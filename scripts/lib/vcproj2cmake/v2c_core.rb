@@ -295,6 +295,15 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
   attr_accessor :arr_compiler_specific_info
 end
 
+class V2C_Tool_Linker_Specific_Info
+  def initialize(linker_name)
+    @linker_name = linker_name
+    @arr_flags = Array.new
+  end
+  attr_accessor :linker_name
+  attr_accessor :arr_flags
+end
+
 class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
   def initialize
     super()
@@ -303,12 +312,14 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
     @module_definition_file = nil
     @pdb_file = nil
     @arr_lib_dirs = Array.new
+    @arr_linker_specific_info = Array.new
   end
   attr_accessor :arr_dependencies
   attr_accessor :link_incremental
   attr_accessor :module_definition_file
   attr_accessor :pdb_file
   attr_accessor :arr_lib_dirs
+  attr_accessor :arr_linker_specific_info
 end
 
 class V2C_Config_Base_Info < V2C_Info_Elem_Base
@@ -1260,7 +1271,17 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
       # FIXME!!! It appears that while CMake source has COMPILE_DEFINITIONS_<CONFIG>,
       # it does NOT provide a per-config COMPILE_FLAGS property! Need to verify ASAP
       # whether compile flags do get passed properly in debug / release.
+      # Strangely enough it _does_ have LINK_FLAGS_<CONFIG>, though!
       cmake_command_arg = "TARGET #{@target.name} APPEND PROPERTY COMPILE_FLAGS_#{config_name_upper}"
+      write_command_list('set_property', cmake_command_arg, arr_flags)
+    write_conditional_end(str_conditional)
+  end
+  def write_property_link_flags(config_name, arr_flags, str_conditional)
+    return if arr_flags.empty?
+    config_name_upper = get_config_name_upcase(config_name)
+    @textOut.write_empty_line()
+    write_conditional_if(str_conditional)
+      cmake_command_arg = "TARGET #{@target.name} APPEND PROPERTY LINK_FLAGS_#{config_name_upper}"
       write_command_list('set_property', cmake_command_arg, arr_flags)
     write_conditional_end(str_conditional)
   end
@@ -1551,6 +1572,7 @@ class V2C_VS7ToolLinkerParser < V2C_VSParserBase
   private
 
   def parse_attributes(linker_info)
+    linker_specific = V2C_Tool_Linker_Specific_Info.new('MSVC7')
     @linker_xml.attributes.each_attribute { |attr_xml|
       attr_value = attr_xml.value
       case attr_xml.name
@@ -1563,7 +1585,7 @@ class V2C_VS7ToolLinkerParser < V2C_VSParserBase
         # CMAKE_SHARED_LINKER_FLAGS / CMAKE_MODULE_LINKER_FLAGS / CMAKE_EXE_LINKER_FLAGS
         # depending on target type, and make sure to filter out options pre-defined by CMake platform
         # setup modules)
-        unknown_attribute(attr_xml.name)
+        parse_additional_options(linker_specific.arr_flags, attr_value)
       when 'LinkIncremental'
         linker_info.link_incremental = parse_link_incremental(attr_value)
       when 'ModuleDefinitionFile'
@@ -1585,7 +1607,6 @@ class V2C_VS7ToolLinkerParser < V2C_VSParserBase
       arr_dependencies.push(dependency_name)
     }
   end
-
   def parse_additional_library_directories(attr_lib_dirs, arr_lib_dirs)
     return if attr_lib_dirs.length == 0
     attr_lib_dirs.split(/#{VS7_VALUE_SEPARATOR_REGEX}/).each { |elem_lib_dir|
@@ -1594,9 +1615,11 @@ class V2C_VS7ToolLinkerParser < V2C_VSParserBase
       arr_lib_dirs.push(elem_lib_dir)
     }
   end
-
-  private
-
+  def parse_additional_options(arr_flags, attr_options)
+    # See comment at compiler-side method counterpart
+    # It seems VS7 linker arguments are separated by whitespace --> empty split() argument.
+    arr_flags.replace(attr_options.split())
+  end
   def parse_link_incremental(str_link_incremental); return str_link_incremental.to_i end
   def parse_module_definition_file(attr_module_definition_file)
     return normalize_path(attr_module_definition_file)
@@ -2897,32 +2920,39 @@ Finished. You should make sure to have all important v2c settings includes such 
         if target_is_valid
           target_generator.write_conditional_target_valid_begin()
           arr_config_info.each { |config_info_curr|
-          # NOTE: the commands below can stay in the general section (outside of
-          # var_v2c_want_buildcfg_curr above), but only since they define properties
-          # which are clearly named as being configuration-_specific_ already!
-          #
-  	# I don't know WhyTH we're iterating over a compiler_info here,
-  	# but let's just do it like that for now since it's required
-  	# by our current data model:
-  	  config_info_curr.arr_compiler_info.each { |compiler_info_curr|
-	    # Hrmm, are we even supposed to be doing this?
-	    # On Windows I guess UseOfMfc in generated VS project files
-	    # would automatically cater for it, and all other platforms
-	    # would have to handle it some way or another anyway.
-	    # But then I guess there are other build environments on Windows
-	    # which would need us handling it here manually, so let's just keep it for now.
-            if config_info_curr.use_of_mfc == 2
-              compiler_info_curr.hash_defines['_AFXEXT'] = ''
-              compiler_info_curr.hash_defines['_AFXDLL'] = ''
-            end
+            # NOTE: the commands below can stay in the general section (outside of
+            # var_v2c_want_buildcfg_curr above), but only since they define properties
+            # which are clearly named as being configuration-_specific_ already!
+            #
+  	    # I don't know WhyTH we're iterating over a compiler_info here,
+  	    # but let's just do it like that for now since it's required
+  	    # by our current data model:
+  	    config_info_curr.arr_compiler_info.each { |compiler_info_curr|
+	      # Hrmm, are we even supposed to be doing this?
+	      # On Windows I guess UseOfMfc in generated VS project files
+	      # would automatically cater for it, and all other platforms
+	      # would have to handle it some way or another anyway.
+	      # But then I guess there are other build environments on Windows
+	      # which would need us handling it here manually, so let's just keep it for now.
+              if config_info_curr.use_of_mfc == 2
+                compiler_info_curr.hash_defines['_AFXEXT'] = ''
+                compiler_info_curr.hash_defines['_AFXDLL'] = ''
+              end
               target_generator.write_property_compile_definitions(config_info_curr.build_type, compiler_info_curr.hash_defines, map_defines)
               # Original compiler flags are MSVC-only, of course. TODO: provide an automatic conversion towards gcc?
-              str_conditional_platform = nil
+              str_conditional_compiler_platform = nil
               compiler_info_curr.arr_compiler_specific_info.each { |compiler_specific|
-		str_conditional_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.compiler_name)
+		str_conditional_compiler_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.compiler_name)
                 # I don't think we need this (we have per-target properties), thus we'll NOT write it!
                 #local_generator.write_directory_property_compile_flags(attr_options)
-                target_generator.write_property_compile_flags(config_info_curr.build_type, compiler_specific.arr_flags, str_conditional_platform)
+                target_generator.write_property_compile_flags(config_info_curr.build_type, compiler_specific.arr_flags, str_conditional_compiler_platform)
+              }
+            }
+            config_info_curr.arr_linker_info.each { |linker_info_curr|
+              str_conditional_linker_platform = nil
+              linker_info_curr.arr_linker_specific_info.each { |linker_specific|
+		str_conditional_linker_platform = map_linker_name_to_cmake_platform_conditional(linker_specific.linker_name)
+                target_generator.write_property_link_flags(config_info_curr.build_type, linker_specific.arr_flags, str_conditional_linker_platform)
               }
             }
           }
@@ -2954,16 +2984,20 @@ Finished. You should make sure to have all important v2c settings includes such 
     return "v2c_want_buildcfg_#{config_name}"
   end
   def map_compiler_name_to_cmake_platform_conditional(compiler_name)
-    str_conditional_platform = nil
+    str_conditional_compiler_platform = nil
     # For a number of platform indentifier variables,
     # see "CMake Useful Variables" http://www.cmake.org/Wiki/CMake_Useful_Variables
     case compiler_name
     when /^MSVC/
-      str_conditional_platform = 'MSVC'
+      str_conditional_compiler_platform = 'MSVC'
     else
       log_error "unknown (unsupported) compiler name #{compiler_name}!"
     end
-    return str_conditional_platform
+    return str_conditional_compiler_platform
+  end
+  def map_linker_name_to_cmake_platform_conditional(linker_name)
+    # For now, let's assume that compiler / linker name mappings are the same:
+    return map_compiler_name_to_cmake_platform_conditional(linker_name)
   end
 end
 
