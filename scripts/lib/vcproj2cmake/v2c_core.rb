@@ -486,6 +486,13 @@ class V2C_TextStreamSyntaxGeneratorBase
 end
 
 #class V2C_CMakeSyntaxGenerator < V2C_TextStreamSyntaxGeneratorBase
+# FIXME: most likely V2C_CMakeSyntaxGenerator should _not_ be the base class
+# of other CMake generator classes, but rather a _member_ of those classes only.
+# Reasoning: that class implements the border crossing towards specific CMake syntax,
+# i.e. it is the _only one_ to know specific CMake syntax (well, "ideally", I have to say, currently).
+# If it was the base class of the various CMake generators,
+# then it would be _hard-coded_ i.e. not configurable (which would be the case
+# when having ctor parameterisation from the outside).
 class V2C_CMakeSyntaxGenerator
   VCPROJ2CMAKE_FUNC_CMAKE = 'vcproj2cmake_func.cmake'
   V2C_ATTRIBUTE_NOT_PROVIDED_MARKER = 'V2C_NOT_PROVIDED'
@@ -589,7 +596,16 @@ class V2C_CMakeSyntaxGenerator
       write_command_single_line('cmake_policy', str_set_policy)
     write_conditional_end(str_conditional)
   end
-
+  def put_source_group(source_group_name, filter_regex, source_files_variable)
+    arr_elems = Array.new
+    if not filter_regex.nil?
+      # WARNING: need to keep as separate array elements (whitespace separator would lead to bogus quoting!)
+      arr_elems.push('REGULAR_EXPRESSION'); arr_elems.push("\"#{filter_regex}\" ")
+    end
+    arr_elems.push('FILES'); arr_elems.push("${#{source_files_variable}}")
+    # Use multi-line method since source_group() arguments can be very long.
+    write_command_list('source_group', "\"#{source_group_name}\"", arr_elems)
+  end
   # analogous to CMake separate_arguments() command
   def separate_arguments(array_in); array_in.join(';') end
 
@@ -1046,17 +1062,12 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeSyntaxGenerator
       write_list_quoted(source_files_variable, arr_local_sources)
       # create source_group() of our local files
       if not parent_source_group.nil?
-        source_group_args = "\"#{this_source_group}\" "
         # use filter regex if available: have it generated as source_group(REGULAR_EXPRESSION "regex" ...).
-        filter_regex_str = nil
+        filter_regex = nil
         if not filter_info.nil?
           filter_regex = filter_info.attr_scfilter
-          if not filter_regex.nil?
-            source_group_args += "REGULAR_EXPRESSION \"#{filter_regex}\" "
-          end
         end
-        source_group_args += "FILES ${#{source_files_variable}}"
-        write_command_single_line('source_group', source_group_args)
+        put_source_group(this_source_group, filter_regex, source_files_variable)
       end
     end
     if not source_files_variable.nil? or not arr_my_sub_sources.empty?
