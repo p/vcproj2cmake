@@ -1647,29 +1647,31 @@ class V2C_VS7ToolCompilerParser < V2C_VSParserBase
   private
 
   def parse_attributes(compiler_info)
-    compiler_specific = V2C_Tool_Compiler_Specific_Info.new('MSVC7')
     @compiler_xml.attributes.each_attribute { |attr_xml|
-      attr_value = attr_xml.value
-      case attr_xml.name
-      when 'AdditionalIncludeDirectories'
-        parse_additional_include_directories(compiler_info, attr_value)
-      when 'AdditionalOptions'
-        parse_additional_options(compiler_specific.arr_flags, attr_value)
-      when 'Name'
-        compiler_info.name = attr_value
-      when 'Optimization'
-        compiler_info.optimization = attr_value.to_i
-      when 'PreprocessorDefinitions'
-        parse_preprocessor_definitions(compiler_info.hash_defines, attr_value)
-      when 'UsePrecompiledHeader'
-        compiler_info.use_precompiled_header = parse_use_precompiled_header(attr_value)
-      when 'WarningLevel'
-        compiler_info.warning_level = attr_value.to_i
-      else
-        unknown_attribute(attr_xml.name)
-      end
+      parse_attribute(compiler_info, attr_xml.name, attr_xml.value)
     }
-    compiler_info.arr_compiler_specific_info.push(compiler_specific)
+  end
+  def parse_attribute(compiler_info, attr_name, attr_value)
+    case attr_name
+    when 'AdditionalIncludeDirectories'
+      parse_additional_include_directories(compiler_info, attr_value)
+    when 'AdditionalOptions'
+      compiler_specific = V2C_Tool_Compiler_Specific_Info.new('MSVC7')
+      parse_additional_options(compiler_specific.arr_flags, attr_value)
+      compiler_info.arr_compiler_specific_info.push(compiler_specific)
+    when 'Name'
+      compiler_info.name = attr_value
+    when 'Optimization'
+      compiler_info.optimization = attr_value.to_i
+    when 'PreprocessorDefinitions'
+      parse_preprocessor_definitions(compiler_info.hash_defines, attr_value)
+    when 'UsePrecompiledHeader'
+      compiler_info.use_precompiled_header = parse_use_precompiled_header(attr_value)
+    when 'WarningLevel'
+      compiler_info.warning_level = attr_value.to_i
+    else
+      unknown_attribute(attr_name)
+    end
   end
   def parse_additional_include_directories(compiler_info, attr_incdir)
     arr_includes = Array.new
@@ -2494,9 +2496,17 @@ class V2C_VS10PropertyGroupParser < V2C_VS10ParserBase
   end
   def parse
     @propgroup_xml.attributes.each_attribute { |attr_xml|
+      attr_value = attr_xml.value
       case attr_xml.name
+      #when 'Condition'
+        # FIXME: should set a have_condition bool to true
+        # and then verify further below that the element that was filled in
+        # actually had its condition parsed properly (V2C_Info_Elem_Base.@condition != nil),
+        # since conditions possibly need to be parsed separately by each property item class type
+        # (upon "Condition" attribute parsing the exact property item class often is not known yet i.e. nil!!).
+        # Or is there a better way to achieve common, reliable parsing of that condition information?
       when 'Label'
-        propgroup_label = attr_xml.value
+        propgroup_label = attr_value
         log_debug "property group, Label #{propgroup_label}!"
         case propgroup_label
         when 'Configuration'
@@ -2531,7 +2541,7 @@ class V2C_VS10ProjectParser < V2C_VS10ProjectParserBase
   def parse
     # Do strict traversal over _all_ elements, parse what's supported by us,
     # and yell loudly for any element which we don't know about!
-    # FIXME: VS7 parser should be changed to do the same thing...
+    parse_attributes()
     @project_xml.elements.each { |elem_xml|
       elem_parser = nil # IMPORTANT: reset it!
       case elem_xml.name
@@ -2546,6 +2556,21 @@ class V2C_VS10ProjectParser < V2C_VS10ProjectParserBase
         elem_parser.parse
       end
     }
+  end
+
+  private
+
+  def parse_attributes
+    @project_xml.attributes.each_attribute { |attr_xml|
+      parse_attribute(@target, attr_xml.name, attr_xml.value)
+    }
+  end
+  def parse_attribute(target, attr_name, attr_value)
+    case attr_name
+    when 'XXX'
+    else
+      unknown_attribute(attr_name)
+    end
   end
 end
 
@@ -2997,6 +3022,7 @@ Finished. You should make sure to have all important v2c settings includes such 
   end
   def map_linker_name_to_cmake_platform_conditional(linker_name)
     # For now, let's assume that compiler / linker name mappings are the same:
+    # BTW, we probably don't have much use for the CMAKE_LINKER variable anywhere, right?
     return map_compiler_name_to_cmake_platform_conditional(linker_name)
   end
 end
