@@ -480,7 +480,7 @@ class V2C_TextStreamSyntaxGeneratorBase
 
   def write_empty_line; @out.puts end
   def write_new_line(part)
-    @textOut.write_empty_line()
+    write_empty_line()
     write_line(part)
   end
 end
@@ -733,7 +733,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # (for automatic stdafx.h resolution etc.), thus add this
     # (and make sure to add it with high priority, i.e. use BEFORE).
     # For now sitting in LocalGenerator and not per-target handling since this setting is valid for the entire directory.
-    @textOut.write_empty_line()
+    next_paragraph()
     write_command_single_line('include_directories', 'BEFORE "${PROJECT_SOURCE_DIR}"')
   end
   def put_cmake_mfc_atl_flag(config_info)
@@ -795,7 +795,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
   end
   def write_directory_property_compile_flags(attr_opts)
     return if attr_opts.nil?
-    @textOut.write_empty_line()
+    next_paragraph()
     # Query WIN32 instead of MSVC, since AFAICS there's nothing in the
     # .vcproj to indicate tool specifics, thus these seem to
     # be settings for ANY PARTICULAR tool that is configured
@@ -814,7 +814,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
       #log_info "arr_platdefs: #{arr_platdefs}"
       next if arr_platdefs.empty?
       arr_platdefs.uniq!
-      @textOut.write_empty_line()
+      next_paragraph()
       str_platform = key if not key.eql?('ALL')
       write_conditional_if(str_platform)
         write_command_list_quoted(cmake_command, cmake_command_arg, arr_platdefs)
@@ -825,7 +825,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # For the CMakeLists.txt rebuilder (automatic rebuild on file changes),
     # add handling of a script file location variable, to enable users
     # to override the script location if needed.
-    @textOut.write_empty_line()
+    next_paragraph()
     write_comment_at_level(1, \
       "user override mechanism (allow defining custom location of script)" \
     )
@@ -894,7 +894,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # be within the project tree as well, since someone might want to copy the entire project tree
     # including .vcproj conversions to a different machine, thus all v2c components should be available)
     #write_new_line("set(V2C_MASTER_PROJECT_DIR \"#{@master_project_dir}\")")
-    @textOut.write_empty_line()
+    next_paragraph()
     write_set_var('V2C_MASTER_PROJECT_DIR', '"${CMAKE_SOURCE_DIR}"')
     # NOTE: use set() instead of list(APPEND...) to _prepend_ path
     # (otherwise not able to provide proper _overrides_)
@@ -905,7 +905,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     write_set_var('V2C_CONFIG_DIR_LOCAL', "\"#{$v2c_config_dir_local}\"")
   end
   def put_include_vcproj2cmake_func
-    @textOut.write_empty_line()
+    next_paragraph()
     write_comment_at_level(2, \
       "include the main file for pre-defined vcproj2cmake helper functions\n" \
       "This module will also include the configuration settings definitions module" \
@@ -1070,7 +1070,7 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeSyntaxGenerator
       if not source_files_variable.nil?
         arr_source_vars.push("${#{source_files_variable}}")
       end
-      @textOut.write_empty_line()
+      next_paragraph()
       write_list_quoted(sources_variable, arr_source_vars)
       # add our source list variable to parent return
       arr_sub_sources_for_parent.push(sources_variable)
@@ -1095,12 +1095,12 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     arr_sub_source_list_var_names.each { |sources_elem|
 	arr_source_vars.push("${#{sources_elem}}")
     }
-    @textOut.write_empty_line()
+    next_paragraph()
     write_list_quoted('SOURCES', arr_source_vars)
   end
   def put_hook_post_sources; write_include('${V2C_HOOK_POST_SOURCES}', true) end
   def put_hook_post_definitions
-    @textOut.write_empty_line()
+    next_paragraph()
     write_comment_at_level(1, \
 	"hook include after all definitions have been made\n" \
 	"(but _before_ target is created using the source list!)" \
@@ -1205,17 +1205,17 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
   end
 
   def write_target_library_dynamic
-    @textOut.write_empty_line()
+    next_paragraph()
     write_command_single_line('add_library', "#{@target.name} SHARED ${SOURCES}")
   end
 
   def write_target_library_static
     #write_new_line("add_library_vcproj2cmake( #{target.name} STATIC ${SOURCES} )")
-    @textOut.write_empty_line()
+    next_paragraph()
     write_command_single_line('add_library', "#{@target.name} STATIC ${SOURCES}")
   end
   def put_hook_post_target
-    @textOut.write_empty_line()
+    next_paragraph()
     write_comment_at_level(1, \
       "e.g. to be used for tweaking target properties etc." \
     )
@@ -1258,7 +1258,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
       #log_info "arr_platdefs: #{arr_platdefs}"
       next if arr_platdefs.empty?
       arr_platdefs.uniq!
-      @textOut.write_empty_line()
+      next_paragraph()
       str_platform = key if not key.eql?('ALL')
       generate_property_compile_definitions(config_name_upper, arr_platdefs, str_platform)
     }
@@ -1266,7 +1266,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
   def write_property_compile_flags(config_name, arr_flags, str_conditional)
     return if arr_flags.empty?
     config_name_upper = get_config_name_upcase(config_name)
-    @textOut.write_empty_line()
+    next_paragraph()
     write_conditional_if(str_conditional)
       # FIXME!!! It appears that while CMake source has COMPILE_DEFINITIONS_<CONFIG>,
       # it does NOT provide a per-config COMPILE_FLAGS property! Need to verify ASAP
@@ -1279,7 +1279,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
   def write_property_link_flags(config_name, arr_flags, str_conditional)
     return if arr_flags.empty?
     config_name_upper = get_config_name_upcase(config_name)
-    @textOut.write_empty_line()
+    next_paragraph()
     write_conditional_if(str_conditional)
       cmake_command_arg = "TARGET #{@target.name} APPEND PROPERTY LINK_FLAGS_#{config_name_upper}"
       write_command_list('set_property', cmake_command_arg, arr_flags)
@@ -1339,7 +1339,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
       escape_char(scc_info.aux_path, '"')
     end
 
-    @textOut.write_empty_line()
+    next_paragraph()
     write_vcproj2cmake_func_comment()
     arr_func_args = [ scc_info.project_name, scc_info.local_path, scc_info.provider, scc_info.aux_path ]
     write_command_list_quoted('v2c_target_set_properties_vs_scc', @target.name, arr_func_args)
@@ -2813,7 +2813,7 @@ Finished. You should make sure to have all important v2c settings includes such 
         # generators CMAKE_CONFIGURATION_TYPES shouldn't be set
         # Also, the configuration_types array should be inferred from arr_config_info.
         ## configuration types need to be stated _before_ declaring the project()!
-        #syntax_generator.write_empty_line()
+        #syntax_generator.next_paragraph()
         #global_generator.put_configuration_types(configuration_types)
 
         local_generator = V2C_CMakeLocalGenerator.new(textOut)
