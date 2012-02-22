@@ -323,7 +323,7 @@ class V2C_Config_Base_Info < V2C_Info_Elem_Base
     @use_of_mfc = 0 # TODO: perhaps make ATL/MFC values an enum?
     @use_of_atl = 0
     @charset = 0 # Simply uses VS7 values for now. TODO: should use our own enum definition or so.
-    @whole_program_optimization = 0 # Simply uses VS7 values for now. TODO: should use our own enum definition or so.
+    @whole_program_optimization = 0 # Simply uses VS7 values for now. TODO: should use our own enum definition or so.; it seems for CMake the related setting is target/directory property INTERPROCEDURAL_OPTIMIZATION_<CONFIG> (described by Wikipedia "Interprocedural optimization")
     @use_debug_libs = false
     @arr_compiler_info = Array.new
     @arr_linker_info = Array.new
@@ -384,10 +384,11 @@ end
 # seem to be pretty much synonymous...
 # FIXME: we should still do better separation between these two...
 class V2C_Target
-  def initialize
+  def initialize(orig_environment)
     @type = nil # project type
-    @name = nil
-    @creator = nil
+    @name = nil 
+    @orig_environment = orig_environment # the original environment (build environment / IDE) which defined the project (MSVS7 - Visual Studio, etc.)
+    @creator = nil # VS7 "ProjectCreator"
     @guid = nil
     @root_namespace = nil
     @version = nil
@@ -404,6 +405,7 @@ class V2C_Target
 
   attr_accessor :type
   attr_accessor :name
+  attr_accessor :orig_environment
   attr_accessor :creator
   attr_accessor :guid
   attr_accessor :root_namespace
@@ -674,6 +676,13 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     end
     write_command_single_line('project', project_name_and_attrs)
   end
+  def put_conversion_details(project_name, orig_environment)
+    # We could have stored all information in one (list) variable,
+    # but generating two lines instead of one isn't much waste
+    # and actually much easier to parse.
+    put_converted_timestamp(project_name)
+    put_converted_from_marker(project_name, orig_environment)
+  end
   def put_include_MasterProjectDefaults_vcproj2cmake
     if @textOut.generated_comments_level() >= 2
       @textOut.write_data %{\
@@ -898,6 +907,22 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # if(PLATFORM) message(STATUS "not supported") return() ...
     # (note that we appended CMAKE_MODULE_PATH _prior_ to this include()!)
     write_include('${V2C_CONFIG_DIR_LOCAL}/hook_pre.txt', true)
+  end
+  def put_converted_timestamp(project_name)
+    # Add an explicit file generation timestamp,
+    # to enable easy identification (grepping) of files of a certain age
+    # (a filesystem-based creation/modification timestamp might be unreliable
+    # due to copying/modification).
+    write_comment_at_level(3, 'Indicates project conversion moment in time (UTC, format Ymd_HMS)')
+    time = Time.new
+    str_time = time.utc.strftime('%Y%m%d_%H%M%S')
+    # Add project_name as _prefix_ (keep variables grep:able, via "v2c_converted_at_utc")
+    write_set_var("#{project_name}_v2c_converted_at_utc", str_time)
+  end
+  def put_converted_from_marker(project_name, str_from_buildtool_version)
+    write_comment_at_level(3, 'Indicates originating build environment / IDE')
+    # Add project_name as _prefix_ (keep variables grep:able, via "v2c_converted_from")
+    write_set_var("#{project_name}_v2c_converted_from", element_handle_quoting(str_from_buildtool_version))
   end
 end
 
@@ -1232,6 +1257,9 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     config_name_upper = get_config_name_upcase(config_name)
     @textOut.write_empty_line()
     write_conditional_if(str_conditional)
+      # FIXME!!! It appears that while CMake source has COMPILE_DEFINITIONS_<CONFIG>,
+      # it does NOT provide a per-config COMPILE_FLAGS property! Need to verify ASAP
+      # whether compile flags do get passed properly in debug / release.
       cmake_command_arg = "TARGET #{@target.name} APPEND PROPERTY COMPILE_FLAGS_#{config_name_upper}"
       write_command_list('set_property', cmake_command_arg, arr_flags)
     write_conditional_end(str_conditional)
@@ -1479,10 +1507,11 @@ class V2C_VSParserBase
 end
 
 class V2C_VSProjectXmlParserBase
-  def initialize(doc_proj, arr_targets, arr_config_info)
+  def initialize(doc_proj, arr_targets, arr_config_info, orig_environment)
     @doc_proj = doc_proj
     @arr_targets = arr_targets
     @arr_config_info = arr_config_info
+    @orig_environment = orig_environment
   end
 end
 
@@ -2098,13 +2127,13 @@ end
 # Project parser variant which works on XML-stream-based input
 class V2C_VS7ProjectXmlParser < V2C_VSProjectXmlParserBase
   def initialize(doc_proj, arr_targets, arr_config_info)
-    super(doc_proj, arr_targets, arr_config_info)
+    super(doc_proj, arr_targets, arr_config_info, 'MSVS7')
   end
   def parse
     @doc_proj.elements.each { |elem_xml|
       case elem_xml.name
       when 'VisualStudioProject'
-        target = V2C_Target.new
+        target = V2C_Target.new(@orig_environment)
         project_parser = V2C_VS7ProjectParser.new(elem_xml, target, @arr_config_info)
         project_parser.parse
 
@@ -2500,14 +2529,14 @@ end
 # Project parser variant which works on XML-stream-based input
 class V2C_VS10ProjectXmlParser < V2C_VSProjectXmlParserBase
   def initialize(doc_proj, arr_targets, arr_config_info)
-    super(doc_proj, arr_targets, arr_config_info)
+    super(doc_proj, arr_targets, arr_config_info, 'MSVS10')
   end
   def parse
     @doc_proj.elements.each { |elem_xml|
       elem_parser = nil # IMPORTANT: reset it!
       case elem_xml.name
       when 'Project'
-        target = V2C_Target.new
+        target = V2C_Target.new(@orig_environment)
         elem_parser = V2C_VS10ProjectParser.new(elem_xml, target, @arr_config_info)
         elem_parser.parse
         @arr_targets.push(target)
@@ -2753,6 +2782,7 @@ Finished. You should make sure to have all important v2c settings includes such 
           end
         end
         local_generator.put_project(target.name, arr_languages)
+	local_generator.put_conversion_details(target.name, target.orig_environment)
 
         #global_generator = V2C_CMakeGlobalGenerator.new(out)
 
