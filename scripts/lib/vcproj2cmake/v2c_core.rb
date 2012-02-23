@@ -256,13 +256,23 @@ class V2C_Tool_Base_Info
   attr_accessor :name
 end
 
-class V2C_Tool_Compiler_Specific_Info
+class V2C_Tool_Specific_Info_Base
+  def initialize
+    @original = false # bool: true == gathered from parsed project, false == converted from other original tool-specific entries
+  end
+  attr_accessor :original
+end
+
+class V2C_Tool_Compiler_Specific_Info < V2C_Tool_Specific_Info_Base
   def initialize(compiler_name)
+    super()
     @compiler_name = compiler_name
     @arr_flags = Array.new
+    @arr_disable_warnings = Array.new
   end
   attr_accessor :compiler_name
   attr_accessor :arr_flags
+  attr_accessor :arr_disable_warnings
 end
 
 class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
@@ -270,11 +280,26 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
     super()
     @arr_info_include_dirs = Array.new
     @hash_defines = Hash.new
-    @use_precompiled_header = 0 # known VS10 content is "Create", "Use", "NotUsing"
+    @rtti = true
+    # FIXME: should probably create a precompiled_header info class!
+    @precompiled_header_use = 0 # known VS10 content is "Create", "Use", "NotUsing"
+    @precompiled_header_source = "" # the header (.h) file to precompile
+    @precompiled_header_binary = "" # the precompiled header binary to create or use
+    @warnings_are_errors = false
     @warning_level = 0 # hmm, this is very compiler-specific, thus it should probably be translated into a particular compiler flag value at V2C_Tool_Compiler_Specific_Info
     @optimization = 0 # currently supporting these values: 0 == Non Debug, 1 == Min Size, 2 == Max Speed, 3 == Max Optimization
     @arr_compiler_specific_info = Array.new
   end
+  attr_accessor :arr_info_include_dirs
+  attr_accessor :hash_defines
+  attr_accessor :rtti
+  attr_accessor :precompiled_header_use
+  attr_accessor :precompiled_header_source
+  attr_accessor :precompiled_header_binary
+  attr_accessor :warnings_are_errors
+  attr_accessor :warning_level
+  attr_accessor :optimization
+  attr_accessor :arr_compiler_specific_info
 
   def get_include_dirs(flag_system, flag_before)
     arr_includes = Array.new
@@ -286,17 +311,11 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
     }  
     return arr_includes
   end
-
-  attr_accessor :arr_info_include_dirs
-  attr_accessor :hash_defines
-  attr_accessor :use_precompiled_header
-  attr_accessor :warning_level
-  attr_accessor :optimization
-  attr_accessor :arr_compiler_specific_info
 end
 
-class V2C_Tool_Linker_Specific_Info
+class V2C_Tool_Linker_Specific_Info < V2C_Tool_Specific_Info_Base
   def initialize(linker_name)
+    super()
     @linker_name = linker_name
     @arr_flags = Array.new
   end
@@ -1600,15 +1619,20 @@ class V2C_VS7ToolLinkerParser < V2C_VSParserBase
 
   def parse_attributes(linker_info)
     linker_specific = V2C_Tool_Linker_Specific_Info.new('MSVC7')
+    linker_specific.original = true
+    linker_info.arr_linker_specific_info.push(linker_specific)
     @linker_xml.attributes.each_attribute { |attr_xml|
-      attr_value = attr_xml.value
-      case attr_xml.name
+      parse_attribute(linker_info, attr_xml.name, attr_xml.value)
+    }
+  end
+  def parse_attribute(linker_info, attr_name, attr_value)
+      case attr_name
       when 'AdditionalDependencies'
         parse_additional_dependencies(attr_value, linker_info.arr_dependencies)
       when 'AdditionalLibraryDirectories'
         parse_additional_library_directories(attr_value, linker_info.arr_lib_dirs)
       when VS7_TOOL_ADDITIONALOPTIONS
-        parse_additional_options(linker_specific.arr_flags, attr_value)
+        parse_additional_options(linker_info.arr_linker_specific_info[0].arr_flags, attr_value)
       when 'LinkIncremental'
         linker_info.link_incremental = parse_link_incremental(attr_value)
       when 'ModuleDefinitionFile'
@@ -1618,9 +1642,8 @@ class V2C_VS7ToolLinkerParser < V2C_VSParserBase
       when 'ProgramDatabaseFile'
         linker_info.pdb_file = parse_pdb_file(attr_value)
       else
-        unknown_attribute(attr_xml.name)
+        unknown_attribute(attr_name)
       end
-    }
   end
   def parse_additional_dependencies(attr_deps, arr_dependencies)
     return if attr_deps.length == 0
@@ -1670,6 +1693,9 @@ class V2C_VS7ToolCompilerParser < V2C_VSParserBase
   private
 
   def parse_attributes(compiler_info)
+    compiler_specific = V2C_Tool_Compiler_Specific_Info.new('MSVC7')
+    compiler_specific.original = true
+    compiler_info.arr_compiler_specific_info.push(compiler_specific)
     @compiler_xml.attributes.each_attribute { |attr_xml|
       parse_attribute(compiler_info, attr_xml.name, attr_xml.value)
     }
@@ -1679,17 +1705,25 @@ class V2C_VS7ToolCompilerParser < V2C_VSParserBase
     when 'AdditionalIncludeDirectories'
       parse_additional_include_directories(compiler_info, attr_value)
     when VS7_TOOL_ADDITIONALOPTIONS
-      compiler_specific = V2C_Tool_Compiler_Specific_Info.new('MSVC7')
-      parse_additional_options(compiler_specific.arr_flags, attr_value)
-      compiler_info.arr_compiler_specific_info.push(compiler_specific)
+      parse_additional_options(compiler_info.arr_compiler_specific_info[0].arr_flags, attr_value)
+    when 'DisableSpecificWarnings'
+      parse_disable_specific_warnings(compiler_info.arr_compiler_specific_info[0].arr_disable_warnings, attr_value)
     when VS7_TOOL_NAME
       compiler_info.name = attr_value
     when 'Optimization'
       compiler_info.optimization = attr_value.to_i
+    when 'PrecompiledHeaderFile'
+      compiler_info.precompiled_header_binary = normalize_path(attr_value)
+    when 'PrecompiledHeaderThrough'
+      compiler_info.precompiled_header_source = normalize_path(attr_value)
     when 'PreprocessorDefinitions'
       parse_preprocessor_definitions(compiler_info.hash_defines, attr_value)
+    when 'RuntimeTypeInfo'
+      compiler_info.rtti = get_boolean_value(attr_value)
     when 'UsePrecompiledHeader'
-      compiler_info.use_precompiled_header = parse_use_precompiled_header(attr_value)
+      compiler_info.precompiled_header_use = parse_use_precompiled_header(attr_value)
+    when 'WarnAsError'
+      compiler_info.warnings_are_errors = get_boolean_value(attr_value)
     when 'WarningLevel'
       compiler_info.warning_level = attr_value.to_i
     else
@@ -1719,6 +1753,9 @@ class V2C_VS7ToolCompilerParser < V2C_VSParserBase
     # TODO: add translation table for specific compiler flag settings such as MinimalRebuild:
     # simply make reverse use of existing translation table in CMake source.
     arr_flags.replace(attr_options.split(';'))
+  end
+  def parse_disable_specific_warnings(arr_disable_warnings, attr_disable_warnings)
+    arr_disable_warnings.replace(attr_disable_warnings.split(';'))
   end
   def parse_preprocessor_definitions(hash_defines, attr_defines)
     attr_defines.split(/#{VS7_VALUE_SEPARATOR_REGEX}/).each { |elem_define|
