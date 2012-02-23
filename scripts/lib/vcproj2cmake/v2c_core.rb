@@ -600,7 +600,7 @@ class V2C_CMakeSyntaxGenerator
     arr_elems = Array.new
     if not filter_regex.nil?
       # WARNING: need to keep as separate array elements (whitespace separator would lead to bogus quoting!)
-      arr_elems.push('REGULAR_EXPRESSION'); arr_elems.push("\"#{filter_regex}\" ")
+      arr_elems.push('REGULAR_EXPRESSION'); arr_elems.push("\"#{filter_regex}\"")
     end
     arr_elems.push('FILES'); arr_elems.push("${#{source_files_variable}}")
     # Use multi-line method since source_group() arguments can be very long.
