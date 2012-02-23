@@ -192,7 +192,7 @@ def parse_platform_conversions(platform_defs, arr_defs, map_defs)
     else
       # Tech note: chomp on map_line should not be needed as long as
       # original constant input has already been pre-treated (chomped).
-      map_line.split('\|').each do |platform_element|
+      map_line.split('|').each do |platform_element|
         #log_debug "platform_element #{platform_element}"
         platform, replacement_defn = platform_element.split('=')
         if platform.empty?
