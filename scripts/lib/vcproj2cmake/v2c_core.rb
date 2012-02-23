@@ -609,6 +609,12 @@ class V2C_CMakeSyntaxGenerator
   # analogous to CMake separate_arguments() command
   def separate_arguments(array_in); array_in.join(';') end
 
+  # Hrmm, I'm not quite happy about this helper's location and
+  # purpose. Probably some hierarchy is not really clean.
+  def prepare_string_literal(str_in)
+    return element_handle_quoting(str_in)
+  end
+
   private
 
   # (un)quote strings as needed
@@ -2916,11 +2922,12 @@ Finished. You should make sure to have all important v2c settings includes such 
 
         arr_config_info.each { |config_info_curr|
   	build_type_condition = ''
+        build_type_cooked = syntax_generator.prepare_string_literal(config_info_curr.build_type)
   	if $config_multi_authoritative == config_info_curr.build_type
-  	  build_type_condition = "CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE STREQUAL \"#{config_info_curr.build_type}\""
+  	  build_type_condition = "CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
   	else
   	  # YES, this condition is supposed to NOT trigger in case of a multi-configuration generator
-  	  build_type_condition = "CMAKE_BUILD_TYPE STREQUAL \"#{config_info_curr.build_type}\""
+  	  build_type_condition = "CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
   	end
   	syntax_generator.write_set_var_bool_conditional(get_var_name_of_config_info_condition(config_info_curr), build_type_condition)
         }
