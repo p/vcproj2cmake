@@ -940,9 +940,12 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # to enable easy identification (grepping) of files of a certain age
     # (a filesystem-based creation/modification timestamp might be unreliable
     # due to copying/modification).
-    write_comment_at_level(3, 'Indicates project conversion moment in time (UTC, format Ymd_HMS)')
+    timestamp_format = $v2c_generated_timestamp_format
+    return if timestamp_format.nil? or timestamp_format.length == 0
+    timestamp_format_docs = timestamp_format.gsub('%', '')
+    write_comment_at_level(3, "Indicates project conversion moment in time (UTC, format #{timestamp_format_docs})")
     time = Time.new
-    str_time = time.utc.strftime('%Y%m%d_%H%M%S')
+    str_time = time.utc.strftime(timestamp_format)
     # Add project_name as _prefix_ (keep variables grep:able, via "v2c_converted_at_utc")
     write_set_var("#{project_name}_v2c_converted_at_utc", str_time)
   end

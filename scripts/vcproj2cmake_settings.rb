@@ -36,6 +36,17 @@ $v2c_validate_vcproj_abort_on_error = 1
 # 4 == extra verbose
 $v2c_generated_comments_level = 2
 
+# Specifies the format of the timestamp which indicates the
+# moment in time that an output file has been generated at.
+# To be specified as Ruby Time.strftime() format.
+# Disable it or provide empty string to skip addition of a timestamp variable.
+# Note that giving an overly detailed format (such as appending %M%S)
+# will have the side effect of a newly generated timestamp value changing
+# each minute and second (i.e. the content of the output file is "different"),
+# causing our generator to detect the content as changed
+# and thus bogusly writing out the actually unchanged configuration file again.
+$v2c_generated_timestamp_format = '%Y%m%d_%H'
+
 # The CMakeLists.txt files we create originate from a tempfile,
 # which always gets created with very restrictive access permissions (0600).
 # Since there's usually not much of a reason not to grant read access
