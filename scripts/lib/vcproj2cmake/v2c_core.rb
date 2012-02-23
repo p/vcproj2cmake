@@ -142,7 +142,7 @@ def read_mappings(filename_mappings, mappings)
     #Hash[*File.read(filename_mappings).scan(/^(.*)=(.*)$/).flatten]
     File.open(filename_mappings, 'r').each do |line|
       next if line =~ /^\s*#/
-      b, c = line.chomp.split(/:/)
+      b, c = line.chomp.split(':')
       mappings[b] = c
     end
   else
@@ -192,9 +192,9 @@ def parse_platform_conversions(platform_defs, arr_defs, map_defs)
     else
       # Tech note: chomp on map_line should not be needed as long as
       # original constant input has already been pre-treated (chomped).
-      map_line.split(/\|/).each do |platform_element|
+      map_line.split('\|').each do |platform_element|
         #log_debug "platform_element #{platform_element}"
-        platform, replacement_defn = platform_element.split(/=/)
+        platform, replacement_defn = platform_element.split('=')
         if platform.empty?
           # specified a replacement without a specific platform?
           # ("tag:=REPLACEMENT")
@@ -1430,6 +1430,10 @@ def vs7_create_config_variable_translation(str, arr_config_var_handling)
     # thus implement insensitive match:
     config_var_upcase = config_var.upcase
     config_var_replacement = ''
+    #TODO_OPTIMIZE: could replace this huge case switch
+    # with a hash lookup on a result struct,
+    # at least in cases where a hard-coded (i.e., non-flexible)
+    # result handling is sufficient.
     case config_var_upcase
       when 'CONFIGURATIONNAME'
       	config_var_replacement = '${CMAKE_CFG_INTDIR}'
@@ -1564,6 +1568,8 @@ end
 
 module V2C_VS7ToolDefines
   VS7_VALUE_SEPARATOR_REGEX = '[;,]'
+  VS7_TOOL_NAME = 'Name'
+  VS7_TOOL_ADDITIONALOPTIONS = 'AdditionalOptions'
 end
 
 class V2C_VS7ToolLinkerParser < V2C_VSParserBase
@@ -1591,17 +1597,13 @@ class V2C_VS7ToolLinkerParser < V2C_VSParserBase
         parse_additional_dependencies(attr_value, linker_info.arr_dependencies)
       when 'AdditionalLibraryDirectories'
         parse_additional_library_directories(attr_value, linker_info.arr_lib_dirs)
-      when 'AdditionalOptions'
-        # TODO: support AdditionalOptions! (mention via
-        # CMAKE_SHARED_LINKER_FLAGS / CMAKE_MODULE_LINKER_FLAGS / CMAKE_EXE_LINKER_FLAGS
-        # depending on target type, and make sure to filter out options pre-defined by CMake platform
-        # setup modules)
+      when VS7_TOOL_ADDITIONALOPTIONS
         parse_additional_options(linker_specific.arr_flags, attr_value)
       when 'LinkIncremental'
         linker_info.link_incremental = parse_link_incremental(attr_value)
       when 'ModuleDefinitionFile'
         linker_info.module_definition_file = parse_module_definition_file(attr_value)
-      when 'Name'
+      when VS7_TOOL_NAME
         linker_info.name = attr_value
       when 'ProgramDatabaseFile'
         linker_info.pdb_file = parse_pdb_file(attr_value)
@@ -1666,11 +1668,11 @@ class V2C_VS7ToolCompilerParser < V2C_VSParserBase
     case attr_name
     when 'AdditionalIncludeDirectories'
       parse_additional_include_directories(compiler_info, attr_value)
-    when 'AdditionalOptions'
+    when VS7_TOOL_ADDITIONALOPTIONS
       compiler_specific = V2C_Tool_Compiler_Specific_Info.new('MSVC7')
       parse_additional_options(compiler_specific.arr_flags, attr_value)
       compiler_info.arr_compiler_specific_info.push(compiler_specific)
-    when 'Name'
+    when VS7_TOOL_NAME
       compiler_info.name = attr_value
     when 'Optimization'
       compiler_info.optimization = attr_value.to_i
@@ -1710,7 +1712,7 @@ class V2C_VS7ToolCompilerParser < V2C_VSParserBase
   end
   def parse_preprocessor_definitions(hash_defines, attr_defines)
     attr_defines.split(/#{VS7_VALUE_SEPARATOR_REGEX}/).each { |elem_define|
-      str_define_key, str_define_value = elem_define.strip.split(/=/)
+      str_define_key, str_define_value = elem_define.strip.split('=')
       # Since a Hash will indicate nil for any non-existing key,
       # we do need to fill in _empty_ value for our _existing_ key.
       if str_define_value.nil?
@@ -2988,6 +2990,10 @@ Finished. You should make sure to have all important v2c settings includes such 
               str_conditional_linker_platform = nil
               linker_info_curr.arr_linker_specific_info.each { |linker_specific|
 		str_conditional_linker_platform = map_linker_name_to_cmake_platform_conditional(linker_specific.linker_name)
+                # Probably more linker flags support needed? (mention via
+                # CMAKE_SHARED_LINKER_FLAGS / CMAKE_MODULE_LINKER_FLAGS / CMAKE_EXE_LINKER_FLAGS
+                # depending on target type, and make sure to filter out options pre-defined by CMake platform
+                # setup modules)
                 target_generator.write_property_link_flags(config_info_curr.build_type, linker_specific.arr_flags, str_conditional_linker_platform)
               }
             }
@@ -3067,6 +3073,12 @@ def v2c_convert_project_inner(p_script, p_parser_proj_file, p_generator_proj_fil
     log_fatal "No project parser found for project file #{parser_project_filename}!?"
   end
 
+  # TODO: it's probably a valid use case to want to generate
+  # multiple build environments from the parsed projects.
+  # In such case the set of generators should be available
+  # at user configuration side, and the configuration/mappings part
+  # (currently sitting at cmake/vcproj2cmake/ at default setting)
+  # should be distinctly provided for each generator, too.
   generator = nil
   if true
     generator = V2C_CMakeGenerator.new(p_script, p_master_project, p_parser_proj_file, p_generator_proj_file, arr_targets, arr_config_info)
