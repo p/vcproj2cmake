@@ -282,23 +282,29 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
     @hash_defines = Hash.new
     @rtti = true
     # FIXME: should probably create a precompiled_header info class!
-    @precompiled_header_use = 0 # known VS10 content is "Create", "Use", "NotUsing"
+    @precompiled_header_use_mode = 0 # known VS10 content is "Create", "Use", "NotUsing"
     @precompiled_header_source = "" # the header (.h) file to precompile
     @precompiled_header_binary = "" # the precompiled header binary to create or use
+    @detect_64bit_porting_problems = true # Enabled by default is preferable, right?
     @warnings_are_errors = false
     @warning_level = 0 # hmm, this is very compiler-specific, thus it should probably be translated into a particular compiler flag value at V2C_Tool_Compiler_Specific_Info
+    @static_code_analysis_enable = false
     @optimization = 0 # currently supporting these values: 0 == Non Debug, 1 == Min Size, 2 == Max Speed, 3 == Max Optimization
+    @show_includes = false # Whether to show the filenames of included header files.
     @arr_compiler_specific_info = Array.new
   end
   attr_accessor :arr_info_include_dirs
   attr_accessor :hash_defines
   attr_accessor :rtti
-  attr_accessor :precompiled_header_use
+  attr_accessor :precompiled_header_use_mode
   attr_accessor :precompiled_header_source
   attr_accessor :precompiled_header_binary
+  attr_accessor :detect_64bit_porting_problems
   attr_accessor :warnings_are_errors
   attr_accessor :warning_level
+  attr_accessor :static_code_analysis_enable
   attr_accessor :optimization
+  attr_accessor :show_includes
   attr_accessor :arr_compiler_specific_info
 
   def get_include_dirs(flag_system, flag_before)
@@ -625,6 +631,13 @@ class V2C_CMakeSyntaxGenerator
     # Use multi-line method since source_group() arguments can be very long.
     write_command_list('source_group', "\"#{source_group_name}\"", arr_elems)
   end
+  def put_include_directories(arr_directories, flag_system=false, flag_before=false)
+    arr_args = Array.new
+    arr_args.push('SYSTEM') if flag_system
+    arr_args.push('BEFORE') if flag_before
+    arr_args.concat(arr_directories)
+    write_command_list_quoted('include_directories', nil, arr_args)
+  end
   # analogous to CMake separate_arguments() command
   def separate_arguments(array_in); array_in.join(';') end
 
@@ -775,7 +788,9 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # (and make sure to add it with high priority, i.e. use BEFORE).
     # For now sitting in LocalGenerator and not per-target handling since this setting is valid for the entire directory.
     next_paragraph()
-    write_command_single_line('include_directories', 'BEFORE "${PROJECT_SOURCE_DIR}"')
+    arr_directories = Array.new
+    arr_directories.push('${PROJECT_SOURCE_DIR}')
+    put_include_directories(arr_directories, false, true)
   end
   def put_cmake_mfc_atl_flag(config_info)
     # Hmm, do we need to actively _reset_ CMAKE_MFC_FLAG / CMAKE_ATL_FLAG
@@ -1277,6 +1292,20 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
 	write_command_list('set_property', cmake_command_arg, arr_compile_defn)
       write_conditional_end(str_platform)
   end
+  def write_precompiled_header(target_name, precompiled_header_source)
+    return if not $v2c_target_precompiled_header_enable
+    # According to several reports and own experience,
+    # ${CMAKE_CURRENT_BINARY_DIR} needs to be available as include directory
+    # when adding a precompiled header configuration.
+    # TODO: this multi-line operation should probably be moved into a vcproj2cmake_func.cmake function.
+    arr_dirs = Array.new
+    arr_dirs.push('${CMAKE_CURRENT_BINARY_DIR}')
+    put_include_directories(arr_dirs)
+    arr_args_precomp_header = Array.new
+    precompiled_header_source_location = "${PROJECT_SOURCE_DIR}/#{precompiled_header_source}"
+    arr_args_precomp_header.push(precompiled_header_source_location)
+    write_command_list_quoted('add_precompiled_header', target_name, arr_args_precomp_header)
+  end
   def write_property_compile_definitions(config_name, hash_defs, map_defs)
     # Convert hash into array as required by common helper functions
     # (it's probably a good idea to provide "key=value" entries
@@ -1706,8 +1735,13 @@ class V2C_VS7ToolCompilerParser < V2C_VSParserBase
       parse_additional_include_directories(compiler_info, attr_value)
     when VS7_TOOL_ADDITIONALOPTIONS
       parse_additional_options(compiler_info.arr_compiler_specific_info[0].arr_flags, attr_value)
+    when 'Detect64BitPortabilityProblems'
+      # TODO: add /Wp64 to flags of an MSVC compiler info...
+      compiler_info.detect_64bit_porting_problems = get_boolean_value(attr_value)
     when 'DisableSpecificWarnings'
       parse_disable_specific_warnings(compiler_info.arr_compiler_specific_info[0].arr_disable_warnings, attr_value)
+    when 'EnablePREfast'
+      compiler_info.static_code_analysis_enable = get_boolean_value(attr_value)
     when VS7_TOOL_NAME
       compiler_info.name = attr_value
     when 'Optimization'
@@ -1720,8 +1754,10 @@ class V2C_VS7ToolCompilerParser < V2C_VSParserBase
       parse_preprocessor_definitions(compiler_info.hash_defines, attr_value)
     when 'RuntimeTypeInfo'
       compiler_info.rtti = get_boolean_value(attr_value)
+    when 'ShowIncludes'
+      compiler_info.show_includes = get_boolean_value(attr_value)
     when 'UsePrecompiledHeader'
-      compiler_info.precompiled_header_use = parse_use_precompiled_header(attr_value)
+      compiler_info.precompiled_header_use_mode = parse_use_precompiled_header(attr_value)
     when 'WarnAsError'
       compiler_info.warnings_are_errors = get_boolean_value(attr_value)
     when 'WarningLevel'
@@ -3018,6 +3054,18 @@ Finished. You should make sure to have all important v2c settings includes such 
   	    # but let's just do it like that for now since it's required
   	    # by our current data model:
   	    config_info_curr.arr_compiler_info.each { |compiler_info_curr|
+
+              # Since the precompiled header CMake module currently
+              # _resets_ a target's COMPILE_FLAGS property,
+              # make sure to generate it _before_ generating COMPILE_FLAGS:
+
+              precompiled_header_source = compiler_info_curr.precompiled_header_source
+	      if not precompiled_header_source.nil?
+                # FIXME: this filesystem validation should be carried out by a generator-independent base class...
+                v2c_generator_check_file_accessible(p_master_project, precompiled_header_source, target.name)
+                target_generator.write_precompiled_header(target.name, precompiled_header_source)
+              end
+
 	      # Hrmm, are we even supposed to be doing this?
 	      # On Windows I guess UseOfMfc in generated VS project files
 	      # would automatically cater for it, and all other platforms

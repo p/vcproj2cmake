@@ -53,3 +53,7 @@ $v2c_generated_timestamp_format = '%Y%m%d_%H'
 # of these build files to other people, we'll use a public 0644
 # as the default value.
 $v2c_cmakelists_create_permissions = 0644
+
+# Whether to parse and generate configuration info about precompiled headers.
+# Currently disabled by default (not verified yet, and module file not checked in yet).
+$v2c_target_precompiled_header_enable = false
