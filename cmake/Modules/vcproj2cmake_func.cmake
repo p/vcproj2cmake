@@ -3,6 +3,22 @@
 
 # Some helper functions to be used by all converted projects in the tree
 
+# Important backwards compatibility comment:
+# Since this file will usually end up in the main custom module path
+# of a source tree and the vcproj2cmake scripts might be kept (and
+# updated!) _external_ to that tree, one should attempt to provide
+# certain amounts of backwards compatibility in this module,
+# for users who don't automatically and consistently install
+# the new module in their source tree.
+# Thus, if you do API-incompatible changes to functions,
+# try to provide some old-style wrapper functions for a limited time,
+# together with an obvious marker comment.
+# However we should probably also provide a configurable functionality
+# to automatically add the _vcproj2cmake-side_ cmake/Modules/ path
+# to the user projects' module path in future, in order to prevent
+# Ruby script vs. module file versions from getting desynchronized.
+
+
 # First, include main file (to be customized by user as needed),
 # to have important vcproj2cmake configuration settings
 # re-defined per each new vcproj-converted project.
