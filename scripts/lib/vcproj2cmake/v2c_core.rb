@@ -947,7 +947,8 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     time = Time.new
     str_time = time.utc.strftime(timestamp_format)
     # Add project_name as _prefix_ (keep variables grep:able, via "v2c_converted_at_utc")
-    write_set_var("#{project_name}_v2c_converted_at_utc", str_time)
+    # Since timestamp format now is user-configurable, quote potential whitespace.
+    write_set_var("#{project_name}_v2c_converted_at_utc", element_handle_quoting(str_time))
   end
   def put_converted_from_marker(project_name, str_from_buildtool_version)
     write_comment_at_level(3, 'Indicates originating build environment / IDE')
