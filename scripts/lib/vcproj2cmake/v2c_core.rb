@@ -2704,12 +2704,16 @@ class V2C_VS10ProjectFiltersFileParser
   def parse
     # Parse the file filters file (_separate_ in VS10!)
     # if it exists:
-    File.open(@proj_filters_filename) { |io|
-      doc_proj_filters = REXML::Document.new io
+    begin
+      File.open(@proj_filters_filename) { |io|
+        doc_proj_filters = REXML::Document.new io
 
-      project_filters_parser = V2C_VS10ProjectFiltersXmlParser.new(doc_proj_filters, @arr_targets, @arr_config_info)
-      project_filters_parser.parse
-    }
+        project_filters_parser = V2C_VS10ProjectFiltersXmlParser.new(doc_proj_filters, @arr_targets, @arr_config_info)
+        project_filters_parser.parse
+      }
+    rescue
+      # File probably does not exiѕt...
+    end
   end
 end
 
