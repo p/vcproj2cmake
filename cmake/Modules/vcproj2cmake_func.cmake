@@ -349,6 +349,10 @@ function(v2c_target_add_precompiled_header _target _build_type _use _header_file
     include(v2c_precompiled_header OPTIONAL)
   endif(NOT COMMAND add_precompiled_header) 
   if(COMMAND add_precompiled_header)
+    # FIXME: should add a target-specific precomp header
+    # enable / disable / force-enable flags mechanism,
+    # equivalent to what our install() helper does.
+
     # According to several reports and own experience,
     # ${CMAKE_CURRENT_BINARY_DIR} needs to be available as include directory
     # when adding a precompiled header configuration.
