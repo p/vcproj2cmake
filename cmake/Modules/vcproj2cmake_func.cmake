@@ -317,6 +317,52 @@ else(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
   endfunction(v2c_project_rebuild_on_update _dependent_target _vcproj_file _cmakelists_file _script _master_proj_dir)
 endif(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
 
+# Helper to hook up a precompiled header that might be enabled
+# by a project configuration.
+# Functionality taken from "Support for precompiled headers"
+#   http://www.cmake.org/Bug/view.php?id=1260
+# (vcproj2cmake can now be considered inofficial "upstream"
+# of this functionality, since there probably is nobody else
+# who's actively improving the module file)
+# Please note that IMHO precompiled headers are not always a good idea.
+# See "Precompiled Headers? Do we really need them" reply at
+#   http://stackoverflow.com/a/1138356
+# for a good explanation.
+# PCH may become a SPOF (Single Point Of Failure) for some of the more chaotic
+# projects (libraries), namely those which fail to have a clear mission
+# and try to implement / reference the entire universe
+# (throwing together spaghetti code which handles file handling / serialization,
+# threading, GUI layout, string handling, algorithms, communication, ...).
+# Consequently such a project ends up including many different toolkits
+# in its main header, causing all source files to include that monster header
+# despite only needing a tiny subset of that functionality each.
+# Admittedly this is the worst case (which should be avoidable),
+# but it does happen and it's not pretty.
+function(v2c_target_add_precompiled_header _target _build_type _use _header_file)
+  if(NOT v2c_want_buildcfg_${_build_type})
+    return()
+  endif(NOT v2c_want_buildcfg_${_build_type})
+  if(NOT _use)
+    return()
+  endif(NOT _use)
+  if(NOT COMMAND add_precompiled_header) 
+    include(v2c_precompiled_header OPTIONAL)
+  endif(NOT COMMAND add_precompiled_header) 
+  if(COMMAND add_precompiled_header)
+    # According to several reports and own experience,
+    # ${CMAKE_CURRENT_BINARY_DIR} needs to be available as include directory
+    # when adding a precompiled header configuration.
+    include_directories(${CMAKE_CURRENT_BINARY_DIR})
+    # FIXME: needs investigation whether use/create distinction
+    # is being serviced properly by the function that the module file offers.
+    if(_use EQUAL 1) # "use"
+      add_precompiled_header(${_target} "${PROJECT_SOURCE_DIR}/${_header_file}")
+    endif(_use EQUAL 1) # "use"
+  else(COMMAND add_precompiled_header)
+    message("could not figure out add_precompiled_header() function (missing module file?) - precompiled header support disabled.")
+  endif(COMMAND add_precompiled_header)
+endfunction(v2c_target_add_precompiled_header _target _build_type _use _header_file)
+
 
 # This function will set up target properties gathered from
 # Visual Studio Source Control Management (SCM) elements.

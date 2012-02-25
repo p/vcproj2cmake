@@ -1292,19 +1292,13 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
 	write_command_list('set_property', cmake_command_arg, arr_compile_defn)
       write_conditional_end(str_platform)
   end
-  def write_precompiled_header(target_name, precompiled_header_source)
+  def write_precompiled_header(target_name, build_type, use_mode, precompiled_header_source)
     return if not $v2c_target_precompiled_header_enable
-    # According to several reports and own experience,
-    # ${CMAKE_CURRENT_BINARY_DIR} needs to be available as include directory
-    # when adding a precompiled header configuration.
-    # TODO: this multi-line operation should probably be moved into a vcproj2cmake_func.cmake function.
-    arr_dirs = Array.new
-    arr_dirs.push('${CMAKE_CURRENT_BINARY_DIR}')
-    put_include_directories(arr_dirs)
     arr_args_precomp_header = Array.new
-    precompiled_header_source_location = "${PROJECT_SOURCE_DIR}/#{precompiled_header_source}"
-    arr_args_precomp_header.push(precompiled_header_source_location)
-    write_command_list_quoted('add_precompiled_header', target_name, arr_args_precomp_header)
+    arr_args_precomp_header.push(build_type)
+    arr_args_precomp_header.push("#{use_mode}") # stringify numeric arg
+    arr_args_precomp_header.push(precompiled_header_source)
+    write_command_list_quoted('v2c_target_add_precompiled_header', target_name, arr_args_precomp_header)
   end
   def write_property_compile_definitions(config_name, hash_defs, map_defs)
     # Convert hash into array as required by common helper functions
@@ -3063,7 +3057,12 @@ Finished. You should make sure to have all important v2c settings includes such 
 	      if not precompiled_header_source.nil?
                 # FIXME: this filesystem validation should be carried out by a generator-independent base class...
                 v2c_generator_check_file_accessible(p_master_project, precompiled_header_source, target.name)
-                target_generator.write_precompiled_header(target.name, precompiled_header_source)
+                target_generator.write_precompiled_header(
+                  target.name,
+                  syntax_generator.prepare_string_literal(config_info_curr.build_type),
+                  compiler_info_curr.precompiled_header_use_mode,
+                  precompiled_header_source
+                )
               end
 
 	      # Hrmm, are we even supposed to be doing this?
