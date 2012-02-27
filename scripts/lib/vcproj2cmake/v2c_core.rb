@@ -1151,6 +1151,10 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     @localGenerator = localGenerator
   end
 
+  # File-related TODO:
+  # should definitely support the following CMake properties, as needed:
+  # PUBLIC_HEADER (cmake --help-property PUBLIC_HEADER), PRIVATE_HEADER, HEADER_FILE_ONLY
+  # and possibly the PUBLIC_HEADER option of the INSTALL(TARGETS) command.
   def put_file_list_source_group_recursive(project_name, files_str, parent_source_group, arr_sub_sources_for_parent)
     filelist_generator = V2C_CMakeFileListGenerator_VS7.new(@textOut, project_name, @project_dir, files_str, parent_source_group, arr_sub_sources_for_parent)
     filelist_generator.generate
