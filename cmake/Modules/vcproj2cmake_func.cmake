@@ -339,16 +339,34 @@ endif(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
 # Admittedly this is the worst case (which should be avoidable),
 # but it does happen and it's not pretty.
 function(v2c_target_add_precompiled_header _target _build_type _use _header_file)
+  function(blubb)
+  endfunction(blubb)
+  if(NOT _build_type)
+    message("v2c_target_add_precompiled_header: empty build type!? Exit...")
+    return()
+  endif(NOT _build_type)
   if(NOT v2c_want_buildcfg_${_build_type})
     return()
   endif(NOT v2c_want_buildcfg_${_build_type})
   if(NOT _use)
     return()
   endif(NOT _use)
-  if(NOT COMMAND add_precompiled_header) 
-    include(v2c_precompiled_header OPTIONAL)
-  endif(NOT COMMAND add_precompiled_header) 
+  # Need to always re-include() this module,
+  # since it defines some non-cache variables in outer non-macro scope,
+  # thus invoking pre-defined macros from foreign scope would be missing
+  # these vars.
+  include(vcproj2cmake_PrecompiledHeader OPTIONAL)
   if(COMMAND add_precompiled_header)
+    if(NOT TARGET ${_target})
+      message("v2c_target_add_precompiled_header: no target ${_target}!? Exit...")
+      return()
+    endif(NOT TARGET ${_target})
+    set(header_file_location_ "${PROJECT_SOURCE_DIR}/${_header_file}")
+    # Complicated check! [empty file (--> dir-only) _does_ check as ok]
+    if(NOT _header_file OR NOT EXISTS "${header_file_location_}")
+      message("v2c_target_add_precompiled_header: header file ${_header_file} at project ${PROJECT_SOURCE_DIR} does not exist!? Exit...")
+      return()
+    endif(NOT _header_file OR NOT EXISTS "${header_file_location_}")
     # FIXME: should add a target-specific precomp header
     # enable / disable / force-enable flags mechanism,
     # equivalent to what our install() helper does.
@@ -359,9 +377,12 @@ function(v2c_target_add_precompiled_header _target _build_type _use _header_file
     include_directories(${CMAKE_CURRENT_BINARY_DIR})
     # FIXME: needs investigation whether use/create distinction
     # is being serviced properly by the function that the module file offers.
-    if(_use EQUAL 1) # "use"
-      add_precompiled_header(${_target} "${PROJECT_SOURCE_DIR}/${_header_file}")
-    endif(_use EQUAL 1) # "use"
+    #
+    # 0/1/2 probably is "NotUsing"/"Create"/"Use":
+    if(_use EQUAL 1 OR _use EQUAL 2)
+      add_precompiled_header(${_target} "${header_file_location_}")
+      message(STATUS "v2c_target_add_precompiled_header: added header ${_header_file} to target ${_target}")
+    endif(_use EQUAL 1 OR _use EQUAL 2)
   else(COMMAND add_precompiled_header)
     message("could not figure out add_precompiled_header() function (missing module file?) - precompiled header support disabled.")
   endif(COMMAND add_precompiled_header)
