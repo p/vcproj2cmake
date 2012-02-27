@@ -555,16 +555,17 @@ class V2C_CMakeSyntaxGenerator
     @textOut.write_line(')')
   end
   def write_command_list_quoted(cmake_command, cmake_command_arg, arr_elems)
+    cmake_command_arg_quoted = element_handle_quoting(cmake_command_arg) if not cmake_command_arg.nil?
     arr_elems_quoted = Array.new
     arr_elems.each do |curr_elem|
       # HACK for nil input of SCC info.
       curr_elem = '' if curr_elem.nil?
       arr_elems_quoted.push(element_handle_quoting(curr_elem))
     end
-    write_command_list(cmake_command, cmake_command_arg, arr_elems_quoted)
+    write_command_list(cmake_command, cmake_command_arg_quoted, arr_elems_quoted)
   end
-  def write_command_single_line(cmake_command, cmake_command_args)
-    @textOut.write_line("#{cmake_command}(#{cmake_command_args})")
+  def write_command_single_line(cmake_command, str_cmake_command_args)
+    @textOut.write_line("#{cmake_command}(#{str_cmake_command_args})")
   end
   def write_list(list_var_name, arr_elems)
     write_command_list('set', list_var_name, arr_elems)
@@ -572,7 +573,15 @@ class V2C_CMakeSyntaxGenerator
   def write_list_quoted(list_var_name, arr_elems)
     write_command_list_quoted('set', list_var_name, arr_elems)
   end
+  # Special helper to invoke custom user-defined functions.
+  def write_invoke_function_quoted(str_function, arr_args_func)
+    write_command_list_quoted(str_function, nil, arr_args_func)
+  end
+  def dereference_variable_name(str_var); return "${#{str_var}}" end
 
+  def get_var_conditional_command(command_name); return "COMMAND #{command_name}" end
+
+  def get_conditional_inverted(str_conditional); return "NOT #{str_conditional}" end
   # WIN32, MSVC, ...
   def write_conditional_if(str_conditional)
     return if str_conditional.nil?
@@ -592,8 +601,8 @@ class V2C_CMakeSyntaxGenerator
   end
   def get_keyword_bool(setting); return setting ? 'true' : 'false' end
   def write_set_var(var_name, setting)
-    str_args = "#{var_name} #{setting}"
-    write_command_single_line('set', str_args)
+    arr_args_func = [ setting ]
+    write_command_list('set', var_name, arr_args_func)
   end
   def write_set_var_bool(var_name, setting)
     write_set_var(var_name, get_keyword_bool(setting))
@@ -605,12 +614,25 @@ class V2C_CMakeSyntaxGenerator
       write_set_var_bool(var_name, false)
     write_conditional_end(str_condition)
   end
+  def write_set_var_if_unset(var_name, setting)
+    str_conditional = get_conditional_inverted(var_name)
+    write_conditional_if(str_conditional)
+      write_set_var(var_name, setting)
+    write_conditional_end(str_conditional)
+  end
+  # Hrmm, I'm currently unsure whether there _should_ in fact
+  # be any difference between write_set_var() and write_set_var_quoted()...
+  def write_set_var_quoted(var_name, setting)
+    arr_args_func = [ setting ]
+    write_command_list_quoted('set', var_name, arr_args_func)
+  end
   def write_include(include_file, optional = false)
-    include_file_args = element_handle_quoting(include_file)
-    if optional
-      include_file_args += ' OPTIONAL'
-    end
-    write_command_single_line('include', include_file_args)
+    arr_args_include_file = [ element_handle_quoting(include_file) ]
+    arr_args_include_file.push('OPTIONAL') if optional
+    write_command_list('include', nil, arr_args_include_file)
+  end
+  def write_include_from_cmake_var(include_file_var, optional = false)
+    write_include(dereference_variable_name(include_file_var), optional)
   end
   def write_vcproj2cmake_func_comment()
     write_comment_at_level(2, "See function implementation/docs in #{$v2c_module_path_root}/#{VCPROJ2CMAKE_FUNC_CMAKE}")
@@ -631,11 +653,11 @@ class V2C_CMakeSyntaxGenerator
     arr_elems = Array.new
     if not filter_regex.nil?
       # WARNING: need to keep as separate array elements (whitespace separator would lead to bogus quoting!)
-      arr_elems.push('REGULAR_EXPRESSION'); arr_elems.push("\"#{filter_regex}\"")
+      arr_elems.push('REGULAR_EXPRESSION', filter_regex)
     end
-    arr_elems.push('FILES'); arr_elems.push("${#{source_files_variable}}")
+    arr_elems.push('FILES', dereference_variable_name(source_files_variable))
     # Use multi-line method since source_group() arguments can be very long.
-    write_command_list('source_group', "\"#{source_group_name}\"", arr_elems)
+    write_command_list_quoted('source_group', source_group_name, arr_elems)
   end
   def put_include_directories(arr_directories, flag_system=false, flag_before=false)
     arr_args = Array.new
@@ -714,7 +736,7 @@ class V2C_CMakeGlobalGenerator < V2C_CMakeSyntaxGenerator
   end
   def put_configuration_types(configuration_types)
     configuration_types_list = separate_arguments(configuration_types)
-    write_set_var('CMAKE_CONFIGURATION_TYPES', "\"#{configuration_types_list}\"")
+    write_set_var_quoted('CMAKE_CONFIGURATION_TYPES', configuration_types_list)
   end
 
   private
@@ -785,7 +807,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
 	"the _LIBRARIES / _INCLUDE_DIRS mappings created\n" \
 	"by your include/dependency map files." \
     )
-    write_include('${V2C_HOOK_PROJECT}', true)
+    write_include_from_cmake_var('V2C_HOOK_PROJECT', true)
   end
 
   def put_include_project_source_dir
@@ -794,8 +816,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # (and make sure to add it with high priority, i.e. use BEFORE).
     # For now sitting in LocalGenerator and not per-target handling since this setting is valid for the entire directory.
     next_paragraph()
-    arr_directories = Array.new
-    arr_directories.push('${PROJECT_SOURCE_DIR}')
+    arr_directories = [ dereference_variable_name('PROJECT_SOURCE_DIR') ]
     put_include_directories(arr_directories, false, true)
   end
   def put_cmake_mfc_atl_flag(config_info)
@@ -819,7 +840,6 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # set the MFC flag if use_of_atl is true?
     #if config_info.use_of_atl > 0
       # TODO: should also set the per-configuration-type variable variant
-      #write_new_line("set(CMAKE_ATL_FLAG #{config_info.use_of_atl})")
       write_set_var('CMAKE_ATL_FLAG', config_info.use_of_atl)
     #end
   end
@@ -848,7 +868,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
       elem_lib_dir = vs7_create_config_variable_translation(elem_lib_dir, @arr_config_var_handling)
       arr_lib_dirs_translated.push(elem_lib_dir)
     }
-    arr_lib_dirs_translated.push('${V2C_LIB_DIRS}')
+    arr_lib_dirs_translated.push(dereference_variable_name('V2C_LIB_DIRS'))
     write_comment_at_level(3, \
       "It is said to be much preferable to be able to use target_link_libraries()\n" \
       "rather than the very unspecific link_directories()." \
@@ -891,14 +911,11 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     write_comment_at_level(1, \
       "user override mechanism (allow defining custom location of script)" \
     )
-    str_conditional = 'NOT V2C_SCRIPT_LOCATION'
-    write_conditional_if(str_conditional)
-      # NOTE: we'll make V2C_SCRIPT_LOCATION express its path via
-      # relative argument to global CMAKE_SOURCE_DIR and _not_ CMAKE_CURRENT_SOURCE_DIR,
-      # (this provision should even enable people to manually relocate
-      # an entire sub project within the source tree).
-      write_set_var('V2C_SCRIPT_LOCATION', "\"${CMAKE_SOURCE_DIR}/#{script_location_relative_to_master}\"")
-    write_conditional_end(str_conditional)
+    # NOTE: we'll make V2C_SCRIPT_LOCATION express its path via
+    # relative argument to global CMAKE_SOURCE_DIR and _not_ CMAKE_CURRENT_SOURCE_DIR,
+    # (this provision should even enable people to manually relocate
+    # an entire sub project within the source tree).
+    write_set_var_if_unset('V2C_SCRIPT_LOCATION', "\"${CMAKE_SOURCE_DIR}/#{script_location_relative_to_master}\"")
   end
   def write_func_v2c_project_post_setup(project_name, orig_project_file_basename)
     # Rationale: keep count of generated lines of CMakeLists.txt to a bare minimum -
@@ -907,8 +924,8 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # that's identical for each project should be implemented by the v2c_project_post_setup() function
     # _internally_.
     write_vcproj2cmake_func_comment()
-    arr_func_args = [ "${CMAKE_CURRENT_SOURCE_DIR}/#{orig_project_file_basename}", '${CMAKE_CURRENT_LIST_FILE}' ]
-    write_command_list_quoted('v2c_project_post_setup', project_name, arr_func_args)
+    arr_args_func = [ project_name, "${CMAKE_CURRENT_SOURCE_DIR}/#{orig_project_file_basename}", dereference_variable_name('CMAKE_CURRENT_LIST_FILE') ]
+    write_invoke_function_quoted('v2c_project_post_setup', arr_args_func)
   end
 
   private
@@ -935,7 +952,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     write_command_single_line('cmake_minimum_required', 'VERSION 2.6')
   end
   def put_file_header_cmake_policies
-    str_conditional = 'COMMAND cmake_policy'
+    str_conditional = get_var_conditional_command('cmake_policy')
     write_conditional_if(str_conditional)
       # CMP0005: manual quoting of brackets in definitions doesn't seem to work otherwise,
       # in cmake 2.6.4-7.el5 with "OLD".
@@ -957,15 +974,14 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # including .vcproj conversions to a different machine, thus all v2c components should be available)
     #write_new_line("set(V2C_MASTER_PROJECT_DIR \"#{@master_project_dir}\")")
     next_paragraph()
-    write_set_var('V2C_MASTER_PROJECT_DIR', '"${CMAKE_SOURCE_DIR}"')
+    write_set_var_quoted('V2C_MASTER_PROJECT_DIR', dereference_variable_name('CMAKE_SOURCE_DIR'))
     # NOTE: use set() instead of list(APPEND...) to _prepend_ path
     # (otherwise not able to provide proper _overrides_)
-    write_set_var('CMAKE_MODULE_PATH', "\"${V2C_MASTER_PROJECT_DIR}/#{$v2c_module_path_local}\" ${CMAKE_MODULE_PATH}")
+    arr_args_func = [ "${V2C_MASTER_PROJECT_DIR}/#{$v2c_module_path_local}", dereference_variable_name('CMAKE_MODULE_PATH') ]
+    write_list_quoted('CMAKE_MODULE_PATH', arr_args_func)
   end
-  def put_var_config_dir_local
-    # "export" our internal $v2c_config_dir_local variable (to be able to reference it in CMake scripts as well)
-    write_set_var('V2C_CONFIG_DIR_LOCAL', "\"#{$v2c_config_dir_local}\"")
-  end
+  # "export" our internal $v2c_config_dir_local variable (to be able to reference it in CMake scripts as well)
+  def put_var_config_dir_local; write_set_var_quoted('V2C_CONFIG_DIR_LOCAL', $v2c_config_dir_local) end
   def put_include_vcproj2cmake_func
     next_paragraph()
     write_comment_at_level(2, \
@@ -1129,11 +1145,11 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeSyntaxGenerator
       arr_source_vars = Array.new
       # dump sub filters...
       arr_my_sub_sources.each { |sources_elem|
-        arr_source_vars.push("${#{sources_elem}}")
+        arr_source_vars.push(dereference_variable_name(sources_elem))
       }
       # ...then our own files
       if not source_files_variable.nil?
-        arr_source_vars.push("${#{source_files_variable}}")
+        arr_source_vars.push(dereference_variable_name(source_files_variable))
       end
       next_paragraph()
       write_list_quoted(sources_variable, arr_source_vars)
@@ -1162,33 +1178,31 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
   def put_source_vars(arr_sub_source_list_var_names)
     arr_source_vars = Array.new
     arr_sub_source_list_var_names.each { |sources_elem|
-	arr_source_vars.push("${#{sources_elem}}")
+	arr_source_vars.push(dereference_variable_name(sources_elem))
     }
     next_paragraph()
     write_list_quoted('SOURCES', arr_source_vars)
   end
-  def put_hook_post_sources; write_include('${V2C_HOOK_POST_SOURCES}', true) end
+  def put_hook_post_sources; write_include_from_cmake_var('V2C_HOOK_POST_SOURCES', true) end
   def put_hook_post_definitions
     next_paragraph()
     write_comment_at_level(1, \
 	"hook include after all definitions have been made\n" \
 	"(but _before_ target is created using the source list!)" \
     )
-    write_include('${V2C_HOOK_POST_DEFINITIONS}', true)
+    write_include_from_cmake_var('V2C_HOOK_POST_DEFINITIONS', true)
   end
   #def evaluate_precompiled_header_config(target, files_str)
   #end
   #
   def write_conditional_target_valid_begin
-    write_conditional_if(get_var_conditional_target())
+    write_conditional_if(get_var_conditional_target(@target.name))
   end
   def write_conditional_target_valid_end
-    write_conditional_end(get_var_conditional_target())
+    write_conditional_end(get_var_conditional_target(@target.name))
   end
 
-  def get_var_conditional_target()
-    return "TARGET #{@target.name}"
-  end
+  def get_var_conditional_target(target_name); return "TARGET #{target_name}" end
 
   # FIXME: not sure whether map_lib_dirs etc. should be passed in in such a raw way -
   # probably mapping should already have been done at that stage...
@@ -1218,7 +1232,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
   def put_target_type(target, map_dependencies, config_info_curr)
     target_is_valid = false
 
-    str_condition_no_target = "NOT TARGET #{target.name}"
+    str_condition_no_target = get_conditional_inverted(get_var_conditional_target(target.name))
     write_conditional_if(str_condition_no_target)
           # FIXME: should use a macro like rosbuild_add_executable(),
           # http://www.ros.org/wiki/rosbuild/CMakeLists ,
@@ -1288,7 +1302,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     write_comment_at_level(1, \
       "e.g. to be used for tweaking target properties etc." \
     )
-    write_include('${V2C_HOOK_POST_TARGET}', true)
+    write_include_from_cmake_var('V2C_HOOK_POST_TARGET', true)
   end
   def generate_property_compile_definitions(config_name_upper, arr_platdefs, str_platform)
       write_conditional_if(str_platform)
@@ -1313,11 +1327,8 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     # and should derive the header from that - but we could grep the
     # .cpp file for the similarly named include......).
     return if pch_source_name.nil? or pch_source_name.length == 0
-    arr_args_precomp_header = Array.new
-    arr_args_precomp_header.push(build_type)
-    arr_args_precomp_header.push("#{pch_use_mode}") # stringify numeric arg
-    arr_args_precomp_header.push(pch_source_name)
-    write_command_list_quoted('v2c_target_add_precompiled_header', target_name, arr_args_precomp_header)
+    arr_args_precomp_header = [ target_name, build_type, "#{pch_use_mode}", pch_source_name ]
+    write_invoke_function_quoted('v2c_target_add_precompiled_header', arr_args_precomp_header)
   end
   def write_precompiled_header(str_build_type, precompiled_header_info)
     return if not $v2c_target_precompiled_header_enable
@@ -1325,7 +1336,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     return if precompiled_header_info.header_source_name.nil?
     # FIXME: this filesystem validation should be carried out by a generator-independent base class...
     pch_ok = v2c_generator_check_file_accessible(@project_dir, precompiled_header_info.header_source_name, 'header file to be precompiled', @target.name, false)
-    # Implement soft failure
+    # Implement non-hard failure
     # (reasoning: the project is compilable anyway, even without pch)
     # in case the file is not valid:
     return if not pch_ok
@@ -1372,7 +1383,8 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
       # it does NOT provide a per-config COMPILE_FLAGS property! Need to verify ASAP
       # whether compile flags do get passed properly in debug / release.
       # Strangely enough it _does_ have LINK_FLAGS_<CONFIG>, though!
-      cmake_command_arg = "TARGET #{@target.name} APPEND PROPERTY COMPILE_FLAGS_#{config_name_upper}"
+      conditional_target = get_var_conditional_target(@target.name)
+      cmake_command_arg = "#{conditional_target} APPEND PROPERTY COMPILE_FLAGS_#{config_name_upper}"
       write_command_list('set_property', cmake_command_arg, arr_flags)
     write_conditional_end(str_conditional)
   end
@@ -1381,12 +1393,13 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     config_name_upper = get_config_name_upcase(config_name)
     next_paragraph()
     write_conditional_if(str_conditional)
-      cmake_command_arg = "TARGET #{@target.name} APPEND PROPERTY LINK_FLAGS_#{config_name_upper}"
+      conditional_target = get_var_conditional_target(@target.name)
+      cmake_command_arg = "#{conditional_target} APPEND PROPERTY LINK_FLAGS_#{config_name_upper}"
       write_command_list('set_property', cmake_command_arg, arr_flags)
     write_conditional_end(str_conditional)
   end
   def write_link_libraries(arr_dependencies, map_dependencies)
-    arr_dependencies.push('${V2C_LIBS}')
+    arr_dependencies.push(dereference_variable_name('V2C_LIBS'))
     @localGenerator.write_build_attributes('target_link_libraries', arr_dependencies, map_dependencies, @target.name)
   end
   def write_func_v2c_target_post_setup(project_name, project_keyword)
@@ -1399,8 +1412,8 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     if project_keyword.nil?
 	project_keyword = V2C_ATTRIBUTE_NOT_PROVIDED_MARKER
     end
-    arr_func_args = [ project_name, project_keyword ]
-    write_command_list_quoted('v2c_target_post_setup', @target.name, arr_func_args)
+    arr_args_func = [ @target.name, project_name, project_keyword ]
+    write_invoke_function_quoted('v2c_target_post_setup', arr_args_func)
   end
   def set_properties_vs_scc(scc_info)
     # Keep source control integration in our conversion!
@@ -1441,8 +1454,8 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
 
     next_paragraph()
     write_vcproj2cmake_func_comment()
-    arr_func_args = [ scc_info.project_name, scc_info.local_path, scc_info.provider, scc_info.aux_path ]
-    write_command_list_quoted('v2c_target_set_properties_vs_scc', @target.name, arr_func_args)
+    arr_args_func = [ @target.name, scc_info.project_name, scc_info.local_path, scc_info.provider, scc_info.aux_path ]
+    write_invoke_function_quoted('v2c_target_set_properties_vs_scc', arr_args_func)
   end
 
   private
@@ -1453,7 +1466,8 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
   end
 
   def set_property(target, property, value)
-    write_command_single_line('set_property', "TARGET #{target} PROPERTY #{property} \"#{value}\"")
+    arr_args_func = [ 'TARGET', target, 'PROPERTY', property, value ]
+    write_command_list_quoted('set_property', nil, arr_args_func)
   end
 end
 
@@ -1598,24 +1612,14 @@ EOF
 end
 
 class V2C_VSParserBase
-  def unknown_attribute(name)
-    unknown_something('attribute', name)
-  end
-  def unknown_element(name)
-    unknown_something('element', name)
-  end
-  def unknown_element_text(name)
-    unknown_something('element text', name)
-  end
+  def unknown_attribute(name); unknown_something('attribute', name) end
+  def unknown_element(name); unknown_something('element', name) end
+  def unknown_element_text(name); unknown_something('element text', name) end
   def skipped_element_warn(elem_name)
     log_warn "unhandled less important XML element (#{elem_name})!"
   end
-  def parser_error(str_description)
-    log_error #{str_description}
-  end
-  def unhandled_functionality(str_description)
-    log_error #{str_description}
-  end
+  def parser_error(str_description); log_error(str_description) end
+  def unhandled_functionality(str_description); log_error(str_description) end
   def get_boolean_value(attr_value)
     value = false
     if not attr_value.nil? and attr_value.downcase == 'true'
@@ -1721,18 +1725,14 @@ class V2C_VS7ToolLinkerParser < V2C_VSParserBase
       arr_lib_dirs.push(elem_lib_dir)
     }
   end
-  def parse_additional_options(arr_flags, attr_options)
-    # See comment at compiler-side method counterpart
-    # It seems VS7 linker arguments are separated by whitespace --> empty split() argument.
-    arr_flags.replace(attr_options.split())
-  end
+  # See comment at compiler-side method counterpart
+  # It seems VS7 linker arguments are separated by whitespace --> empty split() argument.
+  def parse_additional_options(arr_flags, attr_options); arr_flags.replace(attr_options.split()) end
   def parse_link_incremental(str_link_incremental); return str_link_incremental.to_i end
   def parse_module_definition_file(attr_module_definition_file)
     return normalize_path(attr_module_definition_file)
   end
-  def parse_pdb_file(attr_pdb_file)
-    return normalize_path(attr_pdb_file)
-  end
+  def parse_pdb_file(attr_pdb_file); return normalize_path(attr_pdb_file) end
 end
 
 class V2C_VS7ToolCompilerParser < V2C_VSParserBase
