@@ -282,7 +282,7 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
     @hash_defines = Hash.new
     @rtti = true
     # FIXME: should probably create a precompiled_header info class!
-    @precompiled_header_use_mode = 0 # known VS10 content is "Create", "Use", "NotUsing"
+    @precompiled_header_use_mode = 0 # known VS10 content is "NotUsing", "Create", "Use"; I suppose these are VS7 values 0, 1, 2 (TODO verify)
     @precompiled_header_source = "" # the header (.h) file to precompile
     @precompiled_header_binary = "" # the precompiled header binary to create or use
     @detect_64bit_porting_problems = true # Enabled by default is preferable, right?
@@ -1295,6 +1295,13 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
   end
   def write_precompiled_header(target_name, build_type, use_mode, precompiled_header_source)
     return if not $v2c_target_precompiled_header_enable
+
+    # FIXME: empty filename may happen in case of precompiled file
+    # indicated via VS7 FileConfiguration UsePrecompiledHeader
+    # (however this is an entry of the .cpp file: not sure whether we can
+    # and should derive the header from that - but we could grep the
+    # .cpp file for the similarly named include......).
+    return if precompiled_header_source.nil? or precompiled_header_source.length == 0
     arr_args_precomp_header = Array.new
     arr_args_precomp_header.push(build_type)
     arr_args_precomp_header.push("#{use_mode}") # stringify numeric arg
