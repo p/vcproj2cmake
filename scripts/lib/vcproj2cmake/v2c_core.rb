@@ -999,11 +999,12 @@ end
 
 # Hrmm, I'm not quite sure yet where to aggregate this function...
 # (missing some proper generator base class or so...)
-def v2c_generator_check_file_accessible(project_dir, file_relative, project_name)
+def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name)
   if $v2c_validate_vcproj_ensure_files_ok
     # TODO: perhaps we need to add a permissions check, too?
-    if not File.exist?("#{project_dir}/#{file_relative}")
-      log_error "File #{file_relative} as listed in project #{project_name} does not exist!? (perhaps filename with wrong case, or wrong path, ...)"
+    file_location = "#{project_dir}/#{file_relative}"
+    if not File.exist?(file_location)
+      log_error "File #{file_relative} (#{file_item_description}) as listed by project #{project_name} does not exist!? (perhaps filename with wrong case, or wrong path, ...)"
       if $v2c_validate_vcproj_abort_on_error > 0
 	# FIXME: should be throwing an exception, to not exit out
 	# on entire possibly recursive (global) operation
@@ -1042,7 +1043,7 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeSyntaxGenerator
       files_str[:arr_file_infos].each { |file|
         f = file.path_relative
 
-	v2c_generator_check_file_accessible(@project_dir, f, @project_name)
+	v2c_generator_check_file_accessible(@project_dir, f, 'file item in project', @project_name)
 
         ## Ignore header files
         #return if f =~ /\.(h|H|lex|y|ico|bmp|txt)$/
@@ -3066,7 +3067,7 @@ Finished. You should make sure to have all important v2c settings includes such 
               precompiled_header_source = compiler_info_curr.precompiled_header_source
 	      if not precompiled_header_source.nil?
                 # FIXME: this filesystem validation should be carried out by a generator-independent base class...
-                v2c_generator_check_file_accessible(p_master_project, precompiled_header_source, target.name)
+                v2c_generator_check_file_accessible(@project_dir, precompiled_header_source, 'header file to be precompiled', target.name)
                 target_generator.write_precompiled_header(
                   target.name,
                   syntax_generator.prepare_string_literal(config_info_curr.build_type),
