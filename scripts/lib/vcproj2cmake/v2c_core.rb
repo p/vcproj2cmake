@@ -165,9 +165,7 @@ end
 
 def push_platform_defn(platform_defs, platform, defn_value)
   #log_debug "adding #{defn_value} on platform #{platform}"
-  if platform_defs[platform].nil?
-    platform_defs[platform] = Array.new
-  end
+  if platform_defs[platform].nil?; platform_defs[platform] = Array.new end
   platform_defs[platform].push(defn_value)
 end
 
@@ -542,10 +540,10 @@ class V2C_CMakeSyntaxGenerator
       @textOut.write_line("# #{line}")
     }
   end
+  # TODO: ideally we would do single-line/multi-line splitting operation _automatically_
+  # (and bonus points for configure line length...)
   def write_command_list(cmake_command, cmake_command_arg, arr_elems)
-    if cmake_command_arg.nil?
-      cmake_command_arg = ''
-    end
+    if cmake_command_arg.nil?; cmake_command_arg = '' end
     @textOut.write_line("#{cmake_command}(#{cmake_command_arg}")
     @textOut.indent_more()
       arr_elems.each do |curr_elem|
@@ -559,13 +557,20 @@ class V2C_CMakeSyntaxGenerator
     arr_elems_quoted = Array.new
     arr_elems.each do |curr_elem|
       # HACK for nil input of SCC info.
-      curr_elem = '' if curr_elem.nil?
+      if curr_elem.nil?; curr_elem = '' end
       arr_elems_quoted.push(element_handle_quoting(curr_elem))
     end
     write_command_list(cmake_command, cmake_command_arg_quoted, arr_elems_quoted)
   end
   def write_command_single_line(cmake_command, str_cmake_command_args)
     @textOut.write_line("#{cmake_command}(#{str_cmake_command_args})")
+  end
+  def write_command_list_single_line(cmake_command, arr_args_cmd)
+    str_cmake_command_args = ''
+    arr_args_cmd.each { |elem|
+      str_cmake_command_args += " #{elem}"
+    }
+    write_command_single_line(cmake_command, str_cmake_command_args)
   end
   def write_list(list_var_name, arr_elems)
     write_command_list('set', list_var_name, arr_elems)
@@ -645,8 +650,8 @@ class V2C_CMakeSyntaxGenerator
         write_comment_at_level(3, comment)
       end
       str_OLD_NEW = set_to_new ? 'NEW' : 'OLD'
-      str_set_policy = "SET #{str_policy} #{str_OLD_NEW}"
-      write_command_single_line('cmake_policy', str_set_policy)
+      arr_args_set_policy = [ 'SET', str_policy, str_OLD_NEW ]
+      write_command_list_single_line('cmake_policy', arr_args_set_policy)
     write_conditional_end(str_conditional)
   end
   def put_source_group(source_group_name, filter_regex, source_files_variable)
@@ -760,14 +765,10 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     put_hook_pre()
   end
   def put_project(project_name, arr_languages = nil)
-    log_fatal 'missing project name' if project_name.nil?
-    project_name_and_attrs = project_name
-    if not arr_languages.nil?
-      arr_languages.each { |elem_lang|
-        project_name_and_attrs += " #{elem_lang}"
-      }
-    end
-    write_command_single_line('project', project_name_and_attrs)
+    if project_name.nil?; log_fatal 'missing project name' end
+    arr_args_project_name_and_attrs = [ project_name ]
+    if not arr_languages.nil?; arr_args_project_name_and_attrs.concat(arr_languages) end
+    write_command_list_single_line('project', arr_args_project_name_and_attrs)
   end
   def put_conversion_details(project_name, orig_environment)
     # We could have stored all information in one (list) variable,
@@ -1059,7 +1060,7 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeSyntaxGenerator
   def put_file_list_recursive(files_str, parent_source_group, arr_sub_sources_for_parent)
     filter_info = files_str[:filter_info]
     group_name = get_filter_group_name(filter_info)
-      log_debug "#{self.class.name}: #{group_name}"
+      log_debug("#{self.class.name}: #{group_name}")
     if not files_str[:arr_sub_filters].nil?
       arr_sub_filters = files_str[:arr_sub_filters]
     end
@@ -1612,6 +1613,7 @@ EOF
 end
 
 class V2C_VSParserBase
+  def log_debug_class(str); log_debug "#{self.class.name}: #{str}" end
   def unknown_attribute(name); unknown_something('attribute', name) end
   def unknown_element(name); unknown_something('element', name) end
   def unknown_element_text(name); unknown_something('element text', name) end
@@ -2006,7 +2008,7 @@ class V2C_VS7FileParser < V2C_VSParserBase
     @arr_file_infos = arr_file_infos_out
   end
   def parse
-    log_debug "#{self.class.name}: parse"
+    log_debug_class('parse')
     info_file = V2C_Info_File.new
     parse_attributes(info_file)
     f = info_file.path_relative # HACK
@@ -2116,11 +2118,11 @@ class V2C_VS7FilterParser < V2C_VSParserBase
       elem_parser = nil # IMPORTANT: reset it!
       case elem_xml.name
       when 'File'
-        log_debug 'FOUND File'
+        log_debug_class('FOUND File')
         elem_parser = V2C_VS7FileParser.new(@target.name, elem_xml, arr_file_infos)
         elem_parser.parse
       when 'Filter'
-        log_debug 'FOUND Filter'
+        log_debug_class('FOUND Filter')
         subfiles_str = Files_str.new
         elem_parser = V2C_VS7FilterParser.new(elem_xml, @target, subfiles_str)
         if elem_parser.parse
@@ -2180,7 +2182,7 @@ class V2C_VS7FilterParser < V2C_VSParserBase
     if file_group_name.nil?
       file_group_name = 'COMMON'
     end
-    log_debug "parsed files group #{file_group_name}, type #{filter_info.get_group_type()}"
+    log_debug_class("parsed files group #{file_group_name}, type #{filter_info.get_group_type()}")
     files_str[:filter_info] = filter_info
   end
 end
@@ -2380,7 +2382,7 @@ class V2C_VS10ItemGroupProjectConfigParser < V2C_VS10ParserBase
             unknown_element(projcfg_elem_xml.name)
           end
 	}
-        log_debug "ProjectConfig: build type #{config_info.build_type}, platform #{config_info.platform}"
+        log_debug_class("build type #{config_info.build_type}, platform #{config_info.platform}")
 	@arr_config_info.push(config_info)
       else
         unknown_element(itemgroup_elem_xml.name)
@@ -2470,7 +2472,7 @@ class V2C_VS10ItemGroupParser < V2C_VS10ParserBase
   end
   def parse
     itemgroup_label = @itemgroup_xml.attributes['Label']
-    log_debug "item group, Label #{itemgroup_label}!"
+    log_debug_class("Label #{itemgroup_label}!")
     item_group_parser = nil
     case itemgroup_label
     when 'ProjectConfigurations'
@@ -2646,7 +2648,7 @@ class V2C_VS10PropertyGroupParser < V2C_VS10ParserBase
         # Or is there a better way to achieve common, reliable parsing of that condition information?
       when 'Label'
         propgroup_label = attr_value
-        log_debug "property group, Label #{propgroup_label}!"
+        log_debug_class("Label #{propgroup_label}!")
         case propgroup_label
         when 'Configuration'
 	  config_info_curr = V2C_Project_Config_Info.new
