@@ -2127,7 +2127,7 @@ class V2C_VS7FilterParser < V2C_VSParserBase
         when '{67DA6AB6-F800-4C08-8B7A-83BB121AAD01}'
           filter_info.is_resources = true
         else
-          unknown_attribute("unknown UniqueIdentifier #{attr_value_upper}")
+          unknown_attribute("unknown/custom UniqueIdentifier #{attr_value_upper}")
         end
       else
         unknown_attribute(attr_xml.name)
@@ -2399,6 +2399,11 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
         filter = V2C_Info_Filter.new
         elem_parser = V2C_VS10ItemGroupElemFilterParser.new(elem_xml, filter)
 	elem_parser.parse
+      when 'ClCompile', 'ClInclude', 'None', 'ResourceCompile'
+        # Due to split between .vcxproj and .vcxproj.filters,
+        # need to possibly _enhance_ an _existing_ item group info,
+        # thus make sure to do lookup first.
+        unknown_element(elem_name)
       else
         unknown_element(elem_name)
       end
@@ -2722,6 +2727,11 @@ class V2C_VS10ProjectFiltersParser < V2C_VS10ProjectFiltersParserBase
       elem_parser = nil # IMPORTANT: reset it!
       case elem_xml.name
       when 'ItemGroup'
+        # FIXME: _perhaps_ we should pass a boolean to V2C_VS10ItemGroupParser
+        # indicating whether we're .vcxproj or .filters.
+        # But then VS handling of file elements in .vcxproj and .filters
+        # might actually be completely identical, so a boolean split would be
+        # counterproductive (TODO verify!).
         elem_parser = V2C_VS10ItemGroupParser.new(elem_xml, @target, @arr_config_info)
       #when 'PropertyGroup'
       #  proj_filters_elem_parser = V2C_VS10PropertyGroupParser.new(elem_xml, @target)
