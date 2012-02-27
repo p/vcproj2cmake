@@ -62,7 +62,7 @@ file(MAKE_DIRECTORY "${v2c_stamp_files_dir}")
 
 
 # Debug-only helper!
-function(v2c_target_log_configuration _target)
+function(_v2c_target_log_configuration _target)
   if(TARGET ${_target})
     get_property(vs_scc_projectname_ TARGET ${_target} PROPERTY VS_SCC_PROJECTNAME)
     get_property(vs_scc_localpath_ TARGET ${_target} PROPERTY VS_SCC_LOCALPATH)
@@ -70,7 +70,7 @@ function(v2c_target_log_configuration _target)
     get_property(vs_scc_auxpath_ TARGET ${_target} PROPERTY VS_SCC_AUXPATH)
     message(FATAL_ERROR "Properties/settings target ${_target}:\n\tvs_scc_projectname_ ${vs_scc_projectname_}\n\tvs_scc_localpath_ ${vs_scc_localpath_}\n\tvs_scc_provider_ ${vs_scc_provider_}\n\tvs_scc_auxpath_ ${vs_scc_auxpath_}")
   endif(TARGET ${_target})
-endfunction(v2c_target_log_configuration _target)
+endfunction(_v2c_target_log_configuration _target)
 
 
 if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
@@ -126,7 +126,7 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     set(v2c_update_cmakelists_abort_build_after_update_cleanup_stamp_file "${v2c_stamp_files_dir}/v2c_cmakelists_update_abort_cleanup_done.stamp")
   endif(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD)
 
-  function(v2c_cmakelists_rebuild_recursively _v2c_scripts_base_path _v2c_cmakelists_rebuilder_deps_common_list)
+  function(_v2c_cmakelists_rebuild_recursively _v2c_scripts_base_path _v2c_cmakelists_rebuilder_deps_common_list)
     if(TARGET ${v2c_cmakelists_target_rebuild_all_name})
       return() # Nothing left to do...
     endif(TARGET ${v2c_cmakelists_target_rebuild_all_name})
@@ -163,11 +163,11 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     #)
     #add_custom_target(update_cmakelists_rebuild_recursive_ALL_observer ALL DEPENDS "${cmakelists_update_recursively_updated_observer_stamp_file_}")
     #add_dependencies(update_cmakelists_rebuild_recursive_ALL_observer ${v2c_cmakelists_target_rebuild_all_name})
-  endfunction(v2c_cmakelists_rebuild_recursively _v2c_scripts_base_path _v2c_cmakelists_rebuilder_deps_common_list)
+  endfunction(_v2c_cmakelists_rebuild_recursively _v2c_scripts_base_path _v2c_cmakelists_rebuilder_deps_common_list)
 
   # Function to automagically rebuild our converted CMakeLists.txt
   # by the original converter script in case any relevant files changed.
-  function(v2c_project_rebuild_on_update _dependent_target _vcproj_file _cmakelists_file _script _master_proj_dir)
+  function(_v2c_project_rebuild_on_update _dependent_target _vcproj_file _cmakelists_file _script _master_proj_dir)
     message(STATUS "${_dependent_target}: providing ${_cmakelists_file} rebuilder (watching ${_vcproj_file})")
 
     if(NOT EXISTS "${_script}")
@@ -195,7 +195,7 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     # Hrmm, this is a wee bit unclean: since we gather access to the script name
     # only in case of an invocation of this function,
     # we'll have to invoke the recursive-rebuild function _within_ here, too.
-    v2c_cmakelists_rebuild_recursively("${v2c_scripts_base_path_}" "${v2c_cmakelists_rebuilder_deps_common_list_}")
+    _v2c_cmakelists_rebuild_recursively("${v2c_scripts_base_path_}" "${v2c_cmakelists_rebuilder_deps_common_list_}")
 
     # Collect dependencies for mappings files in current project, too:
     file(GLOB proj_mappings_files_list_ "${v2c_mappings_files_expr}")
@@ -310,11 +310,11 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
       # Make sure the CMakeLists.txt rebuild happens _before_ trying to build the actual target.
       add_dependencies(${_dependent_target} ${target_cmakelists_ensure_rebuilt_name_})
     endif(TARGET ${_dependent_target})
-  endfunction(v2c_project_rebuild_on_update _dependent_target _vcproj_file _cmakelists_file _script _master_proj_dir)
+  endfunction(_v2c_project_rebuild_on_update _dependent_target _vcproj_file _cmakelists_file _script _master_proj_dir)
 else(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
-  function(v2c_project_rebuild_on_update _dependent_target _vcproj_file _cmakelists_file _script _master_proj_dir)
+  function(_v2c_project_rebuild_on_update _dependent_target _vcproj_file _cmakelists_file _script _master_proj_dir)
     # dummy!
-  endfunction(v2c_project_rebuild_on_update _dependent_target _vcproj_file _cmakelists_file _script _master_proj_dir)
+  endfunction(_v2c_project_rebuild_on_update _dependent_target _vcproj_file _cmakelists_file _script _master_proj_dir)
 endif(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
 
 # Helper to hook up a precompiled header that might be enabled
@@ -592,7 +592,7 @@ function(v2c_target_post_setup _target _project_label _vs_keyword)
     endif(NOT _vs_keyword STREQUAL V2C_NOT_PROVIDED)
   endif(TARGET ${_target})
   # DEBUG/LOG helper - enable to verify correct transfer of target properties etc.:
-  #v2c_target_log_configuration(${_target})
+  #_v2c_target_log_configuration(${_target})
 
 endfunction(v2c_target_post_setup _target _project_label _vs_keyword)
 
@@ -602,9 +602,9 @@ endfunction(v2c_target_post_setup _target _project_label _vs_keyword)
 # (--> vcproj2cmake.rb and vcproj2cmake_func.cmake versions should always be kept in sync)
 function(v2c_project_post_setup _target _vcproj_file _cmake_current_list_file)
   # Implementation note: the last argument to
-  # v2c_project_rebuild_on_update() should be as much of a 1:1 passthrough of
+  # _v2c_project_rebuild_on_update() should be as much of a 1:1 passthrough of
   # the input argument to the CMakeLists.txt converter ruby script execution as possible/suitable,
   # since invocation arguments of this script on rebuild should be (roughly) identical.
-  v2c_project_rebuild_on_update(${_target} "${_vcproj_file}" "${_cmake_current_list_file}" "${V2C_SCRIPT_LOCATION}" "${V2C_MASTER_PROJECT_DIR}")
+  _v2c_project_rebuild_on_update(${_target} "${_vcproj_file}" "${_cmake_current_list_file}" "${V2C_SCRIPT_LOCATION}" "${V2C_MASTER_PROJECT_DIR}")
   include("${V2C_HOOK_POST}" OPTIONAL)
 endfunction(v2c_project_post_setup _target _vcproj_file _cmake_current_list_file)
