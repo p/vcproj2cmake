@@ -248,6 +248,11 @@ and to implement a cross-compiler setup
   to receive input in case anyone has particular experience in this area).
 
 
+Possibly useful project to normalize file content
+of the rather volatile .vcproj file format ("herding cats"):
+http://www.codeproject.com/Articles/133604/Visual-C-version-7-9-vcproj-project-file-formatter
+
+
 === Off-Topic parts ===
 
 If someone is still making use of the SCM (Source Control Management)
