@@ -275,16 +275,24 @@ class V2C_Tool_Compiler_Specific_Info < V2C_Tool_Specific_Info_Base
   attr_accessor :arr_disable_warnings
 end
 
+class V2C_Precompiled_Header_Info
+  def initialize
+    @use_mode = 0 # known VS10 content is "NotUsing", "Create", "Use"; I suppose these are VS7 values 0, 1, 2 (TODO verify)
+    @header_source_name = '' # the header (.h) file to precompile
+    @header_binary_name = '' # the precompiled header binary to create or use
+  end
+  attr_accessor :use_mode
+  attr_accessor :header_source_name
+  attr_accessor :header_binary_name
+end
+
 class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
   def initialize
     super()
     @arr_info_include_dirs = Array.new
     @hash_defines = Hash.new
     @rtti = true
-    # FIXME: should probably create a precompiled_header info class!
-    @precompiled_header_use_mode = 0 # known VS10 content is "NotUsing", "Create", "Use"; I suppose these are VS7 values 0, 1, 2 (TODO verify)
-    @precompiled_header_source = "" # the header (.h) file to precompile
-    @precompiled_header_binary = "" # the precompiled header binary to create or use
+    @precompiled_header_info = nil
     @detect_64bit_porting_problems = true # Enabled by default is preferable, right?
     @warnings_are_errors = false
     @warning_level = 0 # hmm, this is very compiler-specific, thus it should probably be translated into a particular compiler flag value at V2C_Tool_Compiler_Specific_Info
@@ -296,9 +304,7 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
   attr_accessor :arr_info_include_dirs
   attr_accessor :hash_defines
   attr_accessor :rtti
-  attr_accessor :precompiled_header_use_mode
-  attr_accessor :precompiled_header_source
-  attr_accessor :precompiled_header_binary
+  attr_accessor :precompiled_header_info
   attr_accessor :detect_64bit_porting_problems
   attr_accessor :warnings_are_errors
   attr_accessor :warning_level
@@ -999,20 +1005,23 @@ end
 
 # Hrmm, I'm not quite sure yet where to aggregate this function...
 # (missing some proper generator base class or so...)
-def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name)
+def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name, throw_error)
+  file_accessible = true
   if $v2c_validate_vcproj_ensure_files_ok
     # TODO: perhaps we need to add a permissions check, too?
     file_location = "#{project_dir}/#{file_relative}"
     if not File.exist?(file_location)
       log_error "File #{file_relative} (#{file_item_description}) as listed by project #{project_name} does not exist!? (perhaps filename with wrong case, or wrong path, ...)"
-      if $v2c_validate_vcproj_abort_on_error > 0
+      if throw_error
 	# FIXME: should be throwing an exception, to not exit out
 	# on entire possibly recursive (global) operation
         # when a single project is in error...
         log_fatal "Improper original file - will abort and NOT generate a broken converted project file. Please fix content of the original project file!"
       end
+      file_accessible = false
     end
   end
+  return file_accessible
 end
 
 # FIXME: temporarily appended a _VS7 suffix since we're currently changing file list generation during our VS10 generator work.
@@ -1043,7 +1052,7 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeSyntaxGenerator
       files_str[:arr_file_infos].each { |file|
         f = file.path_relative
 
-	v2c_generator_check_file_accessible(@project_dir, f, 'file item in project', @project_name)
+	v2c_generator_check_file_accessible(@project_dir, f, 'file item in project', @project_name, ($v2c_validate_vcproj_abort_on_error > 0))
 
         ## Ignore header files
         #return if f =~ /\.(h|H|lex|y|ico|bmp|txt)$/
@@ -1293,26 +1302,42 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
 	write_command_list('set_property', cmake_command_arg, arr_compile_defn)
       write_conditional_end(str_platform)
   end
-  def write_precompiled_header(target_name, build_type, use_mode, precompiled_header_source)
-    return if not $v2c_target_precompiled_header_enable
-
+  def put_precompiled_header(target_name, build_type, pch_use_mode, pch_source_name)
     # FIXME: empty filename may happen in case of precompiled file
     # indicated via VS7 FileConfiguration UsePrecompiledHeader
     # (however this is an entry of the .cpp file: not sure whether we can
     # and should derive the header from that - but we could grep the
     # .cpp file for the similarly named include......).
-    return if precompiled_header_source.nil? or precompiled_header_source.length == 0
+    return if pch_source_name.nil? or pch_source_name.length == 0
     arr_args_precomp_header = Array.new
     arr_args_precomp_header.push(build_type)
-    arr_args_precomp_header.push("#{use_mode}") # stringify numeric arg
-    arr_args_precomp_header.push(precompiled_header_source)
+    arr_args_precomp_header.push("#{pch_use_mode}") # stringify numeric arg
+    arr_args_precomp_header.push(pch_source_name)
     write_command_list_quoted('v2c_target_add_precompiled_header', target_name, arr_args_precomp_header)
+  end
+  def write_precompiled_header(str_build_type, precompiled_header_info)
+    return if not $v2c_target_precompiled_header_enable
+    return if precompiled_header_info.nil?
+    return if precompiled_header_info.header_source_name.nil?
+    # FIXME: this filesystem validation should be carried out by a generator-independent base class...
+    pch_ok = v2c_generator_check_file_accessible(@project_dir, precompiled_header_info.header_source_name, 'header file to be precompiled', @target.name, false)
+    # Implement soft failure
+    # (reasoning: the project is compilable anyway, even without pch)
+    # in case the file is not valid:
+    return if not pch_ok
+    put_precompiled_header(
+      @target.name,
+      prepare_string_literal(str_build_type),
+      precompiled_header_info.use_mode,
+      precompiled_header_info.header_source_name
+    )
   end
   def write_property_compile_definitions(config_name, hash_defs, map_defs)
     # Convert hash into array as required by common helper functions
     # (it's probably a good idea to provide "key=value" entries
     # for more complete matching possibilities
     # within the regex matching parts done by those functions).
+    # TODO: this might be relocatable to a common generator base helper method.
     arr_defs = Array.new
     hash_defs.each { |key, value|
       if value.empty?
@@ -1749,9 +1774,11 @@ class V2C_VS7ToolCompilerParser < V2C_VSParserBase
     when 'Optimization'
       compiler_info.optimization = attr_value.to_i
     when 'PrecompiledHeaderFile'
-      compiler_info.precompiled_header_binary = normalize_path(attr_value)
+      allocate_precompiled_header_info(compiler_info)
+      compiler_info.precompiled_header_info.header_binary_name = normalize_path(attr_value)
     when 'PrecompiledHeaderThrough'
-      compiler_info.precompiled_header_source = normalize_path(attr_value)
+      allocate_precompiled_header_info(compiler_info)
+      compiler_info.precompiled_header_info.header_source_name = normalize_path(attr_value)
     when 'PreprocessorDefinitions'
       parse_preprocessor_definitions(compiler_info.hash_defines, attr_value)
     when 'RuntimeTypeInfo'
@@ -1759,7 +1786,8 @@ class V2C_VS7ToolCompilerParser < V2C_VSParserBase
     when 'ShowIncludes'
       compiler_info.show_includes = get_boolean_value(attr_value)
     when 'UsePrecompiledHeader'
-      compiler_info.precompiled_header_use_mode = parse_use_precompiled_header(attr_value)
+      allocate_precompiled_header_info(compiler_info)
+      compiler_info.precompiled_header_info.use_mode = parse_use_precompiled_header(attr_value)
     when 'WarnAsError'
       compiler_info.warnings_are_errors = get_boolean_value(attr_value)
     when 'WarningLevel'
@@ -1805,6 +1833,10 @@ class V2C_VS7ToolCompilerParser < V2C_VSParserBase
       end
       hash_defines[str_define_key] = str_define_value
     }
+  end
+  def allocate_precompiled_header_info(compiler_info)
+    return if not compiler_info.precompiled_header_info.nil?
+    compiler_info.precompiled_header_info = V2C_Precompiled_Header_Info.new
   end
   def parse_use_precompiled_header(attr_use_precompiled_header)
     return attr_use_precompiled_header.to_i
@@ -3070,18 +3102,7 @@ Finished. You should make sure to have all important v2c settings includes such 
               # Since the precompiled header CMake module currently
               # _resets_ a target's COMPILE_FLAGS property,
               # make sure to generate it _before_ generating COMPILE_FLAGS:
-
-              precompiled_header_source = compiler_info_curr.precompiled_header_source
-	      if not precompiled_header_source.nil?
-                # FIXME: this filesystem validation should be carried out by a generator-independent base class...
-                v2c_generator_check_file_accessible(@project_dir, precompiled_header_source, 'header file to be precompiled', target.name)
-                target_generator.write_precompiled_header(
-                  target.name,
-                  syntax_generator.prepare_string_literal(config_info_curr.build_type),
-                  compiler_info_curr.precompiled_header_use_mode,
-                  precompiled_header_source
-                )
-              end
+              target_generator.write_precompiled_header(config_info_curr.build_type, compiler_info_curr.precompiled_header_info)
 
 	      # Hrmm, are we even supposed to be doing this?
 	      # On Windows I guess UseOfMfc in generated VS project files
