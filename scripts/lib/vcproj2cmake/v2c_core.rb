@@ -115,7 +115,7 @@ def log_fatal(str); log_error "#{str}. Aborting!"; exit 1 end
 
 # Change \ to /, and remove leading ./
 def normalize_path(p)
-  felems = p.gsub('\\', '/').split('/')
+  felems = p.tr('\\', '/').split('/')
   # DON'T eradicate single '.' !!
   felems.shift if felems[0] == '.' and felems.size > 1
   File.join(felems)
@@ -640,11 +640,11 @@ class V2C_CMakeSyntaxGenerator
   def write_cmake_policy(policy_num, set_to_new, comment)
     str_policy = '%s%04d' % [ 'CMP', policy_num ]
     str_conditional = "POLICY #{str_policy}"
-    str_OLD_NEW = set_to_new ? 'NEW' : 'OLD'
     write_conditional_if(str_conditional)
       if not comment.nil?
         write_comment_at_level(3, comment)
       end
+      str_OLD_NEW = set_to_new ? 'NEW' : 'OLD'
       str_set_policy = "SET #{str_policy} #{str_OLD_NEW}"
       write_command_single_line('cmake_policy', str_set_policy)
     write_conditional_end(str_conditional)
@@ -1004,7 +1004,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # due to copying/modification).
     timestamp_format = $v2c_generated_timestamp_format
     return if timestamp_format.nil? or timestamp_format.length == 0
-    timestamp_format_docs = timestamp_format.gsub('%', '')
+    timestamp_format_docs = timestamp_format.tr('%', '')
     write_comment_at_level(3, "Indicates project conversion moment in time (UTC, format #{timestamp_format_docs})")
     time = Time.new
     str_time = time.utc.strftime(timestamp_format)
@@ -1462,7 +1462,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
 
   def get_config_name_upcase(config_name)
     # need to also convert config names with spaces into underscore variants, right?
-    config_name.clone.upcase.gsub(/ /,'_')
+    config_name.clone.upcase.tr(' ','_')
   end
 
   def set_property(target, property, value)
