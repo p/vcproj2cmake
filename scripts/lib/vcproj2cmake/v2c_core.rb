@@ -434,7 +434,7 @@ class V2C_Target
     @guid = nil
     @root_namespace = nil
     @version = nil
-    @vs_keyword = nil
+    @vs_keyword = nil # .vcproj Keyword attribute ("Win32Proj", "MFCProj", "ATLProj", "MakeFileProj", "Qt4VSv1.0"). TODO: should perhaps do Keyword-specific post-processing (to enable Qt integration, etc.)
     @scc_info = V2C_SCC_Info.new
     # semi-HACK: we need this variable, since we need to be able
     # to tell whether we're able to build a target
@@ -1234,7 +1234,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
       # TODO: perhaps for real cross-platform binaries (i.e.
       # console apps not needing a WinMain()), we should detect
       # this and not use WIN32 in this case...
-      # Well, this probably is related to the .vcproj Keyword attribute ("Win32Proj", "MFCProj", "ATLProj", "MakeFileProj" etc.).
+      # Well, this toggle probably is related to the .vcproj Keyword attribute...
       write_target_executable()
     when 2    # typeDynamicLibrary (.dll)
       target_is_valid = true
