@@ -3089,6 +3089,9 @@ Finished. You should make sure to have all important v2c settings includes such 
 	      # would have to handle it some way or another anyway.
 	      # But then I guess there are other build environments on Windows
 	      # which would need us handling it here manually, so let's just keep it for now.
+	      # Plus, defining _AFXEXT already includes the _AFXDLL setting
+	      # (MFC will define it implicitly),
+	      # thus it's quite likely that our current handling is somewhat incorrect.
               if config_info_curr.use_of_mfc == 2
                 compiler_info_curr.hash_defines['_AFXEXT'] = ''
                 compiler_info_curr.hash_defines['_AFXDLL'] = ''
