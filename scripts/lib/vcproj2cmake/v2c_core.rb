@@ -435,6 +435,7 @@ class V2C_Project_Info # formerly V2C_Target
     @vs_keyword = nil # .vcproj Keyword attribute ("Win32Proj", "MFCProj", "ATLProj", "MakeFileProj", "Qt4VSv1.0"). TODO: should perhaps do Keyword-specific post-processing (to enable Qt integration, etc.)
     @scc_info = V2C_SCC_Info.new
     @arr_config_info = Array.new
+    @main_files = nil
     # semi-HACK: we need this variable, since we need to be able
     # to tell whether we're able to build a target
     # (i.e. whether we have any build units i.e.
@@ -454,6 +455,7 @@ class V2C_Project_Info # formerly V2C_Target
   attr_accessor :vs_keyword
   attr_accessor :scc_info
   attr_accessor :arr_config_info
+  attr_accessor :main_files
   attr_accessor :have_build_units
 end
 
@@ -2006,12 +2008,12 @@ class V2C_VS7FileParser < V2C_VSParserBase
     @project_name = project_name # FIXME remove (file check should be done _after_ parsing!)
     @file_xml = file_xml
     @arr_file_infos = arr_file_infos_out
+    @have_build_units = false # HACK
   end
   def parse
     log_debug_class('parse')
     info_file = V2C_Info_File.new
     parse_attributes(info_file)
-    f = info_file.path_relative # HACK
 
     config_info_curr = nil
     @file_xml.elements.each { |elem_xml|
@@ -2050,12 +2052,13 @@ class V2C_VS7FileParser < V2C_VSParserBase
     if not excluded_from_build and included_in_build
       @arr_file_infos.push(info_file)
       # HACK:
-      if not $have_build_units
-        if f =~ /\.(c|C)/
-          $have_build_units = true
+      if not @have_build_units
+        if info_file.path_relative =~ /\.(c|C)/
+          @have_build_units = true
         end
       end
     end
+    return @have_build_units
   end
 
   private
@@ -2082,7 +2085,6 @@ class V2C_VS7FilterParser < V2C_VSParserBase
   end
   def parse
     res = parse_file_list(@files_xml, @files_str)
-    @project.have_build_units = $have_build_units # HACK
     return res
   end
   def parse_file_list(vcproj_filter_xml, files_str)
@@ -2120,7 +2122,9 @@ class V2C_VS7FilterParser < V2C_VSParserBase
       when 'File'
         log_debug_class('FOUND File')
         elem_parser = V2C_VS7FileParser.new(@project.name, elem_xml, arr_file_infos)
-        elem_parser.parse
+	if elem_parser.parse
+          @project.have_build_units = true
+        end
       when 'Filter'
         log_debug_class('FOUND Filter')
         subfiles_str = Files_str.new
@@ -2194,10 +2198,6 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
   def parse
     parse_attributes
 
-    $have_build_units = false # HACK
-
-    $main_files = Files_str.new # HACK global var
-
     @project_xml.elements.each { |elem_xml|
       elem_parser = nil # IMPORTANT: reset it!
       case elem_xml.name
@@ -2205,7 +2205,8 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
         elem_parser = V2C_VS7ConfigurationsParser.new(elem_xml, @project.arr_config_info)
       when 'Files' # "Files" simply appears to be a special "Filter" element without any filter conditions.
         # FIXME: we most likely shouldn't pass a rather global "target" object here! (pass a file info object)
-        elem_parser = V2C_VS7FilterParser.new(elem_xml, @project, $main_files)
+        @project.main_files = Files_str.new
+        elem_parser = V2C_VS7FilterParser.new(elem_xml, @project, @project.main_files)
       when 'Platforms'
         skipped_element_warn(elem_xml.name)
       else
@@ -2874,7 +2875,7 @@ class V2C_CMakeGenerator
       tmpfile = Tempfile.new('vcproj2cmake')
 
       File.open(tmpfile.path, 'w') { |out|
-        project_generate_cmake(@p_master_project, @orig_proj_file_basename, out, project_info, $main_files)
+        project_generate_cmake(@p_master_project, @orig_proj_file_basename, out, project_info)
 
         # Close file, since Fileutils.mv on an open file will barf on XP
         out.close
@@ -2929,11 +2930,11 @@ Finished. You should make sure to have all important v2c settings includes such 
       end
     }
   end
-  def project_generate_cmake(p_master_project, orig_proj_file_basename, out, project_info, main_files)
+  def project_generate_cmake(p_master_project, orig_proj_file_basename, out, project_info)
         if project_info.nil?
           log_fatal 'invalid project'
         end
-        if main_files.nil?
+        if project_info.main_files.nil?
           log_fatal 'project has no files!? --> will not generate it'
         end
 
@@ -2990,7 +2991,7 @@ Finished. You should make sure to have all important v2c settings includes such 
 
         # arr_sub_source_list_var_names will receive the names of the individual source list variables:
         arr_sub_source_list_var_names = Array.new
-        target_generator.put_file_list_source_group_recursive(project_info.name, main_files, nil, arr_sub_source_list_var_names)
+        target_generator.put_file_list_source_group_recursive(project_info.name, project_info.main_files, nil, arr_sub_source_list_var_names)
 
         if not arr_sub_source_list_var_names.empty?
           # add a ${V2C_SOURCES} variable to the list, to be able to append
