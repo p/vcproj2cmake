@@ -338,7 +338,7 @@ end
 class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
   def initialize
     super()
-    @arr_dependencies = Array.new
+    @arr_dependencies = Array.new # FIXME: should be changing this into a dependencies class (we need an attribute which indicates whether this dependency is a library _file_ or a target name, since we should be reliably able to decide whether we can add "debug"/"optimized" keywords to CMake variables or target_link_library() parms)
     @link_incremental = 0 # 1 means NO, thus 2 probably means YES?
     @module_definition_file = nil
     @pdb_file = nil
