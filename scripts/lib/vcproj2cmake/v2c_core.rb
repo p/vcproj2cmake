@@ -54,8 +54,9 @@ end
 # with standard Ruby on Rails plugins mechanism.
 v2c_plugin_dir = "#{$script_dir}/v2c_plugins"
 
+PLUGIN_FILE_REGEX_OBJ = %r{v2c_(parser|generator)_.*\.rb$}
 Find.find(v2c_plugin_dir) { |f_plugin|
-  if f_plugin =~ /v2c_(parser|generator)_.*\.rb$/
+  if f_plugin =~ PLUGIN_FILE_REGEX_OBJ
     puts "loading plugin #{f_plugin}!"
     load f_plugin
   end
@@ -127,21 +128,23 @@ def escape_char(in_string, esc_char)
   #puts "in_string quoted #{in_string}"
 end
 
+BACKSLASH_REGEX_OBJ = %r{\\}
 def escape_backslash(in_string)
   # "Escaping a Backslash In Ruby's Gsub": "The reason for this is that
   # the backslash is special in the gsub method. To correctly output a
   # backslash, 4 backslashes are needed.". Oerks - oh well, do it.
   # hrmm, seems we need some more even...
   # (or could we use single quotes (''') for that? Too lazy to retry...)
-  in_string.gsub!(/\\/, '\\\\\\\\')
+  in_string.gsub!(BACKSLASH_REGEX_OBJ, '\\\\\\\\')
 end
 
+COMMENT_LINE_REGEX_OBJ = %r{^\s*#}
 def read_mappings(filename_mappings, mappings)
   # line format is: "tag:PLATFORM1:PLATFORM2=tag_replacement2:PLATFORM3=tag_replacement3"
   if File.exists?(filename_mappings)
     #Hash[*File.read(filename_mappings).scan(/^(.*)=(.*)$/).flatten]
     File.open(filename_mappings, 'r').each do |line|
-      next if line =~ /^\s*#/
+      next if line =~ COMMENT_LINE_REGEX_OBJ
       b, c = line.chomp.split(':')
       mappings[b] = c
     end
@@ -479,8 +482,9 @@ class V2C_BaseGlobalGenerator
 end
 
 
-CMAKE_VAR_MATCH_REGEX = '\\$\\{[[:alnum:]_]+\\}'
-CMAKE_ENV_VAR_MATCH_REGEX = '\\$ENV\\{[[:alnum:]_]+\\}'
+CMAKE_VAR_MATCH_REGEX_STR = '\\$\\{[[:alnum:]_]+\\}'
+CMAKE_IS_LIST_VAR_CONTENT_REGEX_OBJ = %r{^".*;.*"$}
+CMAKE_ENV_VAR_MATCH_REGEX_STR = '\\$ENV\\{[[:alnum:]_]+\\}'
 
 # Contains functionality common to _any_ file-based generator
 class V2C_TextStreamSyntaxGeneratorBase
@@ -570,10 +574,7 @@ class V2C_CMakeSyntaxGenerator
     @textOut.write_line("#{cmake_command}(#{str_cmake_command_args})")
   end
   def write_command_list_single_line(cmake_command, arr_args_cmd)
-    str_cmake_command_args = ''
-    arr_args_cmd.each { |elem|
-      str_cmake_command_args += " #{elem}"
-    }
+    str_cmake_command_args = arr_args_cmd.join(' ')
     write_command_single_line(cmake_command, str_cmake_command_args)
   end
   def write_list(list_var_name, arr_elems)
@@ -581,6 +582,11 @@ class V2C_CMakeSyntaxGenerator
   end
   def write_list_quoted(list_var_name, arr_elems)
     write_command_list_quoted('set', list_var_name, arr_elems)
+  end
+  # Special helper to invoke functions which act on a specific object
+  # (e.g. target) given as first param.
+  def write_invoke_config_object_function_quoted(str_function, str_object, arr_args_func)
+    write_command_list_quoted(str_function, str_object, arr_args_func)
   end
   # Special helper to invoke custom user-defined functions.
   def write_invoke_function_quoted(str_function, arr_args_func)
@@ -658,11 +664,14 @@ class V2C_CMakeSyntaxGenerator
       write_command_list_single_line('cmake_policy', arr_args_set_policy)
     write_conditional_end(str_conditional)
   end
-  def put_source_group(source_group_name, filter_regex, source_files_variable)
+  def put_source_group(source_group_name, arr_filters, source_files_variable)
     arr_elems = Array.new
-    if not filter_regex.nil?
+    if not arr_filters.nil?
       # WARNING: need to keep as separate array elements (whitespace separator would lead to bogus quoting!)
-      arr_elems.push('REGULAR_EXPRESSION', filter_regex)
+      # And _need_ to keep manually quoted,
+      # since we receive this as a ;-separated list and need to pass it on unmodified.
+      str_regex_list = array_to_cmake_list(arr_filters)
+      arr_elems.push('REGULAR_EXPRESSION', str_regex_list)
     end
     arr_elems.push('FILES', dereference_variable_name(source_files_variable))
     # Use multi-line method since source_group() arguments can be very long.
@@ -686,6 +695,12 @@ class V2C_CMakeSyntaxGenerator
 
   private
 
+  def element_manual_quoting(elem)
+    return "\"#{elem}\""
+  end
+  def array_to_cmake_list(arr_elems)
+    return element_manual_quoting(arr_elems.join(';'))
+  end
   # (un)quote strings as needed
   #
   # Once we added a variable in the string,
@@ -695,18 +710,21 @@ class V2C_CMakeSyntaxGenerator
   # However, there is a strong argument to be made for applying the quotes
   # on the _generator_ and not _parser_ side, since it's a CMake syntax attribute
   # that such strings need quoting.
+  CMAKE_STRING_NEEDS_QUOTING_REGEX_OBJ = %r{[^\}\s]\s|\s[^\s\$]|^$}
+  CMAKE_STRING_HAS_QUOTES_REGEX_OBJ = %r{".*"}
+  CMAKE_STRING_QUOTED_CONTENT_MATCH_REGEX_OBJ = %r{"(.*)"}
   def element_handle_quoting(elem)
     # Determine whether quoting needed
     # (in case of whitespace or variable content):
-    #if elem.match(/\s|#{CMAKE_VAR_MATCH_REGEX}|#{CMAKE_ENV_VAR_MATCH_REGEX}/)
+    #if elem.match(/\s|#{CMAKE_VAR_MATCH_REGEX_STR}|#{CMAKE_ENV_VAR_MATCH_REGEX_STR}/)
     # Hrmm, turns out that variables better should _not_ be quoted.
     # But what we _do_ need to quote is regular strings which include
     # whitespace characters, i.e. check for alphanumeric char following
     # whitespace or the other way around.
     # Quoting rules seem terribly confusing, will need to revisit things
     # to get it all precisely correct.
-    # For details, see "Quoting" http://www.itk.org/Wiki/CMake/Language_Syntax
-    needs_quoting = false
+    # For details, see REF_QUOTING: "Quoting" http://www.itk.org/Wiki/CMake/Language_Syntax#Quoting
+    content_needs_quoting = false
     has_quotes = false
     # "contains at least one whitespace character,
     # and then prefixed or followed by any non-whitespace char value"
@@ -719,23 +737,38 @@ class V2C_CMakeSyntaxGenerator
     # And an empty string needs quoting, too!!
     # (this empty content might be a counted parameter of a function invocation,
     # in which case unquoted syntax would implicitly throw away that empty parameter!
-    if elem.match(/[^\}\s]\s|\s[^\s\$]|^$/)
-      needs_quoting = true
+    if elem.match(CMAKE_STRING_NEEDS_QUOTING_REGEX_OBJ)
+      content_needs_quoting = true
     end
-    if elem.match(/".*"/)
+    if elem.match(CMAKE_STRING_HAS_QUOTES_REGEX_OBJ)
       has_quotes = true
     end
-    #puts "QUOTING: elem #{elem} needs_quoting #{needs_quoting} has_quotes #{has_quotes}"
-    if needs_quoting and not has_quotes
+    needs_quoting = (content_needs_quoting and not has_quotes)
+    #puts "QUOTING: elem #{elem} content_needs_quoting #{content_needs_quoting} has_quotes #{has_quotes} needs_quoting #{needs_quoting}"
+    if needs_quoting
       #puts 'QUOTING: do quote!'
-      return "\"#{elem}\""
+      return element_manual_quoting(elem)
     end
-    if not needs_quoting and has_quotes
-      #puts 'QUOTING: do UNquoting!'
-      return elem.gsub(/"(.*)"/, '\1')
+    if has_quotes
+      if not content_needs_quoting
+        is_list = elem_is_cmake_list(elem)
+        needs_unquoting = (not is_list)
+        if needs_unquoting
+          #puts 'QUOTING: do UNquoting!'
+          return elem.sub(CMAKE_STRING_QUOTED_CONTENT_MATCH_REGEX_OBJ, '\1')
+        end
+      end
     end
-      #puts 'QUOTING: do no changes!'
+    #puts 'QUOTING: do no changes!'
     return elem
+  end
+  # Do we have a string such as "aaa;bbb" ?
+  def elem_is_cmake_list(str_elem)
+    # Warning: String.start_with?/end_with? cannot be used (new API)
+    # And using index() etc. for checking of start/end '"' and ';'
+    # is not very useful either, thus use a combined match().
+    #return (not (str_elem.match(CMAKE_IS_LIST_VAR_CONTENT_REGEX_OBJ) == nil))
+    return (not str_elem.match(CMAKE_IS_LIST_VAR_CONTENT_REGEX_OBJ).nil?)
   end
 end
 
@@ -920,7 +953,10 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # relative argument to global CMAKE_SOURCE_DIR and _not_ CMAKE_CURRENT_SOURCE_DIR,
     # (this provision should even enable people to manually relocate
     # an entire sub project within the source tree).
-    write_set_var_if_unset('V2C_SCRIPT_LOCATION', "\"${CMAKE_SOURCE_DIR}/#{script_location_relative_to_master}\"")
+    write_set_var_if_unset(
+      'V2C_SCRIPT_LOCATION',
+      element_manual_quoting("${CMAKE_SOURCE_DIR}/#{script_location_relative_to_master}")
+    )
   end
   def write_func_v2c_project_post_setup(project_name, orig_project_file_basename)
     # Rationale: keep count of generated lines of CMakeLists.txt to a bare minimum -
@@ -929,8 +965,8 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # that's identical for each project should be implemented by the v2c_project_post_setup() function
     # _internally_.
     write_vcproj2cmake_func_comment()
-    arr_args_func = [ project_name, "${CMAKE_CURRENT_SOURCE_DIR}/#{orig_project_file_basename}", dereference_variable_name('CMAKE_CURRENT_LIST_FILE') ]
-    write_invoke_function_quoted('v2c_project_post_setup', arr_args_func)
+    arr_args_func = [ "${CMAKE_CURRENT_SOURCE_DIR}/#{orig_project_file_basename}", dereference_variable_name('CMAKE_CURRENT_LIST_FILE') ]
+    write_invoke_config_object_function_quoted('v2c_project_post_setup', project_name, arr_args_func)
   end
 
   private
@@ -1061,6 +1097,10 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeSyntaxGenerator
   def get_filter_group_name(filter_info); return filter_info.nil? ? 'COMMON' : filter_info.name; end
 
   # Related TODO item: for .cpp files which happen to be listed as include files in their native projects, we should likely explicitly set the HEADER_FILE_ONLY property (however, man cmakeprops seems to say that CMake will implicitly configure .h files correctly).
+  VS7_UNWANTED_GROUP_TAG_CHARS_MATCH_REGEX_OBJ = %r{( |\\)}
+  VS7_UNWANTED_FILE_TYPES_REGEX_OBJ = %r{\.(lex|y|ico|bmp|txt)$}
+  VS7_IDL_FILE_TYPES_REGEX_OBJ = %r{_(i|p).c$}
+  VS7_LIB_FILE_TYPES_REGEX_OBJ = %r{\.lib$}
   def put_file_list_recursive(files_str, parent_source_group, arr_sub_sources_for_parent)
     filter_info = files_str[:filter_info]
     group_name = get_filter_group_name(filter_info)
@@ -1079,10 +1119,10 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeSyntaxGenerator
         #return if f =~ /\.(h|H|lex|y|ico|bmp|txt)$/
         # No we should NOT ignore header files: if they aren't added to the target,
         # then VS won't display them in the file tree.
-        next if f =~ /\.(lex|y|ico|bmp|txt)$/
+        next if f =~ VS7_UNWANTED_FILE_TYPES_REGEX_OBJ
 
         # Verbosely ignore IDL generated files
-        if f =~/_(i|p).c$/
+        if f =~ VS7_IDL_FILE_TYPES_REGEX_OBJ
           # see file_mappings.txt comment above
           log_info "#{@project_name}::#{f} is an IDL generated file: skipping! FIXME: should be platform-dependent."
           included_in_build = false
@@ -1090,7 +1130,7 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeSyntaxGenerator
         end
 
         # Verbosely ignore .lib "sources"
-        if f =~ /\.lib$/
+        if f =~ VS7_LIB_FILE_TYPES_REGEX_OBJ
           # probably these entries are supposed to serve as dependencies
           # (i.e., non-link header-only include dependency, to ensure
           # rebuilds in case of foreign-library header file changes).
@@ -1129,7 +1169,7 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeSyntaxGenerator
       @textOut.indent_less()
     end
 
-    group_tag = this_source_group.clone.gsub(/( |\\)/,'_')
+    group_tag = this_source_group.clone.gsub(VS7_UNWANTED_GROUP_TAG_CHARS_MATCH_REGEX_OBJ,'_')
 
     # process our hierarchy's own files
     if not arr_local_sources.nil?
@@ -1137,12 +1177,12 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeSyntaxGenerator
       write_list_quoted(source_files_variable, arr_local_sources)
       # create source_group() of our local files
       if not parent_source_group.nil?
-        # use filter regex if available: have it generated as source_group(REGULAR_EXPRESSION "regex" ...).
-        filter_regex = nil
+        # use list of filters if available: have it generated as source_group(REGULAR_EXPRESSION "regex" ...).
+        arr_filters = nil
         if not filter_info.nil?
-          filter_regex = filter_info.attr_scfilter
+          arr_filters = filter_info.arr_scfilter
         end
-        put_source_group(this_source_group, filter_regex, source_files_variable)
+        put_source_group(this_source_group, arr_filters, source_files_variable)
       end
     end
     if not source_files_variable.nil? or not arr_my_sub_sources.empty?
@@ -1309,12 +1349,13 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     )
     write_include_from_cmake_var('V2C_HOOK_POST_TARGET', true)
   end
+  COMPILE_DEF_NEEDS_ESCAPING_REGEX_OBJ = %r{[\(\)]+}
   def generate_property_compile_definitions(config_name_upper, arr_platdefs, str_platform)
       write_conditional_if(str_platform)
         arr_compile_defn = Array.new
         arr_platdefs.each do |compile_defn|
     	  # Need to escape the value part of the key=value definition:
-          if compile_defn =~ /[\(\)]+/
+          if compile_defn =~ COMPILE_DEF_NEEDS_ESCAPING_REGEX_OBJ
             escape_char(compile_defn, '\\(')
             escape_char(compile_defn, '\\)')
           end
@@ -1332,8 +1373,8 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     # and should derive the header from that - but we could grep the
     # .cpp file for the similarly named include......).
     return if pch_source_name.nil? or pch_source_name.length == 0
-    arr_args_precomp_header = [ target_name, build_type, "#{pch_use_mode}", pch_source_name ]
-    write_invoke_function_quoted('v2c_target_add_precompiled_header', arr_args_precomp_header)
+    arr_args_precomp_header = [ build_type, "#{pch_use_mode}", pch_source_name ]
+    write_invoke_config_object_function_quoted('v2c_target_add_precompiled_header', target_name, arr_args_precomp_header)
   end
   def write_precompiled_header(str_build_type, precompiled_header_info)
     return if not $v2c_target_precompiled_header_enable
@@ -1417,8 +1458,8 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     if project_keyword.nil?
 	project_keyword = V2C_ATTRIBUTE_NOT_PROVIDED_MARKER
     end
-    arr_args_func = [ @target.name, project_name, project_keyword ]
-    write_invoke_function_quoted('v2c_target_post_setup', arr_args_func)
+    arr_args_func = [ project_name, project_keyword ]
+    write_invoke_config_object_function_quoted('v2c_target_post_setup', @target.name, arr_args_func)
   end
   def set_properties_vs_scc(scc_info)
     # Keep source control integration in our conversion!
@@ -1459,8 +1500,8 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
 
     next_paragraph()
     write_vcproj2cmake_func_comment()
-    arr_args_func = [ @target.name, scc_info.project_name, scc_info.local_path, scc_info.provider, scc_info.aux_path ]
-    write_invoke_function_quoted('v2c_target_set_properties_vs_scc', arr_args_func)
+    arr_args_func = [ scc_info.project_name, scc_info.local_path, scc_info.provider, scc_info.aux_path ]
+    write_invoke_config_object_function_quoted('v2c_target_set_properties_vs_scc', @target.name, arr_args_func)
   end
 
   private
@@ -1481,13 +1522,13 @@ require 'rexml/document'
 
 # See "Format of a .vcproj File" http://msdn.microsoft.com/en-us/library/2208a1f2%28v=vs.71%29.aspx
 
-$vs7_prop_var_scan_regex = '\\$\\(([[:alnum:]_]+)\\)'
-$vs7_prop_var_match_regex = '\\$\\([[:alnum:]_]+\\)'
+VS7_PROP_VAR_SCAN_REGEX_OBJ = %r{\$\(([[:alnum:]_]+)\)}
+VS7_PROP_VAR_MATCH_REGEX_OBJ = %r{\$\([[:alnum:]_]+\)}
 
 class V2C_Info_Filter
   def initialize
     @name = nil
-    @attr_scfilter = nil # "cpp;c;cc;cxx;..."
+    @arr_scfilter = nil # "cpp;c;cc;cxx;..."
     @val_scmfiles = true # VS7: SourceControlFiles 
     @guid = nil
     # While these type flags are being directly derived from magic guid values on VS7/VS10
@@ -1500,7 +1541,7 @@ class V2C_Info_Filter
     @parse_files = true # whether this filter should be parsed (touched) by IntelliSense (or related mechanisms) or not. Probably VS10-only property. Default value true, obviously.
   end
   attr_accessor :name
-  attr_accessor :attr_scfilter
+  attr_accessor :arr_scfilter
   attr_accessor :val_scmfiles
   attr_accessor :guid
   attr_accessor :is_compiles
@@ -1532,7 +1573,7 @@ Files_str = Struct.new(:filter_info, :arr_sub_filters, :arr_file_infos)
 def vs7_create_config_variable_translation(str, arr_config_var_handling)
   # http://langref.org/all-languages/pattern-matching/searching/loop-through-a-string-matching-a-regex-and-performing-an-action-for-each-match
   str_scan_copy = str.dup # create a deep copy of string, to avoid "`scan': string modified (RuntimeError)"
-  str_scan_copy.scan(/#{$vs7_prop_var_scan_regex}/) {
+  str_scan_copy.scan(VS7_PROP_VAR_SCAN_REGEX_OBJ) {
     config_var = $1
     # MSVS Property / Environment variables are documented to be case-insensitive,
     # thus implement insensitive match:
@@ -1612,11 +1653,13 @@ EOF
       end
   }
 
-  #log_info "str is now #{str}"
+  #log_info "str is now #{str}, was #{str_scan_copy}"
   return str
 end
 
 class V2C_VSParserBase
+  VS_VALUE_SEPARATOR_REGEX_OBJ = %r{[;,]}
+  VS_SCC_ATTR_REGEX_OBJ = %r{^Scc}
   def log_debug_class(str); log_debug "#{self.class.name}: #{str}" end
   def unknown_attribute(name); unknown_something('attribute', name) end
   def unknown_element(name); unknown_something('element', name) end
@@ -1632,6 +1675,9 @@ class V2C_VSParserBase
       value = true
     end
     return value
+  end
+  def split_values_list(attr_value)
+    return attr_value.split(VS_VALUE_SEPARATOR_REGEX_OBJ)
   end
 
   private
@@ -1664,7 +1710,6 @@ class V2C_VS7ProjectParserBase < V2C_VSProjectParserBase
 end
 
 module V2C_VS7ToolDefines
-  VS7_VALUE_SEPARATOR_REGEX = '[;,]'
   VS7_TOOL_NAME = 'Name'
   VS7_TOOL_ADDITIONALOPTIONS = 'AdditionalOptions'
 end
@@ -1723,7 +1768,7 @@ class V2C_VS7ToolLinkerParser < V2C_VSParserBase
   end
   def parse_additional_library_directories(attr_lib_dirs, arr_lib_dirs)
     return if attr_lib_dirs.length == 0
-    attr_lib_dirs.split(/#{VS7_VALUE_SEPARATOR_REGEX}/).each { |elem_lib_dir|
+    split_values_list(attr_lib_dirs).each { |elem_lib_dir|
       elem_lib_dir = normalize_path(elem_lib_dir).strip
       #log_info "lib dir is '#{elem_lib_dir}'"
       arr_lib_dirs.push(elem_lib_dir)
@@ -1806,7 +1851,7 @@ class V2C_VS7ToolCompilerParser < V2C_VSParserBase
   end
   def parse_additional_include_directories(compiler_info, attr_incdir)
     arr_includes = Array.new
-    include_dirs = attr_incdir.split(/#{VS7_VALUE_SEPARATOR_REGEX}/).each { |elem_inc_dir|
+    split_values_list(attr_incdir).each { |elem_inc_dir|
       elem_inc_dir = normalize_path(elem_inc_dir).strip
       #log_info "include is '#{elem_inc_dir}'"
       arr_includes.push(elem_inc_dir)
@@ -1832,7 +1877,7 @@ class V2C_VS7ToolCompilerParser < V2C_VSParserBase
     arr_disable_warnings.replace(attr_disable_warnings.split(';'))
   end
   def parse_preprocessor_definitions(hash_defines, attr_defines)
-    attr_defines.split(/#{VS7_VALUE_SEPARATOR_REGEX}/).each { |elem_define|
+    split_values_list(attr_defines).each { |elem_define|
       str_define_key, str_define_value = elem_define.strip.split('=')
       # Since a Hash will indicate nil for any non-existing key,
       # we do need to fill in _empty_ value for our _existing_ key.
@@ -2010,6 +2055,7 @@ class V2C_VS7FileParser < V2C_VSParserBase
     @arr_file_infos = arr_file_infos_out
     @have_build_units = false # HACK
   end
+  BUILD_UNIT_FILE_TYPES_REGEX_OBJ = %r{\.(c|C)}
   def parse
     log_debug_class('parse')
     info_file = V2C_Info_File.new
@@ -2053,7 +2099,7 @@ class V2C_VS7FileParser < V2C_VSParserBase
       @arr_file_infos.push(info_file)
       # HACK:
       if not @have_build_units
-        if info_file.path_relative =~ /\.(c|C)/
+        if info_file.path_relative =~ BUILD_UNIT_FILE_TYPES_REGEX_OBJ
           @have_build_units = true
         end
       end
@@ -2158,7 +2204,7 @@ class V2C_VS7FilterParser < V2C_VSParserBase
       attr_value = attr_xml.value
       case attr_xml.name
       when 'Filter'
-        filter_info.attr_scfilter = attr_value
+        filter_info.arr_scfilter = split_values_list(attr_value)
       when 'Name'
         file_group_name = attr_value
         filter_info.name = file_group_name
@@ -2239,7 +2285,7 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
       when 'Version'
         @project.version = attr_value
 
-      when /^Scc/
+      when VS_SCC_ATTR_REGEX_OBJ
         parse_attributes_scc(attr_xml.name, attr_value, @project.scc_info)
       else
         unknown_attribute(attr_xml.name)
@@ -2409,7 +2455,7 @@ class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
       elem_text = elem_xml.text
       case elem_xml.name
       when 'Extensions'
-	@filter.attr_scfilter = elem_text
+	@filter.arr_scfilter = split_values_list(elem_text)
       when 'UniqueIdentifier'
         @filter.guid = elem_text
       else
@@ -2595,7 +2641,7 @@ class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10ParserBase
         @project.name = elem_text
       when 'RootNamespace'
         @project.root_namespace = elem_text
-      when /^Scc/
+      when VS_SCC_ATTR_REGEX_OBJ
         parse_elements_scc(propelem_xml.name, elem_text, @project.scc_info)
       else
         unknown_element(propelem_xml.name)
@@ -2854,8 +2900,9 @@ class V2C_VS10ProjectFilesBundleParser < V2C_VSProjectFilesParserBase
   end
 end
 
+WHITESPACE_REGEX_OBJ = %r{\s}
 def util_flatten_string(in_string)
-  return in_string.gsub(/\s/, '_')
+  return in_string.gsub(WHITESPACE_REGEX_OBJ, '_')
 end
 
 class V2C_CMakeGenerator
@@ -3165,12 +3212,13 @@ Finished. You should make sure to have all important v2c settings includes such 
     config_name = util_flatten_string(config_info.build_type)
     return "v2c_want_buildcfg_#{config_name}"
   end
+  V2C_COMPILER_MSVC_REGEX_OBJ = %r{^MSVC}
   def map_compiler_name_to_cmake_platform_conditional(compiler_name)
     str_conditional_compiler_platform = nil
     # For a number of platform indentifier variables,
     # see "CMake Useful Variables" http://www.cmake.org/Wiki/CMake_Useful_Variables
     case compiler_name
-    when /^MSVC/
+    when V2C_COMPILER_MSVC_REGEX_OBJ
       str_conditional_compiler_platform = 'MSVC'
     else
       log_error "unknown (unsupported) compiler name #{compiler_name}!"
