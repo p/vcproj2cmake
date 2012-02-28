@@ -108,6 +108,8 @@ def log_info(str)
   puts str
 end
 
+def log_todo(str); puts "TODO: #{str}" end
+
 def log_warn(str); puts "WARNING: #{str}" end
 
 def log_error(str); $stderr.puts "ERROR: #{str}" end
@@ -1665,7 +1667,7 @@ class V2C_VSParserBase
   def unknown_element(name); unknown_something('element', name) end
   def unknown_element_text(name); unknown_something('element text', name) end
   def skipped_element_warn(elem_name)
-    log_warn "unhandled less important XML element (#{elem_name})!"
+    log_todo "unhandled less important XML element (#{elem_name})!"
   end
   def parser_error(str_description); log_error(str_description) end
   def unhandled_functionality(str_description); log_error(str_description) end
@@ -1683,7 +1685,7 @@ class V2C_VSParserBase
   private
 
   def unknown_something(something_name, name)
-    log_error "#{self.class.name}: unknown/incorrect XML #{something_name} (#{name})!"
+    log_todo "#{self.class.name}: unknown/incorrect XML #{something_name} (#{name})!"
   end
 end
 
