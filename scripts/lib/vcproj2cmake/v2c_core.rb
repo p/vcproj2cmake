@@ -280,7 +280,10 @@ end
 
 class V2C_Precompiled_Header_Info
   def initialize
-    @use_mode = 0 # known VS10 content is "NotUsing", "Create", "Use"; I suppose these are VS7 values 0, 1, 2 (TODO verify)
+    # @use_mode: known VS10 content is "NotUsing" / "Create" / "Use"
+    # (corresponding VS8 values are 0 / 1 / 2)
+    # NOTE VS7 (2003) had 3 instead of 2 (i.e. changed to 2 after migration!)
+    @use_mode = 0
     @header_source_name = '' # the header (.h) file to precompile
     @header_binary_name = '' # the precompiled header binary to create or use
   end
@@ -1894,7 +1897,9 @@ class V2C_VS7ToolCompilerParser < V2C_VSParserBase
     compiler_info.precompiled_header_info = V2C_Precompiled_Header_Info.new
   end
   def parse_use_precompiled_header(attr_use_precompiled_header)
-    return attr_use_precompiled_header.to_i
+    use_val = attr_use_precompiled_header.to_i
+    if use_val == 3; use_val = 2 end # VS7 --> VS8 migration change!
+    return use_val
   end
 end
 
