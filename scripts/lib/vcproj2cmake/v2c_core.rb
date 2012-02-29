@@ -359,6 +359,7 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
   attr_accessor :arr_linker_specific_info
 end
 
+# Common base class of both file config and project config.
 class V2C_Config_Base_Info < V2C_Info_Elem_Base
   def initialize
     @build_type = 0 # WARNING: it may contain spaces!
@@ -406,6 +407,7 @@ class V2C_File_Config_Info < V2C_Config_Base_Info
   attr_accessor :excluded_from_build
 end
 
+# FIXME UNUSED
 class V2C_Makefile
   def initialize
     @config_info = V2C_Project_Config_Info.new
@@ -1714,13 +1716,42 @@ class V2C_VS7ProjectParserBase < V2C_VSProjectParserBase
   end
 end
 
-module V2C_VS7ToolDefines
-  VS7_TOOL_NAME = 'Name'
-  VS7_TOOL_ADDITIONALOPTIONS = 'AdditionalOptions'
+module V2C_VSToolDefines
+  VS_TOOL_ADDITIONALOPTIONS = 'AdditionalOptions'
 end
 
-class V2C_VS7ToolLinkerParser < V2C_VSParserBase
+module V2C_VSToolCompilerDefines
+  include V2C_VSToolDefines
+  VS_TOOL_COMPILER_ADDITIONALINCLUDEDIRECTORIES = 'AdditionalIncludeDirectories'
+  VS_TOOL_COMPILER_DISABLESPECIFICWARNINGS = 'DisableSpecificWarnings'
+  VS_TOOL_COMPILER_ENABLEPREFAST = 'EnablePREfast'
+  VS_TOOL_COMPILER_OPTIMIZATION = 'Optimization'
+  VS_TOOL_COMPILER_PREPROCESSORDEFINITIONS = 'PreprocessorDefinitions'
+  VS_TOOL_COMPILER_RUNTIMETYPEINFO = 'RuntimeTypeInfo'
+  VS_TOOL_COMPILER_WARNINGLEVEL = 'WarningLevel'
+end
+
+module V2C_VS7ToolDefines
+  include V2C_VSToolDefines
+  VS7_TOOL_NAME = 'Name'
+end
+
+module V2C_VS7ToolCompilerDefines
   include V2C_VS7ToolDefines
+  include V2C_VSToolCompilerDefines
+  # pch names are _different_ (_swapped_) from their VS10 meanings...
+  VS7_TOOL_COMPILER_PRECOMPILEDHEADERFILE_BINARY = 'PrecompiledHeaderFile'
+  VS7_TOOL_COMPILER_PRECOMPILEDHEADERFILE_SOURCE = 'PrecompiledHeaderThrough'
+  VS7_TOOL_COMPILER_USEPRECOMPILEDHEADER = 'UsePrecompiledHeader'
+  VS7_TOOL_COMPILER_WARNASERROR = 'WarnAsError'
+end
+
+module V2C_VS7ToolLinkerDefines
+  include V2C_VS7ToolDefines
+end   
+    
+class V2C_VS7ToolLinkerParser < V2C_VSParserBase
+  include V2C_VS7ToolLinkerDefines
   def initialize(linker_xml, arr_linker_info_out)
     super()
     @linker_xml = linker_xml
@@ -1749,7 +1780,7 @@ class V2C_VS7ToolLinkerParser < V2C_VSParserBase
         parse_additional_dependencies(attr_value, linker_info.arr_dependencies)
       when 'AdditionalLibraryDirectories'
         parse_additional_library_directories(attr_value, linker_info.arr_lib_dirs)
-      when VS7_TOOL_ADDITIONALOPTIONS
+      when VS_TOOL_ADDITIONALOPTIONS
         parse_additional_options(linker_info.arr_linker_specific_info[0].arr_flags, attr_value)
       when 'LinkIncremental'
         linker_info.link_incremental = parse_link_incremental(attr_value)
@@ -1789,8 +1820,82 @@ class V2C_VS7ToolLinkerParser < V2C_VSParserBase
   def parse_pdb_file(attr_pdb_file); return normalize_path(attr_pdb_file) end
 end
 
-class V2C_VS7ToolCompilerParser < V2C_VSParserBase
-  include V2C_VS7ToolDefines
+class V2C_VSToolParserBase < V2C_VSParserBase
+  def parse_additional_options(arr_flags, attr_options)
+    # Oh well, we might eventually want to provide a full-scale
+    # translation of various compiler switches to their
+    # counterparts on compilers of various platforms, but for
+    # now, let's simply directly pass them on to the compiler when on
+    # Win32 platform.
+
+    # TODO: add translation table for specific compiler flag settings such as MinimalRebuild:
+    # simply make reverse use of existing translation table in CMake source.
+    arr_flags.replace(attr_options.split(';'))
+  end
+end
+
+class V2C_VSToolCompilerParser < V2C_VSToolParserBase
+  include V2C_VSToolCompilerDefines
+  def allocate_precompiled_header_info(compiler_info)
+    return if not compiler_info.precompiled_header_info.nil?
+    compiler_info.precompiled_header_info = V2C_Precompiled_Header_Info.new
+  end
+  def parse_setting_base(compiler_info, setting_key, setting_value)
+    found = true # be optimistic :)
+    case setting_key
+    when VS_TOOL_COMPILER_ADDITIONALINCLUDEDIRECTORIES
+      parse_additional_include_directories(compiler_info, setting_value)
+    when VS_TOOL_ADDITIONALOPTIONS
+      parse_additional_options(compiler_info.arr_compiler_specific_info[0].arr_flags, setting_value)
+    when VS_TOOL_COMPILER_DISABLESPECIFICWARNINGS
+      parse_disable_specific_warnings(compiler_info.arr_compiler_specific_info[0].arr_disable_warnings, setting_value)
+    when VS_TOOL_COMPILER_ENABLEPREFAST
+      compiler_info.static_code_analysis_enable = get_boolean_value(setting_value)
+    when VS_TOOL_COMPILER_OPTIMIZATION
+      compiler_info.optimization = setting_value.to_i
+    when VS_TOOL_COMPILER_PREPROCESSORDEFINITIONS
+      parse_preprocessor_definitions(compiler_info.hash_defines, setting_value)
+    when VS_TOOL_COMPILER_RUNTIMETYPEINFO
+      compiler_info.rtti = get_boolean_value(setting_value)
+    else
+      found = false
+    end
+    return found
+  end
+
+  private
+
+  def parse_additional_include_directories(compiler_info, attr_incdir)
+    arr_includes = Array.new
+    split_values_list(attr_incdir).each { |elem_inc_dir|
+      elem_inc_dir = normalize_path(elem_inc_dir).strip
+      #log_info "include is '#{elem_inc_dir}'"
+      arr_includes.push(elem_inc_dir)
+    }
+    arr_includes.each { |inc_dir|
+      info_inc_dir = V2C_Info_Include_Dir.new
+      info_inc_dir.dir = inc_dir
+      compiler_info.arr_info_include_dirs.push(info_inc_dir)
+    }
+  end
+  def parse_disable_specific_warnings(arr_disable_warnings, attr_disable_warnings)
+    arr_disable_warnings.replace(attr_disable_warnings.split(';'))
+  end
+  def parse_preprocessor_definitions(hash_defines, attr_defines)
+    split_values_list(attr_defines).each { |elem_define|
+      str_define_key, str_define_value = elem_define.strip.split('=')
+      # Since a Hash will indicate nil for any non-existing key,
+      # we do need to fill in _empty_ value for our _existing_ key.
+      if str_define_value.nil?
+        str_define_value = ''
+      end
+      hash_defines[str_define_key] = str_define_value
+    }
+  end
+end
+
+class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
+  include V2C_VS7ToolCompilerDefines
   def initialize(compiler_xml, arr_compiler_info_out)
     super()
     @compiler_xml = compiler_xml
@@ -1815,89 +1920,34 @@ class V2C_VS7ToolCompilerParser < V2C_VSParserBase
     }
   end
   def parse_attribute(compiler_info, attr_name, attr_value)
+    return if parse_setting_base(compiler_info, attr_name, attr_value)
     case attr_name
-    when 'AdditionalIncludeDirectories'
-      parse_additional_include_directories(compiler_info, attr_value)
-    when VS7_TOOL_ADDITIONALOPTIONS
-      parse_additional_options(compiler_info.arr_compiler_specific_info[0].arr_flags, attr_value)
     when 'Detect64BitPortabilityProblems'
       # TODO: add /Wp64 to flags of an MSVC compiler info...
       compiler_info.detect_64bit_porting_problems = get_boolean_value(attr_value)
-    when 'DisableSpecificWarnings'
-      parse_disable_specific_warnings(compiler_info.arr_compiler_specific_info[0].arr_disable_warnings, attr_value)
-    when 'EnablePREfast'
-      compiler_info.static_code_analysis_enable = get_boolean_value(attr_value)
     when VS7_TOOL_NAME
       compiler_info.name = attr_value
-    when 'Optimization'
-      compiler_info.optimization = attr_value.to_i
-    when 'PrecompiledHeaderFile'
+    when VS7_TOOL_COMPILER_PRECOMPILEDHEADERFILE_BINARY
       allocate_precompiled_header_info(compiler_info)
       compiler_info.precompiled_header_info.header_binary_name = normalize_path(attr_value)
-    when 'PrecompiledHeaderThrough'
+    when VS7_TOOL_COMPILER_PRECOMPILEDHEADERFILE_SOURCE
       allocate_precompiled_header_info(compiler_info)
       compiler_info.precompiled_header_info.header_source_name = normalize_path(attr_value)
-    when 'PreprocessorDefinitions'
-      parse_preprocessor_definitions(compiler_info.hash_defines, attr_value)
-    when 'RuntimeTypeInfo'
-      compiler_info.rtti = get_boolean_value(attr_value)
     when 'ShowIncludes'
       compiler_info.show_includes = get_boolean_value(attr_value)
-    when 'UsePrecompiledHeader'
+    when VS7_TOOL_COMPILER_USEPRECOMPILEDHEADER
       allocate_precompiled_header_info(compiler_info)
       compiler_info.precompiled_header_info.use_mode = parse_use_precompiled_header(attr_value)
-    when 'WarnAsError'
+    when VS7_TOOL_COMPILER_WARNASERROR
       compiler_info.warnings_are_errors = get_boolean_value(attr_value)
-    when 'WarningLevel'
+    when VS_TOOL_COMPILER_WARNINGLEVEL
       compiler_info.warning_level = attr_value.to_i
     else
       unknown_attribute(attr_name)
     end
   end
-  def parse_additional_include_directories(compiler_info, attr_incdir)
-    arr_includes = Array.new
-    split_values_list(attr_incdir).each { |elem_inc_dir|
-      elem_inc_dir = normalize_path(elem_inc_dir).strip
-      #log_info "include is '#{elem_inc_dir}'"
-      arr_includes.push(elem_inc_dir)
-    }
-    arr_includes.each { |inc_dir|
-      info_inc_dir = V2C_Info_Include_Dir.new
-      info_inc_dir.dir = inc_dir
-      compiler_info.arr_info_include_dirs.push(info_inc_dir)
-    }
-  end
-  def parse_additional_options(arr_flags, attr_options)
-    # Oh well, we might eventually want to provide a full-scale
-    # translation of various compiler switches to their
-    # counterparts on compilers of various platforms, but for
-    # now, let's simply directly pass them on to the compiler when on
-    # Win32 platform.
-
-    # TODO: add translation table for specific compiler flag settings such as MinimalRebuild:
-    # simply make reverse use of existing translation table in CMake source.
-    arr_flags.replace(attr_options.split(';'))
-  end
-  def parse_disable_specific_warnings(arr_disable_warnings, attr_disable_warnings)
-    arr_disable_warnings.replace(attr_disable_warnings.split(';'))
-  end
-  def parse_preprocessor_definitions(hash_defines, attr_defines)
-    split_values_list(attr_defines).each { |elem_define|
-      str_define_key, str_define_value = elem_define.strip.split('=')
-      # Since a Hash will indicate nil for any non-existing key,
-      # we do need to fill in _empty_ value for our _existing_ key.
-      if str_define_value.nil?
-        str_define_value = ''
-      end
-      hash_defines[str_define_key] = str_define_value
-    }
-  end
-  def allocate_precompiled_header_info(compiler_info)
-    return if not compiler_info.precompiled_header_info.nil?
-    compiler_info.precompiled_header_info = V2C_Precompiled_Header_Info.new
-  end
-  def parse_use_precompiled_header(attr_use_precompiled_header)
-    use_val = attr_use_precompiled_header.to_i
+  def parse_use_precompiled_header(value_use_precompiled_header)
+    use_val = value_use_precompiled_header.to_i
     if use_val == 3; use_val = 2 end # VS7 --> VS8 migration change!
     return use_val
   end
@@ -2412,7 +2462,7 @@ class V2C_VS10ParserBase < V2C_VSParserBase
   end
 end
 
-class V2C_VS10ItemGroupProjectConfigParser < V2C_VS10ParserBase
+class V2C_VS10ItemGroupProjectConfigurationParser < V2C_VS10ParserBase
   def initialize(itemgroup_xml, arr_config_info)
     super()
     @itemgroup_xml = itemgroup_xml
@@ -2459,15 +2509,7 @@ class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
   def parse
     parse_attributes
     @elem_xml.elements.each { |elem_xml|
-      elem_text = elem_xml.text
-      case elem_xml.name
-      when 'Extensions'
-	@filter.arr_scfilter = split_values_list(elem_text)
-      when 'UniqueIdentifier'
-        @filter.guid = elem_text
-      else
-        unknown_element(elem_xml.name)
-      end
+      parse_element(elem_xml.name, elem_xml.text)
     }
   end
   def parse_attributes
@@ -2480,6 +2522,16 @@ class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
         unknown_attribute(attr_xml.name)
       end
     }
+  end
+  def parse_element(elem_name, elem_text)
+    case elem_name
+    when 'Extensions'
+      @filter.arr_scfilter = split_values_list(elem_text)
+    when 'UniqueIdentifier'
+      @filter.guid = elem_text
+    else
+      unknown_element(elem_name)
+    end
   end
 end
 
@@ -2527,7 +2579,7 @@ class V2C_VS10ItemGroupParser < V2C_VS10ParserBase
     item_group_parser = nil
     case itemgroup_label
     when 'ProjectConfigurations'
-      item_group_parser = V2C_VS10ItemGroupProjectConfigParser.new(@itemgroup_xml, @project.arr_config_info)
+      item_group_parser = V2C_VS10ItemGroupProjectConfigurationParser.new(@itemgroup_xml, @project.arr_config_info)
     when nil
       item_group_parser = V2C_VS10ItemGroupAnonymousParser.new(@itemgroup_xml, @project)
     else
@@ -2536,6 +2588,118 @@ class V2C_VS10ItemGroupParser < V2C_VS10ParserBase
     if not item_group_parser.nil?
       item_group_parser.parse
     end
+  end
+end
+
+module V2C_VS10ToolDefines
+  include V2C_VSToolDefines
+end
+
+module V2C_VS10ToolCompilerDefines
+  include V2C_VS10ToolDefines
+  include V2C_VSToolCompilerDefines
+  VS10_TOOL_COMPILER_PRECOMPILEDHEADER = 'PrecompiledHeader'
+  VS10_TOOL_COMPILER_PRECOMPILEDHEADERFILE = 'PrecompiledHeaderFile'
+  VS10_TOOL_COMPILER_PRECOMPILEDHEADEROUTPUTFILE = 'PrecompiledHeaderOutputFile'
+  VS10_TOOL_COMPILER_TREATWARNINGASERROR = 'TreatWarningAsError'
+end
+
+class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
+  include V2C_VS10ToolCompilerDefines
+  def initialize(compiler_xml, arr_compiler_info_out)
+    super()
+    @compiler_xml = compiler_xml
+    @arr_compiler_info = arr_compiler_info_out
+  end
+  def parse
+    compiler_info = V2C_Tool_Compiler_Info.new
+
+    parse_elements(compiler_info)
+
+    @arr_compiler_info.push(compiler_info)
+  end
+
+  private
+
+  def parse_elements(compiler_info)
+    compiler_specific = V2C_Tool_Compiler_Specific_Info.new('MSVC10')
+    compiler_specific.original = true
+    compiler_info.arr_compiler_specific_info.push(compiler_specific)
+    @compiler_xml.elements.each { |elem_xml|
+      parse_element(compiler_info, elem_xml.name, elem_xml.text)
+    }
+  end
+  def parse_element(compiler_info, elem_name, elem_text)
+    return if parse_setting_base(compiler_info, elem_name, elem_text)
+    case elem_name
+    when VS10_TOOL_COMPILER_PRECOMPILEDHEADER
+      allocate_precompiled_header_info(compiler_info)
+      compiler_info.precompiled_header_info.use_mode = parse_use_precompiled_header(elem_text)
+    when VS10_TOOL_COMPILER_PRECOMPILEDHEADERFILE
+      allocate_precompiled_header_info(compiler_info)
+      compiler_info.precompiled_header_info.header_source_name = normalize_path(elem_text)
+    when VS10_TOOL_COMPILER_PRECOMPILEDHEADEROUTPUTFILE
+      allocate_precompiled_header_info(compiler_info)
+      compiler_info.precompiled_header_info.header_binary_name = normalize_path(elem_text)
+    when VS10_TOOL_COMPILER_TREATWARNINGASERROR
+      compiler_info.warnings_are_errors = get_boolean_value(elem_text)
+    when 'AssemblerListingLocation', 'SuppressStartupBanner'
+      skipped_element_warn(elem_name)
+    when 'ObjectFileName'
+       # TODO: support it - but with a CMake out-of-tree build this setting is very unimportant methinks.
+       skipped_element_warn(elem_name)
+    else
+      unknown_element(elem_name)
+    end
+  end
+
+  private
+
+  def parse_use_precompiled_header(value_use_precompiled_header)
+    use_val = 0 # NotUsing
+    case value_use_precompiled_header
+    when 'NotUsing'
+      use_val = 0
+    when 'Create'
+      use_val = 1
+    when 'Use'
+      use_val = 2
+    else
+      unknown_attribute(value_use_precompiled_header)
+    end
+    return use_val
+  end
+end
+
+class V2C_VS10ItemDefinitionGroupParser < V2C_VS10ParserBase
+  def initialize(itemdefgroup_xml, config_info_out)
+    super()
+    @itemdefgroup_xml = itemdefgroup_xml
+    @config_info = config_info_out
+  end
+  def parse
+    parse_elements(@config_info)
+    return true
+  end
+  def parse_elements(config_info)
+    @itemdefgroup_xml.elements.each { |elem_xml|
+      elem_name = elem_xml.name
+      item_def_group_parser = nil # IMPORTANT: reset it!
+      case elem_name
+      when 'ClCompile'
+        item_def_group_parser = V2C_VS10ToolCompilerParser.new(elem_xml, config_info.arr_compiler_info)
+      #when 'ResourceCompile'
+      #when 'Link'
+      #  unknown_element(elem_name)
+      when 'Midl'
+        skipped_element_warn(elem_name)
+      else
+        unknown_element(elem_name)
+      end
+      if not item_def_group_parser.nil?
+        item_def_group_parser.parse
+      end
+    }
   end
 end
 
@@ -2738,13 +2902,17 @@ class V2C_VS10ProjectParser < V2C_VS10ProjectParserBase
       case elem_xml.name
       when 'ItemGroup'
         elem_parser = V2C_VS10ItemGroupParser.new(elem_xml, @project)
+      when 'ItemDefinitionGroup'
+        config_info_curr = V2C_Project_Config_Info.new
+        elem_parser = V2C_VS10ItemDefinitionGroupParser.new(elem_xml, config_info_curr)
+        if elem_parser.parse
+          @project.arr_config_info.push(config_info_curr)
+        end
       when 'PropertyGroup'
         elem_parser = V2C_VS10PropertyGroupParser.new(elem_xml, @project)
+        elem_parser.parse
       else
         unknown_element(elem_xml.name)
-      end
-      if not elem_parser.nil?
-        elem_parser.parse
       end
     }
   end
