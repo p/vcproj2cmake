@@ -281,7 +281,7 @@ end
 class V2C_Tool_Compiler_Specific_Info_MSVC_Base < V2C_Tool_Compiler_Specific_Info_Base
   def initialize(compiler_name)
     super(compiler_name)
-    @warning_level = 3 # numeric value (for /W4 etc.)
+    @warning_level = 3 # numeric value (for /W4 etc.); TODO: translate into MSVC /W... flag
   end
   attr_accessor :warning_level
 end
@@ -318,11 +318,12 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
     @arr_info_include_dirs = Array.new
     @hash_defines = Hash.new
     @rtti = true
-    @suppress_startup_banner = false
+    @suppress_startup_banner_enable = false
     @precompiled_header_info = nil
-    @detect_64bit_porting_problems = true # Enabled by default is preferable, right?
-    @warnings_are_errors = false
-    @static_code_analysis_enable = false
+    @detect_64bit_porting_problems_enable = true # TODO: translate into MSVC /Wp64 flag; Enabled by default is preferable, right?
+    @multi_core_compilation_enable = false # TODO: translate into MSVC10 /MP flag...; Disabled by default is preferable (some builds might not have clean target dependencies...)
+    @warnings_are_errors_enable = false # TODO: translate into MSVC /WX flag
+    @static_code_analysis_enable = false # TODO: translate into MSVC7/10 /analyze flag
     @optimization = 0 # currently supporting these values: 0 == Non Debug, 1 == Min Size, 2 == Max Speed, 3 == Max Optimization
     @show_includes = false # Whether to show the filenames of included header files.
     @arr_compiler_specific_info = Array.new
@@ -330,10 +331,11 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
   attr_accessor :arr_info_include_dirs
   attr_accessor :hash_defines
   attr_accessor :rtti
-  attr_accessor :suppress_startup_banner
+  attr_accessor :suppress_startup_banner_enable
   attr_accessor :precompiled_header_info
-  attr_accessor :detect_64bit_porting_problems
-  attr_accessor :warnings_are_errors
+  attr_accessor :detect_64bit_porting_problems_enable
+  attr_accessor :multi_core_compilation_enable
+  attr_accessor :warnings_are_errors_enable
   attr_accessor :static_code_analysis_enable
   attr_accessor :optimization
   attr_accessor :show_includes
@@ -1898,7 +1900,7 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
     when VS_TOOL_COMPILER_RUNTIMETYPEINFO
       compiler_info.rtti = get_boolean_value(setting_value)
     when VS_TOOL_COMPILER_SUPPRESSSTARTUPBANNER
-      compiler_info.suppress_startup_banner = get_boolean_value(setting_value)
+      compiler_info.suppress_startup_banner_enable = get_boolean_value(setting_value)
     else
       found = false
     end
@@ -1966,7 +1968,7 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
     case attr_name
     when 'Detect64BitPortabilityProblems'
       # TODO: add /Wp64 to flags of an MSVC compiler info...
-      compiler_info.detect_64bit_porting_problems = get_boolean_value(attr_value)
+      compiler_info.detect_64bit_porting_problems_enable = get_boolean_value(attr_value)
     when VS7_TOOL_NAME
       compiler_info.name = attr_value
     when VS7_TOOL_COMPILER_PRECOMPILEDHEADERFILE_BINARY
@@ -1981,7 +1983,7 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
       allocate_precompiled_header_info(compiler_info)
       compiler_info.precompiled_header_info.use_mode = parse_use_precompiled_header(attr_value)
     when VS7_TOOL_COMPILER_WARNASERROR
-      compiler_info.warnings_are_errors = get_boolean_value(attr_value)
+      compiler_info.warnings_are_errors_enable = get_boolean_value(attr_value)
     when VS_TOOL_COMPILER_WARNINGLEVEL
       compiler_info.arr_compiler_specific_info[0].warning_level = attr_value.to_i
     else
@@ -2675,6 +2677,13 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
   def parse_element(compiler_info, setting_key, setting_value)
     return if parse_setting_base(compiler_info, setting_key, setting_value)
     case setting_key
+    when 'AssemblerListingLocation'
+      skipped_element_warn(setting_key)
+    when 'MultiProcessorCompilation'
+      compiler_info.multi_core_compilation_enable = get_boolean_value(setting_value)
+    when 'ObjectFileName'
+       # TODO: support it - but with a CMake out-of-tree build this setting is very unimportant methinks.
+       skipped_element_warn(setting_key)
     when VS10_TOOL_COMPILER_PRECOMPILEDHEADER
       allocate_precompiled_header_info(compiler_info)
       compiler_info.precompiled_header_info.use_mode = parse_use_precompiled_header(setting_value)
@@ -2685,12 +2694,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
       allocate_precompiled_header_info(compiler_info)
       compiler_info.precompiled_header_info.header_binary_name = normalize_path(setting_value)
     when VS10_TOOL_COMPILER_TREATWARNINGASERROR
-      compiler_info.warnings_are_errors = get_boolean_value(setting_value)
-    when 'AssemblerListingLocation'
-      skipped_element_warn(setting_key)
-    when 'ObjectFileName'
-       # TODO: support it - but with a CMake out-of-tree build this setting is very unimportant methinks.
-       skipped_element_warn(setting_key)
+      compiler_info.warnings_are_errors_enable = get_boolean_value(setting_value)
     when VS_TOOL_COMPILER_WARNINGLEVEL
       compiler_info.arr_compiler_specific_info[0].warning_level = parse_warning_level(setting_value)
     else
