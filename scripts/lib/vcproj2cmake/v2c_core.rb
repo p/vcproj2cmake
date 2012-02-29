@@ -114,6 +114,9 @@ def log_warn(str); puts "WARNING: #{str}" end
 
 def log_error(str); $stderr.puts "ERROR: #{str}" end
 
+# FIXME: should probably replace most log_fatal()
+# with exceptions since in many cases
+# one would want to have _partial_ aborts of processing only.
 def log_fatal(str); log_error "#{str}. Aborting!"; exit 1 end
 
 # Change \ to /, and remove leading ./
@@ -1715,23 +1718,23 @@ class V2C_VSParserBase
   end
   def parser_error(str_description); log_error(str_description) end
   def unhandled_functionality(str_description); log_error(str_description) end
-  def get_boolean_value(attr_value)
+  def get_boolean_value(str_value)
     value = false
-    if not attr_value.nil?
-      case attr_value.downcase
+    if not str_value.nil?
+      case str_value.downcase
       when 'true'
         value = true
       when 'false'
         value = false
       else
         # Hrmm, did we hit a totally unexpected (new) element value!?
-        parser_error("unknown value text #{attr_value}")
+        parser_error("unknown value text #{str_value}")
       end
     end
     return value
   end
-  def split_values_list(attr_value)
-    return attr_value.split(VS_VALUE_SEPARATOR_REGEX_OBJ)
+  def split_values_list(str_value)
+    return str_value.split(VS_VALUE_SEPARATOR_REGEX_OBJ)
   end
 
   def string_to_index(arr_settings, str_setting, default_val)
@@ -2245,10 +2248,10 @@ class V2C_VS7FileParser < V2C_VSParserBase
 
   def parse_attributes(info_file)
     @file_xml.attributes.each_attribute { |attr_xml|
-      attr_value = attr_xml.value
+      setting_value = attr_xml.value
       case attr_xml.name
       when 'RelativePath'
-        info_file.path_relative = normalize_path(attr_value)
+        info_file.path_relative = normalize_path(setting_value)
       else
         unknown_attribute(attr_xml.name)
       end
@@ -2335,21 +2338,21 @@ class V2C_VS7FilterParser < V2C_VSParserBase
       filter_info = V2C_Info_Filter.new
     end
     vcproj_filter_xml.attributes.each_attribute { |attr_xml|
-      attr_value = attr_xml.value
+      setting_value = attr_xml.value
       case attr_xml.name
       when 'Filter'
-        filter_info.arr_scfilter = split_values_list(attr_value)
+        filter_info.arr_scfilter = split_values_list(setting_value)
       when 'Name'
-        file_group_name = attr_value
+        file_group_name = setting_value
         filter_info.name = file_group_name
       when 'SourceControlFiles'
-        filter_info.val_scmfiles = get_boolean_value(attr_value)
+        filter_info.val_scmfiles = get_boolean_value(setting_value)
       when 'UniqueIdentifier'
-        filter_info.guid = attr_value
-        attr_value_upper = attr_value.clone.upcase
+        filter_info.guid = setting_value
+        setting_value_upper = setting_value.clone.upcase
 	# TODO: these GUIDs actually seem to be identical between VS7 and VS10,
 	# thus they should be made constants in a common base class...
-	case attr_value_upper
+	case setting_value_upper
         when '{4FC737F1-C7A5-4376-A066-2A32D752A2FF}'
 	  filter_info.is_compiles = true
         when '{93995380-89BD-4B04-88EB-625FBE52EBFB}'
@@ -2357,7 +2360,7 @@ class V2C_VS7FilterParser < V2C_VSParserBase
         when '{67DA6AB6-F800-4C08-8B7A-83BB121AAD01}'
           filter_info.is_resources = true
         else
-          unknown_attribute("unknown/custom UniqueIdentifier #{attr_value_upper}")
+          unknown_attribute("unknown/custom UniqueIdentifier #{setting_value_upper}")
         end
       else
         unknown_attribute(attr_xml.name)
@@ -2399,50 +2402,50 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
 
   def parse_attributes
     @project_xml.attributes.each_attribute { |attr_xml|
-      attr_value = attr_xml.value
+      setting_value = attr_xml.value
       case attr_xml.name
       when 'Keyword'
-        @project.vs_keyword = attr_value
+        @project.vs_keyword = setting_value
       when 'Name'
-        @project.name = attr_value
+        @project.name = setting_value
       when 'ProjectCreator' # used by Fortran .vfproj ("Intel Fortran")
-        @project.creator = attr_value
+        @project.creator = setting_value
       when 'ProjectGUID', 'ProjectIdGuid' # used by Visual C++ .vcproj, Fortran .vfproj
-        @project.guid = attr_value
+        @project.guid = setting_value
       when 'ProjectType'
-        @project.type = attr_value
+        @project.type = setting_value
       when 'RootNamespace'
-        @project.root_namespace = attr_value
+        @project.root_namespace = setting_value
       when 'Version'
-        @project.version = attr_value
+        @project.version = setting_value
 
       when VS_SCC_ATTR_REGEX_OBJ
-        parse_attributes_scc(attr_xml.name, attr_value, @project.scc_info)
+        parse_attributes_scc(attr_xml.name, setting_value, @project.scc_info)
       else
         unknown_attribute(attr_xml.name)
       end
     }
   end
-  def parse_attributes_scc(attr_name, attr_value, scc_info_out)
-    case attr_name
+  def parse_attributes_scc(setting_key, setting_value, scc_info_out)
+    case setting_key
     # Hrmm, turns out having SccProjectName is no guarantee that both SccLocalPath and SccProvider
     # exist, too... (one project had SccProvider missing). HOWEVER,
     # CMake generator does expect all three to exist when available! Hmm.
     when 'SccProjectName'
-      scc_info_out.project_name = attr_value
+      scc_info_out.project_name = setting_value
     # There's a special SAK (Should Already Know) entry marker
     # (see e.g. http://stackoverflow.com/a/6356615 ).
     # Currently I don't believe we need to handle "SAK" in special ways
     # (such as filling it in in case of missing entries),
     # transparent handling ought to be sufficient.
     when 'SccLocalPath'
-      scc_info_out.local_path = attr_value
+      scc_info_out.local_path = setting_value
     when 'SccProvider'
-      scc_info_out.provider = attr_value
+      scc_info_out.provider = setting_value
     when 'SccAuxPath'
-      scc_info_out.aux_path = attr_value
+      scc_info_out.aux_path = setting_value
     else
-      unknown_attribute(attr_name)
+      unknown_attribute(setting_key)
     end
   end
 end
@@ -2469,7 +2472,8 @@ class V2C_VS7ProjectXmlParser < V2C_VSProjectXmlParserBase
   end
   def parse
     @doc_proj.elements.each { |elem_xml|
-      case elem_xml.name
+      setting_key = elem_xml.name
+      case setting_key
       when 'VisualStudioProject'
         project = V2C_Project_Info.new(@orig_environment)
         project_parser = V2C_VS7ProjectParser.new(elem_xml, project)
@@ -2477,7 +2481,7 @@ class V2C_VS7ProjectXmlParser < V2C_VSProjectXmlParserBase
 
         @arr_projects.push(project)
       else
-        unknown_element(elem_xml.name)
+        unknown_element(setting_key)
       end
     }
   end
@@ -2575,21 +2579,22 @@ class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
   def parse
     parse_attributes
     @elem_xml.elements.each { |elem_xml|
-      parse_element(elem_xml.name, elem_xml.text)
+      parse_setting(elem_xml.name, elem_xml.text)
     }
   end
   def parse_attributes
     @elem_xml.attributes.each_attribute { |attr_xml|
-      attr_value = attr_xml.value
-      case attr_xml.name
+      setting_key = attr_xml.name
+      setting_value = attr_xml.value
+      case setting_key
       when 'Include'
-         @filter.name = attr_value
+         @filter.name = setting_value
       else
-        unknown_attribute(attr_xml.name)
+        unknown_attribute(setting_key)
       end
     }
   end
-  def parse_element(setting_key, setting_value)
+  def parse_setting(setting_key, setting_value)
     case setting_key
     when 'Extensions'
       @filter.arr_scfilter = split_values_list(setting_value)
@@ -2609,8 +2614,8 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
   end
   def parse
     @itemgroup_xml.elements.each { |elem_xml|
-      elem_name = elem_xml.name
-      case elem_name
+      setting_key = elem_xml.name
+      case setting_key
       when 'Filter'
         filter = V2C_Info_Filter.new
         elem_parser = V2C_VS10ItemGroupElemFilterParser.new(elem_xml, filter)
@@ -2619,14 +2624,14 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
         # Due to split between .vcxproj and .vcxproj.filters,
         # need to possibly _enhance_ an _existing_ item group info,
         # thus make sure to do lookup first.
-        unknown_element(elem_name)
+        unknown_element(setting_key)
       else
-        unknown_element(elem_name)
+        unknown_element(setting_key)
       end
       # TODO:
       #if not @itemgroup.label.nil?
-      #  if not elem_name == @itemgroup.label
-      #    parser_error("item label #{elem_name} does not match group's label #{@itemgroup.label}!?")
+      #  if not setting_key == @itemgroup.label
+      #    parser_error("item label #{setting_key} does not match group's label #{@itemgroup.label}!?")
       #  end
       #end
     }
@@ -2781,18 +2786,18 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10ParserBase
   end
   def parse_elements(config_info)
     @itemdefgroup_xml.elements.each { |elem_xml|
-      elem_name = elem_xml.name
+      setting_key = elem_xml.name
       item_def_group_parser = nil # IMPORTANT: reset it!
-      case elem_name
+      case setting_key
       when 'ClCompile'
         item_def_group_parser = V2C_VS10ToolCompilerParser.new(elem_xml, config_info.arr_compiler_info)
       #when 'ResourceCompile'
       when 'Link'
         item_def_group_parser = V2C_VS10ToolLinkerParser.new(elem_xml, config_info.arr_linker_info)
       when 'Midl'
-        skipped_element_warn(elem_name)
+        skipped_element_warn(setting_key)
       else
-        unknown_element(elem_name)
+        unknown_element(setting_key)
       end
       if not item_def_group_parser.nil?
         item_def_group_parser.parse
@@ -2812,10 +2817,10 @@ class V2C_VS10PropertyGroupConfigurationParser < V2C_VS10ParserBase
   end
   def parse_elements(config_info)
     @propgroup_xml.elements.each { |elem_xml|
-      parse_element(config_info, elem_xml.name, elem_xml.text)
+      parse_setting(config_info, elem_xml.name, elem_xml.text)
     }
   end
-  def parse_element(config_info, setting_key, setting_value)
+  def parse_setting(config_info, setting_key, setting_value)
     case setting_key
     when 'CharacterSet'
       config_info.charset = parse_charset(setting_value)
@@ -2835,6 +2840,8 @@ class V2C_VS10PropertyGroupConfigurationParser < V2C_VS10ParserBase
   private
 
   def parse_charset(str_charset)
+    # Possibly useful related link: "[CMake] Bug #12189"
+    #   http://www.cmake.org/pipermail/cmake/2011-June/045002.html
     arr_charset = [
       'NotSet',  # 0 (ASCII i.e. SBCS)
       'Unicode', # 1 (The Healthy Choice)
@@ -2866,43 +2873,53 @@ class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10ParserBase
   end
   def parse
     @propgroup_xml.elements.each { |propelem_xml|
-      elem_text = propelem_xml.text
-      case propelem_xml.name
+      setting_key = propelem_xml.name
+      setting_value = propelem_xml.text
+      case setting_key
       when 'Keyword'
-        @project.vs_keyword = elem_text
+        @project.vs_keyword = setting_value
       when 'ProjectGuid'
-        @project.guid = elem_text
+        @project.guid = setting_value
       when 'ProjectName'
-        @project.name = elem_text
+        @project.name = setting_value
       when 'RootNamespace'
-        @project.root_namespace = elem_text
+        @project.root_namespace = setting_value
       when VS_SCC_ATTR_REGEX_OBJ
-        parse_elements_scc(propelem_xml.name, elem_text, @project.scc_info)
+        parse_elements_scc(setting_key, setting_value, @project.scc_info)
       else
-        unknown_element(propelem_xml.name)
+        unknown_element(setting_key)
       end
     }
+    if @project.name.nil?
+      # This can be seen e.g. with sbnc.vcxproj
+      # (contains RootNamespace and NOT ProjectName),
+      # despite sbnc.vcproj containing Name and NOT RootNamespace. WEIRD.
+      # Couldn't find any hint how this case should be handled,
+      # which setting to adopt then. FIXME check on MSVS.
+      parser_error('missing project name? Adopting root namespace...')
+      @project.name = @project.root_namespace
+    end
   end
-  def parse_elements_scc(elem_name, elem_text, scc_info_out)
-    case elem_name
+  def parse_elements_scc(setting_key, setting_value, scc_info_out)
+    case setting_key
     # Hrmm, turns out having SccProjectName is no guarantee that both SccLocalPath and SccProvider
     # exist, too... (one project had SccProvider missing). HOWEVER,
     # CMake generator does expect all three to exist when available! Hmm.
     when 'SccProjectName'
-      scc_info_out.project_name = elem_text
+      scc_info_out.project_name = setting_value
     # There's a special SAK (Should Already Know) entry marker
     # (see e.g. http://stackoverflow.com/a/6356615 ).
     # Currently I don't believe we need to handle "SAK" in special ways
     # (such as filling it in in case of missing entries),
     # transparent handling ought to be sufficient.
     when 'SccLocalPath'
-      scc_info_out.local_path = elem_text
+      scc_info_out.local_path = setting_value
     when 'SccProvider'
-      scc_info_out.provider = elem_text
+      scc_info_out.provider = setting_value
     when 'SccAuxPath'
-      scc_info_out.aux_path = elem_text
+      scc_info_out.aux_path = setting_value
     else
-      unknown_element(elem_name)
+      unknown_element(setting_key)
     end
   end
 end
@@ -2915,8 +2932,9 @@ class V2C_VS10PropertyGroupParser < V2C_VS10ParserBase
   end
   def parse
     @propgroup_xml.attributes.each_attribute { |attr_xml|
-      attr_value = attr_xml.value
-      case attr_xml.name
+      setting_key = attr_xml.name
+      setting_value = attr_xml.value
+      case setting_key
       #when 'Condition'
         # FIXME: should set a have_condition bool to true
         # and then verify further below that the element that was filled in
@@ -2925,7 +2943,7 @@ class V2C_VS10PropertyGroupParser < V2C_VS10ParserBase
         # (upon "Condition" attribute parsing the exact property item class often is not known yet i.e. nil!!).
         # Or is there a better way to achieve common, reliable parsing of that condition information?
       when 'Label'
-        propgroup_label = attr_value
+        propgroup_label = setting_value
         log_debug_class("Label #{propgroup_label}!")
         case propgroup_label
         when 'Configuration'
@@ -2940,7 +2958,7 @@ class V2C_VS10PropertyGroupParser < V2C_VS10ParserBase
           unknown_element("Label #{propgroup_label}")
         end
       else
-        unknown_attribute(attr_xml.name)
+        unknown_attribute(setting_key)
       end
     }
   end
