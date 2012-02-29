@@ -325,8 +325,10 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
     @rtti = true
     @precompiled_header_info = nil
     @detect_64bit_porting_problems_enable = true # TODO: translate into MSVC /Wp64 flag; Enabled by default is preferable, right?
+    @exception_handling = 1 # we do want it enabled, right? (and as Sync?)
     @multi_core_compilation_enable = false # TODO: translate into MSVC10 /MP flag...; Disabled by default is preferable (some builds might not have clean target dependencies...)
     @warnings_are_errors_enable = false # TODO: translate into MSVC /WX flag
+    @show_includes_enable = false # TODO: translate into MSVC /showIncludes flag
     @static_code_analysis_enable = false # TODO: translate into MSVC7/10 /analyze flag
     @optimization = 0 # currently supporting these values: 0 == Non Debug, 1 == Min Size, 2 == Max Speed, 3 == Max Optimization
     @show_includes = false # Whether to show the filenames of included header files.
@@ -337,8 +339,10 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
   attr_accessor :rtti
   attr_accessor :precompiled_header_info
   attr_accessor :detect_64bit_porting_problems_enable
+  attr_accessor :exception_handling
   attr_accessor :multi_core_compilation_enable
   attr_accessor :warnings_are_errors_enable
+  attr_accessor :show_includes_enable
   attr_accessor :static_code_analysis_enable
   attr_accessor :optimization
   attr_accessor :show_includes
@@ -384,6 +388,7 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
     @arr_dependencies = Array.new # FIXME: should be changing this into a dependencies class (we need an attribute which indicates whether this dependency is a library _file_ or a target name, since we should be reliably able to decide whether we can add "debug"/"optimized" keywords to CMake variables or target_link_library() parms)
     @link_incremental = 0 # 1 means NO, thus 2 probably means YES?
     @module_definition_file = nil
+    @optimize_references_enable = false
     @pdb_file = nil
     @arr_lib_dirs = Array.new
     @arr_linker_specific_info = Array.new
@@ -395,6 +400,7 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
   attr_accessor :arr_dependencies
   attr_accessor :link_incremental
   attr_accessor :module_definition_file
+  attr_accessor :optimize_references_enable
   attr_accessor :pdb_file
   attr_accessor :arr_lib_dirs
   attr_accessor :arr_linker_specific_info
@@ -1724,7 +1730,7 @@ class V2C_VSParserBase
       case str_value.downcase
       when 'true'
         value = true
-      when 'false'
+      when 'false', '' # seems empty string is VS equivalent to false, right?
         value = false
       else
         # Hrmm, did we hit a totally unexpected (new) element value!?
@@ -1809,9 +1815,11 @@ module V2C_VSToolCompilerDefines
   VS_TOOL_COMPILER_ADDITIONALINCLUDEDIRECTORIES = 'AdditionalIncludeDirectories'
   VS_TOOL_COMPILER_DISABLESPECIFICWARNINGS = 'DisableSpecificWarnings'
   VS_TOOL_COMPILER_ENABLEPREFAST = 'EnablePREfast'
+  VS_TOOL_COMPILER_EXCEPTIONHANDLING = 'ExceptionHandling'
   VS_TOOL_COMPILER_OPTIMIZATION = 'Optimization'
   VS_TOOL_COMPILER_PREPROCESSORDEFINITIONS = 'PreprocessorDefinitions'
   VS_TOOL_COMPILER_RUNTIMETYPEINFO = 'RuntimeTypeInfo'
+  VS_TOOL_COMPILER_SHOWINCLUDES = 'ShowIncludes'
   VS_TOOL_COMPILER_WARNINGLEVEL = 'WarningLevel'
 end
 
@@ -1841,6 +1849,8 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
       parse_preprocessor_definitions(compiler_info.hash_defines, setting_value)
     when VS_TOOL_COMPILER_RUNTIMETYPEINFO
       compiler_info.rtti = get_boolean_value(setting_value)
+    when VS_TOOL_COMPILER_SHOWINCLUDES
+      compiler_info.show_includes_enable = get_boolean_value(setting_value)
     else
       found = false
     end
@@ -1919,6 +1929,8 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
     when 'Detect64BitPortabilityProblems'
       # TODO: add /Wp64 to flags of an MSVC compiler info...
       compiler_info.detect_64bit_porting_problems_enable = get_boolean_value(setting_value)
+    when VS_TOOL_COMPILER_EXCEPTIONHANDLING
+      compiler_info.exception_handling = setting_value.to_i
     when VS7_TOOL_NAME
       compiler_info.name = setting_value
     when VS_TOOL_COMPILER_OPTIMIZATION
@@ -1951,6 +1963,7 @@ end
 
 module V2C_VSToolLinkerDefines
   include V2C_VSToolDefines
+  VS_TOOL_LINKER_OPTIMIZEREFERENCES = 'OptimizeReferences'
 end
 
 class V2C_VSToolLinkerParser < V2C_VSToolParserBase
@@ -2008,6 +2021,7 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
 end
 
 module V2C_VS7ToolLinkerDefines
+  include V2C_VSToolLinkerDefines
   include V2C_VS7ToolDefines
 end
 
@@ -2034,6 +2048,8 @@ class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
       linker_info.link_incremental = parse_link_incremental(setting_value)
     when VS7_TOOL_NAME
       linker_info.name = setting_value
+    when VS_TOOL_LINKER_OPTIMIZEREFERENCES
+      linker_info.optimize_references_enable = setting_value.to_i
     else
       unknown_attribute(setting_key)
     end
@@ -2705,6 +2721,8 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
     when 'ObjectFileName'
        # TODO: support it - but with a CMake out-of-tree build this setting is very unimportant methinks.
        skipped_element_warn(setting_key)
+    when VS_TOOL_COMPILER_EXCEPTIONHANDLING
+      compiler_info.exception_handling = parse_exception_handling(setting_value)
     when VS_TOOL_COMPILER_OPTIMIZATION
       compiler_info.optimization = parse_optimization(setting_value)
     when VS10_TOOL_COMPILER_PRECOMPILEDHEADER
@@ -2727,12 +2745,21 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
 
   private
 
+  def parse_exception_handling(str_exception_handling)
+    arr_except = [
+      'false', # 0, false
+      'Sync', # 1, Sync, /EHsc
+      'Async', # 2, Async, /EHa
+      'SyncCThrow' # 3, SyncCThrow, /EHs
+    ]
+    return string_to_index(arr_except, str_exception_handling, 0)
+  end
   def parse_optimization(str_optimization)
     arr_optimization = [
-      'Disabled', # 0
-      'UNKNOWN_FIXME', # 1
-      'MaxSpeed', # 2
-      'Full' # 3
+      'Disabled', # 0, /Od
+      'MinSpace', # 1, /O1
+      'MaxSpeed', # 2, /O2
+      'Full' # 3, /Ox
     ]
     return string_to_index(arr_optimization, str_optimization, 0)
   end
@@ -2740,7 +2767,15 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
     return string_to_index([ 'NotUsing', 'Create', 'Use' ], str_use_precompiled_header, 0)
   end
   def parse_warning_level(str_warning_level)
-    return string_to_index([ 'Level3', 'Level4' ], str_warning_level, 3)
+    arr_warn_level = [
+      'TurnOffAllWarnings', # /W0
+      'Level1', # /W1
+      'Level2', # /W2
+      'Level3', # /W3
+      'Level4', # /W4
+      'EnableAllWarnings' # /Wall
+    ]
+    return string_to_index(arr_warn_level, str_warning_level, 3)
   end
 end
 
@@ -2767,7 +2802,8 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
   def parse_setting(linker_info, setting_key, setting_value)
     if super; return true end # base class successful!
     case setting_key
-    when 'FIXME'
+    when VS_TOOL_LINKER_OPTIMIZEREFERENCES
+      linker_info.optimize_references_enable = get_boolean_value(setting_value)
     else
       unknown_element(setting_key)
     end
