@@ -266,7 +266,7 @@ class V2C_Tool_Specific_Info_Base
   attr_accessor :original
 end
 
-class V2C_Tool_Compiler_Specific_Info < V2C_Tool_Specific_Info_Base
+class V2C_Tool_Compiler_Specific_Info_Base < V2C_Tool_Specific_Info_Base
   def initialize(compiler_name)
     super()
     @compiler_name = compiler_name
@@ -276,6 +276,26 @@ class V2C_Tool_Compiler_Specific_Info < V2C_Tool_Specific_Info_Base
   attr_accessor :compiler_name
   attr_accessor :arr_flags
   attr_accessor :arr_disable_warnings
+end
+
+class V2C_Tool_Compiler_Specific_Info_MSVC_Base < V2C_Tool_Compiler_Specific_Info_Base
+  def initialize(compiler_name)
+    super(compiler_name)
+    @warning_level = 3 # numeric value (for /W4 etc.)
+  end
+  attr_accessor :warning_level
+end
+
+class V2C_Tool_Compiler_Specific_Info_MSVC7 < V2C_Tool_Compiler_Specific_Info_MSVC_Base
+  def initialize
+    super('MSVC7')
+  end
+end
+
+class V2C_Tool_Compiler_Specific_Info_MSVC10 < V2C_Tool_Compiler_Specific_Info_MSVC_Base
+  def initialize
+    super('MSVC10')
+  end
 end
 
 class V2C_Precompiled_Header_Info
@@ -298,10 +318,10 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
     @arr_info_include_dirs = Array.new
     @hash_defines = Hash.new
     @rtti = true
+    @suppress_startup_banner = false
     @precompiled_header_info = nil
     @detect_64bit_porting_problems = true # Enabled by default is preferable, right?
     @warnings_are_errors = false
-    @warning_level = 0 # hmm, this is very compiler-specific, thus it should probably be translated into a particular compiler flag value at V2C_Tool_Compiler_Specific_Info
     @static_code_analysis_enable = false
     @optimization = 0 # currently supporting these values: 0 == Non Debug, 1 == Min Size, 2 == Max Speed, 3 == Max Optimization
     @show_includes = false # Whether to show the filenames of included header files.
@@ -310,10 +330,10 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
   attr_accessor :arr_info_include_dirs
   attr_accessor :hash_defines
   attr_accessor :rtti
+  attr_accessor :suppress_startup_banner
   attr_accessor :precompiled_header_info
   attr_accessor :detect_64bit_porting_problems
   attr_accessor :warnings_are_errors
-  attr_accessor :warning_level
   attr_accessor :static_code_analysis_enable
   attr_accessor :optimization
   attr_accessor :show_includes
@@ -1672,19 +1692,38 @@ class V2C_VSParserBase
   def unknown_element(name); unknown_something('element', name) end
   def unknown_element_text(name); unknown_something('element text', name) end
   def skipped_element_warn(elem_name)
-    log_todo "unhandled less important XML element (#{elem_name})!"
+    log_todo "#{self.class.name}: unhandled less important XML element (#{elem_name})!"
   end
   def parser_error(str_description); log_error(str_description) end
   def unhandled_functionality(str_description); log_error(str_description) end
   def get_boolean_value(attr_value)
     value = false
-    if not attr_value.nil? and attr_value.downcase == 'true'
-      value = true
+    if not attr_value.nil?
+      case attr_value.downcase
+      when 'true'
+        value = true
+      when 'false'
+        value = false
+      else
+        # Hrmm, did we hit a totally unexpected (new) element value!?
+        parser_error("unknown value text #{attr_value}")
+      end
     end
     return value
   end
   def split_values_list(attr_value)
     return attr_value.split(VS_VALUE_SEPARATOR_REGEX_OBJ)
+  end
+
+  def string_to_index(arr_settings, str_setting, default_val)
+    val = default_val
+    n = arr_settings.index(str_setting)
+    if not n.nil?
+      val = n
+    else
+      unknown_attribute(str_setting)
+    end
+    return val
   end
 
   private
@@ -1728,6 +1767,7 @@ module V2C_VSToolCompilerDefines
   VS_TOOL_COMPILER_OPTIMIZATION = 'Optimization'
   VS_TOOL_COMPILER_PREPROCESSORDEFINITIONS = 'PreprocessorDefinitions'
   VS_TOOL_COMPILER_RUNTIMETYPEINFO = 'RuntimeTypeInfo'
+  VS_TOOL_COMPILER_SUPPRESSSTARTUPBANNER = 'SuppressStartupBanner'
   VS_TOOL_COMPILER_WARNINGLEVEL = 'WarningLevel'
 end
 
@@ -1857,6 +1897,8 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
       parse_preprocessor_definitions(compiler_info.hash_defines, setting_value)
     when VS_TOOL_COMPILER_RUNTIMETYPEINFO
       compiler_info.rtti = get_boolean_value(setting_value)
+    when VS_TOOL_COMPILER_SUPPRESSSTARTUPBANNER
+      compiler_info.suppress_startup_banner = get_boolean_value(setting_value)
     else
       found = false
     end
@@ -1912,7 +1954,7 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
   private
 
   def parse_attributes(compiler_info)
-    compiler_specific = V2C_Tool_Compiler_Specific_Info.new('MSVC7')
+    compiler_specific = V2C_Tool_Compiler_Specific_Info_MSVC7.new
     compiler_specific.original = true
     compiler_info.arr_compiler_specific_info.push(compiler_specific)
     @compiler_xml.attributes.each_attribute { |attr_xml|
@@ -1941,7 +1983,7 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
     when VS7_TOOL_COMPILER_WARNASERROR
       compiler_info.warnings_are_errors = get_boolean_value(attr_value)
     when VS_TOOL_COMPILER_WARNINGLEVEL
-      compiler_info.warning_level = attr_value.to_i
+      compiler_info.arr_compiler_specific_info[0].warning_level = attr_value.to_i
     else
       unknown_attribute(attr_name)
     end
@@ -2474,14 +2516,15 @@ class V2C_VS10ItemGroupProjectConfigurationParser < V2C_VS10ParserBase
       when 'ProjectConfiguration'
         config_info = V2C_Project_Config_Info.new
         itemgroup_elem_xml.elements.each  { |projcfg_elem_xml|
-	  elem_text = projcfg_elem_xml.text
-          case projcfg_elem_xml.name
+          setting_key = projcfg_elem_xml.name
+          setting_value = projcfg_elem_xml.text
+          case setting_key
           when 'Configuration'
-            config_info.build_type = elem_text
+            config_info.build_type = setting_value
           when 'Platform'
-            config_info.platform = elem_text
+            config_info.platform = setting_value
           else
-            unknown_element(projcfg_elem_xml.name)
+            unknown_element(setting_key)
           end
 	}
         log_debug_class("build type #{config_info.build_type}, platform #{config_info.platform}")
@@ -2523,14 +2566,14 @@ class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
       end
     }
   end
-  def parse_element(elem_name, elem_text)
-    case elem_name
+  def parse_element(setting_key, setting_value)
+    case setting_key
     when 'Extensions'
-      @filter.arr_scfilter = split_values_list(elem_text)
+      @filter.arr_scfilter = split_values_list(setting_value)
     when 'UniqueIdentifier'
-      @filter.guid = elem_text
+      @filter.guid = setting_value
     else
-      unknown_element(elem_name)
+      unknown_element(setting_key)
     end
   end
 end
@@ -2622,52 +2665,46 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
   private
 
   def parse_elements(compiler_info)
-    compiler_specific = V2C_Tool_Compiler_Specific_Info.new('MSVC10')
+    compiler_specific = V2C_Tool_Compiler_Specific_Info_MSVC10.new
     compiler_specific.original = true
     compiler_info.arr_compiler_specific_info.push(compiler_specific)
     @compiler_xml.elements.each { |elem_xml|
       parse_element(compiler_info, elem_xml.name, elem_xml.text)
     }
   end
-  def parse_element(compiler_info, elem_name, elem_text)
-    return if parse_setting_base(compiler_info, elem_name, elem_text)
-    case elem_name
+  def parse_element(compiler_info, setting_key, setting_value)
+    return if parse_setting_base(compiler_info, setting_key, setting_value)
+    case setting_key
     when VS10_TOOL_COMPILER_PRECOMPILEDHEADER
       allocate_precompiled_header_info(compiler_info)
-      compiler_info.precompiled_header_info.use_mode = parse_use_precompiled_header(elem_text)
+      compiler_info.precompiled_header_info.use_mode = parse_use_precompiled_header(setting_value)
     when VS10_TOOL_COMPILER_PRECOMPILEDHEADERFILE
       allocate_precompiled_header_info(compiler_info)
-      compiler_info.precompiled_header_info.header_source_name = normalize_path(elem_text)
+      compiler_info.precompiled_header_info.header_source_name = normalize_path(setting_value)
     when VS10_TOOL_COMPILER_PRECOMPILEDHEADEROUTPUTFILE
       allocate_precompiled_header_info(compiler_info)
-      compiler_info.precompiled_header_info.header_binary_name = normalize_path(elem_text)
+      compiler_info.precompiled_header_info.header_binary_name = normalize_path(setting_value)
     when VS10_TOOL_COMPILER_TREATWARNINGASERROR
-      compiler_info.warnings_are_errors = get_boolean_value(elem_text)
-    when 'AssemblerListingLocation', 'SuppressStartupBanner'
-      skipped_element_warn(elem_name)
+      compiler_info.warnings_are_errors = get_boolean_value(setting_value)
+    when 'AssemblerListingLocation'
+      skipped_element_warn(setting_key)
     when 'ObjectFileName'
        # TODO: support it - but with a CMake out-of-tree build this setting is very unimportant methinks.
-       skipped_element_warn(elem_name)
+       skipped_element_warn(setting_key)
+    when VS_TOOL_COMPILER_WARNINGLEVEL
+      compiler_info.arr_compiler_specific_info[0].warning_level = parse_warning_level(setting_value)
     else
-      unknown_element(elem_name)
+      unknown_element(setting_key)
     end
   end
 
   private
 
-  def parse_use_precompiled_header(value_use_precompiled_header)
-    use_val = 0 # NotUsing
-    case value_use_precompiled_header
-    when 'NotUsing'
-      use_val = 0
-    when 'Create'
-      use_val = 1
-    when 'Use'
-      use_val = 2
-    else
-      unknown_attribute(value_use_precompiled_header)
-    end
-    return use_val
+  def parse_use_precompiled_header(str_use_precompiled_header)
+    return string_to_index([ 'NotUsing', 'Create', 'Use' ], str_use_precompiled_header, 0)
+  end
+  def parse_warning_level(str_warning_level)
+    return string_to_index([ 'Level3', 'Level4' ], str_warning_level, 3)
   end
 end
 
@@ -2717,81 +2754,42 @@ class V2C_VS10PropertyGroupConfigurationParser < V2C_VS10ParserBase
       parse_element(config_info, elem_xml.name, elem_xml.text)
     }
   end
-  def parse_element(config_info, elem_name, elem_text)
-    case elem_name
+  def parse_element(config_info, setting_key, setting_value)
+    case setting_key
     when 'CharacterSet'
-      config_info.charset = parse_charset(elem_text)
+      config_info.charset = parse_charset(setting_value)
     when 'ConfigurationType'
-      config_info.cfg_type = parse_configuration_type(elem_text)
+      config_info.cfg_type = parse_configuration_type(setting_value)
     when 'UseOfAtl'
-      config_info.use_of_atl = parse_use_of_atl_mfc(elem_text)
+      config_info.use_of_atl = parse_use_of_atl_mfc(setting_value)
     when 'UseOfMfc'
-      config_info.use_of_mfc = parse_use_of_atl_mfc(elem_text)
+      config_info.use_of_mfc = parse_use_of_atl_mfc(setting_value)
     when 'WholeProgramOptimization'
-      config_info.whole_program_optimization = parse_wp_optimization(elem_text)
+      config_info.whole_program_optimization = parse_wp_optimization(setting_value)
     else
-      unknown_element(elem_name)
+      unknown_element(setting_key)
     end
   end
 
   private
 
   def parse_charset(str_charset)
-    case str_charset
-    when 'Unicode'
-      return 1
-    when 'MultiByte'
-      return 2
-    else
-      # we're still waiting for value of charSetNotSet
-      # or something else to show up...
-      unknown_element_text(str_charset)
-      return 0
-    end
+    return string_to_index([ 'NotSet', 'Unicode', 'MultiByte' ], str_charset, 0)
   end
   def parse_configuration_type(str_configuration_type)
-    case str_configuration_type
-    when 'Application'
-      return 1 # typeApplication (.exe)
-    when 'DynamicLibrary'
-      return 2 # typeDynamicLibrary (.dll)
-    when 'StaticLibrary'
-      return 4 # typeStaticLibrary
-    when 'Unknown'
-      return 0 # typeUnknown (utility)
-    else
-      # we're still waiting
-      # for something else to show up...
-      unknown_element_text(str_configuration_type)
-      return 0
-    end
+    arr_config_type = [
+      'Unknown', # 0, typeUnknown (utility)
+      'Application', # 1, typeApplication (.exe)
+      'DynamicLibrary', # 2, typeDynamicLibrary (.dll)
+      'UNKNOWN_FIXME', # 3
+      'StaticLibrary' # 4, typeStaticLibrary
+    ]
+    return string_to_index(arr_config_type, str_configuration_type, 0)
   end
   def parse_use_of_atl_mfc(str_use_of_atl_mfc)
-    case str_use_of_atl_mfc
-    when 'Static'
-      return 1
-    when 'Dynamic'
-      return 2
-    when 'false'
-      return 0
-    else
-      # we're still waiting
-      # for something else to show up...
-      unknown_element_text(str_use_of_atl_mfc)
-      return 0
-    end
+    return string_to_index([ 'false', 'Static', 'Dynamic' ], str_use_of_atl_mfc, 0)
   end
-  def parse_wp_optimization(str_opt)
-    case str_opt
-    when 'false'
-      return 0
-    when 'true'
-      return 1
-    else
-      unknown_element_text(str_opt)
-      return 0
-    end
-  end
+  def parse_wp_optimization(str_opt); return get_boolean_value(str_opt) end
 end
 
 class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10ParserBase
