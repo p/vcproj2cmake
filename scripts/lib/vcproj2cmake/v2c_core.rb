@@ -1878,8 +1878,8 @@ class V2C_VS7ProjectParserBase < V2C_VSProjectParserBase
 end
 
 module V2C_VSToolDefines
-  VS_TOOL_ADDITIONALOPTIONS = 'AdditionalOptions'
-  VS_TOOL_SUPPRESSSTARTUPBANNER = 'SuppressStartupBanner'
+  TEXT_ADDITIONALOPTIONS = 'AdditionalOptions'
+  TEXT_SUPPRESSSTARTUPBANNER = 'SuppressStartupBanner'
 end
 
 class V2C_VSToolParserBase < V2C_VSParserBase
@@ -1887,7 +1887,7 @@ class V2C_VSToolParserBase < V2C_VSParserBase
   def parse_setting(tool_info, setting_key, setting_value)
     found = true # be optimistic :)
     case setting_key
-    when VS_TOOL_SUPPRESSSTARTUPBANNER
+    when V2C_VSToolDefines::TEXT_SUPPRESSSTARTUPBANNER
       tool_info.suppress_startup_banner_enable = get_boolean_value(setting_value)
     else
       found = false
@@ -1909,15 +1909,15 @@ end
 
 module V2C_VSToolCompilerDefines
   include V2C_VSToolDefines
-  VS_TOOL_COMPILER_ADDITIONALINCLUDEDIRECTORIES = 'AdditionalIncludeDirectories'
-  VS_TOOL_COMPILER_DISABLESPECIFICWARNINGS = 'DisableSpecificWarnings'
-  VS_TOOL_COMPILER_ENABLEPREFAST = 'EnablePREfast'
-  VS_TOOL_COMPILER_EXCEPTIONHANDLING = 'ExceptionHandling'
-  VS_TOOL_COMPILER_OPTIMIZATION = 'Optimization'
-  VS_TOOL_COMPILER_PREPROCESSORDEFINITIONS = 'PreprocessorDefinitions'
-  VS_TOOL_COMPILER_RUNTIMETYPEINFO = 'RuntimeTypeInfo'
-  VS_TOOL_COMPILER_SHOWINCLUDES = 'ShowIncludes'
-  VS_TOOL_COMPILER_WARNINGLEVEL = 'WarningLevel'
+  TEXT_ADDITIONALINCLUDEDIRECTORIES = 'AdditionalIncludeDirectories'
+  TEXT_DISABLESPECIFICWARNINGS = 'DisableSpecificWarnings'
+  TEXT_ENABLEPREFAST = 'EnablePREfast'
+  TEXT_EXCEPTIONHANDLING = 'ExceptionHandling'
+  TEXT_OPTIMIZATION = 'Optimization'
+  TEXT_PREPROCESSORDEFINITIONS = 'PreprocessorDefinitions'
+  TEXT_RUNTIMETYPEINFO = 'RuntimeTypeInfo'
+  TEXT_SHOWINCLUDES = 'ShowIncludes'
+  TEXT_WARNINGLEVEL = 'WarningLevel'
 end
 
 class V2C_VSToolCompilerParser < V2C_VSToolParserBase
@@ -1934,19 +1934,19 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
     if super; return true end # base method successful!
     found = true # be optimistic :)
     case setting_key
-    when VS_TOOL_COMPILER_ADDITIONALINCLUDEDIRECTORIES
+    when V2C_VSToolCompilerDefines::TEXT_ADDITIONALINCLUDEDIRECTORIES
       parse_additional_include_directories(compiler_info, setting_value)
-    when VS_TOOL_ADDITIONALOPTIONS
+    when V2C_VSToolDefines::TEXT_ADDITIONALOPTIONS
       parse_additional_options(compiler_info.arr_compiler_specific_info[0].arr_flags, setting_value)
-    when VS_TOOL_COMPILER_DISABLESPECIFICWARNINGS
+    when V2C_VSToolCompilerDefines::TEXT_DISABLESPECIFICWARNINGS
       parse_disable_specific_warnings(compiler_info.arr_compiler_specific_info[0].arr_disable_warnings, setting_value)
-    when VS_TOOL_COMPILER_ENABLEPREFAST
+    when V2C_VSToolCompilerDefines::TEXT_ENABLEPREFAST
       compiler_info.static_code_analysis_enable = get_boolean_value(setting_value)
-    when VS_TOOL_COMPILER_PREPROCESSORDEFINITIONS
+    when V2C_VSToolCompilerDefines::TEXT_PREPROCESSORDEFINITIONS
       parse_preprocessor_definitions(compiler_info.hash_defines, setting_value)
-    when VS_TOOL_COMPILER_RUNTIMETYPEINFO
+    when V2C_VSToolCompilerDefines::TEXT_RUNTIMETYPEINFO
       compiler_info.rtti = get_boolean_value(setting_value)
-    when VS_TOOL_COMPILER_SHOWINCLUDES
+    when V2C_VSToolCompilerDefines::TEXT_SHOWINCLUDES
       compiler_info.show_includes_enable = get_boolean_value(setting_value)
     else
       found = false
@@ -1987,17 +1987,19 @@ end
 
 module V2C_VS7ToolDefines
   include V2C_VSToolDefines
-  VS7_TOOL_NAME = 'Name'
+  TEXT_NAME = 'Name'
+  TEXT_VCCLCOMPILERTOOL = 'VCCLCompilerTool'
+  TEXT_VCLINKERTOOL = 'VCLinkerTool'
 end
 
 module V2C_VS7ToolCompilerDefines
   include V2C_VS7ToolDefines
   include V2C_VSToolCompilerDefines
   # pch names are _different_ (_swapped_) from their VS10 meanings...
-  VS7_TOOL_COMPILER_PRECOMPILEDHEADERFILE_BINARY = 'PrecompiledHeaderFile'
-  VS7_TOOL_COMPILER_PRECOMPILEDHEADERFILE_SOURCE = 'PrecompiledHeaderThrough'
-  VS7_TOOL_COMPILER_USEPRECOMPILEDHEADER = 'UsePrecompiledHeader'
-  VS7_TOOL_COMPILER_WARNASERROR = 'WarnAsError'
+  TEXT_PRECOMPILEDHEADERFILE_BINARY = 'PrecompiledHeaderFile'
+  TEXT_PRECOMPILEDHEADERFILE_SOURCE = 'PrecompiledHeaderThrough'
+  TEXT_USEPRECOMPILEDHEADER = 'UsePrecompiledHeader'
+  TEXT_WARNASERROR = 'WarnAsError'
 end
 
 class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
@@ -2026,26 +2028,26 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
     when 'Detect64BitPortabilityProblems'
       # TODO: add /Wp64 to flags of an MSVC compiler info...
       compiler_info.detect_64bit_porting_problems_enable = get_boolean_value(setting_value)
-    when VS_TOOL_COMPILER_EXCEPTIONHANDLING
+    when V2C_VSToolCompilerDefines::TEXT_EXCEPTIONHANDLING
       compiler_info.exception_handling = setting_value.to_i
-    when VS7_TOOL_NAME
+    when V2C_VS7ToolDefines::TEXT_NAME
       compiler_info.name = setting_value
-    when VS_TOOL_COMPILER_OPTIMIZATION
+    when V2C_VSToolCompilerDefines::TEXT_OPTIMIZATION
       compiler_info.optimization = setting_value.to_i
-    when VS7_TOOL_COMPILER_PRECOMPILEDHEADERFILE_BINARY
+    when V2C_VS7ToolCompilerDefines::TEXT_PRECOMPILEDHEADERFILE_BINARY
       allocate_precompiled_header_info(compiler_info)
       compiler_info.precompiled_header_info.header_binary_name = normalize_path(setting_value)
-    when VS7_TOOL_COMPILER_PRECOMPILEDHEADERFILE_SOURCE
+    when V2C_VS7ToolCompilerDefines::TEXT_PRECOMPILEDHEADERFILE_SOURCE
       allocate_precompiled_header_info(compiler_info)
       compiler_info.precompiled_header_info.header_source_name = normalize_path(setting_value)
-    when 'ShowIncludes'
+    when V2C_VSToolCompilerDefines::TEXT_SHOWINCLUDES
       compiler_info.show_includes = get_boolean_value(setting_value)
-    when VS7_TOOL_COMPILER_USEPRECOMPILEDHEADER
+    when V2C_VS7ToolCompilerDefines::TEXT_USEPRECOMPILEDHEADER
       allocate_precompiled_header_info(compiler_info)
       compiler_info.precompiled_header_info.use_mode = parse_use_precompiled_header(setting_value)
-    when VS7_TOOL_COMPILER_WARNASERROR
+    when V2C_VS7ToolCompilerDefines::TEXT_WARNASERROR
       compiler_info.warnings_are_errors_enable = get_boolean_value(setting_value)
-    when VS_TOOL_COMPILER_WARNINGLEVEL
+    when V2C_VSToolCompilerDefines::TEXT_WARNINGLEVEL
       compiler_info.arr_compiler_specific_info[0].warning_level = setting_value.to_i
     else
       unknown_attribute(setting_key)
@@ -2060,7 +2062,12 @@ end
 
 module V2C_VSToolLinkerDefines
   include V2C_VSToolDefines
-  VS_TOOL_LINKER_OPTIMIZEREFERENCES = 'OptimizeReferences'
+  TEXT_ADDITIONALDEPENDENCIES = 'AdditionalDependencies'
+  TEXT_ADDITIONALLIBRARYDIRECTORIES = 'AdditionalLibraryDirectories'
+  TEXT_LINKINCREMENTAL = 'LinkIncremental'
+  TEXT_MODULEDEFINITIONFILE = 'ModuleDefinitionFile'
+  TEXT_OPTIMIZEREFERENCES = 'OptimizeReferences'
+  TEXT_PROGRAMDATABASEFILE = 'ProgramDatabaseFile'
 end
 
 class V2C_VSToolLinkerParser < V2C_VSToolParserBase
@@ -2074,15 +2081,15 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
     if super; return true end # base method successful!
     found = true # be optimistic :)
     case setting_key
-    when 'AdditionalDependencies'
+    when V2C_VSToolLinkerDefines::TEXT_ADDITIONALDEPENDENCIES
       parse_additional_dependencies(setting_value, linker_info.arr_dependencies)
-    when 'AdditionalLibraryDirectories'
+    when V2C_VSToolLinkerDefines::TEXT_ADDITIONALLIBRARYDIRECTORIES
       parse_additional_library_directories(setting_value, linker_info.arr_lib_dirs)
-    when VS_TOOL_ADDITIONALOPTIONS
+    when V2C_VSToolDefines::TEXT_ADDITIONALOPTIONS
       parse_additional_options(linker_info.arr_linker_specific_info[0].arr_flags, setting_value)
-    when 'ModuleDefinitionFile'
+    when V2C_VSToolLinkerDefines::TEXT_MODULEDEFINITIONFILE
       linker_info.module_definition_file = parse_module_definition_file(setting_value)
-    when 'ProgramDatabaseFile'
+    when V2C_VSToolLinkerDefines::TEXT_PROGRAMDATABASEFILE
       linker_info.pdb_file = parse_pdb_file(setting_value)
     else
       found = false
@@ -2141,11 +2148,11 @@ class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
   def parse_setting(linker_info, setting_key, setting_value)
     if super; return true end # base method successful!
     case setting_key
-    when 'LinkIncremental'
+    when V2C_VSToolLinkerDefines::TEXT_LINKINCREMENTAL
       linker_info.link_incremental = parse_link_incremental(setting_value)
-    when VS7_TOOL_NAME
+    when V2C_VS7ToolDefines::TEXT_NAME
       linker_info.name = setting_value
-    when VS_TOOL_LINKER_OPTIMIZEREFERENCES
+    when V2C_VSToolLinkerDefines::TEXT_OPTIMIZEREFERENCES
       linker_info.optimize_references_enable = setting_value.to_i
     else
       unknown_attribute(setting_key)
@@ -2163,9 +2170,9 @@ class V2C_VS7ToolParser < V2C_VSParserBase
   def parse
     toolname = @tool_xml.attributes['Name']
     case toolname
-    when 'VCCLCompilerTool'
+    when V2C_VS7ToolDefines::TEXT_VCCLCOMPILERTOOL
       elem_parser = V2C_VS7ToolCompilerParser.new(@tool_xml, @config_info.arr_compiler_info)
-    when 'VCLinkerTool'
+    when V2C_VS7ToolDefines::TEXT_VCLINKERTOOL
       elem_parser = V2C_VS7ToolLinkerParser.new(@tool_xml, @config_info.arr_linker_info)
     else
       unknown_element(toolname)
@@ -2856,10 +2863,10 @@ end
 module V2C_VS10ToolCompilerDefines
   include V2C_VS10ToolDefines
   include V2C_VSToolCompilerDefines
-  VS10_TOOL_COMPILER_PRECOMPILEDHEADER = 'PrecompiledHeader'
-  VS10_TOOL_COMPILER_PRECOMPILEDHEADERFILE = 'PrecompiledHeaderFile'
-  VS10_TOOL_COMPILER_PRECOMPILEDHEADEROUTPUTFILE = 'PrecompiledHeaderOutputFile'
-  VS10_TOOL_COMPILER_TREATWARNINGASERROR = 'TreatWarningAsError'
+  TEXT_PRECOMPILEDHEADER = 'PrecompiledHeader'
+  TEXT_PRECOMPILEDHEADERFILE = 'PrecompiledHeaderFile'
+  TEXT_PRECOMPILEDHEADEROUTPUTFILE = 'PrecompiledHeaderOutputFile'
+  TEXT_TREATWARNINGASERROR = 'TreatWarningAsError'
 end
 
 class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
@@ -2892,22 +2899,22 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
     when 'ObjectFileName'
        # TODO: support it - but with a CMake out-of-tree build this setting is very unimportant methinks.
        skipped_element_warn(setting_key)
-    when VS_TOOL_COMPILER_EXCEPTIONHANDLING
+    when V2C_VSToolCompilerDefines::TEXT_EXCEPTIONHANDLING
       compiler_info.exception_handling = parse_exception_handling(setting_value)
-    when VS_TOOL_COMPILER_OPTIMIZATION
+    when V2C_VSToolCompilerDefines::TEXT_OPTIMIZATION
       compiler_info.optimization = parse_optimization(setting_value)
-    when VS10_TOOL_COMPILER_PRECOMPILEDHEADER
+    when V2C_VS10ToolCompilerDefines::TEXT_PRECOMPILEDHEADER
       allocate_precompiled_header_info(compiler_info)
       compiler_info.precompiled_header_info.use_mode = parse_use_precompiled_header(setting_value)
-    when VS10_TOOL_COMPILER_PRECOMPILEDHEADERFILE
+    when V2C_VS10ToolCompilerDefines::TEXT_PRECOMPILEDHEADERFILE
       allocate_precompiled_header_info(compiler_info)
       compiler_info.precompiled_header_info.header_source_name = normalize_path(setting_value)
-    when VS10_TOOL_COMPILER_PRECOMPILEDHEADEROUTPUTFILE
+    when V2C_VS10ToolCompilerDefines::TEXT_PRECOMPILEDHEADEROUTPUTFILE
       allocate_precompiled_header_info(compiler_info)
       compiler_info.precompiled_header_info.header_binary_name = normalize_path(setting_value)
-    when VS10_TOOL_COMPILER_TREATWARNINGASERROR
+    when V2C_VS10ToolCompilerDefines::TEXT_TREATWARNINGASERROR
       compiler_info.warnings_are_errors_enable = get_boolean_value(setting_value)
-    when VS_TOOL_COMPILER_WARNINGLEVEL
+    when V2C_VSToolCompilerDefines::TEXT_WARNINGLEVEL
       compiler_info.arr_compiler_specific_info[0].warning_level = parse_warning_level(setting_value)
     else
       unknown_element(setting_key)
@@ -2973,7 +2980,7 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
   def parse_setting(linker_info, setting_key, setting_value)
     if super; return true end # base method successful!
     case setting_key
-    when VS_TOOL_LINKER_OPTIMIZEREFERENCES
+    when V2C_VSToolLinkerDefines::TEXT_OPTIMIZEREFERENCES
       linker_info.optimize_references_enable = get_boolean_value(setting_value)
     else
       unknown_element(setting_key)
