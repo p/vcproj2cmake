@@ -2397,7 +2397,7 @@ class V2C_VS7FilterParser < V2C_VSParserBase
     if file_group_name.nil?
       file_group_name = 'COMMON'
     end
-    log_debug_class("parsed files group #{file_group_name}, type #{filter_info.get_group_type()}")
+    #log_debug_class("parsed files group #{file_group_name}, type #{filter_info.get_group_type()}")
     files_str[:filter_info] = filter_info
   end
 end
