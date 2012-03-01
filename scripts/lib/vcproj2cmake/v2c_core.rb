@@ -3660,7 +3660,12 @@ Finished. You should make sure to have all important v2c settings includes such 
 	      case config_info_curr.charset
               when V2C_BaseConfig_Defines::CHARSET_SBCS # nothing to do?
               when V2C_BaseConfig_Defines::CHARSET_UNICODE
+                # http://blog.m-ri.de/index.php/2007/05/31/_unicode-versus-unicode-und-so-manches-eigentuemliche/
+                #   "    "Use Unicode Character Set" setzt beide Defines _UNICODE und UNICODE
+                #       "Use Multi-Byte Character Set" setzt nur _MBCS.
+                #           "Not set" setzt Erwartungsgemäß keinen der Defines..."
                 hash_defines_actual['_UNICODE'] = ''
+                hash_defines_actual['UNICODE'] = ''
               when V2C_BaseConfig_Defines::CHARSET_MBCS
                 hash_defines_actual['_MBCS'] = ''
               else
