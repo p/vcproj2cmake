@@ -410,6 +410,15 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
   attr_accessor :arr_linker_specific_info
 end
 
+module V2C_BaseConfig_Defines
+  CHARSET_SBCS = 0
+  CHARSET_UNICODE = 1
+  CHARSET_MBCS = 2
+  MFC_FALSE = 0
+  MFC_STATIC = 1
+  MFC_DYNAMIC = 2
+end
+
 # Common base class of both file config and project config.
 class V2C_Config_Base_Info < V2C_Info_Elem_Base
   def initialize
@@ -1015,7 +1024,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # See also "Re: [CMake] CMAKE_MFC_FLAG not working in functions"
     #   http://www.mail-archive.com/cmake@cmake.org/msg38677.html
 
-    #if config_info.use_of_mfc > 0
+    #if config_info.use_of_mfc > V2C_BaseConfig_Defines::MFC_FALSE
       write_set_var('CMAKE_MFC_FLAG', config_info.use_of_mfc)
     #end
     # ok, there's no CMAKE_ATL_FLAG yet, AFAIK, but still prepare
@@ -3557,16 +3566,16 @@ Finished. You should make sure to have all important v2c settings includes such 
         end
 
         arr_config_info.each { |config_info_curr|
-        log_debug "config_info #{config_info_curr.inspect}"
-  	build_type_condition = ''
-        build_type_cooked = syntax_generator.prepare_string_literal(config_info_curr.build_type)
-  	if $config_multi_authoritative == config_info_curr.build_type
-  	  build_type_condition = "CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
-  	else
-  	  # YES, this condition is supposed to NOT trigger in case of a multi-configuration generator
-  	  build_type_condition = "CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
-  	end
-  	syntax_generator.write_set_var_bool_conditional(get_var_name_of_config_info_condition(config_info_curr), build_type_condition)
+          log_debug "config_info #{config_info_curr.inspect}"
+          build_type_condition = ''
+          build_type_cooked = syntax_generator.prepare_string_literal(config_info_curr.build_type)
+          if $config_multi_authoritative == config_info_curr.build_type
+  	    build_type_condition = "CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
+          else
+  	    # YES, this condition is supposed to NOT trigger in case of a multi-configuration generator
+  	    build_type_condition = "CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
+  	  end
+  	  syntax_generator.write_set_var_bool_conditional(get_var_name_of_config_info_condition(config_info_curr), build_type_condition)
         }
 
         arr_config_info.each { |config_info_curr|
@@ -3618,6 +3627,7 @@ Finished. You should make sure to have all important v2c settings includes such 
               # make sure to generate it _before_ generating COMPILE_FLAGS:
               target_generator.write_precompiled_header(config_info_curr.build_type, compiler_info_curr.precompiled_header_info)
 
+	      hash_defines_actual = compiler_info_curr.hash_defines.clone
 	      # Hrmm, are we even supposed to be doing this?
 	      # On Windows I guess UseOfMfc in generated VS project files
 	      # would automatically cater for it, and all other platforms
@@ -3627,11 +3637,21 @@ Finished. You should make sure to have all important v2c settings includes such 
 	      # Plus, defining _AFXEXT already includes the _AFXDLL setting
 	      # (MFC will define it implicitly),
 	      # thus it's quite likely that our current handling is somewhat incorrect.
-              if config_info_curr.use_of_mfc == 2
-                compiler_info_curr.hash_defines['_AFXEXT'] = ''
-                compiler_info_curr.hash_defines['_AFXDLL'] = ''
+              if config_info_curr.use_of_mfc == V2C_BaseConfig_Defines::MFC_DYNAMIC
+                # FIXME: need to add /MD (dynamic) or /MT (static) switch to compiler-specific info (MSVC) as well!
+                hash_defines_actual['_AFXEXT'] = ''
+                hash_defines_actual['_AFXDLL'] = ''
               end
-              target_generator.write_property_compile_definitions(config_info_curr.build_type, compiler_info_curr.hash_defines, map_defines)
+	      case config_info_curr.charset
+              when V2C_BaseConfig_Defines::CHARSET_SBCS # nothing to do?
+              when V2C_BaseConfig_Defines::CHARSET_UNICODE
+                hash_defines_actual['_UNICODE'] = ''
+              when V2C_BaseConfig_Defines::CHARSET_MBCS
+                hash_defines_actual['_MBCS'] = ''
+              else
+                log_implementation_bug('unknown charset type!?')
+              end
+              target_generator.write_property_compile_definitions(config_info_curr.build_type, hash_defines_actual, map_defines)
               # Original compiler flags are MSVC-only, of course. TODO: provide an automatic conversion towards gcc?
               str_conditional_compiler_platform = nil
               compiler_info_curr.arr_compiler_specific_info.each { |compiler_specific|
