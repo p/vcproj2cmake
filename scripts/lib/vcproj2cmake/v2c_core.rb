@@ -481,10 +481,13 @@ end
 # seem to be pretty much synonymous...
 # FIXME: we should still do better separation between these two...
 class V2C_Project_Info # formerly V2C_Target
-  def initialize(orig_environment)
+  def initialize
     @type = nil # project type
-    @name = nil 
-    @orig_environment = orig_environment # the original environment (build environment / IDE) which defined the project (MSVS7 - Visual Studio, etc.)
+    # VS10: in case the main project file is lacking a ProjectName element,
+    # the project will adopt the _exact name part_ of the filename,
+    # thus enforce this ctor taking a project name to use as a default if no ProjectName element is available:
+    @name = nil
+    @orig_environment = nil # the original environment (build environment / IDE) which defined the project (MSVS7 - Visual Studio, etc.)
     @creator = nil # VS7 "ProjectCreator"
     @guid = nil
     @root_namespace = nil
@@ -492,6 +495,12 @@ class V2C_Project_Info # formerly V2C_Target
     @vs_keyword = nil # .vcproj Keyword attribute ("Win32Proj", "MFCProj", "ATLProj", "MakeFileProj", "Qt4VSv1.0"). TODO: should perhaps do Keyword-specific post-processing (to enable Qt integration, etc.)
     @scc_info = V2C_SCC_Info.new
     @arr_config_info = Array.new
+    @arr_filters = Array.new # the array which contains V2C_Info_Filter elements. Now supported by VS10 parser. FIXME: rework VS7 parser to also create a linear array of filters!
+    # In addition to the filters Array, we also need a filters Hash
+    # for fast lookup when intending to insert a new file item of the project.
+    # There's now a new ordered hash which might preserve the ordering
+    # as guaranteed by an Array, but it's too new (Ruby 1.9!).
+    @hash_filters = Hash.new
     @main_files = nil
     # semi-HACK: we need this variable, since we need to be able
     # to tell whether we're able to build a target
@@ -512,8 +521,29 @@ class V2C_Project_Info # formerly V2C_Target
   attr_accessor :vs_keyword
   attr_accessor :scc_info
   attr_accessor :arr_config_info
+  attr_accessor :arr_filters
+  attr_accessor :hash_filters
   attr_accessor :main_files
   attr_accessor :have_build_units
+end
+
+class V2C_ProjectValidator
+  def initialize(project_info)
+    @project_info = project_info
+  end
+  def validate
+    #log_debug "project data: #{@project_info.inspect}"
+    if @project_info.orig_environment.nil?
+      log_fatal "#{@project_info.inspect} Project original environment not set!?"
+    end
+    if @project_info.name.nil?
+      log_fatal 'Project name not set!?'
+    end
+    arr_config_info = @project_info.arr_config_info
+    if arr_config_info.nil? or arr_config_info.length == 0
+      log_fatal 'Project has no config information!?'
+    end
+  end
 end
 
 class V2C_BaseGlobalGenerator
@@ -1220,11 +1250,11 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeSyntaxGenerator
       @textOut.indent_less()
     end
 
-    group_tag = this_source_group.clone.gsub(VS7_UNWANTED_GROUP_TAG_CHARS_MATCH_REGEX_OBJ,'_')
+    source_group_var_suffix = this_source_group.clone.gsub(VS7_UNWANTED_GROUP_TAG_CHARS_MATCH_REGEX_OBJ,'_')
 
     # process our hierarchy's own files
     if not arr_local_sources.nil?
-      source_files_variable = "SOURCES_files_#{group_tag}"
+      source_files_variable = "SOURCES_files_#{source_group_var_suffix}"
       write_list_quoted(source_files_variable, arr_local_sources)
       # create source_group() of our local files
       if not parent_source_group.nil?
@@ -1237,7 +1267,7 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeSyntaxGenerator
       end
     end
     if not source_files_variable.nil? or not arr_my_sub_sources.empty?
-      sources_variable = "SOURCES_#{group_tag}"
+      sources_variable = "SOURCES_#{source_group_var_suffix}"
       arr_source_vars = Array.new
       # dump sub filters...
       arr_my_sub_sources.each { |sources_elem|
@@ -1590,29 +1620,12 @@ class V2C_Info_Filter
     # and thus could be considered redundant in these cases,
     # we'll keep them separate since this implementation is supposed to support
     # parsers other than VSx, too.
-    @is_compiles = false # VS10: ClCompile element
-    @is_includes = false # VS10: ClInclude element
-    @is_resources = false # VS10: ResourceCompile element
     @parse_files = true # whether this filter should be parsed (touched) by IntelliSense (or related mechanisms) or not. Probably VS10-only property. Default value true, obviously.
   end
   attr_accessor :name
   attr_accessor :arr_scfilter
   attr_accessor :val_scmfiles
   attr_accessor :guid
-  attr_accessor :is_compiles
-  attr_accessor :is_includes
-  attr_accessor :is_resources
-  def get_group_type()
-    if @is_compiles
-      return 'sources'
-    elsif @is_includes
-      return 'headers'
-    elsif @is_resources
-      return 'resources'
-    else
-      return 'unknown'
-    end
-  end
 end
 
 Files_str = Struct.new(:filter_info, :arr_sub_filters, :arr_file_infos)
@@ -1761,11 +1774,10 @@ class V2C_VSParserBase
   end
 end
 
-class V2C_VSProjectXmlParserBase
-  def initialize(doc_proj, arr_projects, orig_environment)
+class V2C_VSProjectFileXmlParserBase
+  def initialize(doc_proj, arr_projects_new)
     @doc_proj = doc_proj
-    @arr_projects = arr_projects
-    @orig_environment = orig_environment
+    @arr_projects_new = arr_projects_new
   end
 end
 
@@ -1834,7 +1846,7 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
     compiler_info.precompiled_header_info = V2C_Precompiled_Header_Info.new
   end
   def parse_setting(compiler_info, setting_key, setting_value)
-    if super; return true end # base class successful!
+    if super; return true end # base method successful!
     found = true # be optimistic :)
     case setting_key
     when VS_TOOL_COMPILER_ADDITIONALINCLUDEDIRECTORIES
@@ -1924,7 +1936,7 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
     }
   end
   def parse_setting(compiler_info, setting_key, setting_value)
-    if super; return true end # base class successful!
+    if super; return true end # base method successful!
     case setting_key
     when 'Detect64BitPortabilityProblems'
       # TODO: add /Wp64 to flags of an MSVC compiler info...
@@ -1974,7 +1986,7 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
     @arr_linker_info = arr_linker_info_out
   end
   def parse_setting(linker_info, setting_key, setting_value)
-    if super; return true end # base class successful!
+    if super; return true end # base method successful!
     found = true # be optimistic :)
     case setting_key
     when 'AdditionalDependencies'
@@ -2042,7 +2054,7 @@ class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
     }
   end
   def parse_setting(linker_info, setting_key, setting_value)
-    if super; return true end # base class successful!
+    if super; return true end # base method successful!
     case setting_key
     when 'LinkIncremental'
       linker_info.link_incremental = parse_link_incremental(setting_value)
@@ -2148,7 +2160,7 @@ class V2C_VS7ProjectConfigurationParser < V2C_VS7ConfigurationBaseParser
   private
 
   def parse_setting(config_info, setting_key, setting_value)
-    if super; return true end # base class successful!
+    if super; return true end # base method successful!
     unknown_attribute(setting_key)
   end
 end
@@ -2158,7 +2170,7 @@ class V2C_VS7FileConfigurationParser < V2C_VS7ConfigurationBaseParser
   private
 
   def parse_setting(config_info, setting_key, setting_value)
-    if super; return true end # base class successful!
+    if super; return true end # base method successful!
     case setting_key
     when 'ExcludedFromBuild'
       config_info.excluded_from_build = get_boolean_value(setting_value)
@@ -2370,11 +2382,11 @@ class V2C_VS7FilterParser < V2C_VSParserBase
 	# thus they should be made constants in a common base class...
 	case setting_value_upper
         when '{4FC737F1-C7A5-4376-A066-2A32D752A2FF}'
-	  filter_info.is_compiles = true
+	  #filter_info.is_compiles = true
         when '{93995380-89BD-4B04-88EB-625FBE52EBFB}'
-	  filter_info.is_includes = true
+	  #filter_info.is_includes = true
         when '{67DA6AB6-F800-4C08-8B7A-83BB121AAD01}'
-          filter_info.is_resources = true
+          #filter_info.is_resources = true
         else
           unknown_attribute("unknown/custom UniqueIdentifier #{setting_value_upper}")
         end
@@ -2467,10 +2479,18 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
 end
 
 class V2C_VSProjectFilesBundleParserBase
-  def initialize(proj_filename, arr_projects)
-    @proj_filename = proj_filename
-    @arr_projects = arr_projects
+  def initialize(p_parser_proj_file, str_orig_environment, arr_projects_new)
+    @p_parser_proj_file = p_parser_proj_file
+    @proj_filename = p_parser_proj_file.to_s # FIXME: do we want to keep the string-based filename? We should probably change several sub classes to be Pathname-based...
+    @str_orig_environment = str_orig_environment
+    @arr_projects_new = arr_projects_new # We'll keep a project _array_ as member since it's conceivable that both VS7 and VS10 might have several project elements in their XML files.
   end
+  def parse
+    parse_project_files
+    check_unhandled_file_types
+    mark_projects_postprocessing
+  end
+
   # Hrmm, that function does not really belong
   # in this somewhat too specific class...
   def check_unhandled_file_type(str_ext)
@@ -2479,23 +2499,43 @@ class V2C_VSProjectFilesBundleParserBase
       unhandled_functionality("parser does not handle type of file #{str_file} yet!")
     end
   end
+
+  private
+
+  def get_default_project_name;
+    return (@p_parser_proj_file.basename.to_s).split('.')[0]
+  end
+  def mark_projects_postprocessing
+    mark_projects_orig_environment(@str_orig_environment)
+    project_name_default = get_default_project_name
+    mark_projects_default_project_name(project_name_default)
+  end
+  def mark_projects_orig_environment(str_orig_environment)
+    @arr_projects_new.each { |project_new|
+      project_new.orig_environment = str_orig_environment
+    }
+  end
+  def mark_projects_default_project_name(project_name_default)
+    @arr_projects_new.each { |project_new|
+      if project_new.name.nil?
+        project_new.name = project_name_default
+      end
+    }
+  end
 end
 
 # Project parser variant which works on XML-stream-based input
-class V2C_VS7ProjectXmlParser < V2C_VSProjectXmlParserBase
-  def initialize(doc_proj, arr_projects)
-    super(doc_proj, arr_projects, 'MSVS7')
-  end
+class V2C_VS7ProjectFileXmlParser < V2C_VSProjectFileXmlParserBase
   def parse
     @doc_proj.elements.each { |elem_xml|
       setting_key = elem_xml.name
       case setting_key
       when 'VisualStudioProject'
-        project = V2C_Project_Info.new(@orig_environment)
+        project = V2C_Project_Info.new
         project_parser = V2C_VS7ProjectParser.new(elem_xml, project)
         project_parser.parse
 
-        @arr_projects.push(project)
+        @arr_projects_new.push(project)
       else
         unknown_element(setting_key)
       end
@@ -2505,9 +2545,10 @@ end
 
 # Project parser variant which works on file-based input
 class V2C_VSProjectFileParserBase
-  def initialize(proj_filename, arr_projects)
-    @proj_filename = proj_filename
-    @arr_projects = arr_projects
+  def initialize(p_parser_proj_file, arr_projects_new)
+    @p_parser_proj_file = p_parser_proj_file
+    @proj_filename = p_parser_proj_file.to_s
+    @arr_projects_new = arr_projects_new
     @proj_xml_parser = nil
   end
   def parse
@@ -2520,7 +2561,7 @@ class V2C_VS7ProjectFileParser < V2C_VSProjectFileParserBase
     File.open(@proj_filename) { |io|
       doc_proj = REXML::Document.new io
 
-      @proj_xml_parser = V2C_VS7ProjectXmlParser.new(doc_proj, @arr_projects)
+      @proj_xml_parser = V2C_VS7ProjectFileXmlParser.new(doc_proj, @arr_projects_new)
       #super.parse
       @proj_xml_parser.parse
     }
@@ -2528,9 +2569,14 @@ class V2C_VS7ProjectFileParser < V2C_VSProjectFileParserBase
 end
 
 class V2C_VS7ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
-  def parse
-    proj_file_parser = V2C_VS7ProjectFileParser.new(@proj_filename, @arr_projects)
+  def initialize(p_parser_proj_file, arr_projects_new)
+    super(p_parser_proj_file, 'MSVS7', arr_projects_new)
+  end
+  def parse_project_files
+    proj_file_parser = V2C_VS7ProjectFileParser.new(@p_parser_proj_file, @arr_projects_new)
     proj_file_parser.parse
+  end
+  def check_unhandled_file_types
     # FIXME: we don't handle now externally specified (.rules, .vsprops) custom build parts yet!
     check_unhandled_file_type('rules')
     check_unhandled_file_type('vsprops')
@@ -2622,6 +2668,31 @@ class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
   end
 end
 
+class V2C_Project_File_List_Info
+  FILE_LIST_TYPE_NONE = 0
+  FILE_LIST_TYPE_COMPILES = 1
+  FILE_LIST_TYPE_INCLUDES = 2
+  FILE_LIST_TYPE_RESOURCES = 3
+  def initialize(name)
+    @name = name # VS10: One of None, ClCompile, ClInclude, ResourceCompile; VS7: the name of the filter that contains these files
+    @type = FILE_LIST_TYPE_NONE
+    @arr_files = Array.new
+  end
+  attr_accessor :name
+  attr_accessor :type
+  attr_accessor :arr_files
+  def get_list_type()
+    list_types =
+     [ 'unknown', # VS10: None
+       'sources', # VS10: ClCompile
+       'headers', # VS10: ClInclude
+       'resources' # VS10: ResourceCompile
+     ]
+    type = @type <= FILE_LIST_TYPE_RESOURCES ? @type : FILE_LIST_TYPE_NONE
+    return list_types[type]
+  end
+end
+
 class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
   def initialize(itemgroup_xml, project_out)
     super()
@@ -2636,10 +2707,12 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
         filter = V2C_Info_Filter.new
         elem_parser = V2C_VS10ItemGroupElemFilterParser.new(elem_xml, filter)
 	elem_parser.parse
+        @project.arr_filters.push(filter)
+        @project.hash_filters[filter.name] = filter
       when 'ClCompile', 'ClInclude', 'None', 'ResourceCompile'
         # Due to split between .vcxproj and .vcxproj.filters,
-        # need to possibly _enhance_ an _existing_ item group info,
-        # thus make sure to do lookup first.
+        # need to possibly _enhance_ an _existing_ (added by the prior file)
+        # item group info, thus make sure to do lookup first.
         unknown_element(setting_key)
       else
         unknown_element(setting_key)
@@ -2659,21 +2732,38 @@ class V2C_VS10ItemGroupParser < V2C_VS10ParserBase
     super()
     @itemgroup_xml = itemgroup_xml
     @project = project_out
+    @label = nil
   end
   def parse
-    itemgroup_label = @itemgroup_xml.attributes['Label']
-    log_debug_class("Label #{itemgroup_label}!")
+    parse_attributes
+    log_debug_class("Label #{@label}!")
     item_group_parser = nil
-    case itemgroup_label
+    case @label
     when 'ProjectConfigurations'
       item_group_parser = V2C_VS10ItemGroupProjectConfigurationParser.new(@itemgroup_xml, @project.arr_config_info)
     when nil
       item_group_parser = V2C_VS10ItemGroupAnonymousParser.new(@itemgroup_xml, @project)
     else
-      unknown_element("Label #{itemgroup_label}")
+      unknown_element("Label #{@label}")
     end
     if not item_group_parser.nil?
       item_group_parser.parse
+    end
+  end
+
+  private
+
+  def parse_attributes
+    @itemgroup_xml.attributes.each_attribute { |attr_xml|
+      parse_setting(attr_xml.name, attr_xml.value)
+    }
+  end
+  def parse_setting(setting_key, setting_value)
+    case setting_key
+    when 'Label'
+      @label = setting_value
+    else
+      unknown_attribute(setting_key)
     end
   end
 end
@@ -2712,7 +2802,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
     }
   end
   def parse_setting(compiler_info, setting_key, setting_value)
-    if super; return true end # base class successful!
+    if super; return true end # base method successful!
     case setting_key
     when 'AssemblerListingLocation'
       skipped_element_warn(setting_key)
@@ -2800,7 +2890,7 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
     }
   end
   def parse_setting(linker_info, setting_key, setting_value)
-    if super; return true end # base class successful!
+    if super; return true end # base method successful!
     case setting_key
     when VS_TOOL_LINKER_OPTIMIZEREFERENCES
       linker_info.optimize_references_enable = get_boolean_value(setting_value)
@@ -2968,35 +3058,36 @@ class V2C_VS10PropertyGroupParser < V2C_VS10ParserBase
   end
   def parse
     @propgroup_xml.attributes.each_attribute { |attr_xml|
-      setting_key = attr_xml.name
-      setting_value = attr_xml.value
-      case setting_key
-      #when 'Condition'
-        # FIXME: should set a have_condition bool to true
-        # and then verify further below that the element that was filled in
-        # actually had its condition parsed properly (V2C_Info_Elem_Base.@condition != nil),
-        # since conditions possibly need to be parsed separately by each property item class type
-        # (upon "Condition" attribute parsing the exact property item class often is not known yet i.e. nil!!).
-        # Or is there a better way to achieve common, reliable parsing of that condition information?
-      when 'Label'
-        propgroup_label = setting_value
-        log_debug_class("Label #{propgroup_label}!")
-        case propgroup_label
-        when 'Configuration'
-	  config_info_curr = V2C_Project_Config_Info.new
-          propgroup_parser = V2C_VS10PropertyGroupConfigurationParser.new(@propgroup_xml, config_info_curr)
-          propgroup_parser.parse
-          @project.arr_config_info.push(config_info_curr)
-        when 'Globals'
-          propgroup_parser = V2C_VS10PropertyGroupGlobalsParser.new(@propgroup_xml, @project)
-          propgroup_parser.parse
-        else
-          unknown_element("Label #{propgroup_label}")
-        end
-      else
-        unknown_attribute(setting_key)
-      end
+      parse_setting(attr_xml.name, attr_xml.value)
     }
+  end
+  def parse_setting(setting_key, setting_value)
+    case setting_key
+    #when 'Condition'
+      # FIXME: should set a have_condition bool to true
+      # and then verify further below that the element that was filled in
+      # actually had its condition parsed properly (V2C_Info_Elem_Base.@condition != nil),
+      # since conditions possibly need to be parsed separately by each property item class type
+      # (upon "Condition" attribute parsing the exact property item class often is not known yet i.e. nil!!).
+      # Or is there a better way to achieve common, reliable parsing of that condition information?
+    when 'Label'
+      propgroup_label = setting_value
+      log_debug_class("Label #{propgroup_label}!")
+      case propgroup_label
+      when 'Configuration'
+	config_info_curr = V2C_Project_Config_Info.new
+        propgroup_parser = V2C_VS10PropertyGroupConfigurationParser.new(@propgroup_xml, config_info_curr)
+        propgroup_parser.parse
+        @project.arr_config_info.push(config_info_curr)
+      when 'Globals'
+        propgroup_parser = V2C_VS10PropertyGroupGlobalsParser.new(@propgroup_xml, @project)
+        propgroup_parser.parse
+      else
+        unknown_element("Label #{propgroup_label}")
+      end
+    else
+      unknown_attribute(setting_key)
+    end
   end
 end
 
@@ -3046,19 +3137,20 @@ class V2C_VS10ProjectParser < V2C_VS10ProjectParserBase
 end
 
 # Project parser variant which works on XML-stream-based input
-class V2C_VS10ProjectXmlParser < V2C_VSProjectXmlParserBase
-  def initialize(doc_proj, arr_projects)
-    super(doc_proj, arr_projects, 'MSVS10')
+class V2C_VS10ProjectFileXmlParser < V2C_VSProjectFileXmlParserBase
+  def initialize(doc_proj, arr_projects_new, filters_only)
+    super(doc_proj, arr_projects_new)
+    @filters_only = filters_only
   end
   def parse
     @doc_proj.elements.each { |elem_xml|
       elem_parser = nil # IMPORTANT: reset it!
       case elem_xml.name
       when 'Project'
-        project_info = V2C_Project_Info.new(@orig_environment)
+        project_info = V2C_Project_Info.new
         elem_parser = V2C_VS10ProjectParser.new(elem_xml, project_info)
         elem_parser.parse
-        @arr_projects.push(project_info)
+        @arr_projects_new.push(project_info)
       else
         unknown_element(elem_xml.name)
       end
@@ -3068,21 +3160,30 @@ end
 
 # Project parser variant which works on file-based input
 class V2C_VS10ProjectFileParser < V2C_VSProjectFileParserBase
+  def initialize(p_parser_proj_file, arr_projects_new, filters_only)
+    super(p_parser_proj_file, arr_projects_new)
+    @filters_only = filters_only # are we parsing main file or extension file (.filters) only?
+  end
   def parse
-    File.open(@proj_filename) { |io|
-      doc_proj = REXML::Document.new io
+    success = false
+    # Parse the project-related file if it exists (_separate_ .filters file in VS10!):
+    begin
+      File.open(@proj_filename) { |io|
+        doc_proj = REXML::Document.new io
 
-      @proj_xml_parser = V2C_VS10ProjectXmlParser.new(doc_proj, @arr_projects)
-      #super.parse
-      @proj_xml_parser.parse
-    }
+        @proj_xml_parser = V2C_VS10ProjectFileXmlParser.new(doc_proj, @arr_projects_new, @filters_only)
+        #super.parse
+        @proj_xml_parser.parse
+        success = true
+      }
+    rescue
+      # File probably does not exiѕt...
+    end
+    return success
   end
 end
 
-class V2C_VS10ProjectFiltersParserBase < V2C_VS10ParserBase
-end
-
-class V2C_VS10ProjectFiltersParser < V2C_VS10ProjectFiltersParserBase
+class V2C_VS10ProjectFiltersParser < V2C_VS10ParserBase
   def initialize(project_filters_xml, project_out)
     super()
     @project_filters_xml = project_filters_xml
@@ -3115,6 +3216,11 @@ class V2C_VS10ProjectFiltersParser < V2C_VS10ProjectFiltersParserBase
 end
 
 # Project filters parser variant which works on XML-stream-based input
+# The fact that the xmlns= attribute's value of a .filters file
+# is _identical_ with the one of a .vcxproj file should be enough proof
+# that a .filters file's content is simply a KISS extension of the
+# (possibly same) content of a .vcxproj file. IOW, parsing should
+# most likely be _identical_ (and thus enhance possibly already added structures!?).
 class V2C_VS10ProjectFiltersXmlParser
   def initialize(doc_proj_filters, arr_projects)
     @doc_proj_filters = doc_proj_filters
@@ -3146,6 +3252,7 @@ class V2C_VS10ProjectFiltersFileParser
     @arr_projects = arr_projects
   end
   def parse
+    success = false
     # Parse the file filters file (_separate_ in VS10!)
     # if it exists:
     begin
@@ -3154,20 +3261,39 @@ class V2C_VS10ProjectFiltersFileParser
 
         project_filters_parser = V2C_VS10ProjectFiltersXmlParser.new(doc_proj_filters, @arr_projects)
         project_filters_parser.parse
+        success = true
       }
     rescue
       # File probably does not exiѕt...
     end
+    return success
   end
 end
 
+# VS10 project files bundle explanation:
+# For the relationship between .vcxproj and .vcxproj.filters, the following
+# has been experimentally determined:
+# The list of ItemGroup element items in a .filters file will be _merged_ with the list of items
+# defined by the same ItemGroup of a .vcxproj file (i.e. the array of items may grow),
+# however _payload_ of an ItemGroup _item_ in a .filters file
+# will completely _destructively override_ a pre-existing ItemGroup item
+# defined by the .vcxproj file (i.e. the pre-existing array item will be _replaced_).
+# IOW, it seems VS10 parses .filters _after_ having parsed .vcxproj,
+# with certain overriding taking place.
 class V2C_VS10ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
-  def parse
-    proj_file_parser = V2C_VS10ProjectFileParser.new(@proj_filename, @arr_projects)
-    proj_filters_file_parser = V2C_VS10ProjectFiltersFileParser.new("#{@proj_filename}.filters", @arr_projects)
+  def initialize(p_parser_proj_file, arr_projects_new)
+    super(p_parser_proj_file, 'MSVS10', arr_projects_new)
+  end
+  def parse_project_files
+    proj_filename = @p_parser_proj_file.to_s
+    proj_file_parser = V2C_VS10ProjectFileParser.new(@p_parser_proj_file, @arr_projects_new, false)
+    proj_filters_file_parser = V2C_VS10ProjectFiltersFileParser.new("#{@proj_filename}.filters", @arr_projects_new)
 
-    proj_file_parser.parse
-    proj_filters_file_parser.parse
+    if proj_file_parser.parse
+      proj_filters_file_parser.parse
+    end
+  end
+  def check_unhandled_file_types
     # FIXME: we don't handle now externally specified (.props, .targets, .xml files) custom build parts yet!
     check_unhandled_file_type('props')
     check_unhandled_file_type('targets')
@@ -3522,16 +3648,19 @@ def v2c_convert_project_inner(p_script, p_parser_proj_file, p_generator_proj_fil
 
   arr_projects = Array.new
 
-  parser_project_filename = p_parser_proj_file.to_s
+  parser_project_extension = p_parser_proj_file.extname
   # Q&D parser switch...
   parser = nil # IMPORTANT: reset it!
-  if parser_project_filename.match(/.vcproj$/)
-    parser = V2C_VS7ProjectFilesBundleParser.new(parser_project_filename, arr_projects)
-  elsif parser_project_filename.match(/.vfproj$/)
+  case parser_project_extension
+  when '.vcproj'
+    parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
+  when '.vfproj'
     log_warn 'Detected Fortran .vfproj - parsing is VERY experimental, needs much more work!'
-    parser = V2C_VS7ProjectFilesBundleParser.new(parser_project_filename, arr_projects)
-  elsif parser_project_filename.match(/.vcxproj$/)
-    parser = V2C_VS10ProjectFilesBundleParser.new(parser_project_filename, arr_projects)
+    parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
+  when '.vcxproj'
+    parser = V2C_VS10ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
+  else
+    log_fatal 'unsupported project file type!?'
   end
 
   if not parser.nil?
@@ -3539,6 +3668,17 @@ def v2c_convert_project_inner(p_script, p_parser_proj_file, p_generator_proj_fil
   else
     log_fatal "No project parser found for project file #{parser_project_filename}!?"
   end
+
+  # Now validate the project...
+  # This validation step should be _separate_ from both parser _and_ generator implementations,
+  # since otherwise each individual parser/generator would have to remember carrying out validation
+  # (they could easily forget about that).
+  # Besides, parsing/generating should be concerned about fast (KISS)
+  # parsing/generating only anyway.
+  arr_projects.each { |project|
+    validator = V2C_ProjectValidator.new(project)
+    validator.validate
+  }
 
   # TODO: it's probably a valid use case to want to generate
   # multiple build environments from the parsed projects.
