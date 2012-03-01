@@ -559,7 +559,12 @@ class V2C_Project_Info # formerly V2C_Target
     # the project will adopt the _exact name part_ of the filename,
     # thus enforce this ctor taking a project name to use as a default if no ProjectName element is available:
     @name = nil
-    @orig_environment = nil # the original environment (build environment / IDE) which defined the project (MSVS7, MSVS10 - Visual Studio, etc.)
+
+    # the original environment (build environment / IDE)
+    # which defined the project (MSVS7, MSVS10 - Visual Studio, etc.).
+    # _Short_ name - may NOT contain whitespace.
+    # Perhaps we should also be supplying a long name, too? ('Microsoft Visual Studio 7')
+    @orig_environment_shortname = nil
     @creator = nil # VS7 "ProjectCreator" setting
     @guid = nil
     @root_namespace = nil
@@ -585,7 +590,7 @@ class V2C_Project_Info # formerly V2C_Target
 
   attr_accessor :type
   attr_accessor :name
-  attr_accessor :orig_environment
+  attr_accessor :orig_environment_shortname
   attr_accessor :creator
   attr_accessor :guid
   attr_accessor :root_namespace
@@ -608,7 +613,7 @@ class V2C_ProjectValidator
   end
   def validate
     #log_debug "project data: #{@project_info.inspect}"
-    if @project_info.orig_environment.nil?; validation_error('original environment not set!?') end
+    if @project_info.orig_environment_shortname.nil?; validation_error('original environment not set!?') end
     if @project_info.name.nil?; validation_error('name not set!?') end
     # FIXME: Disabled for TESTING only - should re-enable this check once VS10 parsing is complete.
     #if @project_info.main_files.nil?; validation_error('no files!?') end
@@ -963,12 +968,12 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     if not arr_languages.nil?; arr_args_project_name_and_attrs.concat(arr_languages) end
     write_command_list_single_line('project', arr_args_project_name_and_attrs)
   end
-  def put_conversion_details(project_name, orig_environment)
+  def put_conversion_details(project_name, orig_environment_shortname)
     # We could have stored all information in one (list) variable,
     # but generating two lines instead of one isn't much waste
     # and actually much easier to parse.
     put_converted_timestamp(project_name)
-    put_converted_from_marker(project_name, orig_environment)
+    put_converted_from_marker(project_name, orig_environment_shortname)
   end
   def put_include_MasterProjectDefaults_vcproj2cmake
     if @textOut.generated_comments_level() >= 2
@@ -2562,10 +2567,10 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
 end
 
 class V2C_VSProjectFilesBundleParserBase
-  def initialize(p_parser_proj_file, str_orig_environment, arr_projects_new)
+  def initialize(p_parser_proj_file, str_orig_environment_shortname, arr_projects_new)
     @p_parser_proj_file = p_parser_proj_file
     @proj_filename = p_parser_proj_file.to_s # FIXME: do we want to keep the string-based filename? We should probably change several sub classes to be Pathname-based...
-    @str_orig_environment = str_orig_environment
+    @str_orig_environment_shortname = str_orig_environment_shortname
     @arr_projects_new = arr_projects_new # We'll keep a project _array_ as member since it's conceivable that both VS7 and VS10 might have several project elements in their XML files.
   end
   def parse
@@ -2589,13 +2594,13 @@ class V2C_VSProjectFilesBundleParserBase
     return (@p_parser_proj_file.basename.to_s).split('.')[0]
   end
   def mark_projects_postprocessing
-    mark_projects_orig_environment(@str_orig_environment)
+    mark_projects_orig_environment_shortname(@str_orig_environment_shortname)
     project_name_default = get_default_project_name
     mark_projects_default_project_name(project_name_default)
   end
-  def mark_projects_orig_environment(str_orig_environment)
+  def mark_projects_orig_environment_shortname(str_orig_environment_shortname)
     @arr_projects_new.each { |project_new|
-      project_new.orig_environment = str_orig_environment
+      project_new.orig_environment_shortname = str_orig_environment_shortname
     }
   end
   def mark_projects_default_project_name(project_name_default)
@@ -3496,7 +3501,7 @@ Finished. You should make sure to have all important v2c settings includes such 
           end
         end
         local_generator.put_project(project_info.name, arr_languages)
-	local_generator.put_conversion_details(project_info.name, project_info.orig_environment)
+	local_generator.put_conversion_details(project_info.name, project_info.orig_environment_shortname)
 
         #global_generator = V2C_CMakeGlobalGenerator.new(out)
 
