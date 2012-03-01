@@ -117,7 +117,11 @@ def log_error(str); $stderr.puts "ERROR: #{str}" end
 # FIXME: should probably replace most log_fatal()
 # with exceptions since in many cases
 # one would want to have _partial_ aborts of processing only.
+# Soft error handling via exceptions would apply to errors due to problematic input -
+# but errors due to bugs in our code should cause immediate abort.
 def log_fatal(str); log_error "#{str}. Aborting!"; exit 1 end
+
+def log_implementation_bug(str); log_fatal(str) end
 
 # Change \ to /, and remove leading ./
 def normalize_path(p)
@@ -436,6 +440,7 @@ class V2C_Config_Base_Info < V2C_Info_Elem_Base
   attr_accessor :arr_linker_info
 end
 
+# Carries project-global configuration data.
 class V2C_Project_Config_Info < V2C_Config_Base_Info
   def initialize
     super()
@@ -446,6 +451,8 @@ class V2C_Project_Config_Info < V2C_Config_Base_Info
   attr_accessor :intermediate_dir
 end
 
+# Carries per-file-specific configuration data
+# (which overrides the project globals).
 class V2C_File_Config_Info < V2C_Config_Base_Info
   def initialize
     super()
@@ -463,6 +470,7 @@ class V2C_Makefile
   attr_accessor :config_info
 end
 
+# Carries Source Control Management (SCM) setup.
 class V2C_SCC_Info
   def initialize
     @project_name = nil
@@ -477,6 +485,61 @@ class V2C_SCC_Info
   attr_accessor :aux_path
 end
 
+class V2C_Filters_Container
+  def initialize
+    @arr_filters = Array.new # the array which contains V2C_Info_Filter elements. Now supported by VS10 parser. FIXME: rework VS7 parser to also create a linear array of filters!
+    # In addition to the filters Array, we also need a filters Hash
+    # for fast lookup when intending to insert a new file item of the project.
+    # There's now a new ordered hash which might preserve the ordering
+    # as guaranteed by an Array, but it's too new (Ruby 1.9!).
+    @hash_filters = Hash.new
+  end
+  def append(filter_info)
+    # Hmm, no need to check the hash for existing filter
+    # since overriding is ok, right?
+    @hash_filters[filter_info.name] = filter_info
+    @arr_filters.push(filter_info)
+  end
+end
+
+module V2C_File_List_Types
+  TYPE_NONE = 0
+  TYPE_COMPILES = 1
+  TYPE_INCLUDES = 2
+  TYPE_RESOURCES = 3
+end
+
+class V2C_File_List_Info
+  include V2C_File_List_Types
+  def initialize(name, type = TYPE_NONE)
+    @name = name # VS10: One of None, ClCompile, ClInclude, ResourceCompile; VS7: the name of the filter that contains these files
+    @type = type
+    @arr_files = Array.new
+  end
+  attr_accessor :name
+  attr_accessor :type
+  attr_accessor :arr_files
+  def get_list_type_name()
+    list_types =
+     [ 'unknown', # VS10: None
+       'sources', # VS10: ClCompile
+       'headers', # VS10: ClInclude
+       'resources' # VS10: ResourceCompile
+     ]
+    type = @type <= TYPE_RESOURCES ? @type : TYPE_NONE
+    return list_types[type]
+  end
+end
+
+class V2C_File_Lists_Container
+  def initialize
+    @file_lists = Array.new
+  end
+  def get(file_list_type, file_list_name)
+    #log_fatal "get!!"
+  end
+end
+
 # Well, in fact in Visual Studio, "target" and "project"
 # seem to be pretty much synonymous...
 # FIXME: we should still do better separation between these two...
@@ -487,21 +550,21 @@ class V2C_Project_Info # formerly V2C_Target
     # the project will adopt the _exact name part_ of the filename,
     # thus enforce this ctor taking a project name to use as a default if no ProjectName element is available:
     @name = nil
-    @orig_environment = nil # the original environment (build environment / IDE) which defined the project (MSVS7 - Visual Studio, etc.)
-    @creator = nil # VS7 "ProjectCreator"
+    @orig_environment = nil # the original environment (build environment / IDE) which defined the project (MSVS7, MSVS10 - Visual Studio, etc.)
+    @creator = nil # VS7 "ProjectCreator" setting
     @guid = nil
     @root_namespace = nil
     @version = nil
-    @vs_keyword = nil # .vcproj Keyword attribute ("Win32Proj", "MFCProj", "ATLProj", "MakeFileProj", "Qt4VSv1.0"). TODO: should perhaps do Keyword-specific post-processing (to enable Qt integration, etc.)
+
+    # .vcproj Keyword attribute ("Win32Proj", "MFCProj", "ATLProj", "MakeFileProj", "Qt4VSv1.0").
+    # TODO: should perhaps do Keyword-specific post-processing at generator
+    # (to enable Qt integration, etc.):
+    @vs_keyword = nil
     @scc_info = V2C_SCC_Info.new
     @arr_config_info = Array.new
-    @arr_filters = Array.new # the array which contains V2C_Info_Filter elements. Now supported by VS10 parser. FIXME: rework VS7 parser to also create a linear array of filters!
-    # In addition to the filters Array, we also need a filters Hash
-    # for fast lookup when intending to insert a new file item of the project.
-    # There's now a new ordered hash which might preserve the ordering
-    # as guaranteed by an Array, but it's too new (Ruby 1.9!).
-    @hash_filters = Hash.new
-    @main_files = nil
+    @file_lists = V2C_File_Lists_Container.new
+    @filters = V2C_Filters_Container.new
+    @main_files = nil # FIXME get rid of this VS7 crap, rework file list/filters handling there!
     # semi-HACK: we need this variable, since we need to be able
     # to tell whether we're able to build a target
     # (i.e. whether we have any build units i.e.
@@ -521,10 +584,13 @@ class V2C_Project_Info # formerly V2C_Target
   attr_accessor :vs_keyword
   attr_accessor :scc_info
   attr_accessor :arr_config_info
-  attr_accessor :arr_filters
-  attr_accessor :hash_filters
+  attr_accessor :file_lists
+  attr_accessor :filters
   attr_accessor :main_files
   attr_accessor :have_build_units
+end
+
+class V2C_ValidationError < StandardError
 end
 
 class V2C_ProjectValidator
@@ -533,16 +599,17 @@ class V2C_ProjectValidator
   end
   def validate
     #log_debug "project data: #{@project_info.inspect}"
-    if @project_info.orig_environment.nil?
-      log_fatal "#{@project_info.inspect} Project original environment not set!?"
-    end
-    if @project_info.name.nil?
-      log_fatal 'Project name not set!?'
-    end
+    if @project_info.orig_environment.nil?; validation_error('original environment not set!?') end
+    if @project_info.name.nil?; validation_error('name not set!?') end
+    # FIXME: Disabled for TESTING only - should re-enable this check once VS10 parsing is complete.
+    #if @project_info.main_files.nil?; validation_error('no files!?') end
     arr_config_info = @project_info.arr_config_info
     if arr_config_info.nil? or arr_config_info.length == 0
-      log_fatal 'Project has no config information!?'
+      validation_error('no config information!?')
     end
+  end
+  def validation_error(str_message)
+    raise V2C_ValidationError, "Project: #{str_message}; #{@project_info.inspect}"
   end
 end
 
@@ -883,7 +950,6 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     put_hook_pre()
   end
   def put_project(project_name, arr_languages = nil)
-    if project_name.nil?; log_fatal 'missing project name' end
     arr_args_project_name_and_attrs = [ project_name ]
     if not arr_languages.nil?; arr_args_project_name_and_attrs.concat(arr_languages) end
     write_command_list_single_line('project', arr_args_project_name_and_attrs)
@@ -1177,7 +1243,11 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeSyntaxGenerator
   # Hrmm, I'm not quite sure yet where to aggregate this function...
   def get_filter_group_name(filter_info); return filter_info.nil? ? 'COMMON' : filter_info.name; end
 
-  # Related TODO item: for .cpp files which happen to be listed as include files in their native projects, we should likely explicitly set the HEADER_FILE_ONLY property (however, man cmakeprops seems to say that CMake will implicitly configure .h files correctly).
+  # Related TODO item: for .cpp files which happen to be listed as
+  # include files in their native projects, we should likely
+  # explicitly set the HEADER_FILE_ONLY property (note that for .h files,
+  # man cmakeprops seems to say that CMake
+  # will _implicitly_ configure these correctly).
   VS7_UNWANTED_GROUP_TAG_CHARS_MATCH_REGEX_OBJ = %r{( |\\)}
   VS7_UNWANTED_FILE_TYPES_REGEX_OBJ = %r{\.(lex|y|ico|bmp|txt)$}
   VS7_IDL_FILE_TYPES_REGEX_OBJ = %r{_(i|p).c$}
@@ -1465,7 +1535,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     return if not $v2c_target_precompiled_header_enable
     return if precompiled_header_info.nil?
     return if precompiled_header_info.header_source_name.nil?
-    # FIXME: this filesystem validation should be carried out by a generator-independent base class...
+    # FIXME: this filesystem validation should be carried out by a non-parser/non-generator validator class...
     pch_ok = v2c_generator_check_file_accessible(@project_dir, precompiled_header_info.header_source_name, 'header file to be precompiled', @target.name, false)
     # Implement non-hard failure
     # (reasoning: the project is compilable anyway, even without pch)
@@ -1486,11 +1556,8 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     # TODO: this might be relocatable to a common generator base helper method.
     arr_defs = Array.new
     hash_defs.each { |key, value|
-      if value.empty?
-	  arr_defs.push(key)
-      else
-	  arr_defs.push("#{key}=#{value}")
-      end
+      str_define = value.empty? ? key : "#{key}=#{value}"
+      arr_defs.push(str_define)
     }
     config_name_upper = get_config_name_upcase(config_name)
     # the container for the list of _actual_ dependencies as stated by the project
@@ -1540,9 +1607,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     # that's identical for each project should be implemented by the v2c_project_post_setup() function
     # _internally_.
     write_vcproj2cmake_func_comment()
-    if project_keyword.nil?
-	project_keyword = V2C_ATTRIBUTE_NOT_PROVIDED_MARKER
-    end
+    if project_keyword.nil?; project_keyword = V2C_ATTRIBUTE_NOT_PROVIDED_MARKER end
     arr_args_func = [ project_name, project_keyword ]
     write_invoke_config_object_function_quoted('v2c_target_post_setup', @target.name, arr_args_func)
   end
@@ -1614,7 +1679,7 @@ class V2C_Info_Filter
   def initialize
     @name = nil
     @arr_scfilter = nil # "cpp;c;cc;cxx;..."
-    @val_scmfiles = true # VS7: SourceControlFiles 
+    @val_scmfiles = true # VS7: SourceControlFiles
     @guid = nil
     # While these type flags are being directly derived from magic guid values on VS7/VS10
     # and thus could be considered redundant in these cases,
@@ -1725,6 +1790,10 @@ EOF
   return str
 end
 
+def log_error_unhandled_exception(e)
+  log_error "unhandled exception occurred! #{e.message}, #{e.backtrace.inspect}"
+end
+
 class V2C_VSParserBase
   VS_VALUE_SEPARATOR_REGEX_OBJ = %r{[;,]}
   VS_SCC_ATTR_REGEX_OBJ = %r{^Scc}
@@ -1736,6 +1805,8 @@ class V2C_VSParserBase
     log_todo "#{self.class.name}: unhandled less important XML element (#{elem_name})!"
   end
   def parser_error(str_description); log_error(str_description) end
+  # "Ruby Exceptions", http://rubylearning.com/satishtalim/ruby_exceptions.html
+  def unhandled_exception(e); log_error_unhandled_exception(e) end
   def unhandled_functionality(str_description); log_error(str_description) end
   def get_boolean_value(str_value)
     value = false
@@ -1968,7 +2039,7 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
   end
   def parse_use_precompiled_header(value_use_precompiled_header)
     use_val = value_use_precompiled_header.to_i
-    if use_val == 3; use_val = 2 end # VS7 --> VS8 migration change!
+    if use_val == 3; use_val = 2 end # VS7 --> VS8 migration change: all values of 3 have been replaced by 2, it seems...
     return use_val
   end
 end
@@ -2213,9 +2284,8 @@ class V2C_Info_File
 end
 
 class V2C_VS7FileParser < V2C_VSParserBase
-  def initialize(project_name, file_xml, arr_file_infos_out)
+  def initialize(file_xml, arr_file_infos_out)
     super()
-    @project_name = project_name # FIXME remove (file check should be done _after_ parsing!)
     @file_xml = file_xml
     @arr_file_infos = arr_file_infos_out
     @have_build_units = false # HACK
@@ -2276,14 +2346,16 @@ class V2C_VS7FileParser < V2C_VSParserBase
 
   def parse_attributes(info_file)
     @file_xml.attributes.each_attribute { |attr_xml|
-      setting_value = attr_xml.value
-      case attr_xml.name
-      when 'RelativePath'
-        info_file.path_relative = normalize_path(setting_value)
-      else
-        unknown_attribute(attr_xml.name)
-      end
+      parse_setting(info_file, attr_xml.name, attr_xml.value)
     }
+  end
+  def parse_setting(info_file, setting_key, setting_value)
+    case setting_key
+    when 'RelativePath'
+      info_file.path_relative = normalize_path(setting_value)
+    else
+      unknown_attribute(setting_key)
+    end
   end
 end
 
@@ -2332,7 +2404,7 @@ class V2C_VS7FilterParser < V2C_VSParserBase
       case elem_xml.name
       when 'File'
         log_debug_class('FOUND File')
-        elem_parser = V2C_VS7FileParser.new(@project.name, elem_xml, arr_file_infos)
+        elem_parser = V2C_VS7FileParser.new(elem_xml, arr_file_infos)
 	if elem_parser.parse
           @project.have_build_units = true
         end
@@ -2430,29 +2502,31 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
 
   def parse_attributes
     @project_xml.attributes.each_attribute { |attr_xml|
-      setting_value = attr_xml.value
-      case attr_xml.name
-      when 'Keyword'
-        @project.vs_keyword = setting_value
-      when 'Name'
-        @project.name = setting_value
-      when 'ProjectCreator' # used by Fortran .vfproj ("Intel Fortran")
-        @project.creator = setting_value
-      when 'ProjectGUID', 'ProjectIdGuid' # used by Visual C++ .vcproj, Fortran .vfproj
-        @project.guid = setting_value
-      when 'ProjectType'
-        @project.type = setting_value
-      when 'RootNamespace'
-        @project.root_namespace = setting_value
-      when 'Version'
-        @project.version = setting_value
-
-      when VS_SCC_ATTR_REGEX_OBJ
-        parse_attributes_scc(attr_xml.name, setting_value, @project.scc_info)
-      else
-        unknown_attribute(attr_xml.name)
-      end
+      parse_setting(attr_xml.name, attr_xml.value, @project)
     }
+  end
+  def parse_setting(setting_key, setting_value, project_out)
+    case setting_key
+    when 'Keyword'
+      project_out.vs_keyword = setting_value
+    when 'Name'
+      project_out.name = setting_value
+    when 'ProjectCreator' # used by Fortran .vfproj ("Intel Fortran")
+      project_out.creator = setting_value
+    when 'ProjectGUID', 'ProjectIdGuid' # used by Visual C++ .vcproj, Fortran .vfproj
+      project_out.guid = setting_value
+    when 'ProjectType'
+      project_out.type = setting_value
+    when 'RootNamespace'
+      project_out.root_namespace = setting_value
+    when 'Version'
+      project_out.version = setting_value
+
+    when VS_SCC_ATTR_REGEX_OBJ
+      parse_attributes_scc(setting_key, setting_value, project_out.scc_info)
+    else
+      unknown_attribute(setting_key)
+    end
   end
   def parse_attributes_scc(setting_key, setting_value, scc_info_out)
     case setting_key
@@ -2544,7 +2618,7 @@ class V2C_VS7ProjectFileXmlParser < V2C_VSProjectFileXmlParserBase
 end
 
 # Project parser variant which works on file-based input
-class V2C_VSProjectFileParserBase
+class V2C_VSProjectFileParserBase < V2C_VSParserBase
   def initialize(p_parser_proj_file, arr_projects_new)
     @p_parser_proj_file = p_parser_proj_file
     @proj_filename = p_parser_proj_file.to_s
@@ -2668,31 +2742,6 @@ class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
   end
 end
 
-class V2C_Project_File_List_Info
-  FILE_LIST_TYPE_NONE = 0
-  FILE_LIST_TYPE_COMPILES = 1
-  FILE_LIST_TYPE_INCLUDES = 2
-  FILE_LIST_TYPE_RESOURCES = 3
-  def initialize(name)
-    @name = name # VS10: One of None, ClCompile, ClInclude, ResourceCompile; VS7: the name of the filter that contains these files
-    @type = FILE_LIST_TYPE_NONE
-    @arr_files = Array.new
-  end
-  attr_accessor :name
-  attr_accessor :type
-  attr_accessor :arr_files
-  def get_list_type()
-    list_types =
-     [ 'unknown', # VS10: None
-       'sources', # VS10: ClCompile
-       'headers', # VS10: ClInclude
-       'resources' # VS10: ResourceCompile
-     ]
-    type = @type <= FILE_LIST_TYPE_RESOURCES ? @type : FILE_LIST_TYPE_NONE
-    return list_types[type]
-  end
-end
-
 class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
   def initialize(itemgroup_xml, project_out)
     super()
@@ -2707,13 +2756,14 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
         filter = V2C_Info_Filter.new
         elem_parser = V2C_VS10ItemGroupElemFilterParser.new(elem_xml, filter)
 	elem_parser.parse
-        @project.arr_filters.push(filter)
-        @project.hash_filters[filter.name] = filter
+        @project.filters.append(filter)
       when 'ClCompile', 'ClInclude', 'None', 'ResourceCompile'
         # Due to split between .vcxproj and .vcxproj.filters,
         # need to possibly _enhance_ an _existing_ (added by the prior file)
         # item group info, thus make sure to do lookup first.
-        unknown_element(setting_key)
+        file_list_name = setting_key
+        file_list_type = get_file_list_type(file_list_name)
+        file_list = @project.file_lists.get(file_list_type, file_list_name)
       else
         unknown_element(setting_key)
       end
@@ -2724,6 +2774,23 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
       #  end
       #end
     }
+  end
+  def get_file_list_type(file_list_name)
+    type = V2C_File_List_Types::TYPE_NONE
+    case file_list_name
+    when 'None'
+      type = V2C_File_List_Types::TYPE_NONE
+    when 'ClCompile'
+      type = V2C_File_List_Types::TYPE_COMPILES
+    when 'ClInclude'
+      type = V2C_File_List_Types::TYPE_INCLUDES
+    when 'ResourceCompile'
+      type = V2C_File_List_Types::TYPE_RESOURCES
+    else
+      unhandled_functionality("file list name #{file_list_name}")
+      type = V2C_File_List_Types::TYPE_NONE
+    end
+    return type
   end
 end
 
@@ -3105,6 +3172,7 @@ class V2C_VS10ProjectParser < V2C_VS10ProjectParserBase
       case elem_xml.name
       when 'ItemGroup'
         elem_parser = V2C_VS10ItemGroupParser.new(elem_xml, @project)
+        elem_parser.parse
       when 'ItemDefinitionGroup'
         config_info_curr = V2C_Project_Config_Info.new
         elem_parser = V2C_VS10ItemDefinitionGroupParser.new(elem_xml, config_info_curr)
@@ -3176,8 +3244,9 @@ class V2C_VS10ProjectFileParser < V2C_VSProjectFileParserBase
         @proj_xml_parser.parse
         success = true
       }
-    rescue
+    rescue Exception => e
       # File probably does not exiѕt...
+      log_error_unhandled_exception(e)
     end
     return success
   end
@@ -3263,8 +3332,9 @@ class V2C_VS10ProjectFiltersFileParser
         project_filters_parser.parse
         success = true
       }
-    rescue
+    rescue Exception => e
       # File probably does not exiѕt...
+      log_error_unhandled_exception(e)
     end
     return success
   end
@@ -3382,14 +3452,6 @@ Finished. You should make sure to have all important v2c settings includes such 
     }
   end
   def project_generate_cmake(p_master_project, orig_proj_file_basename, out, project_info)
-        if project_info.nil?
-          log_fatal 'invalid project'
-        end
-        # FIXME: TESTING only - should re-enable this check once VS10 parsing is complete.
-        #if project_info.main_files.nil?
-        #  log_fatal 'project has no files!? --> will not generate it'
-        #end
-
         target_is_valid = false
 
         master_project_dir = p_master_project.to_s
@@ -3659,14 +3721,12 @@ def v2c_convert_project_inner(p_script, p_parser_proj_file, p_generator_proj_fil
     parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
   when '.vcxproj'
     parser = V2C_VS10ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
-  else
-    log_fatal 'unsupported project file type!?'
   end
 
   if not parser.nil?
     parser.parse
   else
-    log_fatal "No project parser found for project file #{parser_project_filename}!?"
+    log_implementation_bug "No project parser found for project file #{p_parser_proj_file.to_s}!?"
   end
 
   # Now validate the project...
@@ -3675,24 +3735,39 @@ def v2c_convert_project_inner(p_script, p_parser_proj_file, p_generator_proj_fil
   # (they could easily forget about that).
   # Besides, parsing/generating should be concerned about fast (KISS)
   # parsing/generating only anyway.
-  arr_projects.each { |project|
-    validator = V2C_ProjectValidator.new(project)
-    validator.validate
-  }
-
-  # TODO: it's probably a valid use case to want to generate
-  # multiple build environments from the parsed projects.
-  # In such case the set of generators should be available
-  # at user configuration side, and the configuration/mappings part
-  # (currently sitting at cmake/vcproj2cmake/ at default setting)
-  # should be distinctly provided for each generator, too.
-  generator = nil
-  if true
-    generator = V2C_CMakeGenerator.new(p_script, p_master_project, p_parser_proj_file, p_generator_proj_file, arr_projects)
+  projects_valid = true
+  begin
+    arr_projects.each { |project|
+      validator = V2C_ProjectValidator.new(project)
+      validator.validate
+    }
+  rescue V2C_ValidationError => e
+    projects_valid = false
+    error_msg = "project validation failed: #{e.message}"
+    if ($v2c_validate_vcproj_abort_on_error > 0)
+      log_fatal error_msg
+    else
+      log_error error_msg
+    end
+  rescue Exception => e
+    log_error_unhandled_exception(e)
   end
 
-  if not generator.nil?
-    generator.generate
+  if projects_valid
+    # TODO: it's probably a valid use case to want to generate
+    # multiple build environments from the parsed projects.
+    # In such case the set of generators should be available
+    # at user configuration side, and the configuration/mappings part
+    # (currently sitting at cmake/vcproj2cmake/ at default setting)
+    # should be distinctly provided for each generator, too.
+    generator = nil
+    if true
+      generator = V2C_CMakeGenerator.new(p_script, p_master_project, p_parser_proj_file, p_generator_proj_file, arr_projects)
+    end
+
+    if not generator.nil?
+      generator.generate
+    end
   end
 end
 
