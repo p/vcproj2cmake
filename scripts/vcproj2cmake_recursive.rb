@@ -34,6 +34,11 @@ VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{CMakeLists.txt}
 #     MAIN     #
 ################
 
+# FIXME: currently this code below is too unstructured / dirty
+# (many parts open-coded rather than clean helpers).
+# But for now, I just don't care ;)
+
+
 script_fqpn = File.expand_path $0
 script_path = Pathname.new(script_fqpn).parent
 source_root = Dir.pwd
@@ -60,6 +65,17 @@ if File.exist?(excluded_projects)
   end
   f_excl.close
 end
+
+class Thread_Work
+  def initialize(str_proj_file_location, str_cmakelists_file_location)
+    @str_proj_file_location = str_proj_file_location
+    @str_cmakelists_file_location = str_cmakelists_file_location
+  end
+  attr_accessor :str_proj_file_location
+  attr_accessor :str_cmakelists_file_location
+end
+
+arr_thread_work = Array.new
 
 arr_project_subdirs = Array.new
 
@@ -211,13 +227,36 @@ Find.find('./') do
   # since Ruby startup latency is extremely high
   # (3 seconds startup vs. 0.3 seconds payload compute time with our script!)
 
-  # TODO!! Should collect the list of projects to convert, then call v2c_convert_project_outer() multi-threaded! (although threading is said to be VERY slow in Ruby - but still it should provide some sizeable benefit).
-  v2c_convert_project_outer(script_location, str_proj_file, str_cmakelists_file, source_root)
+  # Collect the list of projects to convert, then call v2c_convert_project_outer() multi-threaded! (although threading is said to be VERY slow in Ruby - but still it should provide some sizeable benefit).
+  thread_work = Thread_Work.new(str_proj_file, str_cmakelists_file)
+  arr_thread_work.push(thread_work)
 
   #output.split("\n").each do |line|
   #  puts "[parent] output: #{line}"
   #end
   #puts
+end
+
+if ($v2c_enable_threads)
+  puts 'Recursively converting projects, multi-threaded'
+
+  # "Ruby-Threads erzeugen"
+  #    http://home.vr-web.de/juergen.katins/ruby/buch/tut_threads.html
+
+  threads = []
+
+  for thread_work in arr_thread_work
+    threads << Thread.new(thread_work) { |myWork|
+      v2c_convert_project_outer(script_location, myWork.str_proj_file_location, myWork.str_cmakelists_file_location, source_root)
+    }
+  end
+
+  threads.each { |aThread| aThread.join }
+else # non-threaded
+  puts 'Recursively converting projects, NON-threaded'
+  arr_thread_work.each { |myWork|
+    v2c_convert_project_outer(script_location, myWork.str_proj_file_location, myWork.str_cmakelists_file_location, source_root)
+  }
 end
 
 def write_projects_list_file(str_file_fqpn, create_permissions, arr_project_subdirs)
@@ -247,4 +286,6 @@ def write_projects_list_file(str_file_fqpn, create_permissions, arr_project_subd
   V2C_Util_File.mv(tmpfile.path, str_file_fqpn)
 end
 
+# Finally, write out the file for the projects list (separate from any
+# multi-threaded implementation).
 write_projects_list_file("#{$v2c_config_dir_local}/all_sub_projects.txt", $v2c_cmakelists_create_permissions, arr_project_subdirs)

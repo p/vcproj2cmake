@@ -57,3 +57,11 @@ $v2c_cmakelists_create_permissions = 0644
 # Whether to parse and generate configuration info about precompiled headers.
 # Currently disabled by default (not verified yet, and module file not checked in yet).
 $v2c_target_precompiled_header_enable = false
+
+# Whether we would like to have multi-threaded operation
+# for project conversion (vcproj2cmake_recursive.rb).
+# Currently still disabled by default (better have some more testing).
+# Also, console output is likely to get intermingled (semi-readable).
+# Should implement scoped output management if this turns out to be
+# a problem.
+$v2c_enable_threads = false
