@@ -3569,19 +3569,22 @@ Finished. You should make sure to have all important v2c settings includes such 
         # target property, depending on a pre-determined support flag
         # for proper include dirs setting.
 
-        if $config_multi_authoritative.empty? # HACK global var
+        # HACK global var (multi-thread unsafety!)
+        # Thus make sure to have a local copy, for internal modifications.
+        config_multi_authoritative = $config_multi_authoritative
+        if config_multi_authoritative.empty?
           # Hrmm, we used to fetch this via REXML next_element,
           # which returned the _second_ setting (index 1)
           # i.e. Release in a certain file,
           # while we now get the first config, Debug, in that file.
-          $config_multi_authoritative = arr_config_info[0].build_type
+          config_multi_authoritative = arr_config_info[0].build_type
         end
 
         arr_config_info.each { |config_info_curr|
           log_debug "config_info #{config_info_curr.inspect}"
           build_type_condition = ''
           build_type_cooked = syntax_generator.prepare_string_literal(config_info_curr.build_type)
-          if $config_multi_authoritative == config_info_curr.build_type
+          if config_multi_authoritative == config_info_curr.build_type
   	    build_type_condition = "CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
           else
   	    # YES, this condition is supposed to NOT trigger in case of a multi-configuration generator
