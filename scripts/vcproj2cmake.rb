@@ -79,9 +79,6 @@ end
 
 tweak_load_path()
 
-# load common settings
-load 'vcproj2cmake_settings.rb'
-
 require 'vcproj2cmake/v2c_core' # (currently) large amount of random "core" functionality
 
 ################

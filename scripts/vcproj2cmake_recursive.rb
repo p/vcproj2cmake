@@ -20,9 +20,6 @@ end
 
 tweak_load_path()
 
-# load common settings
-load 'vcproj2cmake_settings.rb'
-
 require 'vcproj2cmake/v2c_core' # (currently) large amount of random "core" functionality
 
 require 'vcproj2cmake/util_file' # V2C_Util_File.mkdir_p()
@@ -296,4 +293,4 @@ end
 
 # Finally, write out the file for the projects list (separate from any
 # multi-threaded implementation).
-write_projects_list_file("#{$v2c_config_dir_local}/all_sub_projects.txt", $v2c_cmakelists_create_permissions, arr_project_subdirs)
+write_projects_list_file("#{$v2c_config_dir_local}/all_sub_projects.txt", $v2c_generator_file_create_permissions, arr_project_subdirs)

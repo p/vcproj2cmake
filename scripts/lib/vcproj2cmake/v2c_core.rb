@@ -1,18 +1,49 @@
-### USER-CONFIGURABLE SECTION ###
+require 'vcproj2cmake/util_file' # V2C_Util_File.cmp()
+
+def load_configuration_file(str_file, str_descr, arr_descr_loaded)
+  begin
+  success = true # be optimistic :)
+    load str_file
+    arr_descr_loaded.push("#{str_descr} #{str_file}")
+  rescue LoadError
+    success = false
+  end
+  return success
+end
+
+def load_configuration
+  # FIXME: we should be offering instances of configuration classes!
+  # That way, rather than having the user possibly _create_ ad-hoc global
+  # variables, we'll have a restricted set of class members which the
+  # user may modify --> the user will _know_ immediately in case
+  # a now non-existent variable gets modified
+  # (i.e. a config file update happened!).
+
+  # load common settings
+  settings_file_prefix = 'vcproj2cmake_settings'
+  settings_file_extension = 'rb'
+  arr_descr_loaded = Array.new
+  settings_file_standard = "#{settings_file_prefix}.#{settings_file_extension}"
+  load_configuration_file(settings_file_standard, 'standard settings file', arr_descr_loaded)
+  settings_file_user = "#{settings_file_prefix}.user.#{settings_file_extension}"
+  str_descr = 'user-specific customized settings file'
+  str_msg_extra = nil
+  if not load_configuration_file(settings_file_user, str_descr, arr_descr_loaded)
+    str_msg_extra = "#{str_descr} #{settings_file_user} not available, skipped"
+  end
+  str_msg = "Read #{arr_descr_loaded.join(' and ')}"
+  if not str_msg_extra.nil?
+    str_msg += " (#{str_msg_extra})"
+  end
+  str_msg += '.'
+  puts str_msg
+end
+
+load_configuration()
 
 # global variable to indicate whether we want debug output or not
-$v2c_debug = false
-
-# Initial number of spaces for indenting
-$v2c_generator_indent_num_spaces = 0
-
-# Number of spaces to increment by
-$v2c_generator_indent_step = 2
-
-### USER-CONFIGURABLE SECTION END ###
-
-
-require 'vcproj2cmake/util_file' # V2C_Util_File.cmp()
+# FIXME: deprecated, always directly use $v2c_log_level instead.
+$v2c_debug = ($v2c_log_level >= 4)
 
 # At least currently, this is a custom plugin mechanism.
 # It doesn't have anything to do with e.g.
@@ -699,7 +730,6 @@ class V2C_CMakeSyntaxGenerator
   VCPROJ2CMAKE_FUNC_CMAKE = 'vcproj2cmake_func.cmake'
   V2C_ATTRIBUTE_NOT_PROVIDED_MARKER = 'V2C_NOT_PROVIDED'
   def initialize(textOut)
-    #super(out, $v2c_generator_indent_step, $v2c_generated_comments_level)
     @textOut = textOut
     # internal CMake generator helpers
   end
@@ -1204,7 +1234,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # to enable easy identification (grepping) of files of a certain age
     # (a filesystem-based creation/modification timestamp might be unreliable
     # due to copying/modification).
-    timestamp_format = $v2c_generated_timestamp_format
+    timestamp_format = $v2c_generator_timestamp_format
     return if timestamp_format.nil? or timestamp_format.length == 0
     timestamp_format_docs = timestamp_format.tr('%', '')
     write_comment_at_level(3, "Indicates project conversion moment in time (UTC, format #{timestamp_format_docs})")
@@ -3453,8 +3483,8 @@ class V2C_CMakeGenerator
           V2C_Util_File.mv(output_file, output_file + '.previous')
         end
         # activate our version
-        # [for chmod() comments, see our $v2c_cmakelists_create_permissions settings variable]
-        V2C_Util_File.chmod($v2c_cmakelists_create_permissions, tmpfile.path)
+        # [for chmod() comments, see our $v2c_generator_file_create_permissions settings variable]
+        V2C_Util_File.chmod($v2c_generator_file_create_permissions, tmpfile.path)
         V2C_Util_File.mv(tmpfile.path, output_file)
 
         log_info %{\
@@ -3484,7 +3514,7 @@ Finished. You should make sure to have all important v2c settings includes such 
         map_defines = Hash.new
         read_mappings_combined(FILENAME_MAP_DEF, map_defines, master_project_dir)
 
-	textOut = V2C_TextStreamSyntaxGeneratorBase.new(out, $v2c_generator_indent_num_spaces, $v2c_generator_indent_step, $v2c_generated_comments_level)
+	textOut = V2C_TextStreamSyntaxGeneratorBase.new(out, $v2c_generator_indent_initial_num_spaces, $v2c_generator_indent_step, $v2c_generator_comments_level)
         syntax_generator = V2C_CMakeSyntaxGenerator.new(textOut)
 
         # we likely shouldn't declare this, since for single-configuration

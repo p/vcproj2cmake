@@ -15,6 +15,11 @@ support for this version might still be a bit weak.
 
 Usage (very rough summary), with Linux/Makefile generator:
 - use existing Visual Studio project source tree which contains a .vcproj file
+- [OPTIONAL] choose suitable vcproj2cmake converter configuration:
+  create a [PATH_TO_VCPROJ2CMAKE]/scripts/vcproj2cmake_settings.user.rb,
+  or directly modify the vcproj2cmake_settings.rb there
+  (not recommended - the non-user file will be overwritten on each repository update,
+  thus restoring all settings to default)
 - in the project source tree, run ruby [PATH_TO_VCPROJ2CMAKE]/scripts/vcproj2cmake.rb PROJECT.vcproj
   (alternatively, execute vcproj2cmake_recursive.rb to convert an entire hierarchy of .vcproj sub projects)
 - copy all required cmake/Modules, cmake/vcproj2cmake and samples (provided by the vcproj2cmake source tree!)
@@ -22,8 +27,9 @@ Usage (very rough summary), with Linux/Makefile generator:
 - after successfully converting the .vcproj file to a CMakeLists.txt, start your out-of-tree CMake builds:
   - mkdir ../[PROJECT_NAME].build_toolkit1_v1.2.3_unicode_debug
   - cd ../[PROJECT_NAME].build_toolkit1_v1.2.3_unicode_debug
-  - cmake -DCMAKE_BUILD_TYPE=Debug ../[PROJECT_NAME] (alternatively: ccmake ../[PROJECT_NAME]) - NOTE that DCMAKE_BUILD_TYPE is a _required_ setting on many generators (things will break if unspecified)
-  - time make -j3 -k
+  - ccmake -DCMAKE_BUILD_TYPE=Debug ../[PROJECT_NAME] (alternatively: cmake ../[PROJECT_NAME])
+     -- NOTE that DCMAKE_BUILD_TYPE is a _required_ setting on many generators (things will break if unspecified)
+  - time make -j3 -k (however I would recommend using a CMake with CMAKE_GENERATOR Ninja rather than Makefiles)
 
 ===========================================================================
 Usage, easy mode:

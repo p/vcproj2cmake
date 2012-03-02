@@ -184,12 +184,28 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     ##message(FATAL_ERROR "_script ${_script} _script_rel ${_script_rel}")
 
     get_filename_component(v2c_scripts_base_path_ "${_script}" PATH)
+    set(v2c_scripts_lib_path_ "${v2c_scripts_base_path_}/lib/vcproj2cmake")
     # This is currently the actual implementation file which will be changed most frequently:
-    set(script_core_ "${v2c_scripts_base_path_}/lib/vcproj2cmake/v2c_core.rb")
+    set(script_core_ "${v2c_scripts_lib_path_}/v2c_core.rb")
     # Need to manually derive the name of the settings script...
     set(script_settings_ "${v2c_scripts_base_path_}/vcproj2cmake_settings.rb")
+    set(script_settings_user_check_ "${v2c_scripts_base_path_}/vcproj2cmake_settings.user.rb")
+    # Avoid adding a dependency on a non-existing file:
+    if(EXISTS "${script_settings_user_check_}")
+      set(script_settings_user_ "${script_settings_user_check_}")
+    endif(EXISTS "${script_settings_user_check_}")
+    # All v2c scripts, MINUS the two script frontends
+    # that our specific targets happen to use.
+    set(v2c_cmakelists_rebuilder_deps_v2c_common_list_
+      "${script_core_}"
+      "${script_settings_}"
+      "${script_settings_user_}"
+    )
 
-    set(v2c_cmakelists_rebuilder_deps_common_list_ ${v2c_cmakelists_rebuilder_deps_static_list} "${script_core_}" "${script_settings_}")
+    set(v2c_cmakelists_rebuilder_deps_common_list_
+      ${v2c_cmakelists_rebuilder_deps_static_list}
+      ${v2c_cmakelists_rebuilder_deps_v2c_common_list_}
+    )
     # TODO add any other relevant dependencies here
 
     # Hrmm, this is a wee bit unclean: since we gather access to the script name

@@ -1,4 +1,10 @@
 # user-modifiable file containing common vcproj2cmake settings, included by all vcproj2cmake scripts.
+# NOTE that in addition to this file a vcproj2cmake_settings.user.rb
+# file (for local customization of the settings in this more
+# global/default file) will be loaded if available.
+
+# Script execution log level (0: no logging, 1: errors only, 2: +warnings, 3: +info, 4: +debug, 5: all).
+$v2c_log_level = 3
 
 # local config directory as created in every project which needs specific settings
 # (possibly required in root project space only)
@@ -34,7 +40,7 @@ $v2c_validate_vcproj_abort_on_error = 1
 # 2 == standard (default)
 # 3 == verbose
 # 4 == extra verbose
-$v2c_generated_comments_level = 2
+$v2c_generator_comments_level = 2
 
 # Specifies the format of the timestamp which indicates the
 # moment in time that an output file has been generated at.
@@ -45,14 +51,20 @@ $v2c_generated_comments_level = 2
 # each minute and second (i.e. the content of the output file is "different"),
 # causing our generator to detect the content as changed
 # and thus bogusly writing out the actually unchanged configuration file again.
-$v2c_generated_timestamp_format = '%Y%m%d_%H'
+$v2c_generator_timestamp_format = '%Y%m%d_%H'
+
+# Initial number of spaces for indenting in the text output files
+$v2c_generator_indent_initial_num_spaces = 0
+
+# Number of spaces to increment by
+$v2c_generator_indent_step = 2
 
 # The CMakeLists.txt files we create originate from a tempfile,
 # which always gets created with very restrictive access permissions (0600).
 # Since there's usually not much of a reason not to grant read access
 # of these build files to other people, we'll use a public 0644
 # as the default value.
-$v2c_cmakelists_create_permissions = 0644
+$v2c_generator_file_create_permissions = 0644
 
 # Whether to parse and generate configuration info about precompiled headers.
 # Currently disabled by default (not verified yet, and module file not checked in yet).
