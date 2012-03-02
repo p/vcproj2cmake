@@ -237,6 +237,14 @@ Find.find('./') do
   #puts
 end
 
+# Hrmm, many Ruby implementations have "green threads", i.e.
+# implementing _cooperative_ (non-parallel) threading.
+# Perhaps there's a flag to query whether a particular Ruby Thread
+# implementation has cooperative or real (multi-core) threading.
+# Otherwise we should probably just use Process.fork()
+# (I hate all those dirty thread implementations anyway,
+# real separate-process handling with clean IPC is a much better idea
+# in several cases).
 if ($v2c_enable_threads)
   puts 'Recursively converting projects, multi-threaded'
 

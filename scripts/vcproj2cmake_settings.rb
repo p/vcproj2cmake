@@ -60,6 +60,9 @@ $v2c_target_precompiled_header_enable = false
 
 # Whether we would like to have multi-threaded operation
 # for project conversion (vcproj2cmake_recursive.rb).
+# Not very useful since several Ruby implementations
+# have "green threads" (cooperative threading rather than
+# multi-core!), IOW it's _SLOWER_ than serialized operation!
 # Currently still disabled by default (better have some more testing).
 # Also, console output is likely to get intermingled (semi-readable).
 # Should implement scoped output management if this turns out to be
