@@ -2718,6 +2718,22 @@ end
 class V2C_VS10ParserBase < V2C_VSParserBase
 end
 
+# Parses elements with optional conditional information (Condition=xxx).
+class V2C_VS10BaseElemParser < V2C_VS10ParserBase
+  def initialize
+    @have_condition = false
+  end
+  def parse_attributes(setting_key, setting_value)
+    found = true # be optimistic :)
+    case setting_key
+    when 'blubb'
+    else
+      unknown_attribute(setting_key)
+    end
+    return found
+  end
+end
+
 class V2C_VS10ItemGroupProjectConfigurationParser < V2C_VS10ParserBase
   def initialize(itemgroup_xml, arr_config_info)
     super()
@@ -2771,15 +2787,16 @@ class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
   end
   def parse_attributes
     @elem_xml.attributes.each_attribute { |attr_xml|
-      setting_key = attr_xml.name
-      setting_value = attr_xml.value
-      case setting_key
-      when 'Include'
-         @filter.name = setting_value
-      else
-        unknown_attribute(setting_key)
-      end
+      parse_attribute(attr_xml.name, attr_xml.value)
     }
+  end
+  def parse_attribute(setting_value, setting_key)
+    case setting_key
+    when 'Include'
+       @filter.name = setting_value
+    else
+      unknown_attribute(setting_key)
+    end
   end
   def parse_setting(setting_key, setting_value)
     case setting_key
@@ -3018,7 +3035,7 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
   end
 end
 
-class V2C_VS10ItemDefinitionGroupParser < V2C_VS10ParserBase
+class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
   def initialize(itemdefgroup_xml, config_info_out)
     super()
     @itemdefgroup_xml = itemdefgroup_xml
@@ -3168,7 +3185,7 @@ class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10ParserBase
   end
 end
 
-class V2C_VS10PropertyGroupParser < V2C_VS10ParserBase
+class V2C_VS10PropertyGroupParser < V2C_VS10BaseElemParser
   def initialize(propgroup_xml, project_out)
     super()
     @propgroup_xml = propgroup_xml
@@ -3181,13 +3198,14 @@ class V2C_VS10PropertyGroupParser < V2C_VS10ParserBase
   end
   def parse_setting(setting_key, setting_value)
     case setting_key
-    #when 'Condition'
-      # FIXME: should set a have_condition bool to true
-      # and then verify further below that the element that was filled in
+    when 'Condition'
+      # set have_condition bool to true,
+      # then verify further below that the element that was filled in
       # actually had its condition parsed properly (V2C_Info_Elem_Base.@condition != nil),
-      # since conditions possibly need to be parsed separately by each property item class type
+      # since conditions need to be parsed separately by each property item class type's base class
       # (upon "Condition" attribute parsing the exact property item class often is not known yet i.e. nil!!).
       # Or is there a better way to achieve common, reliable parsing of that condition information?
+      @have_condition = true
     when 'Label'
       propgroup_label = setting_value
       log_debug_class("Label #{propgroup_label}!")
