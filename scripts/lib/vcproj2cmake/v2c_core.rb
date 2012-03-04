@@ -1841,6 +1841,9 @@ end
 class V2C_VSParserBase
   VS_VALUE_SEPARATOR_REGEX_OBJ = %r{[;,]}
   VS_SCC_ATTR_REGEX_OBJ = %r{^Scc}
+  def initialize(elem_xml)
+    @elem_xml = elem_xml
+  end
   def log_debug_class(str); log_debug "#{self.class.name}: #{str}" end
   def unknown_attribute(name); unknown_something('attribute', name) end
   def unknown_element(name); unknown_something('element', name) end
@@ -1898,8 +1901,7 @@ end
 
 class V2C_VSProjectParserBase < V2C_VSParserBase
   def initialize(project_xml, project_out)
-    super()
-    @project_xml = project_xml
+    super(project_xml)
     @project = project_out
   end
 end
@@ -1953,7 +1955,7 @@ end
 class V2C_VSToolCompilerParser < V2C_VSToolParserBase
   include V2C_VSToolCompilerDefines
   def initialize(compiler_xml, arr_compiler_info_out)
-    @compiler_xml = compiler_xml
+    super(compiler_xml)
     @arr_compiler_info = arr_compiler_info_out
   end
   def allocate_precompiled_header_info(compiler_info)
@@ -2048,7 +2050,7 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
     compiler_specific = V2C_Tool_Compiler_Specific_Info_MSVC7.new
     compiler_specific.original = true
     compiler_info.arr_compiler_specific_info.push(compiler_specific)
-    @compiler_xml.attributes.each_attribute { |attr_xml|
+    @elem_xml.attributes.each_attribute { |attr_xml|
       parse_setting(compiler_info, attr_xml.name, attr_xml.value)
     }
   end
@@ -2103,8 +2105,7 @@ end
 class V2C_VSToolLinkerParser < V2C_VSToolParserBase
   include V2C_VSToolLinkerDefines
   def initialize(linker_xml, arr_linker_info_out)
-    super()
-    @linker_xml = linker_xml
+    super(linker_xml)
     @arr_linker_info = arr_linker_info_out
   end
   def parse_setting(linker_info, setting_key, setting_value)
@@ -2171,7 +2172,7 @@ class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
   private
 
   def parse_attributes(linker_info)
-    @linker_xml.attributes.each_attribute { |attr_xml|
+    @elem_xml.attributes.each_attribute { |attr_xml|
       parse_setting(linker_info, attr_xml.name, attr_xml.value)
     }
   end
@@ -2193,17 +2194,16 @@ end
 
 class V2C_VS7ToolParser < V2C_VSParserBase
   def initialize(tool_xml, config_info_out)
-    super()
-    @tool_xml = tool_xml
+    super(tool_xml)
     @config_info = config_info_out
   end
   def parse
-    toolname = @tool_xml.attributes['Name']
+    toolname = @elem_xml.attributes['Name']
     case toolname
     when V2C_VS7ToolDefines::TEXT_VCCLCOMPILERTOOL
-      elem_parser = V2C_VS7ToolCompilerParser.new(@tool_xml, @config_info.arr_compiler_info)
+      elem_parser = V2C_VS7ToolCompilerParser.new(@elem_xml, @config_info.arr_compiler_info)
     when V2C_VS7ToolDefines::TEXT_VCLINKERTOOL
-      elem_parser = V2C_VS7ToolLinkerParser.new(@tool_xml, @config_info.arr_linker_info)
+      elem_parser = V2C_VS7ToolLinkerParser.new(@elem_xml, @config_info.arr_linker_info)
     else
       unknown_element(toolname)
     end
@@ -2215,8 +2215,7 @@ end
 
 class V2C_VS7ConfigurationBaseParser < V2C_VSParserBase
   def initialize(config_xml, config_info_out)
-    super()
-    @config_xml = config_xml
+    super(config_xml)
     @config_info = config_info_out
   end
   def parse
@@ -2230,7 +2229,7 @@ class V2C_VS7ConfigurationBaseParser < V2C_VSParserBase
   private
 
   def parse_attributes(config_info)
-    @config_xml.attributes.each_attribute { |attr_xml|
+    @elem_xml.attributes.each_attribute { |attr_xml|
       parse_setting(config_info, attr_xml.name, attr_xml.value)
     }
   end
@@ -2259,7 +2258,7 @@ class V2C_VS7ConfigurationBaseParser < V2C_VSParserBase
     return found
   end
   def parse_elements(config_info)
-    @config_xml.elements.each { |elem_xml|
+    @elem_xml.elements.each { |elem_xml|
       elem_parser = nil # IMPORTANT: reset it!
       case elem_xml.name
       when 'Tool'
@@ -2304,12 +2303,11 @@ end
 
 class V2C_VS7ConfigurationsParser < V2C_VSParserBase
   def initialize(configs_xml, arr_config_info_out)
-    super()
-    @configs_xml = configs_xml
+    super(configs_xml)
     @arr_config_info = arr_config_info_out
   end
   def parse
-    @configs_xml.elements.each { |elem_xml|
+    @elem_xml.elements.each { |elem_xml|
       elem_parser = nil # IMPORTANT: reset it!
       case elem_xml.name
       when 'Configuration'
@@ -2336,8 +2334,7 @@ end
 
 class V2C_VS7FileParser < V2C_VSParserBase
   def initialize(file_xml, arr_file_infos_out)
-    super()
-    @file_xml = file_xml
+    super(file_xml)
     @arr_file_infos = arr_file_infos_out
     @have_build_units = false # HACK
   end
@@ -2348,7 +2345,7 @@ class V2C_VS7FileParser < V2C_VSParserBase
     parse_attributes(info_file)
 
     config_info_curr = nil
-    @file_xml.elements.each { |elem_xml|
+    @elem_xml.elements.each { |elem_xml|
       case elem_xml.name
       when 'FileConfiguration'
 	config_info_curr = V2C_File_Config_Info.new
@@ -2374,7 +2371,7 @@ class V2C_VS7FileParser < V2C_VSParserBase
     end
     # Ignore files with custom build steps
     included_in_build = true
-    @file_xml.elements.each('FileConfiguration/Tool') { |tool_xml|
+    @elem_xml.elements.each('FileConfiguration/Tool') { |tool_xml|
       if tool_xml.attributes['Name'] == 'VCCustomBuildTool'
         included_in_build = false
         return # no complex handling, just return
@@ -2396,7 +2393,7 @@ class V2C_VS7FileParser < V2C_VSParserBase
   private
 
   def parse_attributes(info_file)
-    @file_xml.attributes.each_attribute { |attr_xml|
+    @elem_xml.attributes.each_attribute { |attr_xml|
       parse_setting(info_file, attr_xml.name, attr_xml.value)
     }
   end
@@ -2412,13 +2409,12 @@ end
 
 class V2C_VS7FilterParser < V2C_VSParserBase
   def initialize(files_xml, project_out, files_str_out)
-    super()
-    @files_xml = files_xml
+    super(files_xml)
     @project = project_out
     @files_str = files_str_out
   end
   def parse
-    res = parse_file_list(@files_xml, @files_str)
+    res = parse_file_list(@elem_xml, @files_str)
     return res
   end
   def parse_file_list(vcproj_filter_xml, files_str)
@@ -2529,7 +2525,7 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
   def parse
     parse_attributes
 
-    @project_xml.elements.each { |elem_xml|
+    @elem_xml.elements.each { |elem_xml|
       elem_parser = nil # IMPORTANT: reset it!
       case elem_xml.name
       when 'Configurations'
@@ -2552,7 +2548,7 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
   private
 
   def parse_attributes
-    @project_xml.attributes.each_attribute { |attr_xml|
+    @elem_xml.attributes.each_attribute { |attr_xml|
       parse_setting(attr_xml.name, attr_xml.value, @project)
     }
   end
@@ -2720,7 +2716,8 @@ end
 
 # Parses elements with optional conditional information (Condition=xxx).
 class V2C_VS10BaseElemParser < V2C_VS10ParserBase
-  def initialize
+  def initialize(elem_xml)
+    super(elem_xml)
     @have_condition = false
   end
   def parse_attributes(setting_key, setting_value)
@@ -2736,12 +2733,11 @@ end
 
 class V2C_VS10ItemGroupProjectConfigurationParser < V2C_VS10ParserBase
   def initialize(itemgroup_xml, arr_config_info)
-    super()
-    @itemgroup_xml = itemgroup_xml
+    super(itemgroup_xml)
     @arr_config_info = arr_config_info
   end
   def parse
-    @itemgroup_xml.elements.each { |itemgroup_elem_xml|
+    @elem_xml.elements.each { |itemgroup_elem_xml|
       case itemgroup_elem_xml.name
       when 'ProjectConfiguration'
         config_info = V2C_Project_Config_Info.new
@@ -2775,8 +2771,7 @@ end
 
 class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
   def initialize(elem_xml, filter)
-    super()
-    @elem_xml = elem_xml
+    super(elem_xml)
     @filter = filter
   end
   def parse
@@ -2812,12 +2807,11 @@ end
 
 class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
   def initialize(itemgroup_xml, project_out)
-    super()
-    @itemgroup_xml = itemgroup_xml
+    super(itemgroup_xml)
     @project = project_out
   end
   def parse
-    @itemgroup_xml.elements.each { |elem_xml|
+    @elem_xml.elements.each { |elem_xml|
       setting_key = elem_xml.name
       case setting_key
       when 'Filter'
@@ -2864,8 +2858,7 @@ end
 
 class V2C_VS10ItemGroupParser < V2C_VS10ParserBase
   def initialize(itemgroup_xml, project_out)
-    super()
-    @itemgroup_xml = itemgroup_xml
+    super(itemgroup_xml)
     @project = project_out
     @label = nil
   end
@@ -2875,9 +2868,9 @@ class V2C_VS10ItemGroupParser < V2C_VS10ParserBase
     item_group_parser = nil
     case @label
     when 'ProjectConfigurations'
-      item_group_parser = V2C_VS10ItemGroupProjectConfigurationParser.new(@itemgroup_xml, @project.arr_config_info)
+      item_group_parser = V2C_VS10ItemGroupProjectConfigurationParser.new(@elem_xml, @project.arr_config_info)
     when nil
-      item_group_parser = V2C_VS10ItemGroupAnonymousParser.new(@itemgroup_xml, @project)
+      item_group_parser = V2C_VS10ItemGroupAnonymousParser.new(@elem_xml, @project)
     else
       unknown_element("Label #{@label}")
     end
@@ -2889,7 +2882,7 @@ class V2C_VS10ItemGroupParser < V2C_VS10ParserBase
   private
 
   def parse_attributes
-    @itemgroup_xml.attributes.each_attribute { |attr_xml|
+    @elem_xml.attributes.each_attribute { |attr_xml|
       parse_setting(attr_xml.name, attr_xml.value)
     }
   end
@@ -2932,7 +2925,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
     compiler_specific = V2C_Tool_Compiler_Specific_Info_MSVC10.new
     compiler_specific.original = true
     compiler_info.arr_compiler_specific_info.push(compiler_specific)
-    @compiler_xml.elements.each { |elem_xml|
+    @elem_xml.elements.each { |elem_xml|
       parse_setting(compiler_info, elem_xml.name, elem_xml.text)
     }
   end
@@ -3020,7 +3013,7 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
   private
 
   def parse_elements(linker_info)
-    @linker_xml.elements.each { |elem_xml|
+    @elem_xml.elements.each { |elem_xml|
       parse_setting(linker_info, elem_xml.name, elem_xml.text)
     }
   end
@@ -3037,8 +3030,7 @@ end
 
 class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
   def initialize(itemdefgroup_xml, config_info_out)
-    super()
-    @itemdefgroup_xml = itemdefgroup_xml
+    super(itemdefgroup_xml)
     @config_info = config_info_out
   end
   def parse
@@ -3046,7 +3038,7 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
     return true
   end
   def parse_elements(config_info)
-    @itemdefgroup_xml.elements.each { |elem_xml|
+    @elem_xml.elements.each { |elem_xml|
       setting_key = elem_xml.name
       item_def_group_parser = nil # IMPORTANT: reset it!
       case setting_key
@@ -3069,15 +3061,14 @@ end
 
 class V2C_VS10PropertyGroupConfigurationParser < V2C_VS10ParserBase
   def initialize(propgroup_xml, config_info_out)
-    super()
-    @propgroup_xml = propgroup_xml
+    super(propgroup_xml)
     @config_info = config_info_out
   end
   def parse
     parse_elements(@config_info)
   end
   def parse_elements(config_info)
-    @propgroup_xml.elements.each { |elem_xml|
+    @elem_xml.elements.each { |elem_xml|
       parse_setting(config_info, elem_xml.name, elem_xml.text)
     }
   end
@@ -3128,12 +3119,11 @@ end
 
 class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10ParserBase
   def initialize(propgroup_xml, project_out)
-    super()
-    @propgroup_xml = propgroup_xml
+    super(propgroup_xml)
     @project = project_out
   end
   def parse
-    @propgroup_xml.elements.each { |propelem_xml|
+    @elem_xml.elements.each { |propelem_xml|
       setting_key = propelem_xml.name
       setting_value = propelem_xml.text
       case setting_key
@@ -3187,12 +3177,11 @@ end
 
 class V2C_VS10PropertyGroupParser < V2C_VS10BaseElemParser
   def initialize(propgroup_xml, project_out)
-    super()
-    @propgroup_xml = propgroup_xml
+    super(propgroup_xml)
     @project = project_out
   end
   def parse
-    @propgroup_xml.attributes.each_attribute { |attr_xml|
+    @elem_xml.attributes.each_attribute { |attr_xml|
       parse_setting(attr_xml.name, attr_xml.value)
     }
   end
@@ -3212,11 +3201,11 @@ class V2C_VS10PropertyGroupParser < V2C_VS10BaseElemParser
       case propgroup_label
       when 'Configuration'
 	config_info_curr = V2C_Project_Config_Info.new
-        propgroup_parser = V2C_VS10PropertyGroupConfigurationParser.new(@propgroup_xml, config_info_curr)
+        propgroup_parser = V2C_VS10PropertyGroupConfigurationParser.new(@elem_xml, config_info_curr)
         propgroup_parser.parse
         @project.arr_config_info.push(config_info_curr)
       when 'Globals'
-        propgroup_parser = V2C_VS10PropertyGroupGlobalsParser.new(@propgroup_xml, @project)
+        propgroup_parser = V2C_VS10PropertyGroupGlobalsParser.new(@elem_xml, @project)
         propgroup_parser.parse
       else
         unknown_element("Label #{propgroup_label}")
@@ -3236,7 +3225,7 @@ class V2C_VS10ProjectParser < V2C_VS10ProjectParserBase
     # Do strict traversal over _all_ elements, parse what's supported by us,
     # and yell loudly for any element which we don't know about!
     parse_attributes()
-    @project_xml.elements.each { |elem_xml|
+    @elem_xml.elements.each { |elem_xml|
       elem_parser = nil # IMPORTANT: reset it!
       case elem_xml.name
       when 'ItemGroup'
@@ -3260,7 +3249,7 @@ class V2C_VS10ProjectParser < V2C_VS10ProjectParserBase
   private
 
   def parse_attributes
-    @project_xml.attributes.each_attribute { |attr_xml|
+    @elem_xml.attributes.each_attribute { |attr_xml|
       parse_setting(@project, attr_xml.name, attr_xml.value)
     }
   end
@@ -3323,15 +3312,14 @@ end
 
 class V2C_VS10ProjectFiltersParser < V2C_VS10ParserBase
   def initialize(project_filters_xml, project_out)
-    super()
-    @project_filters_xml = project_filters_xml
+    super(project_filters_xml)
     @project = project_out
   end
 
   def parse
     # Do strict traversal over _all_ elements, parse what's supported by us,
     # and yell loudly for any element which we don't know about!
-    @project_filters_xml.elements.each { |elem_xml|
+    @elem_xml.elements.each { |elem_xml|
       elem_parser = nil # IMPORTANT: reset it!
       case elem_xml.name
       when 'ItemGroup'
