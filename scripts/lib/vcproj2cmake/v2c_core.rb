@@ -2198,18 +2198,28 @@ class V2C_VS7ToolParser < V2C_VSParserBase
     @config_info = config_info_out
   end
   def parse
-    toolname = @elem_xml.attributes['Name']
-    case toolname
-    when V2C_VS7ToolDefines::TEXT_VCCLCOMPILERTOOL
-      elem_parser = V2C_VS7ToolCompilerParser.new(@elem_xml, @config_info.arr_compiler_info)
-    when V2C_VS7ToolDefines::TEXT_VCLINKERTOOL
-      elem_parser = V2C_VS7ToolLinkerParser.new(@elem_xml, @config_info.arr_linker_info)
-    else
-      unknown_element(toolname)
-    end
-    if not elem_parser.nil?
-      elem_parser.parse
-    end
+    parse_attributes()
+  end
+  def parse_attributes
+    @elem_xml.attributes.each_attribute { |attr_xml|
+      case attr_xml.name
+      when V2C_VS7ToolDefines::TEXT_NAME
+        toolname = attr_xml.value
+        case toolname
+        when V2C_VS7ToolDefines::TEXT_VCCLCOMPILERTOOL
+          elem_parser = V2C_VS7ToolCompilerParser.new(@elem_xml, @config_info.arr_compiler_info)
+        when V2C_VS7ToolDefines::TEXT_VCLINKERTOOL
+          elem_parser = V2C_VS7ToolLinkerParser.new(@elem_xml, @config_info.arr_linker_info)
+        else
+          unknown_element(toolname)
+        end
+        if not elem_parser.nil?
+          elem_parser.parse
+        end
+      else
+        unknown_attribute(attr_xml.name)
+      end
+    }
   end
 end
 
