@@ -130,7 +130,7 @@ FILENAME_MAP_LIB_DIRS = "#{$v2c_config_dir_local}/lib_dirs_mappings.txt"
 
 
 def log_debug(str)
-  return if not $v2c_debug
+  return if $v2c_log_level < 4
   puts str
 end
 
@@ -139,18 +139,18 @@ def log_info(str)
   puts str
 end
 
-def log_todo(str); puts "TODO: #{str}" end
+def log_warn(str); puts "WARNING: #{str}" if $v2c_log_level >= 2 end
 
-def log_warn(str); puts "WARNING: #{str}" end
+def log_todo(str); puts "TODO: #{str}" if $v2c_log_level >= 1 end
 
-def log_error(str); $stderr.puts "ERROR: #{str}" end
+def log_error(str); $stderr.puts "ERROR: #{str}" if $v2c_log_level >= 1 end
 
 # FIXME: should probably replace most log_fatal()
 # with exceptions since in many cases
 # one would want to have _partial_ aborts of processing only.
 # Soft error handling via exceptions would apply to errors due to problematic input -
 # but errors due to bugs in our code should cause immediate abort.
-def log_fatal(str); log_error "#{str}. Aborting!"; exit 1 end
+def log_fatal(str); log_error "#{str}. Aborting!" if $v2c_log_level > 0; exit 1 end
 
 def log_implementation_bug(str); log_fatal(str) end
 
@@ -265,6 +265,7 @@ class V2C_Info_Condition
   def initialize(str_condition)
     @str_condition = str_condition
   end
+  attr_accessor :str_condition
 end
 
 # @brief Mostly used to manage the condition element...
@@ -272,6 +273,7 @@ class V2C_Info_Elem_Base
   def initialize
     @condition = nil # V2C_Info_Condition
   end
+  attr_accessor :condition
 end
 
 class V2C_Info_Include_Dir < V2C_Info_Elem_Base
@@ -288,12 +290,19 @@ class V2C_Info_Include_Dir < V2C_Info_Elem_Base
   attr_accessor :attr_system
 end
 
-# Not sure whether we really need this base class -
-# do we really want to know the tool name??
 class V2C_Tool_Base_Info
-  def initialize
-    @name = nil
+  def initialize(tool_variant_specific_info)
+    @name = nil # Hmm, do we need this member? (do we really want to know the tool name??)
     @suppress_startup_banner_enable = false # used by at least VS10 Compiler _and_ Linker, thus it's member of the common base class.
+
+    # _base_ class member to provide a mechanism to intelligently translate tool (compiler, linker) configurations
+    # as specified by the original build environment files (e.g. compiler flags, warnings, ...)
+    # into values as used by _other_ candidates (e.g. MSVC vs. gcc etc.).
+    @arr_tool_variant_specific_info = Array.new
+    if not tool_variant_specific_info.nil?
+      tool_variant_specific_info.original = true
+      @arr_tool_variant_specific_info.push(tool_variant_specific_info)
+    end
   end
   attr_accessor :name
   attr_accessor :suppress_startup_banner_enable
@@ -353,8 +362,8 @@ class V2C_Precompiled_Header_Info
 end
 
 class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
-  def initialize
-    super()
+  def initialize(tool_variant_specific_info = nil)
+    super(tool_variant_specific_info)
     @arr_info_include_dirs = Array.new
     @hash_defines = Hash.new
     @rtti = true
@@ -367,7 +376,6 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
     @static_code_analysis_enable = false # TODO: translate into MSVC7/10 /analyze flag
     @optimization = 0 # currently supporting these values: 0 == Non Debug, 1 == Min Size, 2 == Max Speed, 3 == Max Optimization
     @show_includes = false # Whether to show the filenames of included header files.
-    @arr_compiler_specific_info = Array.new
   end
   attr_accessor :arr_info_include_dirs
   attr_accessor :hash_defines
@@ -381,7 +389,7 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
   attr_accessor :static_code_analysis_enable
   attr_accessor :optimization
   attr_accessor :show_includes
-  attr_accessor :arr_compiler_specific_info
+  attr_accessor :arr_tool_variant_specific_info
 
   def get_include_dirs(flag_system, flag_before)
     arr_includes = Array.new
@@ -390,7 +398,7 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
       # and collect only those dirs that match these settings
       # (equivalent to CMake include_directories() SYSTEM / BEFORE).
       arr_includes.push(inc_dir_info.dir)
-    }  
+    }
     return arr_includes
   end
 end
@@ -418,19 +426,14 @@ class V2C_Tool_Linker_Specific_Info_MSVC10 < V2C_Tool_Linker_Specific_Info
 end
 
 class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
-  def initialize(linker_specific_info = nil)
-    super()
+  def initialize(tool_variant_specific_info = nil)
+    super(tool_variant_specific_info)
     @arr_dependencies = Array.new # FIXME: should be changing this into a dependencies class (we need an attribute which indicates whether this dependency is a library _file_ or a target name, since we should be reliably able to decide whether we can add "debug"/"optimized" keywords to CMake variables or target_link_library() parms)
     @link_incremental = 0 # 1 means NO, thus 2 probably means YES?
     @module_definition_file = nil
     @optimize_references_enable = false
     @pdb_file = nil
     @arr_lib_dirs = Array.new
-    @arr_linker_specific_info = Array.new
-    if not linker_specific_info.nil?
-      linker_specific_info.original = true
-      @arr_linker_specific_info.push(linker_specific_info)
-    end
   end
   attr_accessor :arr_dependencies
   attr_accessor :link_incremental
@@ -438,7 +441,7 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
   attr_accessor :optimize_references_enable
   attr_accessor :pdb_file
   attr_accessor :arr_lib_dirs
-  attr_accessor :arr_linker_specific_info
+  attr_accessor :arr_tool_variant_specific_info
 end
 
 module V2C_BaseConfig_Defines
@@ -583,7 +586,8 @@ end
 # Well, in fact in Visual Studio, "target" and "project"
 # seem to be pretty much synonymous...
 # FIXME: we should still do better separation between these two...
-class V2C_Project_Info # formerly V2C_Target
+# Formerly called V2C_Target.
+class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consistently get a condition element - but the VS10-side project info actually most likely does not have/use it!
   def initialize
     @type = nil # project type
     # VS10: in case the main project file is lacking a ProjectName element,
@@ -718,6 +722,16 @@ class V2C_TextStreamSyntaxGeneratorBase
   end
 end
 
+class V2C_LoggerBase
+  def log_error_class(str); log_error "#{self.class.name}: #{str}" end
+  def log_fixme_class(str); log_error "#{self.class.name}: FIXME: #{str}" end
+  def log_info_class(str); log_info "#{self.class.name}: #{str}" end
+  def log_debug_class(str); log_debug "#{self.class.name}: #{str}" end
+  # "Ruby Exceptions", http://rubylearning.com/satishtalim/ruby_exceptions.html
+  def unhandled_exception(e); log_error_unhandled_exception(e) end
+  def unhandled_functionality(str_description); log_error(str_description) end
+end
+
 #class V2C_CMakeSyntaxGenerator < V2C_TextStreamSyntaxGeneratorBase
 # FIXME: most likely V2C_CMakeSyntaxGenerator should _not_ be the base class
 # of other CMake generator classes, but rather a _member_ of those classes only.
@@ -726,7 +740,7 @@ end
 # If it was the base class of the various CMake generators,
 # then it would be _hard-coded_ i.e. not configurable (which would be the case
 # when having ctor parameterisation from the outside).
-class V2C_CMakeSyntaxGenerator
+class V2C_CMakeSyntaxGenerator < V2C_LoggerBase
   VCPROJ2CMAKE_FUNC_CMAKE = 'vcproj2cmake_func.cmake'
   V2C_ATTRIBUTE_NOT_PROVIDED_MARKER = 'V2C_NOT_PROVIDED'
   def initialize(textOut)
@@ -1085,6 +1099,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     return if arr_includes.empty?
     arr_includes_translated = Array.new
     arr_includes.each { |elem_inc_dir|
+      next if elem_inc_dir.match(VS10_EXTENSION_VAR_MATCH_REGEX_OBJ)
       elem_inc_dir = vs7_create_config_variable_translation(elem_inc_dir, @arr_config_var_handling)
       arr_includes_translated.push(elem_inc_dir)
     }
@@ -1271,6 +1286,13 @@ def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_de
   end
   return file_accessible
 end
+
+# FIXME: very rough handling - what to do with those VS10 %(XXX) variables?
+# Well, one idea would be to append entries (include directories, dependencies etc.)
+# to individual list vars that are being scoped within a
+# CMake parent directory chain. But these lists should be implementation details
+# hidden behind v2c_xxx(_target _build_type _entries) funcs, of course.
+VS10_EXTENSION_VAR_MATCH_REGEX_OBJ = %r{%([^\s]*)}
 
 # FIXME: temporarily appended a _VS7 suffix since we're currently changing file list generation during our VS10 generator work.
 class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeSyntaxGenerator
@@ -1600,6 +1622,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     # TODO: this might be relocatable to a common generator base helper method.
     arr_defs = Array.new
     hash_defs.each { |key, value|
+      next if key.match(VS10_EXTENSION_VAR_MATCH_REGEX_OBJ)
       str_define = value.empty? ? key : "#{key}=#{value}"
       arr_defs.push(str_define)
     }
@@ -1641,8 +1664,9 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     write_conditional_end(str_conditional)
   end
   def write_link_libraries(arr_dependencies, map_dependencies)
-    arr_dependencies.push(dereference_variable_name('V2C_LIBS'))
-    @localGenerator.write_build_attributes('target_link_libraries', arr_dependencies, map_dependencies, @target.name)
+    arr_dependencies_augmented = arr_dependencies.clone
+    arr_dependencies_augmented.push(dereference_variable_name('V2C_LIBS'))
+    @localGenerator.write_build_attributes('target_link_libraries', arr_dependencies_augmented, map_dependencies, @target.name)
   end
   def write_func_v2c_target_post_setup(project_name, project_keyword)
     # Rationale: keep count of generated lines of CMakeLists.txt to a bare minimum -
@@ -1838,23 +1862,55 @@ def log_error_unhandled_exception(e)
   log_error "unhandled exception occurred! #{e.message}, #{e.backtrace.inspect}"
 end
 
-class V2C_VSParserBase
-  VS_VALUE_SEPARATOR_REGEX_OBJ = %r{[;,]}
-  VS_SCC_ATTR_REGEX_OBJ = %r{^Scc}
-  def initialize(elem_xml)
-    @elem_xml = elem_xml
+class V2C_ParserBase < V2C_LoggerBase
+  def initialize(info_elem_out)
+    @info_elem = info_elem_out
   end
-  def log_debug_class(str); log_debug "#{self.class.name}: #{str}" end
+
+  def parser_error(str_description); log_error_class(str_description) end
+end
+
+class V2C_VSXmlParserBase < V2C_ParserBase
+  # Hmm, \n at least appears in VS10 (DisableSpecificWarnings element), but in VS7 as well?
+  # WS_VALUE is for entries containing (and preserving!) whitespace (no split on whitespace!).
+  VS_VALUE_SEPARATOR_REGEX_OBJ    = %r{[;,\n\s]}
+  VS_WS_VALUE_SEPARATOR_REGEX_OBJ = %r{[;,\n]}
+  VS_SCC_ATTR_REGEX_OBJ = %r{^Scc}
+  FOUND_FALSE = 0
+  FOUND_TRUE = 1
+  FOUND_SKIP = 2
+  def log_call; log_error_class 'CALLED' end
+  def initialize(elem_xml, info_elem_out)
+    super(info_elem_out)
+    @elem_xml = elem_xml
+    @called_base_parse_element = false
+    @called_base_parse_attribute = false
+    @called_base_parse_setting = false
+    @called_base_parse_post_hook = false
+  end
+  # THE MAIN PARSER ENTRY POINT.
+  # Will invoke all methods of derived parser classes, whenever available.
+  def parse
+    log_debug_class('parse')
+    # Do strict traversal over _all_ elements, parse what's supported by us,
+    # and yell loudly for any element which we don't know about!
+    parse_attributes
+    parse_elements
+    parse_post_hook
+    verify_calls
+    return FOUND_TRUE # FIXME don't assume success - add some missing checks...
+  end
+  def log_found(found, label); log_debug_class "FOUND: #{found} #{label}" end
   def unknown_attribute(name); unknown_something('attribute', name) end
   def unknown_element(name); unknown_something('element', name) end
   def unknown_element_text(name); unknown_something('element text', name) end
+  def unknown_setting(name); unknown_something('VS7/10 setting', name) end
+  def skipped_attribute_warn(elem_name)
+    log_todo "#{self.class.name}: unhandled less important XML attribute (#{elem_name})!"
+  end
   def skipped_element_warn(elem_name)
     log_todo "#{self.class.name}: unhandled less important XML element (#{elem_name})!"
   end
-  def parser_error(str_description); log_error(str_description) end
-  # "Ruby Exceptions", http://rubylearning.com/satishtalim/ruby_exceptions.html
-  def unhandled_exception(e); log_error_unhandled_exception(e) end
-  def unhandled_functionality(str_description); log_error(str_description) end
   def get_boolean_value(str_value)
     value = false
     if not str_value.nil?
@@ -1871,7 +1927,25 @@ class V2C_VSParserBase
     return value
   end
   def split_values_list(str_value)
-    return str_value.split(VS_VALUE_SEPARATOR_REGEX_OBJ)
+    arr_str = str_value.split(VS_VALUE_SEPARATOR_REGEX_OBJ)
+    #arr_str.each { |str| log_debug_class "SPLIT #{str}" }
+    return arr_str
+  end
+  def split_values_list_preserve_ws(str_value)
+    arr_str = str_value.split(VS_WS_VALUE_SEPARATOR_REGEX_OBJ)
+    #arr_str.each { |str| log_debug_class "SPLIT #{str}" }
+    return arr_str
+  end
+  def array_discard_empty(arr_values); arr_values.delete_if { |elem| elem.empty? } end
+  def split_values_list_discard_empty(str_value)
+    arr_values = split_values_list(str_value)
+    #log_debug_class "arr_values #{arr_values.class.name}"
+    return array_discard_empty(arr_values)
+  end
+  def split_values_list_preserve_ws_discard_empty(str_value)
+    arr_values = split_values_list_preserve_ws(str_value)
+    #log_debug_class "arr_values #{arr_values.class.name}"
+    return array_discard_empty(arr_values)
   end
 
   def string_to_index(arr_settings, str_setting, default_val)
@@ -1887,23 +1961,137 @@ class V2C_VSParserBase
 
   private
 
+  def parse_attributes
+    @elem_xml.attributes.each_attribute { |attr_xml|
+      log_debug_class "ATTR: #{attr_xml.name}"
+      if not call_parse_attribute(attr_xml)
+        if not call_parse_setting(attr_xml.name, attr_xml.value)
+          unknown_setting(attr_xml.name)
+        end
+      end
+    }
+  end
+  def parse_elements
+    @elem_xml.elements.each { |subelem_xml|
+      log_debug_class "ELEM: #{subelem_xml.name}"
+      if not call_parse_element(subelem_xml)
+        log_debug_class "call_parse_element #{subelem_xml.name} failed"
+        if not call_parse_setting(subelem_xml.name, subelem_xml.text)
+          unknown_element(subelem_xml.name)
+        end
+      end
+    }
+  end
+  def call_parse_attribute(attr_xml)
+    @called_base_parse_attribute = false
+    success = false
+    found = parse_attribute(attr_xml.name, attr_xml.value)
+    case found
+    when FOUND_TRUE
+      success = true
+    when FOUND_FALSE
+      if not @called_base_parse_attribute
+        announce_missing_base_call('parse_attribute')
+      end
+    when FOUND_SKIP
+      skipped_attribute_warn(attr_xml.name)
+      success = true
+    end
+    return success
+  end
+  def call_parse_element(subelem_xml)
+    @called_base_parse_element = false
+    success = false
+    found = parse_element(subelem_xml)
+    case found
+    when FOUND_TRUE
+      success = true
+    when FOUND_FALSE
+      if not @called_base_parse_element
+        announce_missing_base_call('parse_element')
+      end
+    when FOUND_SKIP
+      skipped_element_warn(subelem_xml.name)
+      success = true
+    end
+    return success
+  end
+  def call_parse_setting(setting_key, setting_value)
+    @called_base_parse_setting = false
+    success = false
+    found = parse_setting(setting_key, setting_value)
+    case found
+    when FOUND_TRUE
+      success = true
+    when FOUND_FALSE
+      if not @called_base_parse_setting
+        announce_missing_base_call('parse_setting')
+      end
+    when FOUND_SKIP
+      skipped_element_warn(setting_key)
+      success = true
+    end
+    return success
+  end
+
+  # @brief the virtual method for parsing an _entire_
+  # recursive element structure.
+  def parse_element(subelem_xml)
+    @called_base_parse_element = true
+    return false
+  end
+
+  # @brief parses various attributes of an XML element.
+  def parse_attribute(setting_key, setting_value)
+    @called_base_parse_attribute = true
+    found = FOUND_FALSE # this base method will almost never "find" anything...
+  end
+
+  # @brief Parses "settings", which are _either_ XML attributes (in VS7)
+  # _or_ XML element simple name/text pairs (in VS10).
+  # This method is intended for _both_ since VS7 <-> VS10 have identical
+  # content for certain attributes <-> elements.
+  def parse_setting(setting_key, setting_value)
+    @called_base_parse_setting = true
+    return false
+  end
+  def parse_post_hook
+    @called_base_parse_post_hook = true
+  end
+  def announce_missing_base_call(str_method)
+    parser_error "one of its classes forgot to service the #{str_method} base handler!"
+  end
+  def verify_calls
+    missing_call = nil
+    if not @called_base_parse_element
+      missing_call = 'parse_element'
+    else
+      if not @called_base_parse_attribute
+        missing_call = 'parse_attribute'
+      else
+        if not @called_base_parse_post_hook
+        missing_call = 'parse_post_hook'
+        end
+      end
+    end
+    if not missing_call.nil?
+      # Should not forget to call super, unless not wanted,
+      # in which case at least set the bool flag to not fail this check
+    end
+  end
   def unknown_something(something_name, name)
     log_todo "#{self.class.name}: unknown/incorrect XML #{something_name} (#{name})!"
   end
 end
 
-class V2C_VSProjectFileXmlParserBase
-  def initialize(doc_proj, arr_projects_new)
-    @doc_proj = doc_proj
-    @arr_projects_new = arr_projects_new
-  end
+class V2C_VSProjectFileXmlParserBase < V2C_VSXmlParserBase
+  def get_arr_projects_new; return @info_elem end
 end
 
-class V2C_VSProjectParserBase < V2C_VSParserBase
-  def initialize(project_xml, project_out)
-    super(project_xml)
-    @project = project_out
-  end
+class V2C_VSProjectParserBase < V2C_VSXmlParserBase
+  private
+
+  def get_project; return @info_elem end
 end
 
 class V2C_VS7ProjectParserBase < V2C_VSProjectParserBase
@@ -1914,15 +2102,19 @@ module V2C_VSToolDefines
   TEXT_SUPPRESSSTARTUPBANNER = 'SuppressStartupBanner'
 end
 
-class V2C_VSToolParserBase < V2C_VSParserBase
+class V2C_VSToolParserBase < V2C_VSXmlParserBase
+  private
+
   include V2C_VSToolDefines
-  def parse_setting(tool_info, setting_key, setting_value)
-    found = true # be optimistic :)
+  def get_tool_info; return @info_elem end
+  def parse_setting(setting_key, setting_value)
+    found = FOUND_TRUE # be optimistic :)
+    tool_info = get_tool_info()
     case setting_key
     when V2C_VSToolDefines::TEXT_SUPPRESSSTARTUPBANNER
       tool_info.suppress_startup_banner_enable = get_boolean_value(setting_value)
     else
-      found = false
+      found = super
     end
     return found
   end
@@ -1953,35 +2145,33 @@ module V2C_VSToolCompilerDefines
 end
 
 class V2C_VSToolCompilerParser < V2C_VSToolParserBase
+  private
+
   include V2C_VSToolCompilerDefines
-  def initialize(compiler_xml, arr_compiler_info_out)
-    super(compiler_xml)
-    @arr_compiler_info = arr_compiler_info_out
-  end
+  def get_compiler_info; return @info_elem end
   def allocate_precompiled_header_info(compiler_info)
-    return if not compiler_info.precompiled_header_info.nil?
-    compiler_info.precompiled_header_info = V2C_Precompiled_Header_Info.new
+    return if not get_compiler_info().precompiled_header_info.nil?
+    get_compiler_info().precompiled_header_info = V2C_Precompiled_Header_Info.new
   end
-  def parse_setting(compiler_info, setting_key, setting_value)
-    if super; return true end # base method successful!
-    found = true # be optimistic :)
+  def parse_setting(setting_key, setting_value)
+    found = FOUND_TRUE # be optimistic :)
     case setting_key
     when V2C_VSToolCompilerDefines::TEXT_ADDITIONALINCLUDEDIRECTORIES
-      parse_additional_include_directories(compiler_info, setting_value)
+      parse_additional_include_directories(get_compiler_info(), setting_value)
     when V2C_VSToolDefines::TEXT_ADDITIONALOPTIONS
-      parse_additional_options(compiler_info.arr_compiler_specific_info[0].arr_flags, setting_value)
+      parse_additional_options(get_compiler_info().arr_tool_variant_specific_info[0].arr_flags, setting_value)
     when V2C_VSToolCompilerDefines::TEXT_DISABLESPECIFICWARNINGS
-      parse_disable_specific_warnings(compiler_info.arr_compiler_specific_info[0].arr_disable_warnings, setting_value)
+      parse_disable_specific_warnings(get_compiler_info().arr_tool_variant_specific_info[0].arr_disable_warnings, setting_value)
     when V2C_VSToolCompilerDefines::TEXT_ENABLEPREFAST
-      compiler_info.static_code_analysis_enable = get_boolean_value(setting_value)
+      get_compiler_info().static_code_analysis_enable = get_boolean_value(setting_value)
     when V2C_VSToolCompilerDefines::TEXT_PREPROCESSORDEFINITIONS
-      parse_preprocessor_definitions(compiler_info.hash_defines, setting_value)
+      parse_preprocessor_definitions(get_compiler_info().hash_defines, setting_value)
     when V2C_VSToolCompilerDefines::TEXT_RUNTIMETYPEINFO
-      compiler_info.rtti = get_boolean_value(setting_value)
+      get_compiler_info().rtti = get_boolean_value(setting_value)
     when V2C_VSToolCompilerDefines::TEXT_SHOWINCLUDES
-      compiler_info.show_includes_enable = get_boolean_value(setting_value)
+      get_compiler_info().show_includes_enable = get_boolean_value(setting_value)
     else
-      found = false
+      found = super
     end
     return found
   end
@@ -1990,22 +2180,22 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
 
   def parse_additional_include_directories(compiler_info, attr_incdir)
     arr_includes = Array.new
-    split_values_list(attr_incdir).each { |elem_inc_dir|
+    split_values_list_preserve_ws_discard_empty(attr_incdir).each { |elem_inc_dir|
       elem_inc_dir = normalize_path(elem_inc_dir).strip
-      #log_info "include is '#{elem_inc_dir}'"
+      #log_info_class "include is '#{elem_inc_dir}'"
       arr_includes.push(elem_inc_dir)
     }
     arr_includes.each { |inc_dir|
       info_inc_dir = V2C_Info_Include_Dir.new
       info_inc_dir.dir = inc_dir
-      compiler_info.arr_info_include_dirs.push(info_inc_dir)
+      get_compiler_info().arr_info_include_dirs.push(info_inc_dir)
     }
   end
   def parse_disable_specific_warnings(arr_disable_warnings, attr_disable_warnings)
-    arr_disable_warnings.replace(attr_disable_warnings.split(';'))
+    arr_disable_warnings.replace(split_values_list_discard_empty(attr_disable_warnings))
   end
   def parse_preprocessor_definitions(hash_defines, attr_defines)
-    split_values_list(attr_defines).each { |elem_define|
+    split_values_list_discard_empty(attr_defines).each { |elem_define|
       str_define_key, str_define_value = elem_define.strip.split('=')
       # Since a Hash will indicate nil for any non-existing key,
       # we do need to fill in _empty_ value for our _existing_ key.
@@ -2036,26 +2226,12 @@ end
 
 class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
   include V2C_VS7ToolCompilerDefines
-  def parse
-    compiler_info = V2C_Tool_Compiler_Info.new
-
-    parse_attributes(compiler_info)
-
-    @arr_compiler_info.push(compiler_info)
-  end
 
   private
 
-  def parse_attributes(compiler_info)
-    compiler_specific = V2C_Tool_Compiler_Specific_Info_MSVC7.new
-    compiler_specific.original = true
-    compiler_info.arr_compiler_specific_info.push(compiler_specific)
-    @elem_xml.attributes.each_attribute { |attr_xml|
-      parse_setting(compiler_info, attr_xml.name, attr_xml.value)
-    }
-  end
-  def parse_setting(compiler_info, setting_key, setting_value)
-    if super; return true end # base method successful!
+  def parse_setting(setting_key, setting_value)
+    found = FOUND_TRUE # be optimistic :)
+    compiler_info = get_compiler_info()
     case setting_key
     when 'Detect64BitPortabilityProblems'
       # TODO: add /Wp64 to flags of an MSVC compiler info...
@@ -2080,10 +2256,11 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
     when V2C_VS7ToolCompilerDefines::TEXT_WARNASERROR
       compiler_info.warnings_are_errors_enable = get_boolean_value(setting_value)
     when V2C_VSToolCompilerDefines::TEXT_WARNINGLEVEL
-      compiler_info.arr_compiler_specific_info[0].warning_level = setting_value.to_i
+      compiler_info.arr_tool_variant_specific_info[0].warning_level = setting_value.to_i
     else
-      unknown_attribute(setting_key)
+      found = super
     end
+    return found
   end
   def parse_use_precompiled_header(value_use_precompiled_header)
     use_val = value_use_precompiled_header.to_i
@@ -2104,35 +2281,34 @@ end
 
 class V2C_VSToolLinkerParser < V2C_VSToolParserBase
   include V2C_VSToolLinkerDefines
-  def initialize(linker_xml, arr_linker_info_out)
-    super(linker_xml)
-    @arr_linker_info = arr_linker_info_out
-  end
-  def parse_setting(linker_info, setting_key, setting_value)
-    if super; return true end # base method successful!
-    found = true # be optimistic :)
+
+  private
+
+  def get_linker_info; return @info_elem end
+  def parse_setting(setting_key, setting_value)
+    found = FOUND_TRUE # be optimistic :)
+    linker_info = get_linker_info()
     case setting_key
     when V2C_VSToolLinkerDefines::TEXT_ADDITIONALDEPENDENCIES
       parse_additional_dependencies(setting_value, linker_info.arr_dependencies)
     when V2C_VSToolLinkerDefines::TEXT_ADDITIONALLIBRARYDIRECTORIES
       parse_additional_library_directories(setting_value, linker_info.arr_lib_dirs)
     when V2C_VSToolDefines::TEXT_ADDITIONALOPTIONS
-      parse_additional_options(linker_info.arr_linker_specific_info[0].arr_flags, setting_value)
+      parse_additional_options(linker_info.arr_tool_variant_specific_info[0].arr_flags, setting_value)
     when V2C_VSToolLinkerDefines::TEXT_MODULEDEFINITIONFILE
       linker_info.module_definition_file = parse_module_definition_file(setting_value)
     when V2C_VSToolLinkerDefines::TEXT_PROGRAMDATABASEFILE
       linker_info.pdb_file = parse_pdb_file(setting_value)
     else
-      found = false
+      found = super
     end
     return found
   end
 
-  private
-
   def parse_additional_dependencies(attr_deps, arr_dependencies)
     return if attr_deps.length == 0
-    attr_deps.split.each { |elem_lib_dep|
+    split_values_list_discard_empty(attr_deps).each { |elem_lib_dep|
+      log_debug_class "!!!!! elem_lib_dep #{elem_lib_dep}"
       elem_lib_dep = normalize_path(elem_lib_dep).strip
       dependency_name = File.basename(elem_lib_dep, '.lib')
       arr_dependencies.push(dependency_name)
@@ -2140,9 +2316,9 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
   end
   def parse_additional_library_directories(attr_lib_dirs, arr_lib_dirs)
     return if attr_lib_dirs.length == 0
-    split_values_list(attr_lib_dirs).each { |elem_lib_dir|
+    split_values_list_preserve_ws_discard_empty(attr_lib_dirs).each { |elem_lib_dir|
       elem_lib_dir = normalize_path(elem_lib_dir).strip
-      #log_info "lib dir is '#{elem_lib_dir}'"
+      #log_info_class "lib dir is '#{elem_lib_dir}'"
       arr_lib_dirs.push(elem_lib_dir)
     }
   end
@@ -2162,22 +2338,15 @@ end
 
 class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
   include V2C_VS7ToolLinkerDefines
-  def parse
-    # parse linker configuration...
-    linker_info_curr = V2C_Tool_Linker_Info.new(V2C_Tool_Linker_Specific_Info_MSVC7.new)
-    parse_attributes(linker_info_curr)
-    @arr_linker_info.push(linker_info_curr)
+  def initialize(linker_xml, linker_info_out)
+    super(linker_xml, linker_info_out)
   end
 
   private
 
-  def parse_attributes(linker_info)
-    @elem_xml.attributes.each_attribute { |attr_xml|
-      parse_setting(linker_info, attr_xml.name, attr_xml.value)
-    }
-  end
-  def parse_setting(linker_info, setting_key, setting_value)
-    if super; return true end # base method successful!
+  def parse_attribute(setting_key, setting_value)
+    found = FOUND_TRUE # be optimistic :)
+    linker_info = get_linker_info()
     case setting_key
     when V2C_VSToolLinkerDefines::TEXT_LINKINCREMENTAL
       linker_info.link_incremental = parse_link_incremental(setting_value)
@@ -2186,101 +2355,86 @@ class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
     when V2C_VSToolLinkerDefines::TEXT_OPTIMIZEREFERENCES
       linker_info.optimize_references_enable = setting_value.to_i
     else
-      unknown_attribute(setting_key)
+      found = super
     end
+    return found
   end
   def parse_link_incremental(str_link_incremental); return str_link_incremental.to_i end
 end
 
-class V2C_VS7ToolParser < V2C_VSParserBase
-  def initialize(tool_xml, config_info_out)
-    super(tool_xml)
-    @config_info = config_info_out
-  end
+# Simple forwarder class. Creates specific parsers and invokes them.
+class V2C_VS7ToolParser < V2C_VSXmlParserBase
   def parse
-    parse_attributes()
-  end
-  def parse_attributes
-    @elem_xml.attributes.each_attribute { |attr_xml|
-      case attr_xml.name
-      when V2C_VS7ToolDefines::TEXT_NAME
-        toolname = attr_xml.value
-        case toolname
-        when V2C_VS7ToolDefines::TEXT_VCCLCOMPILERTOOL
-          elem_parser = V2C_VS7ToolCompilerParser.new(@elem_xml, @config_info.arr_compiler_info)
-        when V2C_VS7ToolDefines::TEXT_VCLINKERTOOL
-          elem_parser = V2C_VS7ToolLinkerParser.new(@elem_xml, @config_info.arr_linker_info)
-        else
-          unknown_element(toolname)
-        end
-        if not elem_parser.nil?
-          elem_parser.parse
-        end
-      else
-        unknown_attribute(attr_xml.name)
-      end
-    }
-  end
-end
-
-class V2C_VS7ConfigurationBaseParser < V2C_VSParserBase
-  def initialize(config_xml, config_info_out)
-    super(config_xml)
-    @config_info = config_info_out
-  end
-  def parse
-    res = false
-    parse_attributes(@config_info)
-    parse_elements(@config_info)
-    res = true
-    return res
-  end
-
-  private
-
-  def parse_attributes(config_info)
-    @elem_xml.attributes.each_attribute { |attr_xml|
-      parse_setting(config_info, attr_xml.name, attr_xml.value)
-    }
-  end
-  def parse_setting(config_info, setting_key, setting_value)
-    found = true # be optimistic :)
-    case setting_key
-    when 'CharacterSet'
-      config_info.charset = parse_charset(setting_value)
-    when 'ConfigurationType'
-      config_info.cfg_type = parse_configuration_type(setting_value)
-    when 'Name'
-      arr_name = setting_value.split('|')
-      config_info.build_type = arr_name[0]
-      config_info.platform = arr_name[1]
-    when 'UseOfMFC'
-      # VS7 does not seem to use string values (only 0/1/2 integers), while VS10 additionally does.
-      # NOTE SPELLING DIFFERENCE: MSVS7 has UseOfMFC, MSVS10 has UseOfMfc (see CMake MSVS generators)
-      config_info.use_of_mfc = setting_value.to_i
-    when 'UseOfATL'
-      config_info.use_of_atl = setting_value.to_i
-    when 'WholeProgramOptimization'
-      config_info.whole_program_optimization = parse_wp_optimization(setting_value)
+    found = FOUND_TRUE # be optimistic :)
+    toolname = @elem_xml.attributes[V2C_VS7ToolDefines::TEXT_NAME]
+    arr_info = nil
+    info = nil
+    elem_parser = nil
+    case toolname
+    when V2C_VS7ToolDefines::TEXT_VCCLCOMPILERTOOL
+      arr_info = get_project().arr_compiler_info
+      info = V2C_Tool_Compiler_Info.new(V2C_Tool_Compiler_Specific_Info_MSVC7.new)
+      elem_parser = V2C_VS7ToolCompilerParser.new(@elem_xml, info)
+    when V2C_VS7ToolDefines::TEXT_VCLINKERTOOL
+      arr_info = get_project().arr_linker_info
+      info = V2C_Tool_Linker_Info.new(V2C_Tool_Linker_Specific_Info_MSVC7.new)
+      elem_parser = V2C_VS7ToolLinkerParser.new(@elem_xml, info)
     else
-      found = false
+      found = FOUND_FALSE
+    end
+    if not elem_parser.nil?
+      elem_parser.parse
+      arr_info.push(info)
     end
     return found
   end
-  def parse_elements(config_info)
-    @elem_xml.elements.each { |subelem_xml|
-      elem_parser = nil # IMPORTANT: reset it!
-      case subelem_xml.name
-      when 'Tool'
-        elem_parser = V2C_VS7ToolParser.new(subelem_xml, config_info)
-      else
-        unknown_element(subelem_xml.name)
-      end
-      if not elem_parser.nil?
-        elem_parser.parse
-      end
-    }
+  private
+
+  def get_project; return @info_elem end
+end
+
+class V2C_VS7ConfigurationBaseParser < V2C_VSXmlParserBase
+  private
+
+  def parse_setting(setting_key, setting_value)
+    found = FOUND_TRUE # be optimistic :)
+    case setting_key
+    when 'CharacterSet'
+      get_config_info().charset = parse_charset(setting_value)
+    when 'ConfigurationType'
+      get_config_info().cfg_type = parse_configuration_type(setting_value)
+    when 'Name'
+      arr_name = setting_value.split('|')
+      get_config_info().build_type = arr_name[0]
+      get_config_info().platform = arr_name[1]
+    when 'UseOfMFC'
+      # VS7 does not seem to use string values (only 0/1/2 integers), while VS10 additionally does.
+      # NOTE SPELLING DIFFERENCE: MSVS7 has UseOfMFC, MSVS10 has UseOfMfc (see CMake MSVS generators)
+      get_config_info().use_of_mfc = setting_value.to_i
+    when 'UseOfATL'
+      get_config_info().use_of_atl = setting_value.to_i
+    when 'WholeProgramOptimization'
+      get_config_info().whole_program_optimization = parse_wp_optimization(setting_value)
+    else
+      found = super
+    end
+    return found
   end
+  def parse_element(subelem_xml)
+    found = FOUND_TRUE # be optimistic :)
+    elem_parser = nil # IMPORTANT: reset it!
+    case subelem_xml.name
+    when 'Tool'
+      elem_parser = V2C_VS7ToolParser.new(subelem_xml, get_config_info())
+    end
+    if not elem_parser.nil?
+      elem_parser.parse
+    else
+      found = super
+    end
+    return found
+  end
+  def get_config_info; return @info_elem end
   def parse_charset(str_charset); return str_charset.to_i end
   def parse_configuration_type(str_configuration_type); return str_configuration_type.to_i end
   def parse_wp_optimization(str_opt); return str_opt.to_i end
@@ -2290,46 +2444,41 @@ class V2C_VS7ProjectConfigurationParser < V2C_VS7ConfigurationBaseParser
 
   private
 
-  def parse_setting(config_info, setting_key, setting_value)
-    if super; return true end # base method successful!
-    unknown_attribute(setting_key)
-  end
 end
 
 class V2C_VS7FileConfigurationParser < V2C_VS7ConfigurationBaseParser
 
   private
 
-  def parse_setting(config_info, setting_key, setting_value)
-    if super; return true end # base method successful!
+  def parse_setting(setting_key, setting_value)
+    found = FOUND_TRUE # be optimistic :)
     case setting_key
     when 'ExcludedFromBuild'
-      config_info.excluded_from_build = get_boolean_value(setting_value)
+      @info_elem.excluded_from_build = get_boolean_value(setting_value)
     else
-      unknown_attribute(setting_key)
+      found = super
     end
+    return found
   end
 end
 
-class V2C_VS7ConfigurationsParser < V2C_VSParserBase
-  def initialize(configs_xml, arr_config_info_out)
-    super(configs_xml)
-    @arr_config_info = arr_config_info_out
-  end
-  def parse
-    @elem_xml.elements.each { |subelem_xml|
-      elem_parser = nil # IMPORTANT: reset it!
-      case subelem_xml.name
-      when 'Configuration'
-        config_info_curr = V2C_Project_Config_Info.new
-        elem_parser = V2C_VS7ProjectConfigurationParser.new(subelem_xml, config_info_curr)
-        if elem_parser.parse
-          @arr_config_info.push(config_info_curr)
-        end
-      else
-        unknown_element(subelem_xml.name)
+class V2C_VS7ConfigurationsParser < V2C_VSXmlParserBase
+  private
+
+  def parse_element(subelem_xml)
+    found = FOUND_TRUE # be optimistic :)
+    elem_parser = nil # IMPORTANT: reset it!
+    case subelem_xml.name
+    when 'Configuration'
+      config_info_curr = V2C_Project_Config_Info.new
+      elem_parser = V2C_VS7ProjectConfigurationParser.new(subelem_xml, config_info_curr)
+      if elem_parser.parse
+        @info_elem.push(config_info_curr)
       end
-    }
+    else
+      found = super
+    end
+    return found
   end
 end
 
@@ -2342,34 +2491,28 @@ class V2C_Info_File
   attr_accessor :path_relative
 end
 
-class V2C_VS7FileParser < V2C_VSParserBase
+class V2C_VS7FileParser < V2C_VSXmlParserBase
   def initialize(file_xml, arr_file_infos_out)
-    super(file_xml)
-    @arr_file_infos = arr_file_infos_out
+    super(file_xml, arr_file_infos_out)
     @have_build_units = false # HACK
+    @info_file = V2C_Info_File.new
   end
+  def get_arr_file_infos; return @info_elem end
   BUILD_UNIT_FILE_TYPES_REGEX_OBJ = %r{\.(c|C)}
   def parse
     log_debug_class('parse')
-    info_file = V2C_Info_File.new
-    parse_attributes(info_file)
 
-    config_info_curr = nil
+    @elem_xml.attributes.each_attribute { |attr_xml|
+      parse_setting(attr_xml.name, attr_xml.value)
+    }
     @elem_xml.elements.each { |subelem_xml|
-      case subelem_xml.name
-      when 'FileConfiguration'
-	config_info_curr = V2C_File_Config_Info.new
-        elem_parser = V2C_VS7FileConfigurationParser.new(subelem_xml, config_info_curr)
-        elem_parser.parse
-        info_file.config_info = config_info_curr
-      else
-        unknown_element(subelem_xml.name)
-      end
+      parse_element(subelem_xml)
     }
 
     # FIXME: move these file skipping parts to _generator_ side,
     # don't skip adding file array entries here!!
 
+    config_info_curr = @info_file.config_info
     excluded_from_build = false
     if not config_info_curr.nil? and config_info_curr.excluded_from_build
       excluded_from_build = true
@@ -2389,10 +2532,10 @@ class V2C_VS7FileParser < V2C_VSParserBase
     }
 
     if not excluded_from_build and included_in_build
-      @arr_file_infos.push(info_file)
+      get_arr_file_infos().push(@info_file)
       # HACK:
       if not @have_build_units
-        if info_file.path_relative =~ BUILD_UNIT_FILE_TYPES_REGEX_OBJ
+        if @info_file.path_relative =~ BUILD_UNIT_FILE_TYPES_REGEX_OBJ
           @have_build_units = true
         end
       end
@@ -2402,27 +2545,37 @@ class V2C_VS7FileParser < V2C_VSParserBase
 
   private
 
-  def parse_attributes(info_file)
-    @elem_xml.attributes.each_attribute { |attr_xml|
-      parse_setting(info_file, attr_xml.name, attr_xml.value)
-    }
+  def parse_element(subelem_xml)
+    found = FOUND_TRUE # be optimistic :)
+    case subelem_xml.name
+    when 'FileConfiguration'
+      config_info_curr = V2C_File_Config_Info.new
+      elem_parser = V2C_VS7FileConfigurationParser.new(subelem_xml, config_info_curr)
+      elem_parser.parse
+      @info_file.config_info = config_info_curr
+    else
+      found = super
+    end
+    return found
   end
-  def parse_setting(info_file, setting_key, setting_value)
+  def parse_setting(setting_key, setting_value)
+    found = FOUND_TRUE # be optimistic :)
     case setting_key
     when 'RelativePath'
-      info_file.path_relative = normalize_path(setting_value)
+      @info_file.path_relative = normalize_path(setting_value)
     else
-      unknown_attribute(setting_key)
+      found = super
     end
+    return found
   end
 end
 
-class V2C_VS7FilterParser < V2C_VSParserBase
+class V2C_VS7FilterParser < V2C_VSXmlParserBase
   def initialize(files_xml, project_out, files_str_out)
-    super(files_xml)
-    @project = project_out
+    super(files_xml, project_out)
     @files_str = files_str_out
   end
+  def get_project; return @info_elem end
   def parse
     res = parse_file_list(@elem_xml, @files_str)
     return res
@@ -2440,7 +2593,7 @@ class V2C_VS7FilterParser < V2C_VSParserBase
       # after all. We should probably do a platform check in such
       # cases, i.e. add support for a file_mappings.txt
       if filter_info.val_scmfiles == false
-        log_info "#{filter_info.name}: SourceControlFiles set to false, listing generated files? --> skipping!"
+        log_info_class "#{filter_info.name}: SourceControlFiles set to false, listing generated files? --> skipping!"
         return false
       end
       if not filter_info.name.nil?
@@ -2449,7 +2602,7 @@ class V2C_VS7FilterParser < V2C_VSParserBase
           # Hmm, how are we supposed to handle Generated Files?
           # Most likely we _are_ supposed to add such files
           # and set_property(SOURCE ... GENERATED) on it.
-          log_info "#{filter_info.name}: encountered a filter named Generated Files --> skipping! (FIXME)"
+          log_info_class "#{filter_info.name}: encountered a filter named Generated Files --> skipping! (FIXME)"
           return false
         end
       end
@@ -2463,12 +2616,12 @@ class V2C_VS7FilterParser < V2C_VSParserBase
         log_debug_class('FOUND File')
         elem_parser = V2C_VS7FileParser.new(subelem_xml, arr_file_infos)
 	if elem_parser.parse
-          @project.have_build_units = true
+          get_project().have_build_units = true
         end
       when 'Filter'
         log_debug_class('FOUND Filter')
         subfiles_str = Files_str.new
-        elem_parser = V2C_VS7FilterParser.new(subelem_xml, @project, subfiles_str)
+        elem_parser = V2C_VS7FilterParser.new(subelem_xml, get_project(), subfiles_str)
         if elem_parser.parse
           if files_str[:arr_sub_filters].nil?
             files_str[:arr_sub_filters] = Array.new
@@ -2498,7 +2651,7 @@ class V2C_VS7FilterParser < V2C_VSParserBase
       setting_value = attr_xml.value
       case attr_xml.name
       when 'Filter'
-        filter_info.arr_scfilter = split_values_list(setting_value)
+        filter_info.arr_scfilter = split_values_list_discard_empty(setting_value)
       when 'Name'
         file_group_name = setting_value
         filter_info.name = file_group_name
@@ -2532,55 +2685,48 @@ class V2C_VS7FilterParser < V2C_VSParserBase
 end
 
 class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
-  def parse
-    parse_attributes
-
-    @elem_xml.elements.each { |subelem_xml|
-      elem_parser = nil # IMPORTANT: reset it!
-      case subelem_xml.name
-      when 'Configurations'
-        elem_parser = V2C_VS7ConfigurationsParser.new(subelem_xml, @project.arr_config_info)
-      when 'Files' # "Files" simply appears to be a special "Filter" element without any filter conditions.
-        # FIXME: we most likely shouldn't pass a rather global "target" object here! (pass a file info object)
-        @project.main_files = Files_str.new
-        elem_parser = V2C_VS7FilterParser.new(subelem_xml, @project, @project.main_files)
-      when 'Platforms'
-        skipped_element_warn(subelem_xml.name)
-      else
-        unknown_element(subelem_xml.name)
-      end
-      if not elem_parser.nil?
-        elem_parser.parse
-      end
-    }
+  def parse_element(subelem_xml)
+    found = FOUND_TRUE # be optimistic :)
+    elem_parser = nil # IMPORTANT: reset it!
+    case subelem_xml.name
+    when 'Configurations'
+      elem_parser = V2C_VS7ConfigurationsParser.new(subelem_xml, get_project().arr_config_info)
+    when 'Files' # "Files" simply appears to be a special "Filter" element without any filter conditions.
+      # FIXME: we most likely shouldn't pass a rather global "target" object here! (pass a file info object)
+      get_project().main_files = Files_str.new
+      elem_parser = V2C_VS7FilterParser.new(subelem_xml, get_project(), get_project().main_files)
+    when 'Platforms'
+      # nothing yet
+    end
+    if not elem_parser.nil?
+      elem_parser.parse
+    else
+      found = super
+    end
+    return found
   end
 
   private
 
-  def parse_attributes
-    @elem_xml.attributes.each_attribute { |attr_xml|
-      parse_setting(attr_xml.name, attr_xml.value, @project)
-    }
-  end
-  def parse_setting(setting_key, setting_value, project_out)
+  def parse_setting(setting_key, setting_value)
     case setting_key
     when 'Keyword'
-      project_out.vs_keyword = setting_value
+      get_project().vs_keyword = setting_value
     when 'Name'
-      project_out.name = setting_value
+      get_project().name = setting_value
     when 'ProjectCreator' # used by Fortran .vfproj ("Intel Fortran")
-      project_out.creator = setting_value
+      get_project().creator = setting_value
     when 'ProjectGUID', 'ProjectIdGuid' # used by Visual C++ .vcproj, Fortran .vfproj
-      project_out.guid = setting_value
+      get_project().guid = setting_value
     when 'ProjectType'
-      project_out.type = setting_value
+      get_project().type = setting_value
     when 'RootNamespace'
-      project_out.root_namespace = setting_value
+      get_project().root_namespace = setting_value
     when 'Version'
-      project_out.version = setting_value
+      get_project().version = setting_value
 
     when VS_SCC_ATTR_REGEX_OBJ
-      parse_attributes_scc(setting_key, setting_value, project_out.scc_info)
+      parse_attributes_scc(setting_key, setting_value, get_project().scc_info)
     else
       unknown_attribute(setting_key)
     end
@@ -2657,38 +2803,35 @@ end
 
 # Project parser variant which works on XML-stream-based input
 class V2C_VS7ProjectFileXmlParser < V2C_VSProjectFileXmlParserBase
-  def parse
-    @doc_proj.elements.each { |subelem_xml|
-      setting_key = subelem_xml.name
-      case setting_key
-      when 'VisualStudioProject'
-        project = V2C_Project_Info.new
-        project_parser = V2C_VS7ProjectParser.new(subelem_xml, project)
-        project_parser.parse
+  def parse_element(subelem_xml)
+    setting_key = subelem_xml.name
+    found = FOUND_TRUE # be optimistic :)
+    case setting_key
+    when 'VisualStudioProject'
+      project = V2C_Project_Info.new
+      project_parser = V2C_VS7ProjectParser.new(subelem_xml, project)
+      project_parser.parse
 
-        @arr_projects_new.push(project)
-      else
-        unknown_element(setting_key)
-      end
-    }
+      get_arr_projects_new().push(project)
+    else
+      found = super
+    end
+    return found
   end
 end
 
 # Project parser variant which works on file-based input
-class V2C_VSProjectFileParserBase < V2C_VSParserBase
+class V2C_VSProjectFileParserBase < V2C_ParserBase
   def initialize(p_parser_proj_file, arr_projects_new)
     @p_parser_proj_file = p_parser_proj_file
     @proj_filename = p_parser_proj_file.to_s
     @arr_projects_new = arr_projects_new
     @proj_xml_parser = nil
   end
-  def parse
-    @proj_xml_parser.parse
-  end
 end
 
 class V2C_VS7ProjectFileParser < V2C_VSProjectFileParserBase
-  def parse
+  def parse_file
     File.open(@proj_filename) { |io|
       doc_proj = REXML::Document.new io
 
@@ -2705,7 +2848,7 @@ class V2C_VS7ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
   end
   def parse_project_files
     proj_file_parser = V2C_VS7ProjectFileParser.new(@p_parser_proj_file, @arr_projects_new)
-    proj_file_parser.parse
+    proj_file_parser.parse_file
   end
   def check_unhandled_file_types
     # FIXME: we don't handle now externally specified (.rules, .vsprops) custom build parts yet!
@@ -2721,68 +2864,102 @@ end
 # NOTE: VS10 == MSBuild == somewhat Ant-based.
 # Thus it would probably be useful to create an Ant syntax parser base class
 # and derive MSBuild-specific behaviour from it.
-class V2C_VS10ParserBase < V2C_VSParserBase
+class V2C_VS10ParserBase < V2C_VSXmlParserBase
 end
 
 # Parses elements with optional conditional information (Condition=xxx).
 class V2C_VS10BaseElemParser < V2C_VS10ParserBase
-  def initialize(elem_xml)
-    super(elem_xml)
+  def initialize(elem_xml, info_elem_out)
+    super(elem_xml, info_elem_out)
     @have_condition = false
   end
-  def parse_attributes(setting_key, setting_value)
-    found = true # be optimistic :)
+  def parse_attribute(setting_key, setting_value)
+    found = FOUND_TRUE # be optimistic :)
     case setting_key
-    when 'blubb'
+    when V2C_VS10Defines::TEXT_CONDITION
+      # set have_condition bool to true,
+      # then verify further below that the element that was filled in
+      # actually had its condition parsed properly (V2C_Info_Elem_Base.@condition != nil),
+      # since conditions need to be parsed separately by each property item class type's base class
+      # (upon "Condition" attribute parsing the exact property item class often is not known yet i.e. nil!!).
+      # Or is there a better way to achieve common, reliable parsing of that condition information?
+      @have_condition = true
+      if not @info_elem.condition.nil?
+        parser_error 'huh, pre-existing condition!?'
+      else
+        @info_elem.condition = V2C_Info_Condition.new(setting_value)
+      end
     else
-      unknown_attribute(setting_key)
+      found = super
     end
     return found
+  end
+
+  private
+
+  def verify_execution
+    if not check_condition
+      parser_error 'unhandled condition element!?'
+    end
+  end
+  def check_condition
+    success = true
+    if not @have_condition
+      # check whether there really was no condition
+      # (derived classes might have failed to call into base class handling!!)
+      if not @elem_xml.attributes[V2C_VS10Defines::TEXT_CONDITION].nil?
+        @have_condition = true
+      end
+    end
+    if @have_condition
+      if @info_elem.condition.nil?
+        success = false
+      end
+    end
+    return success
   end
 end
 
 class V2C_VS10ItemGroupProjectConfigurationParser < V2C_VS10ParserBase
-  def initialize(projconf_xml, config_info_out)
-    super(projconf_xml)
-    @config_info = config_info_out
+  private
+  def get_config_info; return @info_elem end
+
+  def parse_element(subelem_xml)
+    setting_key = subelem_xml.name
+    setting_value = subelem_xml.text
+    found = FOUND_TRUE # be optimistic :)
+    case setting_key
+    when 'Configuration'
+      get_config_info().build_type = setting_value
+    when 'Platform'
+      get_config_info().platform = setting_value
+    else
+      found = super
+    end
+    return found
   end
-  def parse
-    @elem_xml.elements.each  { |subelem_xml|
-      setting_key = subelem_xml.name
-      setting_value = subelem_xml.text
-      case setting_key
-      when 'Configuration'
-        @config_info.build_type = setting_value
-      when 'Platform'
-        @config_info.platform = setting_value
-      else
-        unknown_element(setting_key)
-      end
-    }
-    log_debug_class("build type #{@config_info.build_type}, platform #{@config_info.platform}")
+  def parse_post_hook
+    super
+    log_debug_class("build type #{get_config_info().build_type}, platform #{get_config_info().platform}")
   end
 end
 
 class V2C_VS10ItemGroupProjectConfigurationsParser < V2C_VS10ParserBase
-  def initialize(itemgroup_xml, arr_config_info)
-    super(itemgroup_xml)
-    @arr_config_info = arr_config_info
-  end
-  def parse
-    @elem_xml.elements.each { |itemgroup_elem_xml|
-      parse_element(itemgroup_elem_xml, itemgroup_elem_xml.name, itemgroup_elem_xml.text)
-    }
-  end
-  def parse_element(itemgroup_elem_xml, setting_key, setting_name)
+  private
+
+  def get_arr_config_info; return @info_elem end
+  def parse_element(itemgroup_elem_xml)
+    found = FOUND_TRUE # be optimistic :)
     case itemgroup_elem_xml.name
     when 'ProjectConfiguration'
       config_info = V2C_Project_Config_Info.new
       projconf_parser = V2C_VS10ItemGroupProjectConfigurationParser.new(itemgroup_elem_xml, config_info)
       projconf_parser.parse
-      @arr_config_info.push(config_info)
+      get_arr_config_info().push(config_info)
     else
-      unknown_element(itemgroup_elem_xml.name)
+      found = super
     end
+    return found
   end
 end
 
@@ -2794,72 +2971,62 @@ class V2C_ItemGroup_Info
 end
 
 class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
-  def initialize(elem_xml, filter)
-    super(elem_xml)
-    @filter = filter
-  end
-  def parse
-    parse_attributes
-    @elem_xml.elements.each { |subelem_xml|
-      parse_setting(subelem_xml.name, subelem_xml.text)
-    }
-  end
-  def parse_attributes
-    @elem_xml.attributes.each_attribute { |attr_xml|
-      parse_attribute(attr_xml.name, attr_xml.value)
-    }
-  end
   def parse_attribute(setting_value, setting_key)
+    found = FOUND_TRUE # be optimistic :)
     case setting_key
     when 'Include'
-       @filter.name = setting_value
+       get_filter().name = setting_value
     else
-      unknown_attribute(setting_key)
+      found = super
     end
+    return found
   end
   def parse_setting(setting_key, setting_value)
+    found = FOUND_TRUE # be optimistic :)
     case setting_key
     when 'Extensions'
-      @filter.arr_scfilter = split_values_list(setting_value)
+      get_filter().arr_scfilter = split_values_list_discard_empty(setting_value)
     when 'UniqueIdentifier'
-      @filter.guid = setting_value
+      get_filter().guid = setting_value
     else
-      unknown_element(setting_key)
+      found = super
     end
+    return found
   end
+  def get_filter; return @info_elem end
 end
 
 class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
-  def initialize(itemgroup_xml, project_out)
-    super(itemgroup_xml)
-    @project = project_out
-  end
-  def parse
-    @elem_xml.elements.each { |subelem_xml|
-      setting_key = subelem_xml.name
-      case setting_key
-      when 'Filter'
-        filter = V2C_Info_Filter.new
-        elem_parser = V2C_VS10ItemGroupElemFilterParser.new(subelem_xml, filter)
+
+  private
+
+  def get_project; return @info_elem end
+  def parse_element(subelem_xml)
+    found = FOUND_TRUE # be optimistic :)
+    setting_key = subelem_xml.name
+    case setting_key
+    when 'Filter'
+      filter = V2C_Info_Filter.new
+      elem_parser = V2C_VS10ItemGroupElemFilterParser.new(subelem_xml, filter)
 	elem_parser.parse
-        @project.filters.append(filter)
-      when 'ClCompile', 'ClInclude', 'None', 'ResourceCompile'
-        # Due to split between .vcxproj and .vcxproj.filters,
-        # need to possibly _enhance_ an _existing_ (added by the prior file)
-        # item group info, thus make sure to do lookup first.
-        file_list_name = setting_key
-        file_list_type = get_file_list_type(file_list_name)
-        file_list = @project.file_lists.get(file_list_type, file_list_name)
-      else
-        unknown_element(setting_key)
-      end
-      # TODO:
-      #if not @itemgroup.label.nil?
-      #  if not setting_key == @itemgroup.label
-      #    parser_error("item label #{setting_key} does not match group's label #{@itemgroup.label}!?")
-      #  end
-      #end
-    }
+      get_project().filters.append(filter)
+    when 'ClCompile', 'ClInclude', 'None', 'ResourceCompile'
+      # Due to split between .vcxproj and .vcxproj.filters,
+      # need to possibly _enhance_ an _existing_ (added by the prior file)
+      # item group info, thus make sure to do lookup first.
+      file_list_name = setting_key
+      file_list_type = get_file_list_type(file_list_name)
+      file_list = get_project().file_lists.get(file_list_type, file_list_name)
+    else
+      found = super
+    end
+    # TODO:
+    #if not @itemgroup.label.nil?
+    #  if not setting_key == @itemgroup.label
+    #    parser_error("item label #{setting_key} does not match group's label #{@itemgroup.label}!?")
+    #  end
+    #end
+    return found
   end
   def get_file_list_type(file_list_name)
     type = V2C_File_List_Types::TYPE_NONE
@@ -2880,48 +3047,40 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
   end
 end
 
+# Simple forwarder class. Creates specific property group parsers
+# and invokes them.
+# V2C_VS10PropertyGroupParser / V2C_VS10ItemGroupParser are pretty much identical.
 class V2C_VS10ItemGroupParser < V2C_VS10ParserBase
-  def initialize(itemgroup_xml, project_out)
-    super(itemgroup_xml)
-    @project = project_out
-    @label = nil
-  end
   def parse
-    parse_attributes
-    log_debug_class("Label #{@label}!")
+    found = FOUND_TRUE # be optimistic :)
+    itemgroup_label = @elem_xml.attributes['Label']
+    log_debug_class("Label #{itemgroup_label}!")
     item_group_parser = nil
-    case @label
+    case itemgroup_label
     when 'ProjectConfigurations'
-      item_group_parser = V2C_VS10ItemGroupProjectConfigurationsParser.new(@elem_xml, @project.arr_config_info)
+      item_group_parser = V2C_VS10ItemGroupProjectConfigurationsParser.new(@elem_xml, get_project().arr_config_info)
     when nil
-      item_group_parser = V2C_VS10ItemGroupAnonymousParser.new(@elem_xml, @project)
-    else
-      unknown_element("Label #{@label}")
+      item_group_parser = V2C_VS10ItemGroupAnonymousParser.new(@elem_xml, get_project())
     end
     if not item_group_parser.nil?
       item_group_parser.parse
     end
+    log_found(found, itemgroup_label)
+    return found
   end
 
   private
 
-  def parse_attributes
-    @elem_xml.attributes.each_attribute { |attr_xml|
-      parse_setting(attr_xml.name, attr_xml.value)
-    }
-  end
-  def parse_setting(setting_key, setting_value)
-    case setting_key
-    when 'Label'
-      @label = setting_value
-    else
-      unknown_attribute(setting_key)
-    end
-  end
+  def get_project; return @info_elem end
+end
+
+module V2C_VS10Defines
+  TEXT_CONDITION = 'Condition'
 end
 
 module V2C_VS10ToolDefines
   include V2C_VSToolDefines
+  include V2C_VS10Defines
 end
 
 module V2C_VS10ToolCompilerDefines
@@ -2935,54 +3094,42 @@ end
 
 class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
   include V2C_VS10ToolCompilerDefines
-  def parse
-    compiler_info = V2C_Tool_Compiler_Info.new
-
-    parse_elements(compiler_info)
-
-    @arr_compiler_info.push(compiler_info)
-  end
 
   private
 
-  def parse_elements(compiler_info)
-    compiler_specific = V2C_Tool_Compiler_Specific_Info_MSVC10.new
-    compiler_specific.original = true
-    compiler_info.arr_compiler_specific_info.push(compiler_specific)
-    @elem_xml.elements.each { |subelem_xml|
-      parse_setting(compiler_info, subelem_xml.name, subelem_xml.text)
-    }
-  end
-  def parse_setting(compiler_info, setting_key, setting_value)
-    if super; return true end # base method successful!
+  def parse_element(subelem_xml)
+    found = FOUND_TRUE # be optimistic :)
+    setting_key = subelem_xml.name
+    setting_value = subelem_xml.text
     case setting_key
     when 'AssemblerListingLocation'
       skipped_element_warn(setting_key)
     when 'MultiProcessorCompilation'
-      compiler_info.multi_core_compilation_enable = get_boolean_value(setting_value)
+      get_compiler_info().multi_core_compilation_enable = get_boolean_value(setting_value)
     when 'ObjectFileName'
        # TODO: support it - but with a CMake out-of-tree build this setting is very unimportant methinks.
        skipped_element_warn(setting_key)
     when V2C_VSToolCompilerDefines::TEXT_EXCEPTIONHANDLING
-      compiler_info.exception_handling = parse_exception_handling(setting_value)
+      get_compiler_info().exception_handling = parse_exception_handling(setting_value)
     when V2C_VSToolCompilerDefines::TEXT_OPTIMIZATION
-      compiler_info.optimization = parse_optimization(setting_value)
+      get_compiler_info().optimization = parse_optimization(setting_value)
     when V2C_VS10ToolCompilerDefines::TEXT_PRECOMPILEDHEADER
-      allocate_precompiled_header_info(compiler_info)
-      compiler_info.precompiled_header_info.use_mode = parse_use_precompiled_header(setting_value)
+      allocate_precompiled_header_info(get_compiler_info())
+      get_compiler_info().precompiled_header_info.use_mode = parse_use_precompiled_header(setting_value)
     when V2C_VS10ToolCompilerDefines::TEXT_PRECOMPILEDHEADERFILE
-      allocate_precompiled_header_info(compiler_info)
-      compiler_info.precompiled_header_info.header_source_name = normalize_path(setting_value)
+      allocate_precompiled_header_info(get_compiler_info())
+      get_compiler_info().precompiled_header_info.header_source_name = normalize_path(setting_value)
     when V2C_VS10ToolCompilerDefines::TEXT_PRECOMPILEDHEADEROUTPUTFILE
-      allocate_precompiled_header_info(compiler_info)
-      compiler_info.precompiled_header_info.header_binary_name = normalize_path(setting_value)
+      allocate_precompiled_header_info(get_compiler_info())
+      get_compiler_info().precompiled_header_info.header_binary_name = normalize_path(setting_value)
     when V2C_VS10ToolCompilerDefines::TEXT_TREATWARNINGASERROR
-      compiler_info.warnings_are_errors_enable = get_boolean_value(setting_value)
+      get_compiler_info().warnings_are_errors_enable = get_boolean_value(setting_value)
     when V2C_VSToolCompilerDefines::TEXT_WARNINGLEVEL
-      compiler_info.arr_compiler_specific_info[0].warning_level = parse_warning_level(setting_value)
+      get_compiler_info().arr_tool_variant_specific_info[0].warning_level = parse_warning_level(setting_value)
     else
-      unknown_element(setting_key)
+      found = super
     end
+    return found
   end
 
   private
@@ -3026,91 +3173,70 @@ end
 
 class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
   include V2C_VS10ToolLinkerDefines
-  def parse
-    linker_info = V2C_Tool_Linker_Info.new(V2C_Tool_Linker_Specific_Info_MSVC10.new)
-
-    parse_elements(linker_info)
-
-    @arr_linker_info.push(linker_info)
-  end
 
   private
 
-  def parse_elements(linker_info)
-    @elem_xml.elements.each { |subelem_xml|
-      parse_setting(linker_info, subelem_xml.name, subelem_xml.text)
-    }
-  end
-  def parse_setting(linker_info, setting_key, setting_value)
-    if super; return true end # base method successful!
+  def parse_setting(setting_key, setting_value)
+    found = FOUND_TRUE # be optimistic :)
     case setting_key
     when V2C_VSToolLinkerDefines::TEXT_OPTIMIZEREFERENCES
-      linker_info.optimize_references_enable = get_boolean_value(setting_value)
+      get_linker_info().optimize_references_enable = get_boolean_value(setting_value)
     else
-      unknown_element(setting_key)
+      found = super
     end
+    return found
   end
 end
 
 class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
-  def initialize(itemdefgroup_xml, config_info_out)
-    super(itemdefgroup_xml)
-    @config_info = config_info_out
-  end
-  def parse
-    parse_elements(@config_info)
-    return true
-  end
-  def parse_elements(config_info)
-    @elem_xml.elements.each { |subelem_xml|
-      setting_key = subelem_xml.name
-      item_def_group_parser = nil # IMPORTANT: reset it!
-      case setting_key
-      when 'ClCompile'
-        item_def_group_parser = V2C_VS10ToolCompilerParser.new(subelem_xml, config_info.arr_compiler_info)
-      #when 'ResourceCompile'
-      when 'Link'
-        item_def_group_parser = V2C_VS10ToolLinkerParser.new(subelem_xml, config_info.arr_linker_info)
-      when 'Midl'
-        skipped_element_warn(setting_key)
-      else
-        unknown_element(setting_key)
-      end
-      if not item_def_group_parser.nil?
-        item_def_group_parser.parse
-      end
-    }
+  def get_project; return @info_elem end
+  def parse_element(subelem_xml)
+    found = FOUND_TRUE # be optimistic :)
+    setting_key = subelem_xml.name
+    item_def_group_parser = nil # IMPORTANT: reset it!
+    arr_info = nil
+    info = nil
+    case setting_key
+    when 'ClCompile'
+      arr_info = get_project().arr_compiler_info
+      info = V2C_Tool_Compiler_Info.new(V2C_Tool_Compiler_Specific_Info_MSVC10.new)
+      item_def_group_parser = V2C_VS10ToolCompilerParser.new(subelem_xml, info)
+    #when 'ResourceCompile'
+    when 'Link'
+      arr_info = get_project().arr_linker_info
+      info = V2C_Tool_Linker_Info.new(V2C_Tool_Linker_Specific_Info_MSVC10.new)
+      item_def_group_parser = V2C_VS10ToolLinkerParser.new(subelem_xml, info)
+    when 'Midl'
+      found = FOUND_SKIP
+    else
+      found = super
+    end
+    if not item_def_group_parser.nil?
+      item_def_group_parser.parse
+      arr_info.push(info)
+    end
+    return found
   end
 end
 
-class V2C_VS10PropertyGroupConfigurationParser < V2C_VS10ParserBase
-  def initialize(propgroup_xml, config_info_out)
-    super(propgroup_xml)
-    @config_info = config_info_out
-  end
-  def parse
-    parse_elements(@config_info)
-  end
-  def parse_elements(config_info)
-    @elem_xml.elements.each { |subelem_xml|
-      parse_setting(config_info, subelem_xml.name, subelem_xml.text)
-    }
-  end
-  def parse_setting(config_info, setting_key, setting_value)
+class V2C_VS10PropertyGroupConfigurationParser < V2C_VS10BaseElemParser
+  def parse_setting(setting_key, setting_value)
+    found = FOUND_TRUE # be optimistic :)
     case setting_key
     when 'CharacterSet'
-      config_info.charset = parse_charset(setting_value)
+      @info_elem.charset = parse_charset(setting_value)
     when 'ConfigurationType'
-      config_info.cfg_type = parse_configuration_type(setting_value)
+      @info_elem.cfg_type = parse_configuration_type(setting_value)
     when 'UseOfAtl'
-      config_info.use_of_atl = parse_use_of_atl_mfc(setting_value)
+      @info_elem.use_of_atl = parse_use_of_atl_mfc(setting_value)
     when 'UseOfMfc'
-      config_info.use_of_mfc = parse_use_of_atl_mfc(setting_value)
+      @info_elem.use_of_mfc = parse_use_of_atl_mfc(setting_value)
     when 'WholeProgramOptimization'
-      config_info.whole_program_optimization = parse_wp_optimization(setting_value)
+      @info_elem.whole_program_optimization = parse_wp_optimization(setting_value)
     else
-      unknown_element(setting_key)
+      found = super
     end
+    return found
   end
 
   private
@@ -3141,41 +3267,29 @@ class V2C_VS10PropertyGroupConfigurationParser < V2C_VS10ParserBase
   def parse_wp_optimization(str_opt); return get_boolean_value(str_opt) end
 end
 
-class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10ParserBase
-  def initialize(propgroup_xml, project_out)
-    super(propgroup_xml)
-    @project = project_out
-  end
-  def parse
-    @elem_xml.elements.each { |subelem_xml|
-      setting_key = subelem_xml.name
-      setting_value = subelem_xml.text
-      case setting_key
-      when 'Keyword'
-        @project.vs_keyword = setting_value
-      when 'ProjectGuid'
-        @project.guid = setting_value
-      when 'ProjectName'
-        @project.name = setting_value
-      when 'RootNamespace'
-        @project.root_namespace = setting_value
-      when VS_SCC_ATTR_REGEX_OBJ
-        parse_elements_scc(setting_key, setting_value, @project.scc_info)
-      else
-        unknown_element(setting_key)
-      end
-    }
-    if @project.name.nil?
-      # This can be seen e.g. with sbnc.vcxproj
-      # (contains RootNamespace and NOT ProjectName),
-      # despite sbnc.vcproj containing Name and NOT RootNamespace. WEIRD.
-      # Couldn't find any hint how this case should be handled,
-      # which setting to adopt then. FIXME check on MSVS.
-      parser_error('missing project name? Adopting root namespace...')
-      @project.name = @project.root_namespace
+class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10BaseElemParser
+  private
+
+  def get_project; return @info_elem end
+  def parse_setting(setting_key, setting_value)
+    found = FOUND_TRUE # be optimistic :)
+    case setting_key
+    when 'Keyword'
+      get_project().vs_keyword = setting_value
+    when 'ProjectGuid'
+      get_project().guid = setting_value
+    when 'ProjectName'
+      get_project().name = setting_value
+    when 'RootNamespace'
+      get_project().root_namespace = setting_value
+    when VS_SCC_ATTR_REGEX_OBJ
+      found = parse_elements_scc(setting_key, setting_value, get_project().scc_info)
     end
+    if found == FOUND_FALSE; found = super end
+    return found
   end
   def parse_elements_scc(setting_key, setting_value, scc_info_out)
+    found = FOUND_TRUE # be optimistic :)
     case setting_key
     # Hrmm, turns out having SccProjectName is no guarantee that both SccLocalPath and SccProvider
     # exist, too... (one project had SccProvider missing). HOWEVER,
@@ -3194,95 +3308,79 @@ class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10ParserBase
     when 'SccAuxPath'
       scc_info_out.aux_path = setting_value
     else
-      unknown_element(setting_key)
+      found = FOUND_FALSE
+    end
+    return found
+  end
+  def parse_post_hook
+    super
+    if get_project().name.nil?
+      # This can be seen e.g. with sbnc.vcxproj
+      # (contains RootNamespace and NOT ProjectName),
+      # despite sbnc.vcproj containing Name and NOT RootNamespace. WEIRD.
+      # Couldn't find any hint how this case should be handled,
+      # which setting to adopt then. FIXME check on MSVS.
+      parser_error('missing project name? Adopting root namespace...')
+      get_project().name = get_project().root_namespace
     end
   end
 end
 
+# Simple forwarder class. Creates specific property group parsers
+# and invokes them.
+# V2C_VS10PropertyGroupParser / V2C_VS10ItemGroupParser are pretty much identical.
 class V2C_VS10PropertyGroupParser < V2C_VS10BaseElemParser
-  def initialize(propgroup_xml, project_out)
-    super(propgroup_xml)
-    @project = project_out
-  end
   def parse
-    @elem_xml.attributes.each_attribute { |attr_xml|
-      parse_setting(attr_xml.name, attr_xml.value)
-    }
-  end
-  def parse_setting(setting_key, setting_value)
-    case setting_key
-    when 'Condition'
-      # set have_condition bool to true,
-      # then verify further below that the element that was filled in
-      # actually had its condition parsed properly (V2C_Info_Elem_Base.@condition != nil),
-      # since conditions need to be parsed separately by each property item class type's base class
-      # (upon "Condition" attribute parsing the exact property item class often is not known yet i.e. nil!!).
-      # Or is there a better way to achieve common, reliable parsing of that condition information?
-      @have_condition = true
-    when 'Label'
-      propgroup_label = setting_value
-      log_debug_class("Label #{propgroup_label}!")
-      case propgroup_label
-      when 'Configuration'
-	config_info_curr = V2C_Project_Config_Info.new
-        propgroup_parser = V2C_VS10PropertyGroupConfigurationParser.new(@elem_xml, config_info_curr)
-        propgroup_parser.parse
-        @project.arr_config_info.push(config_info_curr)
-      when 'Globals'
-        propgroup_parser = V2C_VS10PropertyGroupGlobalsParser.new(@elem_xml, @project)
-        propgroup_parser.parse
-      else
-        unknown_element("Label #{propgroup_label}")
-      end
+    found = FOUND_TRUE # be optimistic :)
+    propgroup_label = @elem_xml.attributes['Label']
+    log_debug_class("Label #{propgroup_label}!")
+    case propgroup_label
+    when 'Configuration'
+      config_info_curr = V2C_Project_Config_Info.new
+      propgroup_parser = V2C_VS10PropertyGroupConfigurationParser.new(@elem_xml, config_info_curr)
+      propgroup_parser.parse
+      get_project().arr_config_info.push(config_info_curr)
+    when 'Globals'
+      propgroup_parser = V2C_VS10PropertyGroupGlobalsParser.new(@elem_xml, get_project())
+      propgroup_parser.parse
     else
-      unknown_attribute(setting_key)
+      found = FOUND_FALSE
     end
-  end
-end
-
-class V2C_VS10ProjectParserBase < V2C_VSProjectParserBase
-end
-
-class V2C_VS10ProjectParser < V2C_VS10ProjectParserBase
-
-  def parse
-    # Do strict traversal over _all_ elements, parse what's supported by us,
-    # and yell loudly for any element which we don't know about!
-    parse_attributes()
-    @elem_xml.elements.each { |subelem_xml|
-      elem_parser = nil # IMPORTANT: reset it!
-      case subelem_xml.name
-      when 'ItemGroup'
-        elem_parser = V2C_VS10ItemGroupParser.new(subelem_xml, @project)
-        elem_parser.parse
-      when 'ItemDefinitionGroup'
-        config_info_curr = V2C_Project_Config_Info.new
-        elem_parser = V2C_VS10ItemDefinitionGroupParser.new(subelem_xml, config_info_curr)
-        if elem_parser.parse
-          @project.arr_config_info.push(config_info_curr)
-        end
-      when 'PropertyGroup'
-        elem_parser = V2C_VS10PropertyGroupParser.new(subelem_xml, @project)
-        elem_parser.parse
-      else
-        unknown_element(subelem_xml.name)
-      end
-    }
+    # we're a simple forwarder class, thus EVERYTHING is supposed to be "successful" for us
+    log_found(found, propgroup_label)
+    return found
   end
 
   private
 
-  def parse_attributes
-    @elem_xml.attributes.each_attribute { |attr_xml|
-      parse_setting(@project, attr_xml.name, attr_xml.value)
-    }
-  end
-  def parse_setting(target, setting_key, setting_value)
-    case setting_key
-    when 'XXX'
+  def get_project; return @info_elem end
+end
+
+class V2C_VS10ProjectParser < V2C_VSProjectParserBase
+
+  private
+
+  def parse_element(subelem_xml)
+    found = FOUND_TRUE # be optimistic :)
+    elem_parser = nil # IMPORTANT: reset it!
+    case subelem_xml.name
+    when 'ItemGroup'
+      elem_parser = V2C_VS10ItemGroupParser.new(subelem_xml, get_project())
+      elem_parser.parse
+    when 'ItemDefinitionGroup'
+      config_info_curr = V2C_Project_Config_Info.new
+      elem_parser = V2C_VS10ItemDefinitionGroupParser.new(subelem_xml, config_info_curr)
+      if elem_parser.parse
+        get_project().arr_config_info.push(config_info_curr)
+      end
+    when 'PropertyGroup'
+      elem_parser = V2C_VS10PropertyGroupParser.new(subelem_xml, get_project())
+      elem_parser.parse
     else
-      unknown_attribute(setting_key)
+      found = super
     end
+    log_found(found, subelem_xml.name)
+    return found
   end
 end
 
@@ -3292,19 +3390,19 @@ class V2C_VS10ProjectFileXmlParser < V2C_VSProjectFileXmlParserBase
     super(doc_proj, arr_projects_new)
     @filters_only = filters_only
   end
-  def parse
-    @doc_proj.elements.each { |subelem_xml|
-      elem_parser = nil # IMPORTANT: reset it!
-      case subelem_xml.name
-      when 'Project'
-        project_info = V2C_Project_Info.new
-        elem_parser = V2C_VS10ProjectParser.new(subelem_xml, project_info)
-        elem_parser.parse
-        @arr_projects_new.push(project_info)
-      else
-        unknown_element(subelem_xml.name)
-      end
-    }
+  def parse_element(subelem_xml)
+    found = FOUND_TRUE # be optimistic :)
+    elem_parser = nil # IMPORTANT: reset it!
+    case subelem_xml.name
+    when 'Project'
+      project_info = V2C_Project_Info.new
+      elem_parser = V2C_VS10ProjectParser.new(subelem_xml, project_info)
+      elem_parser.parse
+      get_arr_projects_new().push(project_info)
+    else
+      found = super
+    end
+    return found
   end
 end
 
@@ -3314,7 +3412,7 @@ class V2C_VS10ProjectFileParser < V2C_VSProjectFileParserBase
     super(p_parser_proj_file, arr_projects_new)
     @filters_only = filters_only # are we parsing main file or extension file (.filters) only?
   end
-  def parse
+  def parse_file
     success = false
     # Parse the project-related file if it exists (_separate_ .filters file in VS10!):
     begin
@@ -3335,33 +3433,30 @@ class V2C_VS10ProjectFileParser < V2C_VSProjectFileParserBase
 end
 
 class V2C_VS10ProjectFiltersParser < V2C_VS10ParserBase
-  def initialize(project_filters_xml, project_out)
-    super(project_filters_xml)
-    @project = project_out
-  end
 
-  def parse
-    # Do strict traversal over _all_ elements, parse what's supported by us,
-    # and yell loudly for any element which we don't know about!
-    @elem_xml.elements.each { |subelem_xml|
-      elem_parser = nil # IMPORTANT: reset it!
-      case subelem_xml.name
-      when 'ItemGroup'
-        # FIXME: _perhaps_ we should pass a boolean to V2C_VS10ItemGroupParser
-        # indicating whether we're .vcxproj or .filters.
-        # But then VS handling of file elements in .vcxproj and .filters
-        # might actually be completely identical, so a boolean split would be
-        # counterproductive (TODO verify!).
-        elem_parser = V2C_VS10ItemGroupParser.new(subelem_xml, @project)
-      #when 'PropertyGroup'
-      #  proj_filters_elem_parser = V2C_VS10PropertyGroupParser.new(subelem_xml, @project)
-      else
-        unknown_element(subelem_xml.name)
-      end
-      if not elem_parser.nil?
-        elem_parser.parse
-      end
-    }
+  private
+
+  def get_project; return @info_elem end
+  def parse_element(subelem_xml)
+    found = FOUND_TRUE # be optimistic :)
+    elem_parser = nil # IMPORTANT: reset it!
+    case subelem_xml.name
+    when 'ItemGroup'
+      # FIXME: _perhaps_ we should pass a boolean to V2C_VS10ItemGroupParser
+      # indicating whether we're .vcxproj or .filters.
+      # But then VS handling of file elements in .vcxproj and .filters
+      # might actually be completely identical, so a boolean split would be
+      # counterproductive (TODO verify!).
+      elem_parser = V2C_VS10ItemGroupParser.new(subelem_xml, get_project())
+    #when 'PropertyGroup'
+    #  proj_filters_elem_parser = V2C_VS10PropertyGroupParser.new(subelem_xml, get_project())
+    end
+    if not elem_parser.nil?
+      elem_parser.parse
+    else
+      found = super
+    end
+    return found
   end
 end
 
@@ -3371,37 +3466,39 @@ end
 # that a .filters file's content is simply a KISS extension of the
 # (possibly same) content of a .vcxproj file. IOW, parsing should
 # most likely be _identical_ (and thus enhance possibly already added structures!?).
-class V2C_VS10ProjectFiltersXmlParser
+class V2C_VS10ProjectFiltersXmlParser < V2C_VSXmlParserBase
   def initialize(doc_proj_filters, arr_projects)
-    @doc_proj_filters = doc_proj_filters
-    @arr_projects = arr_projects
+    super(doc_proj_filters, arr_projects)
+    @idx_target = 0 # to count the number of <project> elems in the XML stream
+    log_fixme_class 'filters file exists, needs parsing!'
   end
-  def parse
-    idx_target = 0
-    puts "FIXME: filters file exists, needs parsing!"
-    @doc_proj_filters.elements.each { |subelem_xml|
-      elem_parser = nil # IMPORTANT: reset it!
-      case subelem_xml.name
-      when 'Project'
-	# FIXME handle fetch() exception
-        project_info = @arr_projects.fetch(idx_target)
-        idx_target += 1
-        elem_parser = V2C_VS10ProjectFiltersParser.new(subelem_xml, project_info)
-        elem_parser.parse
-      else
-        unknown_element(subelem_xml.name)
-      end
-    }
+  def parse_element(subelem_xml)
+    found = FOUND_TRUE # be optimistic :)
+    elem_parser = nil # IMPORTANT: reset it!
+    case subelem_xml.name
+    when 'Project'
+      # FIXME handle fetch() exception
+      project_info = get_arr_projects().fetch(@idx_target)
+      @idx_target += 1
+      elem_parser = V2C_VS10ProjectFiltersParser.new(subelem_xml, project_info)
+      elem_parser.parse
+    else
+      found = super
+    end
+    return found
   end
+
+  private
+  def get_arr_projects; return @info_elem end
 end
 
 # Project filters parser variant which works on file-based input
-class V2C_VS10ProjectFiltersFileParser
+class V2C_VS10ProjectFiltersFileParser < V2C_ParserBase
   def initialize(proj_filters_filename, arr_projects)
     @proj_filters_filename = proj_filters_filename
     @arr_projects = arr_projects
   end
-  def parse
+  def parse_file
     success = false
     # Parse the file filters file (_separate_ in VS10!)
     # if it exists:
@@ -3440,8 +3537,8 @@ class V2C_VS10ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
     proj_file_parser = V2C_VS10ProjectFileParser.new(@p_parser_proj_file, @arr_projects_new, false)
     proj_filters_file_parser = V2C_VS10ProjectFiltersFileParser.new("#{@proj_filename}.filters", @arr_projects_new)
 
-    if proj_file_parser.parse
-      proj_filters_file_parser.parse
+    if proj_file_parser.parse_file
+      proj_filters_file_parser.parse_file
     end
   end
   def check_unhandled_file_types
@@ -3460,7 +3557,11 @@ def util_flatten_string(in_string)
   return in_string.gsub(WHITESPACE_REGEX_OBJ, '_')
 end
 
-class V2C_CMakeGenerator
+class V2C_GeneratorBase < V2C_LoggerBase
+  def generator_error(str_description); log_error_class(str_description) end
+end
+
+class V2C_CMakeGenerator < V2C_GeneratorBase
   def initialize(p_script, p_master_project, p_parser_proj_file, p_generator_proj_file, arr_projects)
     @p_master_project = p_master_project
     @orig_proj_file_basename = p_parser_proj_file.basename
@@ -3469,7 +3570,7 @@ class V2C_CMakeGenerator
     @cmakelists_output_file = p_generator_proj_file.to_s
     @arr_projects = arr_projects
     @script_location_relative_to_master = p_script.relative_path_from(p_master_project)
-    #puts "p_script #{p_script} | p_master_project #{p_master_project} | @script_location_relative_to_master #{@script_location_relative_to_master}"
+    #log_debug_class "p_script #{p_script} | p_master_project #{p_master_project} | @script_location_relative_to_master #{@script_location_relative_to_master}"
   end
   def generate
     @arr_projects.each { |project_info|
@@ -3654,30 +3755,30 @@ Finished. You should make sure to have all important v2c settings includes such 
         }
 
         arr_config_info.each { |config_info_curr|
-  	var_v2c_want_buildcfg_curr = get_var_name_of_config_info_condition(config_info_curr)
-  	syntax_generator.next_paragraph()
-  	syntax_generator.write_conditional_if(var_v2c_want_buildcfg_curr)
+          var_v2c_want_buildcfg_curr = get_var_name_of_config_info_condition(config_info_curr)
+          syntax_generator.next_paragraph()
+          syntax_generator.write_conditional_if(var_v2c_want_buildcfg_curr)
 
-  	local_generator.put_cmake_mfc_atl_flag(config_info_curr)
+          local_generator.put_cmake_mfc_atl_flag(config_info_curr)
 
-  	config_info_curr.arr_compiler_info.each { |compiler_info_curr|
-	  arr_includes = compiler_info_curr.get_include_dirs(false, false)
-  	  local_generator.write_include_directories(arr_includes, generator_base.map_includes)
-  	}
+          config_info_curr.arr_compiler_info.each { |compiler_info_curr|
+            arr_includes = compiler_info_curr.get_include_dirs(false, false)
+            local_generator.write_include_directories(arr_includes, generator_base.map_includes)
+          }
 
-  	# FIXME: hohumm, the position of this hook include is outdated, need to update it
-  	target_generator.put_hook_post_definitions()
+	  # FIXME: hohumm, the position of this hook include is outdated, need to update it
+	  target_generator.put_hook_post_definitions()
 
-        # Technical note: target type (library, executable, ...) in .vcproj can be configured per-config
-        # (or, in other words, different configs are capable of generating _different_ target _types_
-        # for the _same_ target), but in CMake this isn't possible since _one_ target name
-        # maps to _one_ target type and we _need_ to restrict ourselves to using the project name
-        # as the exact target name (we are unable to define separate PROJ_lib and PROJ_exe target names,
-        # since other .vcproj file contents always link to our target via the main project name only!!).
-        # Thus we need to declare the target _outside_ the scope of per-config handling :(
-  	target_is_valid = target_generator.put_target(project_info, arr_sub_source_list_var_names, map_lib_dirs, map_dependencies, config_info_curr)
+          # Technical note: target type (library, executable, ...) in .vcproj can be configured per-config
+          # (or, in other words, different configs are capable of generating _different_ target _types_
+          # for the _same_ target), but in CMake this isn't possible since _one_ target name
+          # maps to _one_ target type and we _need_ to restrict ourselves to using the project name
+          # as the exact target name (we are unable to define separate PROJ_lib and PROJ_exe target names,
+          # since other .vcproj file contents always link to our target via the main project name only!!).
+          # Thus we need to declare the target _outside_ the scope of per-config handling :(
+          target_is_valid = target_generator.put_target(project_info, arr_sub_source_list_var_names, map_lib_dirs, map_dependencies, config_info_curr)
 
-  	syntax_generator.write_conditional_end(var_v2c_want_buildcfg_curr)
+          syntax_generator.write_conditional_end(var_v2c_want_buildcfg_curr)
         } # [END per-config handling]
 
         # Now that we likely _do_ have a valid target
@@ -3734,7 +3835,7 @@ Finished. You should make sure to have all important v2c settings includes such 
               target_generator.write_property_compile_definitions(config_info_curr.build_type, hash_defines_actual, map_defines)
               # Original compiler flags are MSVC-only, of course. TODO: provide an automatic conversion towards gcc?
               str_conditional_compiler_platform = nil
-              compiler_info_curr.arr_compiler_specific_info.each { |compiler_specific|
+              compiler_info_curr.arr_tool_variant_specific_info.each { |compiler_specific|
 		str_conditional_compiler_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.compiler_name)
                 # I don't think we need this (we have per-target properties), thus we'll NOT write it!
                 #local_generator.write_directory_property_compile_flags(attr_options)
@@ -3743,7 +3844,7 @@ Finished. You should make sure to have all important v2c settings includes such 
             }
             config_info_curr.arr_linker_info.each { |linker_info_curr|
               str_conditional_linker_platform = nil
-              linker_info_curr.arr_linker_specific_info.each { |linker_specific|
+              linker_info_curr.arr_tool_variant_specific_info.each { |linker_specific|
 		str_conditional_linker_platform = map_linker_name_to_cmake_platform_conditional(linker_specific.linker_name)
                 # Probably more linker flags support needed? (mention via
                 # CMAKE_SHARED_LINKER_FLAGS / CMAKE_MODULE_LINKER_FLAGS / CMAKE_EXE_LINKER_FLAGS
@@ -3776,8 +3877,25 @@ Finished. You should make sure to have all important v2c settings includes such 
 
   # Hrmm, I'm not quite sure yet where to aggregate this function...
   def get_var_name_of_config_info_condition(config_info)
+    # HACK: very Q&D handling, to make things work quickly.
+    # Should think of implementing a proper abstraction for handling of conditions.
+    # Probably we _at least_ need to create a _condition generator_ class.
+    if config_info.condition.nil?
+      build_type = config_info.build_type
+    else
+      str_condition = config_info.condition.str_condition
+      log_debug "condition: #{str_condition}"
+      build_type = nil
+      str_condition.scan(/^'\$\(Configuration\)\|\$\(Platform\)'=='(.*)\|.*$/) {
+        build_type = $1
+      }
+      if build_type.nil? or build_type.empty?
+        # TODO!! (see above)
+        generator_error "could not parse build type from condition #{str_condition}"
+      end
+    end
     # Name may contain spaces - need to handle them!
-    config_name = util_flatten_string(config_info.build_type)
+    config_name = util_flatten_string(build_type)
     return "v2c_want_buildcfg_#{config_name}"
   end
   V2C_COMPILER_MSVC_REGEX_OBJ = %r{^MSVC}
