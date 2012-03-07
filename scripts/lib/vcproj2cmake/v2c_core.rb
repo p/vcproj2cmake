@@ -620,6 +620,10 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
     # implementation files / non-header files),
     # otherwise we should not add a target since CMake will
     # complain with "Cannot determine link language for target "xxx"".
+    # Well, for such cases, in CMake we now fixed the generator
+    # to be able to generate "project(SomeProj NONE)",
+    # thus it should be ok now (and then add custom build commands/targets
+    # _other_ than source-file-based executable targets).
     @have_build_units = false
   end
 
@@ -986,8 +990,44 @@ class V2C_CMakeGlobalGenerator < V2C_CMakeSyntaxGenerator
     configuration_types_list = separate_arguments(configuration_types)
     write_set_var_quoted('CMAKE_CONFIGURATION_TYPES', configuration_types_list)
   end
+end
 
-  private
+class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
+  def initialize(project_info)
+    @project_info = project_info
+    @arr_languages = Array.new
+  end
+  attr_accessor :arr_languages
+  def detect
+    # ok, let's try some initial Q&D handling...
+    if @project_info.have_build_units == true
+      if not @project_info.type.nil?
+        case @project_info.type
+        when 'Visual C++'
+          # FIXME: how to configure C vs. CXX?
+          # Even a C-only project I have is registered as 'Visual C++'.
+          # I guess one is supposed to make this setting depend
+          # on availability of .c/.cpp file extensions...
+          # Hmm, and for .vcxproj, the language is perhaps encoded in the
+          # <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+          # line only (i.e. the .props file).
+          @arr_languages.push('C', 'CXX')
+        else
+          log_fixme_class("unknown project type #{@project_info.type}, cannot determine programming language!")
+        end
+      end
+      if not @project_info.creator.nil?
+        if @project_info.creator.match(/Fortran/)
+          @arr_languages.push('Fortran')
+        end
+      end
+      if @arr_languages.empty?
+        @arr_languages.push('C', 'CXX')
+        generator_error 'Could not detect programming language! (FIXME)'
+      end
+    end
+    return @arr_languages
+  end
 end
 
 class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
@@ -1007,10 +1047,25 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     put_include_vcproj2cmake_func()
     put_hook_pre()
   end
-  def put_project(project_name, arr_languages = nil)
+  def detect_programming_languages(project_info)
+    language_detector = V2C_CMakeProjectLanguageDetector.new(project_info)
+    language_detector.detect
+  end
+  def put_project(project_name, arr_progr_languages = nil)
     arr_args_project_name_and_attrs = [ project_name ]
-    if not arr_languages.nil?; arr_args_project_name_and_attrs.concat(arr_languages) end
+    if arr_progr_languages.nil? or arr_progr_languages.empty?
+      # No programming language given? Indicate special marker "NONE"
+      # to skip any compiler checks.
+      arr_args_project_name_and_attrs.push('NONE')
+    else
+      arr_args_project_name_and_attrs.concat(arr_progr_languages)
+    end
     write_command_list_single_line('project', arr_args_project_name_and_attrs)
+  end
+  def write_project(project_info)
+    # Figure out language type (C CXX etc.) and add it to project() command
+    arr_languages = detect_programming_languages(project_info)
+    put_project(project_info.name, arr_languages)
   end
   def put_conversion_details(project_name, orig_environment_shortname)
     # We could have stored all information in one (list) variable,
@@ -2494,16 +2549,15 @@ end
 class V2C_VS7FileParser < V2C_VSXmlParserBase
   def initialize(file_xml, arr_file_infos_out)
     super(file_xml, arr_file_infos_out)
-    @have_build_units = false # HACK
     @info_file = V2C_Info_File.new
+    @add_to_build = false
   end
   def get_arr_file_infos; return @info_elem end
-  BUILD_UNIT_FILE_TYPES_REGEX_OBJ = %r{\.(c|C)}
   def parse
     log_debug_class('parse')
 
     @elem_xml.attributes.each_attribute { |attr_xml|
-      parse_setting(attr_xml.name, attr_xml.value)
+      parse_attribute(attr_xml.name, attr_xml.value)
     }
     @elem_xml.elements.each { |subelem_xml|
       parse_element(subelem_xml)
@@ -2532,15 +2586,9 @@ class V2C_VS7FileParser < V2C_VSXmlParserBase
     }
 
     if not excluded_from_build and included_in_build
-      get_arr_file_infos().push(@info_file)
-      # HACK:
-      if not @have_build_units
-        if @info_file.path_relative =~ BUILD_UNIT_FILE_TYPES_REGEX_OBJ
-          @have_build_units = true
-        end
-      end
+      @add_to_build = true
     end
-    return @have_build_units
+    parse_post_hook
   end
 
   private
@@ -2558,7 +2606,7 @@ class V2C_VS7FileParser < V2C_VSXmlParserBase
     end
     return found
   end
-  def parse_setting(setting_key, setting_value)
+  def parse_attribute(setting_key, setting_value)
     found = FOUND_TRUE # be optimistic :)
     case setting_key
     when 'RelativePath'
@@ -2568,9 +2616,15 @@ class V2C_VS7FileParser < V2C_VSXmlParserBase
     end
     return found
   end
+  def parse_post_hook
+    if @add_to_build == true
+      get_arr_file_infos().push(@info_file)
+    end
+  end
 end
 
 class V2C_VS7FilterParser < V2C_VSXmlParserBase
+  BUILD_UNIT_FILE_TYPES_REGEX_OBJ = %r{\.(c|C)}
   def initialize(files_xml, project_out, files_str_out)
     super(files_xml, project_out)
     @files_str = files_str_out
@@ -2615,9 +2669,7 @@ class V2C_VS7FilterParser < V2C_VSXmlParserBase
       when 'File'
         log_debug_class('FOUND File')
         elem_parser = V2C_VS7FileParser.new(subelem_xml, arr_file_infos)
-	if elem_parser.parse
-          get_project().have_build_units = true
-        end
+	elem_parser.parse
       when 'Filter'
         log_debug_class('FOUND Filter')
         subfiles_str = Files_str.new
@@ -2635,6 +2687,15 @@ class V2C_VS7FilterParser < V2C_VSXmlParserBase
 
     if not arr_file_infos.empty?
       files_str[:arr_file_infos] = arr_file_infos
+
+      if not get_project().have_build_units == true
+        arr_file_infos.each { |file|
+          if file.path_relative =~ BUILD_UNIT_FILE_TYPES_REGEX_OBJ
+            get_project().have_build_units = true
+            break
+          end
+        }
+      end
     end
     return true
   end
@@ -2643,44 +2704,45 @@ class V2C_VS7FilterParser < V2C_VSXmlParserBase
 
   def parse_file_list_attributes(vcproj_filter_xml, files_str)
     filter_info = nil
-    file_group_name = nil
     if vcproj_filter_xml.attributes.length
       filter_info = V2C_Info_Filter.new
     end
     vcproj_filter_xml.attributes.each_attribute { |attr_xml|
-      setting_value = attr_xml.value
-      case attr_xml.name
-      when 'Filter'
-        filter_info.arr_scfilter = split_values_list_discard_empty(setting_value)
-      when 'Name'
-        file_group_name = setting_value
-        filter_info.name = file_group_name
-      when 'SourceControlFiles'
-        filter_info.val_scmfiles = get_boolean_value(setting_value)
-      when 'UniqueIdentifier'
-        filter_info.guid = setting_value
-        setting_value_upper = setting_value.clone.upcase
+      parse_file_list_attribute(filter_info, attr_xml.name, attr_xml.value)
+    }
+    if filter_info.name.nil?
+      filter_info.name = 'COMMON'
+    end
+    #log_debug_class("parsed files group #{filter_info.name}, type #{filter_info.get_group_type()}")
+    files_str[:filter_info] = filter_info
+  end
+  def parse_file_list_attribute(filter_info, setting_key, setting_value)
+    found = FOUND_TRUE # be optimistic :)
+    case setting_key
+    when 'Filter'
+      filter_info.arr_scfilter = split_values_list_discard_empty(setting_value)
+    when 'Name'
+      filter_info.name = setting_value
+    when 'SourceControlFiles'
+      filter_info.val_scmfiles = get_boolean_value(setting_value)
+    when 'UniqueIdentifier'
+      filter_info.guid = setting_value
+      setting_value_upper = setting_value.clone.upcase
 	# TODO: these GUIDs actually seem to be identical between VS7 and VS10,
 	# thus they should be made constants in a common base class...
-	case setting_value_upper
-        when '{4FC737F1-C7A5-4376-A066-2A32D752A2FF}'
+      case setting_value_upper
+      when '{4FC737F1-C7A5-4376-A066-2A32D752A2FF}'
 	  #filter_info.is_compiles = true
-        when '{93995380-89BD-4B04-88EB-625FBE52EBFB}'
+      when '{93995380-89BD-4B04-88EB-625FBE52EBFB}'
 	  #filter_info.is_includes = true
-        when '{67DA6AB6-F800-4C08-8B7A-83BB121AAD01}'
-          #filter_info.is_resources = true
-        else
-          unknown_attribute("unknown/custom UniqueIdentifier #{setting_value_upper}")
-        end
+      when '{67DA6AB6-F800-4C08-8B7A-83BB121AAD01}'
+        #filter_info.is_resources = true
       else
-        unknown_attribute(attr_xml.name)
+        unknown_attribute("unknown/custom UniqueIdentifier #{setting_value_upper}")
       end
-    }
-    if file_group_name.nil?
-      file_group_name = 'COMMON'
+    else
+      unknown_attribute(setting_key)
     end
-    #log_debug_class("parsed files group #{file_group_name}, type #{filter_info.get_group_type()}")
-    files_str[:filter_info] = filter_info
   end
 end
 
@@ -3658,17 +3720,7 @@ Finished. You should make sure to have all important v2c settings includes such 
         local_generator = V2C_CMakeLocalGenerator.new(textOut)
 
         local_generator.put_file_header()
-
-        # TODO: figure out language type (C CXX etc.) and add it to project() command
-        # ok, let's try some initial Q&D handling...
-        arr_languages = nil
-        if not project_info.creator.nil?
-          if project_info.creator.match(/Fortran/)
-            arr_languages = Array.new
-            arr_languages.push('Fortran')
-          end
-        end
-        local_generator.put_project(project_info.name, arr_languages)
+        local_generator.write_project(project_info)
 	local_generator.put_conversion_details(project_info.name, project_info.orig_environment_shortname)
 
         #global_generator = V2C_CMakeGlobalGenerator.new(out)
