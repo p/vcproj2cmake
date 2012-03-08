@@ -297,6 +297,7 @@ class V2C_Tool_Base_Info
   def initialize(tool_variant_specific_info)
     @name = nil # Hmm, do we need this member? (do we really want to know the tool name??)
     @suppress_startup_banner_enable = false # used by at least VS10 Compiler _and_ Linker, thus it's member of the common base class.
+    @show_progress_enable = false
 
     # _base_ class member to provide a mechanism to intelligently translate tool (compiler, linker) configurations
     # as specified by the original build environment files (e.g. compiler flags, warnings, ...)
@@ -309,6 +310,7 @@ class V2C_Tool_Base_Info
   end
   attr_accessor :name
   attr_accessor :suppress_startup_banner_enable
+  attr_accessor :show_progress_enable
 end
 
 class V2C_Tool_Specific_Info_Base
@@ -373,12 +375,14 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
     @precompiled_header_info = nil
     @detect_64bit_porting_problems_enable = true # TODO: translate into MSVC /Wp64 flag; Enabled by default is preferable, right?
     @exception_handling = 1 # we do want it enabled, right? (and as Sync?)
+    @minimal_rebuild_enable = false
     @multi_core_compilation_enable = false # TODO: translate into MSVC10 /MP flag...; Disabled by default is preferable (some builds might not have clean target dependencies...)
+    @pdb_filename = nil
     @warnings_are_errors_enable = false # TODO: translate into MSVC /WX flag
-    @show_includes_enable = false # TODO: translate into MSVC /showIncludes flag
+    @show_includes_enable = false # Whether to show the filenames of included header files. TODO: translate into MSVC /showIncludes flag
     @static_code_analysis_enable = false # TODO: translate into MSVC7/10 /analyze flag
+    @treat_wchar_t_as_builtin_type_enable = false
     @optimization = 0 # currently supporting these values: 0 == Non Debug, 1 == Min Size, 2 == Max Speed, 3 == Max Optimization
-    @show_includes = false # Whether to show the filenames of included header files.
   end
   attr_accessor :arr_info_include_dirs
   attr_accessor :hash_defines
@@ -386,12 +390,14 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
   attr_accessor :precompiled_header_info
   attr_accessor :detect_64bit_porting_problems_enable
   attr_accessor :exception_handling
+  attr_accessor :minimal_rebuild_enable
   attr_accessor :multi_core_compilation_enable
+  attr_accessor :pdb_filename
   attr_accessor :warnings_are_errors_enable
   attr_accessor :show_includes_enable
   attr_accessor :static_code_analysis_enable
+  attr_accessor :treat_wchar_t_as_builtin_type_enable
   attr_accessor :optimization
-  attr_accessor :show_includes
   attr_accessor :arr_tool_variant_specific_info
 
   def get_include_dirs(flag_system, flag_before)
@@ -432,6 +438,7 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
   def initialize(tool_variant_specific_info = nil)
     super(tool_variant_specific_info)
     @arr_dependencies = Array.new # FIXME: should be changing this into a dependencies class (we need an attribute which indicates whether this dependency is a library _file_ or a target name, since we should be reliably able to decide whether we can add "debug"/"optimized" keywords to CMake variables or target_link_library() parms)
+    @generate_debug_information_enable = false
     @link_incremental = 0 # 1 means NO, thus 2 probably means YES?
     @module_definition_file = nil
     @optimize_references_enable = false
@@ -439,6 +446,7 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
     @arr_lib_dirs = Array.new
   end
   attr_accessor :arr_dependencies
+  attr_accessor :generate_debug_information_enable
   attr_accessor :link_incremental
   attr_accessor :module_definition_file
   attr_accessor :optimize_references_enable
@@ -700,7 +708,7 @@ class V2C_ProjectValidator
     # FIXME: Disabled for TESTING only - should re-enable this check once VS10 parsing is complete.
     #if @project_info.main_files.nil?; validation_error('no files!?') end
     arr_config_info = @project_info.arr_config_info
-    if arr_config_info.nil? or arr_config_info.length == 0
+    if arr_config_info.nil? or arr_config_info.size == 0
       validation_error('no config information!?')
     end
   end
@@ -2239,6 +2247,7 @@ end
 
 module V2C_VSToolDefines
   TEXT_ADDITIONALOPTIONS = 'AdditionalOptions'
+  TEXT_SHOWPROGRESS = 'ShowProgress' # Houston... differing VS7/10 elements don't fit into our class hierarchy all too well...
   TEXT_SUPPRESSSTARTUPBANNER = 'SuppressStartupBanner'
 end
 
@@ -2251,7 +2260,7 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
     found = FOUND_TRUE # be optimistic :)
     tool_info = get_tool_info()
     case setting_key
-    when V2C_VSToolDefines::TEXT_SUPPRESSSTARTUPBANNER
+    when TEXT_SUPPRESSSTARTUPBANNER
       tool_info.suppress_startup_banner_enable = get_boolean_value(setting_value)
     else
       found = super
@@ -2277,10 +2286,13 @@ module V2C_VSToolCompilerDefines
   TEXT_DISABLESPECIFICWARNINGS = 'DisableSpecificWarnings'
   TEXT_ENABLEPREFAST = 'EnablePREfast'
   TEXT_EXCEPTIONHANDLING = 'ExceptionHandling'
+  TEXT_MINIMALREBUILD = 'MinimalRebuild'
   TEXT_OPTIMIZATION = 'Optimization'
+  TEXT_PROGRAMDATABASEFILENAME = 'ProgramDatabaseFileName'
   TEXT_PREPROCESSORDEFINITIONS = 'PreprocessorDefinitions'
   TEXT_RUNTIMETYPEINFO = 'RuntimeTypeInfo'
   TEXT_SHOWINCLUDES = 'ShowIncludes'
+  TEXT_TREAT_WCHAR_T_AS_BUILTIN_TYPE = 'TreatWChar_tAsBuiltInType'
   TEXT_WARNINGLEVEL = 'WarningLevel'
 end
 
@@ -2296,20 +2308,26 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
   def parse_setting(setting_key, setting_value)
     found = FOUND_TRUE # be optimistic :)
     case setting_key
-    when V2C_VSToolCompilerDefines::TEXT_ADDITIONALINCLUDEDIRECTORIES
+    when TEXT_ADDITIONALINCLUDEDIRECTORIES
       parse_additional_include_directories(get_compiler_info(), setting_value)
-    when V2C_VSToolDefines::TEXT_ADDITIONALOPTIONS
+    when TEXT_ADDITIONALOPTIONS
       parse_additional_options(get_compiler_info().arr_tool_variant_specific_info[0].arr_flags, setting_value)
-    when V2C_VSToolCompilerDefines::TEXT_DISABLESPECIFICWARNINGS
+    when TEXT_DISABLESPECIFICWARNINGS
       parse_disable_specific_warnings(get_compiler_info().arr_tool_variant_specific_info[0].arr_disable_warnings, setting_value)
-    when V2C_VSToolCompilerDefines::TEXT_ENABLEPREFAST
+    when TEXT_ENABLEPREFAST
       get_compiler_info().static_code_analysis_enable = get_boolean_value(setting_value)
-    when V2C_VSToolCompilerDefines::TEXT_PREPROCESSORDEFINITIONS
+    when TEXT_MINIMALREBUILD
+      get_compiler_info().minimal_rebuild_enable = get_boolean_value(setting_value)
+    when TEXT_PROGRAMDATABASEFILENAME
+      get_compiler_info().pdb_filename = normalize_path(setting_value)
+    when TEXT_PREPROCESSORDEFINITIONS
       parse_preprocessor_definitions(get_compiler_info().hash_defines, setting_value)
-    when V2C_VSToolCompilerDefines::TEXT_RUNTIMETYPEINFO
+    when TEXT_RUNTIMETYPEINFO
       get_compiler_info().rtti = get_boolean_value(setting_value)
-    when V2C_VSToolCompilerDefines::TEXT_SHOWINCLUDES
+    when TEXT_SHOWINCLUDES
       get_compiler_info().show_includes_enable = get_boolean_value(setting_value)
+    when TEXT_TREAT_WCHAR_T_AS_BUILTIN_TYPE
+      get_compiler_info().treat_wchar_t_as_builtin_type_enable = get_boolean_value(setting_value)
     else
       found = super
     end
@@ -2376,26 +2394,24 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
     when 'Detect64BitPortabilityProblems'
       # TODO: add /Wp64 to flags of an MSVC compiler info...
       compiler_info.detect_64bit_porting_problems_enable = get_boolean_value(setting_value)
-    when V2C_VSToolCompilerDefines::TEXT_EXCEPTIONHANDLING
+    when TEXT_EXCEPTIONHANDLING
       compiler_info.exception_handling = setting_value.to_i
-    when V2C_VS7ToolDefines::TEXT_NAME
+    when TEXT_NAME
       compiler_info.name = setting_value
-    when V2C_VSToolCompilerDefines::TEXT_OPTIMIZATION
+    when TEXT_OPTIMIZATION
       compiler_info.optimization = setting_value.to_i
-    when V2C_VS7ToolCompilerDefines::TEXT_PRECOMPILEDHEADERFILE_BINARY
+    when TEXT_PRECOMPILEDHEADERFILE_BINARY
       allocate_precompiled_header_info(compiler_info)
       compiler_info.precompiled_header_info.header_binary_name = normalize_path(setting_value)
-    when V2C_VS7ToolCompilerDefines::TEXT_PRECOMPILEDHEADERFILE_SOURCE
+    when TEXT_PRECOMPILEDHEADERFILE_SOURCE
       allocate_precompiled_header_info(compiler_info)
       compiler_info.precompiled_header_info.header_source_name = normalize_path(setting_value)
-    when V2C_VSToolCompilerDefines::TEXT_SHOWINCLUDES
-      compiler_info.show_includes = get_boolean_value(setting_value)
-    when V2C_VS7ToolCompilerDefines::TEXT_USEPRECOMPILEDHEADER
+    when TEXT_USEPRECOMPILEDHEADER
       allocate_precompiled_header_info(compiler_info)
       compiler_info.precompiled_header_info.use_mode = parse_use_precompiled_header(setting_value)
-    when V2C_VS7ToolCompilerDefines::TEXT_WARNASERROR
+    when TEXT_WARNASERROR
       compiler_info.warnings_are_errors_enable = get_boolean_value(setting_value)
-    when V2C_VSToolCompilerDefines::TEXT_WARNINGLEVEL
+    when TEXT_WARNINGLEVEL
       compiler_info.arr_tool_variant_specific_info[0].warning_level = setting_value.to_i
     else
       found = super
@@ -2413,6 +2429,7 @@ module V2C_VSToolLinkerDefines
   include V2C_VSToolDefines
   TEXT_ADDITIONALDEPENDENCIES = 'AdditionalDependencies'
   TEXT_ADDITIONALLIBRARYDIRECTORIES = 'AdditionalLibraryDirectories'
+  TEXT_GENERATEDEBUGINFORMATION = 'GenerateDebugInformation'
   TEXT_LINKINCREMENTAL = 'LinkIncremental'
   TEXT_MODULEDEFINITIONFILE = 'ModuleDefinitionFile'
   TEXT_OPTIMIZEREFERENCES = 'OptimizeReferences'
@@ -2429,15 +2446,17 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
     found = FOUND_TRUE # be optimistic :)
     linker_info = get_linker_info()
     case setting_key
-    when V2C_VSToolLinkerDefines::TEXT_ADDITIONALDEPENDENCIES
+    when TEXT_ADDITIONALDEPENDENCIES
       parse_additional_dependencies(setting_value, linker_info.arr_dependencies)
-    when V2C_VSToolLinkerDefines::TEXT_ADDITIONALLIBRARYDIRECTORIES
+    when TEXT_ADDITIONALLIBRARYDIRECTORIES
       parse_additional_library_directories(setting_value, linker_info.arr_lib_dirs)
-    when V2C_VSToolDefines::TEXT_ADDITIONALOPTIONS
+    when TEXT_ADDITIONALOPTIONS
       parse_additional_options(linker_info.arr_tool_variant_specific_info[0].arr_flags, setting_value)
-    when V2C_VSToolLinkerDefines::TEXT_MODULEDEFINITIONFILE
+    when TEXT_GENERATEDEBUGINFORMATION
+      linker_info.generate_debug_information_enable = get_boolean_value(setting_value)
+    when TEXT_MODULEDEFINITIONFILE
       linker_info.module_definition_file = parse_module_definition_file(setting_value)
-    when V2C_VSToolLinkerDefines::TEXT_PROGRAMDATABASEFILE
+    when TEXT_PROGRAMDATABASEFILE
       linker_info.pdb_file = parse_pdb_file(setting_value)
     else
       found = super
@@ -2488,11 +2507,11 @@ class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
     found = FOUND_TRUE # be optimistic :)
     linker_info = get_linker_info()
     case setting_key
-    when V2C_VSToolLinkerDefines::TEXT_LINKINCREMENTAL
+    when TEXT_LINKINCREMENTAL
       linker_info.link_incremental = parse_link_incremental(setting_value)
-    when V2C_VS7ToolDefines::TEXT_NAME
+    when TEXT_NAME
       linker_info.name = setting_value
-    when V2C_VSToolLinkerDefines::TEXT_OPTIMIZEREFERENCES
+    when TEXT_OPTIMIZEREFERENCES
       linker_info.optimize_references_enable = setting_value.to_i
     else
       found = super
@@ -2504,18 +2523,19 @@ end
 
 # Simple forwarder class. Creates specific parsers and invokes them.
 class V2C_VS7ToolParser < V2C_VSXmlParserBase
+  include V2C_VS7ToolDefines
   def parse
     found = FOUND_TRUE # be optimistic :)
-    toolname = @elem_xml.attributes[V2C_VS7ToolDefines::TEXT_NAME]
+    toolname = @elem_xml.attributes[TEXT_NAME]
     arr_info = nil
     info = nil
     elem_parser = nil
     case toolname
-    when V2C_VS7ToolDefines::TEXT_VCCLCOMPILERTOOL
+    when TEXT_VCCLCOMPILERTOOL
       arr_info = get_project().arr_compiler_info
       info = V2C_Tool_Compiler_Info.new(V2C_Tool_Compiler_Specific_Info_MSVC7.new)
       elem_parser = V2C_VS7ToolCompilerParser.new(@elem_xml, info)
-    when V2C_VS7ToolDefines::TEXT_VCLINKERTOOL
+    when TEXT_VCLINKERTOOL
       arr_info = get_project().arr_linker_info
       info = V2C_Tool_Linker_Info.new(V2C_Tool_Linker_Specific_Info_MSVC7.new)
       elem_parser = V2C_VS7ToolLinkerParser.new(@elem_xml, info)
@@ -2533,27 +2553,40 @@ class V2C_VS7ToolParser < V2C_VSXmlParserBase
   def get_project; return @info_elem end
 end
 
+module V2C_VSConfigurationDefines
+  TEXT_CHARACTERSET = 'CharacterSet'
+  TEXT_CONFIGURATIONTYPE = 'ConfigurationType'
+  TEXT_WHOLEPROGRAMOPTIMIZATION = 'WholeProgramOptimization'
+end
+
+module V2C_VS7ConfigurationDefines
+  include V2C_VSConfigurationDefines
+  TEXT_VS7_USEOFATL = 'UseOfATL'
+  TEXT_VS7_USEOFMFC = 'UseOfMFC'
+end
+
 class V2C_VS7ConfigurationBaseParser < V2C_VSXmlParserBase
+  include V2C_VS7ConfigurationDefines
   private
 
   def parse_setting(setting_key, setting_value)
     found = FOUND_TRUE # be optimistic :)
     case setting_key
-    when 'CharacterSet'
+    when TEXT_CHARACTERSET
       get_config_info().charset = parse_charset(setting_value)
-    when 'ConfigurationType'
+    when TEXT_CONFIGURATIONTYPE
       get_config_info().cfg_type = parse_configuration_type(setting_value)
     when 'Name'
       arr_name = setting_value.split('|')
       get_config_info().build_type = arr_name[0]
       get_config_info().platform = arr_name[1]
-    when 'UseOfMFC'
+    when TEXT_VS7_USEOFATL
+      get_config_info().use_of_atl = setting_value.to_i
+    when TEXT_VS7_USEOFMFC
       # VS7 does not seem to use string values (only 0/1/2 integers), while VS10 additionally does.
       # NOTE SPELLING DIFFERENCE: MSVS7 has UseOfMFC, MSVS10 has UseOfMfc (see CMake MSVS generators)
       get_config_info().use_of_mfc = setting_value.to_i
-    when 'UseOfATL'
-      get_config_info().use_of_atl = setting_value.to_i
-    when 'WholeProgramOptimization'
+    when TEXT_WHOLEPROGRAMOPTIMIZATION
       get_config_info().whole_program_optimization = parse_wp_optimization(setting_value)
     else
       found = super
@@ -2863,6 +2896,7 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
   private
 
   def parse_setting(setting_key, setting_value)
+    found = FOUND_TRUE # be optimistic :)
     case setting_key
     when 'Keyword'
       get_project().vs_keyword = setting_value
@@ -2880,12 +2914,14 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
       get_project().version = setting_value
 
     when VS_SCC_ATTR_REGEX_OBJ
-      parse_attributes_scc(setting_key, setting_value, get_project().scc_info)
+      found = parse_attributes_scc(setting_key, setting_value, get_project().scc_info)
     else
-      unknown_attribute(setting_key)
+      found = super
     end
+    return found
   end
   def parse_attributes_scc(setting_key, setting_value, scc_info_out)
+    found = FOUND_TRUE # be optimistic :)
     case setting_key
     # Hrmm, turns out having SccProjectName is no guarantee that both SccLocalPath and SccProvider
     # exist, too... (one project had SccProvider missing). HOWEVER,
@@ -2904,8 +2940,9 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
     when 'SccAuxPath'
       scc_info_out.aux_path = setting_value
     else
-      unknown_attribute(setting_key)
+      found = FOUND_FALSE
     end
+    return found
   end
 end
 
@@ -3015,6 +3052,10 @@ class V2C_VS7ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
   end
 end
 
+module V2C_VS10Defines
+  TEXT_CONDITION = 'Condition'
+end
+
 # NOTE: VS10 == MSBuild == somewhat Ant-based.
 # Thus it would probably be useful to create an Ant syntax parser base class
 # and derive MSBuild-specific behaviour from it.
@@ -3023,6 +3064,7 @@ end
 
 # Parses elements with optional conditional information (Condition=xxx).
 class V2C_VS10BaseElemParser < V2C_VS10ParserBase
+  include V2C_VS10Defines
   def initialize(elem_xml, info_elem_out)
     super(elem_xml, info_elem_out)
     @have_condition = false
@@ -3030,7 +3072,7 @@ class V2C_VS10BaseElemParser < V2C_VS10ParserBase
   def parse_attribute(setting_key, setting_value)
     found = FOUND_TRUE # be optimistic :)
     case setting_key
-    when V2C_VS10Defines::TEXT_CONDITION
+    when TEXT_CONDITION
       # set have_condition bool to true,
       # then verify further below that the element that was filled in
       # actually had its condition parsed properly (V2C_Info_Elem_Base.@condition != nil),
@@ -3061,7 +3103,7 @@ class V2C_VS10BaseElemParser < V2C_VS10ParserBase
     if not @have_condition
       # check whether there really was no condition
       # (derived classes might have failed to call into base class handling!!)
-      if not @elem_xml.attributes[V2C_VS10Defines::TEXT_CONDITION].nil?
+      if not @elem_xml.attributes[TEXT_CONDITION].nil?
         @have_condition = true
       end
     end
@@ -3291,10 +3333,6 @@ class V2C_VS10ItemGroupParser < V2C_VS10ParserBase
   def get_project; return @info_elem end
 end
 
-module V2C_VS10Defines
-  TEXT_CONDITION = 'Condition'
-end
-
 module V2C_VS10ToolDefines
   include V2C_VSToolDefines
   include V2C_VS10Defines
@@ -3326,22 +3364,22 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
     when 'ObjectFileName'
        # TODO: support it - but with a CMake out-of-tree build this setting is very unimportant methinks.
        skipped_element_warn(setting_key)
-    when V2C_VSToolCompilerDefines::TEXT_EXCEPTIONHANDLING
+    when TEXT_EXCEPTIONHANDLING
       get_compiler_info().exception_handling = parse_exception_handling(setting_value)
-    when V2C_VSToolCompilerDefines::TEXT_OPTIMIZATION
+    when TEXT_OPTIMIZATION
       get_compiler_info().optimization = parse_optimization(setting_value)
-    when V2C_VS10ToolCompilerDefines::TEXT_PRECOMPILEDHEADER
+    when TEXT_PRECOMPILEDHEADER
       allocate_precompiled_header_info(get_compiler_info())
       get_compiler_info().precompiled_header_info.use_mode = parse_use_precompiled_header(setting_value)
-    when V2C_VS10ToolCompilerDefines::TEXT_PRECOMPILEDHEADERFILE
+    when TEXT_PRECOMPILEDHEADERFILE
       allocate_precompiled_header_info(get_compiler_info())
       get_compiler_info().precompiled_header_info.header_source_name = normalize_path(setting_value)
-    when V2C_VS10ToolCompilerDefines::TEXT_PRECOMPILEDHEADEROUTPUTFILE
+    when TEXT_PRECOMPILEDHEADEROUTPUTFILE
       allocate_precompiled_header_info(get_compiler_info())
       get_compiler_info().precompiled_header_info.header_binary_name = normalize_path(setting_value)
-    when V2C_VS10ToolCompilerDefines::TEXT_TREATWARNINGASERROR
+    when TEXT_TREATWARNINGASERROR
       get_compiler_info().warnings_are_errors_enable = get_boolean_value(setting_value)
-    when V2C_VSToolCompilerDefines::TEXT_WARNINGLEVEL
+    when TEXT_WARNINGLEVEL
       get_compiler_info().arr_tool_variant_specific_info[0].warning_level = parse_warning_level(setting_value)
     else
       found = super
@@ -3386,6 +3424,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
 end
 
 module V2C_VS10ToolLinkerDefines
+  include V2C_VSToolLinkerDefines
 end
 
 class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
@@ -3396,7 +3435,7 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
   def parse_setting(setting_key, setting_value)
     found = FOUND_TRUE # be optimistic :)
     case setting_key
-    when V2C_VSToolLinkerDefines::TEXT_OPTIMIZEREFERENCES
+    when TEXT_OPTIMIZEREFERENCES
       get_linker_info().optimize_references_enable = get_boolean_value(setting_value)
     else
       found = super
@@ -3436,19 +3475,28 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
   end
 end
 
+module V2C_VS10ConfigurationDefines
+  include V2C_VSConfigurationDefines
+  TEXT_VS10_USEOFATL = 'UseOfAtl'
+  TEXT_VS10_USEOFMFC = 'UseOfMfc'
+end
+
 class V2C_VS10PropertyGroupConfigurationParser < V2C_VS10BaseElemParser
+  include V2C_VS10ConfigurationDefines
+private
+
   def parse_setting(setting_key, setting_value)
     found = FOUND_TRUE # be optimistic :)
     case setting_key
-    when 'CharacterSet'
+    when TEXT_CHARACTERSET
       @info_elem.charset = parse_charset(setting_value)
-    when 'ConfigurationType'
+    when TEXT_CONFIGURATIONTYPE
       @info_elem.cfg_type = parse_configuration_type(setting_value)
-    when 'UseOfAtl'
+    when TEXT_VS10_USEOFATL
       @info_elem.use_of_atl = parse_use_of_atl_mfc(setting_value)
-    when 'UseOfMfc'
+    when TEXT_VS10_USEOFMFC
       @info_elem.use_of_mfc = parse_use_of_atl_mfc(setting_value)
-    when 'WholeProgramOptimization'
+    when TEXT_WHOLEPROGRAMOPTIMIZATION
       @info_elem.whole_program_optimization = parse_wp_optimization(setting_value)
     else
       found = super
