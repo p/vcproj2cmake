@@ -2749,7 +2749,12 @@ def check_have_build_units_in_file_list(arr_file_infos)
   return have_build_units
 end
 
+module V2C_VSFilterDefines
+  TEXT_UNIQUEIDENTIFIER = 'UniqueIdentifier'
+end
+
 class V2C_VS7FilterParser < V2C_VSXmlParserBase
+  include V2C_VSFilterDefines
   def initialize(files_xml, project_out, files_str_out)
     super(files_xml, project_out)
     @files_str = files_str_out
@@ -2845,7 +2850,7 @@ class V2C_VS7FilterParser < V2C_VSXmlParserBase
       filter_info.name = setting_value
     when 'SourceControlFiles'
       filter_info.val_scmfiles = get_boolean_value(setting_value)
-    when 'UniqueIdentifier'
+    when TEXT_UNIQUEIDENTIFIER
       filter_info.guid = setting_value
       setting_value_upper = setting_value.clone.upcase
 	# TODO: these GUIDs actually seem to be identical between VS7 and VS10,
@@ -2866,7 +2871,13 @@ class V2C_VS7FilterParser < V2C_VSXmlParserBase
   end
 end
 
+module V2C_VSProjectDefines
+  TEXT_KEYWORD = 'Keyword'
+  TEXT_ROOTNAMESPACE = 'RootNamespace'
+end
+
 class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
+  include V2C_VSProjectDefines
   def parse_element(subelem_xml)
     found = FOUND_TRUE # be optimistic :)
     elem_parser = nil # IMPORTANT: reset it!
@@ -2893,7 +2904,7 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
   def parse_setting(setting_key, setting_value)
     found = FOUND_TRUE # be optimistic :)
     case setting_key
-    when 'Keyword'
+    when TEXT_KEYWORD
       get_project().vs_keyword = setting_value
     when 'Name'
       get_project().name = setting_value
@@ -2903,7 +2914,7 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
       get_project().guid = setting_value
     when 'ProjectType'
       get_project().type = setting_value
-    when 'RootNamespace'
+    when TEXT_ROOTNAMESPACE
       get_project().root_namespace = setting_value
     when 'Version'
       get_project().version = setting_value
@@ -3154,7 +3165,13 @@ class V2C_VS10ItemGroupProjectConfigurationsParser < V2C_VS10ParserBase
   end
 end
 
+module V2C_VS10FilterDefines
+  include V2C_VSFilterDefines
+  TEXT_VS10_EXTENSIONS = 'Extensions'
+end
+
 class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
+  include V2C_VS10FilterDefines
   def parse_attribute(setting_value, setting_key)
     found = FOUND_TRUE # be optimistic :)
     case setting_key
@@ -3168,9 +3185,9 @@ class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
   def parse_setting(setting_key, setting_value)
     found = FOUND_TRUE # be optimistic :)
     case setting_key
-    when 'Extensions'
+    when TEXT_VS10_EXTENSIONS
       get_filter().arr_scfilter = split_values_list_discard_empty(setting_value)
-    when 'UniqueIdentifier'
+    when TEXT_UNIQUEIDENTIFIER
       get_filter().guid = setting_value
     else
       found = super
@@ -3528,19 +3545,20 @@ private
 end
 
 class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10BaseElemParser
+  include V2C_VSProjectDefines
   private
 
   def get_project; return @info_elem end
   def parse_setting(setting_key, setting_value)
     found = FOUND_TRUE # be optimistic :)
     case setting_key
-    when 'Keyword'
+    when TEXT_KEYWORD
       get_project().vs_keyword = setting_value
     when 'ProjectGuid'
       get_project().guid = setting_value
     when 'ProjectName'
       get_project().name = setting_value
-    when 'RootNamespace'
+    when TEXT_ROOTNAMESPACE
       get_project().root_namespace = setting_value
     when VS_SCC_ATTR_REGEX_OBJ
       found = parse_elements_scc(setting_key, setting_value, get_project().scc_info)
