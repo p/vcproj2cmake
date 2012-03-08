@@ -1,4 +1,4 @@
-#!/usr/bin/env ruby
+#!/usr/bin/ruby -w
 
 require 'find'
 require 'tempfile'

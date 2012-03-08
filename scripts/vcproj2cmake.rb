@@ -1,4 +1,4 @@
-#!/usr/bin/env ruby
+#!/usr/bin/ruby -w
 
 # Given a Visual Studio project (.vcproj, .vcxproj),
 # create a CMakeLists.txt file which optionally allows
