@@ -401,13 +401,14 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
   attr_accessor :arr_tool_variant_specific_info
 
   def get_include_dirs(flag_system, flag_before)
-    arr_includes = Array.new
-    arr_info_include_dirs.each { |inc_dir_info|
-      # TODO: evaluate flag_system and flag_before
-      # and collect only those dirs that match these settings
-      # (equivalent to CMake include_directories() SYSTEM / BEFORE).
-      arr_includes.push(inc_dir_info.dir)
-    }
+    #arr_includes = Array.new
+    #@arr_info_include_dirs.each { |inc_dir_info|
+    #  # TODO: evaluate flag_system and flag_before
+    #  # and collect only those dirs that match these settings
+    #  # (equivalent to CMake include_directories() SYSTEM / BEFORE).
+    #  arr_includes.push(inc_dir_info.dir)
+    #}
+    arr_includes = @arr_info_include_dirs.collect { |inc_dir_info| inc_dir_info.dir }
     return arr_includes
   end
 end
@@ -1203,20 +1204,16 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # at least on Makefile and .vcproj.
     # CMake dox currently don't offer such details... (yet!)
     return if arr_includes.empty?
-    arr_includes_translated = Array.new
-    arr_includes.each { |elem_inc_dir|
+    arr_includes_translated = arr_includes.collect { |elem_inc_dir|
       next if elem_inc_dir.match(VS10_EXTENSION_VAR_MATCH_REGEX_OBJ)
-      elem_inc_dir = vs7_create_config_variable_translation(elem_inc_dir, @arr_config_var_handling)
-      arr_includes_translated.push(elem_inc_dir)
+      vs7_create_config_variable_translation(elem_inc_dir, @arr_config_var_handling)
     }
     write_build_attributes('include_directories', arr_includes_translated, map_includes, nil)
   end
 
   def write_link_directories(arr_lib_dirs, map_lib_dirs)
-    arr_lib_dirs_translated = Array.new
-    arr_lib_dirs.each { |elem_lib_dir|
-      elem_lib_dir = vs7_create_config_variable_translation(elem_lib_dir, @arr_config_var_handling)
-      arr_lib_dirs_translated.push(elem_lib_dir)
+    arr_lib_dirs_translated = arr_lib_dirs.collect { |elem_lib_dir|
+      vs7_create_config_variable_translation(elem_lib_dir, @arr_config_var_handling)
     }
     arr_lib_dirs_translated.push(dereference_variable_name('V2C_LIB_DIRS'))
     write_comment_at_level(3, \
@@ -1528,10 +1525,9 @@ class V2C_CMakeFileListsGenerator_VS7 < V2C_CMakeFileListGeneratorBase
     end
     if not source_files_variable.nil? or not arr_my_sub_sources.empty?
       sources_variable = "SOURCES_#{source_group_var_suffix}"
-      arr_source_vars = Array.new
       # dump sub filters...
-      arr_my_sub_sources.each { |sources_elem|
-        arr_source_vars.push(dereference_variable_name(sources_elem))
+      arr_source_vars = arr_my_sub_sources.collect { |sources_elem|
+        dereference_variable_name(sources_elem)
       }
       # ...then our own files
       if not source_files_variable.nil?
@@ -1590,9 +1586,8 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     }
   end
   def put_source_vars(arr_sub_source_list_var_names)
-    arr_source_vars = Array.new
-    arr_sub_source_list_var_names.each { |sources_elem|
-	arr_source_vars.push(dereference_variable_name(sources_elem))
+    arr_source_vars = arr_sub_source_list_var_names.collect { |sources_elem|
+	dereference_variable_name(sources_elem)
     }
     next_paragraph()
     write_list_quoted('SOURCES', arr_source_vars)
@@ -1721,14 +1716,13 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
   COMPILE_DEF_NEEDS_ESCAPING_REGEX_OBJ = %r{[\(\)]+}
   def generate_property_compile_definitions(config_name_upper, arr_platdefs, str_platform)
       write_conditional_if(str_platform)
-        arr_compile_defn = Array.new
-        arr_platdefs.each do |compile_defn|
+        arr_compile_defn = arr_platdefs.collect do |compile_defn|
     	  # Need to escape the value part of the key=value definition:
           if compile_defn =~ COMPILE_DEF_NEEDS_ESCAPING_REGEX_OBJ
             escape_char(compile_defn, '\\(')
             escape_char(compile_defn, '\\)')
           end
-          arr_compile_defn.push(compile_defn)
+          compile_defn
         end
         # make sure to specify APPEND for greater flexibility (hooks etc.)
         cmake_command_arg = "TARGET #{@target.name} APPEND PROPERTY COMPILE_DEFINITIONS_#{config_name_upper}"
@@ -2343,11 +2337,12 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
       #log_info_class "include is '#{elem_inc_dir}'"
       arr_includes.push(elem_inc_dir)
     }
-    arr_includes.each { |inc_dir|
+    arr_include_dirs = arr_includes.collect { |inc_dir|
       info_inc_dir = V2C_Info_Include_Dir.new
       info_inc_dir.dir = inc_dir
-      get_compiler_info().arr_info_include_dirs.push(info_inc_dir)
+      info_inc_dir
     }
+    get_compiler_info().arr_info_include_dirs.concat(arr_include_dirs)
   end
   def parse_disable_specific_warnings(arr_disable_warnings, attr_disable_warnings)
     arr_disable_warnings.replace(split_values_list_discard_empty(attr_disable_warnings))
