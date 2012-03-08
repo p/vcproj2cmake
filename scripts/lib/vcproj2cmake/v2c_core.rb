@@ -445,6 +445,11 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
 end
 
 module V2C_BaseConfig_Defines
+  CFG_TYPE_INVALID = -1 # detect improper entries
+  CFG_TYPE_UNKNOWN = 0 # VS7/10 typeUnknown (utility), 0
+  CFG_TYPE_APP = 1 # VS7/10 typeApplication (.exe), 1
+  CFG_TYPE_DLL = 2 # VS7/10 typeDynamicLibrary (.dll), 2
+  CFG_TYPE_STATIC_LIB = 4 # VS7/10 typeStaticLibrary, 4
   CHARSET_SBCS = 0
   CHARSET_UNICODE = 1
   CHARSET_MBCS = 2
@@ -455,10 +460,11 @@ end
 
 # Common base class of both file config and project config.
 class V2C_Config_Base_Info < V2C_Info_Elem_Base
+  include V2C_BaseConfig_Defines
   def initialize
     @build_type = '' # WARNING: it may contain spaces!
     @platform = ''
-    @cfg_type = 0
+    @cfg_type = CFG_TYPE_INVALID
 
     # 0 == no MFC
     # 1 == static MFC
@@ -670,6 +676,21 @@ class V2C_ProjectValidator
     @project_info = project_info
   end
   def validate
+    validate_project
+  end
+  private
+  def validate_config(config_info)
+    if config_info.cfg_type == V2C_BaseConfig_Defines::CFG_TYPE_INVALID
+      validation_error('config type not set!?')
+    end
+  end
+  def validate_configs(arr_config_info)
+    arr_config_info.each { |config_info_curr|
+      validate_config(config_info_curr)
+    }
+  end
+  def validate_project
+    validate_configs(@project_info.arr_config_info)
     #log_debug "project data: #{@project_info.inspect}"
     if @project_info.orig_environment_shortname.nil?; validation_error('original environment not set!?') end
     if @project_info.name.nil?; validation_error('name not set!?') end
@@ -1624,7 +1645,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
 
           # see VCProjectEngine ConfigurationTypes enumeration
     case config_info_curr.cfg_type
-    when 1       # typeApplication (.exe)
+    when V2C_BaseConfig_Defines::CFG_TYPE_APP
       target_is_valid = true
       #syntax_generator.write_line("add_executable_vcproj2cmake( #{target.name} WIN32 ${SOURCES} )")
       # TODO: perhaps for real cross-platform binaries (i.e.
@@ -1632,7 +1653,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
       # this and not use WIN32 in this case...
       # Well, this toggle probably is related to the .vcproj Keyword attribute...
       write_target_executable()
-    when 2    # typeDynamicLibrary (.dll)
+    when V2C_BaseConfig_Defines::CFG_TYPE_DLL
       target_is_valid = true
       #syntax_generator.write_line("add_library_vcproj2cmake( #{target.name} SHARED ${SOURCES} )")
       # add_library() docs: "If no type is given explicitly the type is STATIC or  SHARED
@@ -1645,11 +1666,11 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
       # Or perhaps make use of new V2C_TARGET_LINKAGE_{SHARED|STATIC}_LIB
       # variables here, to be able to define "SHARED"/"STATIC" externally?
       write_target_library_dynamic()
-    when 4    # typeStaticLibrary
+    when V2C_BaseConfig_Defines::CFG_TYPE_STATIC_LIB
       target_is_valid = true
       write_target_library_static()
-    when 0    # typeUnknown (utility)
-      log_warn "Project type 0 (typeUnknown - utility) is a _custom command_ type and thus probably cannot be supported easily. We will not abort and thus do write out a file, but it probably needs fixup (hook scripts?) to work properly. If this project type happens to use VCNMakeTool tool, then I would suggest to examine BuildCommandLine/ReBuildCommandLine/CleanCommandLine attributes for clues on how to proceed."
+    when V2C_BaseConfig_Defines::CFG_TYPE_UNKNOWN
+      log_warn "Project type 0 (typeUnknown - utility, configured for target #{target.name}) is a _custom command_ type and thus probably cannot be supported easily. We will not abort and thus do write out a file, but it probably needs fixup (hook scripts?) to work properly. If this project type happens to use VCNMakeTool tool, then I would suggest to examine BuildCommandLine/ReBuildCommandLine/CleanCommandLine attributes for clues on how to proceed."
     else
     #when 10    # typeGeneric (Makefile) [and possibly other things...]
       # TODO: we _should_ somehow support these project types...
@@ -3154,8 +3175,13 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
     end
     file_info = V2C_Info_File.new
     file_parser = V2C_VS10ItemGroupFileElemParser.new(subelem_xml, file_info)
-    file_parser.parse
-    get_file_list().append_file(file_info)
+    found = file_parser.parse
+    if found == FOUND_TRUE
+      get_file_list().append_file(file_info)
+    else
+      found = super
+    end
+    return found
   end
   #def parse_post_hook
   #  log_fatal "file list: #{get_file_list().inspect}"
@@ -3173,13 +3199,16 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
       case elem_name
       when 'Filter'
         elem_parser = V2C_VS10ItemGroupFiltersParser.new(@elem_xml, get_project().filters)
-      when 'ClCompile', 'ClInclude', 'None', 'ResourceCompile'
+      when 'ClCompile', 'ClInclude', 'Midl', 'None', 'ResourceCompile'
         file_list_new = V2C_File_List_Info.new(elem_name, get_file_list_type(elem_name))
         elem_parser = V2C_VS10ItemGroupFilesParser.new(@elem_xml, file_list_new)
         elem_parser.parse
         get_project().file_lists.append(file_list_new)
       else
-        found = super
+        # We should NOT call base method, right? This is an _override_ of the
+        # standard method, and we expect to be able to parse it fully,
+        # thus signal failure.
+        found = FOUND_FALSE
       end
     end
     return found
