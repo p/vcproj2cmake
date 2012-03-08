@@ -61,7 +61,7 @@ if File.exist?(excluded_projects)
       # since exclusion is most likely per-platform after all
       arr_excl_proj.push(exclude_expr)
     end
-  rescue
+  ensure
     f_excl.close
   end
 end
@@ -158,7 +158,7 @@ Find.find('./') do
     begin
       f_cmakelists = File.new(str_cmakelists_file, 'r')
       auto_generated = f_cmakelists.grep(CMAKELISTS_AUTO_GENERATED_REGEX_OBJ)
-    rescue
+    ensure
       f_cmakelists.close
     end
     if (auto_generated.empty?)
@@ -179,7 +179,7 @@ Find.find('./') do
   begin
     f_vcproj = File.new(str_proj_file, 'r')
     cmakelists_text = f_vcproj.grep(VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ)
-  rescue
+  ensure
     f_vcproj.close
   end
   if not cmakelists_text.empty?
@@ -293,7 +293,7 @@ def write_projects_list_file(str_file_fqpn, create_permissions, arr_project_subd
       end
     }
 
-  rescue
+  ensure
     # Make sure to close it:
     projlistfile.close
 
