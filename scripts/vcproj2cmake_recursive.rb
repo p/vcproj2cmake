@@ -112,10 +112,13 @@ Find.find('./') do
     next
   end
 
+  # HACK: temporary helper to quickly switch between .vcproj/.vcxproj
+  want_proj = 'vcproj'
+
   puts "processing #{f}!"
   dir_entries = Dir.entries(f)
   #puts "entries: #{dir_entries}"
-  vcproj_files = dir_entries.grep(/\.vcproj$/i)
+  vcproj_files = dir_entries.grep(/\.#{want_proj}$/i)
   #puts vcproj_files
 
   # No project file type at all? Immediately skip directory.
@@ -126,12 +129,12 @@ Find.find('./') do
   # not available, use a non-_vc8 file.
   projfile = nil
   vcproj_files.each do |vcproj_file|
-    if vcproj_file =~ /_vc8.vcproj$/i
+    if vcproj_file =~ /_vc8.#{want_proj}$/i
       # ok, we found a _vc8 version, quit searching since this is what we prefer
       projfile = vcproj_file
       break
     end
-    if vcproj_file =~ /.vcproj$/i
+    if vcproj_file =~ /.#{want_proj}$/i
       projfile = vcproj_file
 	# do NOT break here (another _vc8 file might come along!)
     end
@@ -173,7 +176,7 @@ Find.find('./') do
     next
   end
 
-  if projfile =~ /_vc8.vcproj$/i
+  if projfile =~ /_vc8.#{want_proj}$/i
   else
     puts "Darn, no _vc8.vcproj in #{f}! Should have offered one..."
   end
