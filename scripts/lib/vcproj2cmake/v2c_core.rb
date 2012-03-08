@@ -561,7 +561,8 @@ class V2C_File_List_Info
   end
   attr_accessor :name
   attr_accessor :type
-  attr_accessor :arr_files
+  attr_reader :arr_files
+  def append_file(file_info); @arr_files.push(file_info) end
   def get_list_type_name()
     list_types =
      [ 'unknown', # VS10: None
@@ -576,10 +577,28 @@ end
 
 class V2C_File_Lists_Container
   def initialize
-    @file_lists = Array.new
+    @arr_file_lists = Array.new # V2C_File_List_Info:s, array (serves to maintain ordering)
+    @hash_file_lists = Hash.new # dito, but hashed! (serves to maintain fast lookup)
   end
-  def get(file_list_type, file_list_name)
-    #log_fatal "get!!"
+  attr_reader :arr_file_lists
+  def lookupFromName(file_list_name)
+    return @hash_file_lists[file_list_name]
+  end
+  def append(file_list)
+    name = file_list.name
+    file_list_existing = lookupFromName(name)
+    file_list_append = file_list_existing
+    if file_list_append.nil?
+      register(file_list)
+      file_list_append = file_list
+    end
+  end
+
+  private
+  # registers a file list (does NOT do collision checks!)
+  def register(file_list)
+    @arr_file_lists.push(file_list)
+    @hash_file_lists[file_list.name] = file_list
   end
 end
 
@@ -1349,40 +1368,22 @@ end
 # hidden behind v2c_xxx(_target _build_type _entries) funcs, of course.
 VS10_EXTENSION_VAR_MATCH_REGEX_OBJ = %r{%([^\s]*)}
 
-# FIXME: temporarily appended a _VS7 suffix since we're currently changing file list generation during our VS10 generator work.
-class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeSyntaxGenerator
-  def initialize(textOut, project_name, project_dir, files_str, parent_source_group, arr_sub_sources_for_parent)
-    super(textOut)
-    @project_name = project_name
-    @project_dir = project_dir
-    @files_str = files_str
-    @parent_source_group = parent_source_group
-    @arr_sub_sources_for_parent = arr_sub_sources_for_parent
-  end
-  def generate; put_file_list_recursive(@files_str, @parent_source_group, @arr_sub_sources_for_parent) end
 
-  # Hrmm, I'm not quite sure yet where to aggregate this function...
-  def get_filter_group_name(filter_info); return filter_info.nil? ? 'COMMON' : filter_info.name; end
-
-  # Related TODO item: for .cpp files which happen to be listed as
-  # include files in their native projects, we should likely
-  # explicitly set the HEADER_FILE_ONLY property (note that for .h files,
-  # man cmakeprops seems to say that CMake
-  # will _implicitly_ configure these correctly).
-  VS7_UNWANTED_GROUP_TAG_CHARS_MATCH_REGEX_OBJ = %r{( |\\)}
+class V2C_CMakeFileListGeneratorBase < V2C_CMakeSyntaxGenerator
   VS7_UNWANTED_FILE_TYPES_REGEX_OBJ = %r{\.(lex|y|ico|bmp|txt)$}
   VS7_IDL_FILE_TYPES_REGEX_OBJ = %r{_(i|p).c$}
   VS7_LIB_FILE_TYPES_REGEX_OBJ = %r{\.lib$}
-  def put_file_list_recursive(files_str, parent_source_group, arr_sub_sources_for_parent)
-    filter_info = files_str[:filter_info]
-    group_name = get_filter_group_name(filter_info)
-      log_debug("#{self.class.name}: #{group_name}")
-    if not files_str[:arr_sub_filters].nil?
-      arr_sub_filters = files_str[:arr_sub_filters]
-    end
-    if not files_str[:arr_file_infos].nil?
+  def initialize(textOut, project_name, project_dir, arr_sub_sources_for_parent)
+    super(textOut)
+    @project_name = project_name
+    @project_dir = project_dir
+    @arr_sub_sources_for_parent = arr_sub_sources_for_parent
+  end
+  def filter_files(arr_file_infos)
+    arr_local_sources = nil
+    if not arr_file_infos.nil?
       arr_local_sources = Array.new
-      files_str[:arr_file_infos].each { |file|
+      arr_file_infos.each { |file|
         f = file.path_relative
 
 	v2c_generator_check_file_accessible(@project_dir, f, 'file item in project', @project_name, ($v2c_validate_vcproj_abort_on_error > 0))
@@ -1416,6 +1417,43 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeSyntaxGenerator
         arr_local_sources.push(f)
       }
     end
+    return arr_local_sources
+  end
+  def write_sources_list(source_list_name, arr_sources, var_prefix = 'SOURCES_files_')
+    source_files_variable = "#{var_prefix}#{source_list_name}"
+    write_list_quoted(source_files_variable, arr_sources)
+    return source_files_variable
+  end
+end
+
+# FIXME: temporarily appended a _VS7 suffix since we're currently changing file list generation during our VS10 generator work.
+class V2C_CMakeFileListsGenerator_VS7 < V2C_CMakeFileListGeneratorBase
+  def initialize(textOut, project_name, project_dir, files_str, parent_source_group, arr_sub_sources_for_parent)
+    super(textOut, project_name, project_dir, arr_sub_sources_for_parent)
+    @files_str = files_str
+    @parent_source_group = parent_source_group
+  end
+  def generate; put_file_list_recursive(@files_str, @parent_source_group, @arr_sub_sources_for_parent) end
+
+  # Hrmm, I'm not quite sure yet where to aggregate this function...
+  def get_filter_group_name(filter_info); return filter_info.nil? ? 'COMMON' : filter_info.name; end
+
+  # Related TODO item: for .cpp files which happen to be listed as
+  # include files in their native projects, we should likely
+  # explicitly set the HEADER_FILE_ONLY property (note that for .h files,
+  # man cmakeprops seems to say that CMake
+  # will _implicitly_ configure these correctly).
+  VS7_UNWANTED_GROUP_TAG_CHARS_MATCH_REGEX_OBJ = %r{( |\\)}
+  def put_file_list_recursive(files_str, parent_source_group, arr_sub_sources_for_parent)
+    filter_info = files_str[:filter_info]
+    group_name = get_filter_group_name(filter_info)
+      log_debug("#{self.class.name}: #{group_name}")
+    if not files_str[:arr_sub_filters].nil?
+      arr_sub_filters = files_str[:arr_sub_filters]
+    end
+    arr_file_infos = files_str[:arr_file_infos]
+
+    arr_local_sources = filter_files(arr_file_infos)
 
     # TODO: CMake is said to have a weird bug in case of parent_source_group being "Source Files":
     # "Re: [CMake] SOURCE_GROUP does not function in Visual Studio 8"
@@ -1445,8 +1483,7 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeSyntaxGenerator
 
     # process our hierarchy's own files
     if not arr_local_sources.nil?
-      source_files_variable = "SOURCES_files_#{source_group_var_suffix}"
-      write_list_quoted(source_files_variable, arr_local_sources)
+      source_files_variable = write_sources_list(source_group_var_suffix, arr_local_sources)
       # create source_group() of our local files
       if not parent_source_group.nil?
         # use list of filters if available: have it generated as source_group(REGULAR_EXPRESSION "regex" ...).
@@ -1476,6 +1513,20 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeSyntaxGenerator
   end
 end
 
+class V2C_CMakeFileListGenerator_VS10 < V2C_CMakeFileListGeneratorBase
+  def initialize(textOut, project_name, project_dir, file_list, parent_source_group, arr_sub_sources_for_parent)
+    super(textOut, project_name, project_dir, arr_sub_sources_for_parent)
+    @file_list = file_list
+    @parent_source_group = parent_source_group
+  end
+  def generate; put_file_list(@file_list, @arr_sub_sources_for_parent) end
+  def put_file_list(file_list, arr_sub_sources_for_parent)
+    arr_local_sources = filter_files(file_list.arr_files)
+    source_files_variable = write_sources_list(file_list.name, arr_local_sources)
+    arr_sub_sources_for_parent.push(source_files_variable)
+  end
+end
+
 class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
   def initialize(target, project_dir, localGenerator, textOut)
     super(textOut)
@@ -1493,8 +1544,18 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
       puts "ERROR: WHAT THE HELL, NO FILES!?"
       return
     end
-    filelist_generator = V2C_CMakeFileListGenerator_VS7.new(@textOut, project_name, @project_dir, files_str, parent_source_group, arr_sub_sources_for_parent)
+    filelist_generator = V2C_CMakeFileListsGenerator_VS7.new(@textOut, project_name, @project_dir, files_str, parent_source_group, arr_sub_sources_for_parent)
     filelist_generator.generate
+  end
+  def put_file_list_vs10(project_name, file_lists, parent_source_group, arr_sub_sources_for_parent)
+    if file_lists.nil?
+      puts "ERROR: WHAT THE HELL, NO FILES!?"
+      return
+    end
+    file_lists.arr_file_lists.each { |file_list|
+      filelist_generator = V2C_CMakeFileListGenerator_VS10.new(@textOut, project_name, @project_dir, file_list, parent_source_group, arr_sub_sources_for_parent)
+      filelist_generator.generate
+    }
   end
   def put_source_vars(arr_sub_source_list_var_names)
     arr_source_vars = Array.new
@@ -2623,8 +2684,20 @@ class V2C_VS7FileParser < V2C_VSXmlParserBase
   end
 end
 
+BUILD_UNIT_FILE_TYPES_REGEX_OBJ = %r{\.(c|C)}
+# VERY DIRTY interim helper, not sure at all where it will finally end up at
+def check_have_build_units_in_file_list(arr_file_infos)
+  have_build_units = false
+  arr_file_infos.each { |file|
+    if file.path_relative =~ BUILD_UNIT_FILE_TYPES_REGEX_OBJ
+      have_build_units = true
+      break
+    end
+  }
+  return have_build_units
+end
+
 class V2C_VS7FilterParser < V2C_VSXmlParserBase
-  BUILD_UNIT_FILE_TYPES_REGEX_OBJ = %r{\.(c|C)}
   def initialize(files_xml, project_out, files_str_out)
     super(files_xml, project_out)
     @files_str = files_str_out
@@ -2689,12 +2762,7 @@ class V2C_VS7FilterParser < V2C_VSXmlParserBase
       files_str[:arr_file_infos] = arr_file_infos
 
       if not get_project().have_build_units == true
-        arr_file_infos.each { |file|
-          if file.path_relative =~ BUILD_UNIT_FILE_TYPES_REGEX_OBJ
-            get_project().have_build_units = true
-            break
-          end
-        }
+        get_project().have_build_units = check_have_build_units_in_file_list(arr_file_infos)
       end
     end
     return true
@@ -3025,13 +3093,6 @@ class V2C_VS10ItemGroupProjectConfigurationsParser < V2C_VS10ParserBase
   end
 end
 
-class V2C_ItemGroup_Info
-  def initialize
-    @label = String.new
-    @items = Array.new
-  end
-end
-
 class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
   def parse_attribute(setting_value, setting_key)
     found = FOUND_TRUE # be optimistic :)
@@ -3058,30 +3119,92 @@ class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
   def get_filter; return @info_elem end
 end
 
+class V2C_VS10ItemGroupFiltersParser
+  def parse
+    log_fixme_class "FIXME!!!"
+  end
+end
+
+class V2C_VS10ItemGroupFileElemParser < V2C_VS10ParserBase
+  private
+
+  def get_file_elem; return @info_elem end # V2C_Info_File
+
+  def parse_attribute(setting_key, setting_value)
+    found = FOUND_TRUE # be optimistic :)
+    case setting_key
+    when 'Include'
+      get_file_elem().path_relative = normalize_path(setting_value)
+    else
+      found = super
+    end
+    return found
+  end
+end
+
+class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
+  def initialize(elem_xml, file_list_out)
+    super(elem_xml, file_list_out)
+    @list_name = file_list_out.name
+  end
+  def get_file_list; return @info_elem end
+  def parse_element(subelem_xml)
+    if not subelem_xml.name == @list_name
+      parser_error "ItemGroup element mismatch! list name #{@list_name} vs. element name #{subelem_xml.name}!"
+    end
+    file_info = V2C_Info_File.new
+    file_parser = V2C_VS10ItemGroupFileElemParser.new(subelem_xml, file_info)
+    file_parser.parse
+    get_file_list().append_file(file_info)
+  end
+  #def parse_post_hook
+  #  log_fatal "file list: #{get_file_list().inspect}"
+  #end
+end
+
 class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
+  def parse
+    found = FOUND_FALSE
+    elem_first = @elem_xml.elements[1] # 1-based index!!
+    if not elem_first.nil?
+      found = FOUND_TRUE # be optimistic :)
+      elem_name = elem_first.name
+      elem_parser = nil
+      case elem_name
+      when 'Filter'
+        elem_parser = V2C_VS10ItemGroupFiltersParser.new(@elem_xml, get_project().filters)
+      when 'ClCompile', 'ClInclude', 'None', 'ResourceCompile'
+        file_list_new = V2C_File_List_Info.new(elem_name, get_file_list_type(elem_name))
+        elem_parser = V2C_VS10ItemGroupFilesParser.new(@elem_xml, file_list_new)
+        elem_parser.parse
+        get_project().file_lists.append(file_list_new)
+      else
+        found = super
+      end
+    end
+    return found
+  end
 
   private
 
   def get_project; return @info_elem end
-  def parse_element(subelem_xml)
+  def parse_element_DEPRECATED(subelem_xml)
     found = FOUND_TRUE # be optimistic :)
     setting_key = subelem_xml.name
-    case setting_key
-    when 'Filter'
-      filter = V2C_Info_Filter.new
-      elem_parser = V2C_VS10ItemGroupElemFilterParser.new(subelem_xml, filter)
-	elem_parser.parse
-      get_project().filters.append(filter)
-    when 'ClCompile', 'ClInclude', 'None', 'ResourceCompile'
-      # Due to split between .vcxproj and .vcxproj.filters,
-      # need to possibly _enhance_ an _existing_ (added by the prior file)
-      # item group info, thus make sure to do lookup first.
-      file_list_name = setting_key
-      file_list_type = get_file_list_type(file_list_name)
-      file_list = get_project().file_lists.get(file_list_type, file_list_name)
-    else
-      found = super
-    end
+    filter = V2C_Info_Filter.new
+    elem_parser = V2C_VS10ItemGroupElemFilterParser.new(subelem_xml, filter)
+    elem_parser.parse
+    get_project().filters.append(filter)
+    # Due to split between .vcxproj and .vcxproj.filters,
+    # need to possibly _enhance_ an _existing_ (added by the prior file)
+    # item group info, thus make sure to do lookup first.
+    file_list_name = setting_key
+    #file_list_type = get_file_list_type(file_list_name)
+    #file_list = get_project().file_lists.lookupFromName(file_list_name)
+    file_list_new = V2C_File_List_Info.new(file_list_name, get_file_list_type(file_list_name))
+    elem_parser = V2C_VS10ItemGroupElemFileListParser.new(subelem_xml, file_list_new)
+    elem_parser.parse
+    get_project().file_lists.append(file_list_new)
     # TODO:
     #if not @itemgroup.label.nil?
     #  if not setting_key == @itemgroup.label
@@ -3600,7 +3723,8 @@ class V2C_VS10ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
     proj_filters_file_parser = V2C_VS10ProjectFiltersFileParser.new("#{@proj_filename}.filters", @arr_projects_new)
 
     if proj_file_parser.parse_file
-      proj_filters_file_parser.parse_file
+       puts "FILTERS FILE PARSING DISABLED, TODO!!"
+#      proj_filters_file_parser.parse_file
     end
   end
   def check_unhandled_file_types
@@ -3740,6 +3864,19 @@ Finished. You should make sure to have all important v2c settings includes such 
         # arr_sub_source_list_var_names will receive the names of the individual source list variables:
         arr_sub_source_list_var_names = Array.new
         target_generator.put_file_list_source_group_recursive(project_info.name, project_info.main_files, nil, arr_sub_source_list_var_names)
+
+        # VERY DIRTY interim handling:
+        if project_info.have_build_units == false
+          project_info.file_lists.arr_file_lists.each { |file_list|
+            arr_file_infos = file_list.arr_files
+            have_build_units = check_have_build_units_in_file_list(arr_file_infos)
+            if have_build_units == true
+              project_info.have_build_units = have_build_units
+              break
+            end
+          }
+        end
+        target_generator.put_file_list_vs10(project_info.name, project_info.file_lists, nil, arr_sub_source_list_var_names)
 
         if not arr_sub_source_list_var_names.empty?
           # add a ${V2C_SOURCES} variable to the list, to be able to append
