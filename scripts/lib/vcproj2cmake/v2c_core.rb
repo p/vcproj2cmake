@@ -702,7 +702,7 @@ class V2C_ProjectValidator
     end
   end
   def validation_error(str_message)
-    raise V2C_ValidationError, "Project: #{str_message}; #{@project_info.inspect}"
+    raise V2C_ValidationError, "Project #{@project_info.name}: #{str_message}; #{@project_info.inspect}"
   end
 end
 
