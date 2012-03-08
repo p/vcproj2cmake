@@ -1,3 +1,5 @@
+# This file is part of the vcproj2cmake build converter (vcproj2cmake.sf.net)
+#
 # Reset common variables used by all converted CMakeLists.txt files
 # (these are supposed to be defined anew by each subproject based on a
 # converted CMakeLists.txt)

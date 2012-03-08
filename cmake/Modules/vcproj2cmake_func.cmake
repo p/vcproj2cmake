@@ -1,3 +1,5 @@
+# This file is part of the vcproj2cmake build converter (vcproj2cmake.sf.net)
+#
 # This vcproj2cmake-specific CMake module should be available
 # at least in your root project (i.e., PROJECT/cmake/Modules/)
 

@@ -1,3 +1,5 @@
+# This file is part of the vcproj2cmake build converter (vcproj2cmake.sf.net)
+#
 # user-modifiable file containing common vcproj2cmake settings, included by all vcproj2cmake scripts.
 # NOTE that in addition to this file a vcproj2cmake_settings.user.rb
 # file (for local customization of the settings in this more
