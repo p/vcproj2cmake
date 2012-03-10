@@ -68,6 +68,21 @@ $v2c_generator_indent_step = 2
 # as the default value.
 $v2c_generator_file_create_permissions = 0644
 
+# Indicates that the project conversion run is supposed to be a one-time event
+# rather than "on-going tracking of continued development on the side of the
+# parsed project files".
+# ENABLING NOT RECOMMENDED since it will disable automatic rebuilding
+# - only for cases where you are sure that you intend to completely leave
+# the originating platform behind # and subsequently maintain all build aspects
+# on the side of the generated platform (CMake).
+# This switch will disable elements such as:
+# - the "auto-generated file" marker
+# - all hooks for custom code (since the generated file will never
+#   be re-generated, it can now reliably host any permanent modifications on its own)
+# - the automatic rebuild of generated files which would happen
+#   whenever there is an update to the originating project file
+$v2c_generator_one_time_conversion_only = false
+
 # Whether to parse and generate configuration info about precompiled headers.
 # Currently disabled by default (not verified yet, and module file not checked in yet).
 $v2c_target_precompiled_header_enable = false

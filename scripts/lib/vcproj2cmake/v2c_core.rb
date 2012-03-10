@@ -1157,7 +1157,15 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
 	"the _LIBRARIES / _INCLUDE_DIRS mappings created\n" \
 	"by your include/dependency map files." \
     )
-    write_include_from_cmake_var('V2C_HOOK_PROJECT', true)
+    put_customization_hook_from_cmake_var('V2C_HOOK_PROJECT')
+  end
+  def put_customization_hook(include_file)
+    return if $v2c_generator_one_time_conversion_only
+    write_include(include_file, true)
+  end
+  def put_customization_hook_from_cmake_var(include_file_var)
+    return if $v2c_generator_one_time_conversion_only
+    write_include_from_cmake_var(include_file_var, true)
   end
 
   def put_include_project_source_dir
@@ -1251,6 +1259,8 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     }
   end
   def put_var_converter_script_location(script_location_relative_to_master)
+    return if $v2c_generator_one_time_conversion_only
+
     # For the CMakeLists.txt rebuilder (automatic rebuild on file changes),
     # add handling of a script file location variable, to enable users
     # to override the script location if needed.
@@ -1281,6 +1291,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
   private
 
   def put_file_header_temporary_marker
+    return if $v2c_generator_one_time_conversion_only
     # WARNING: since this comment header is meant to advertise
     # _generated_ vcproj2cmake files, user-side code _will_ check for this
     # particular wording to tell apart generated CMakeLists.txt from
@@ -1345,7 +1356,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # to skip the entire build of this file on certain platforms:
     # if(PLATFORM) message(STATUS "not supported") return() ...
     # (note that we appended CMAKE_MODULE_PATH _prior_ to this include()!)
-    write_include('${V2C_CONFIG_DIR_LOCAL}/hook_pre.txt', true)
+    put_customization_hook('${V2C_CONFIG_DIR_LOCAL}/hook_pre.txt')
   end
   def put_converted_timestamp(project_name)
     # Add an explicit file generation timestamp,
@@ -1592,14 +1603,14 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     next_paragraph()
     write_list_quoted('SOURCES', arr_source_vars)
   end
-  def put_hook_post_sources; write_include_from_cmake_var('V2C_HOOK_POST_SOURCES', true) end
+  def put_hook_post_sources; @localGenerator.put_customization_hook_from_cmake_var('V2C_HOOK_POST_SOURCES') end
   def put_hook_post_definitions
     next_paragraph()
     write_comment_at_level(1, \
 	"hook include after all definitions have been made\n" \
 	"(but _before_ target is created using the source list!)" \
     )
-    write_include_from_cmake_var('V2C_HOOK_POST_DEFINITIONS', true)
+    @localGenerator.put_customization_hook_from_cmake_var('V2C_HOOK_POST_DEFINITIONS')
   end
   #def evaluate_precompiled_header_config(target, files_str)
   #end
@@ -1711,7 +1722,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     write_comment_at_level(1, \
       "e.g. to be used for tweaking target properties etc." \
     )
-    write_include_from_cmake_var('V2C_HOOK_POST_TARGET', true)
+    @localGenerator.put_customization_hook_from_cmake_var('V2C_HOOK_POST_TARGET')
   end
   COMPILE_DEF_NEEDS_ESCAPING_REGEX_OBJ = %r{[\(\)]+}
   def generate_property_compile_definitions(config_name_upper, arr_platdefs, str_platform)
