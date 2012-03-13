@@ -457,10 +457,19 @@ class V2C_Tool_Linker_Specific_Info_MSVC10 < V2C_Tool_Linker_Specific_Info
   end
 end
 
+class V2C_Dependency_Info
+  def initialize(dependency)
+    @dependency = dependency # string (filename path or target name)
+    @is_target_name = false
+  end
+  attr_accessor :dependency
+  attr_accessor :is_target_name
+end
+
 class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
   def initialize(tool_variant_specific_info = nil)
     super(tool_variant_specific_info)
-    @arr_dependencies = Array.new # FIXME: should be changing this into a dependencies class (we need an attribute which indicates whether this dependency is a library _file_ or a target name, since we should be reliably able to decide whether we can add "debug"/"optimized" keywords to CMake variables or target_link_library() parms)
+    @arr_dependencies = Array.new # V2C_Dependency_Info (we need an attribute which indicates whether this dependency is a library _file_ or a target name, since we should be reliably able to decide whether we can add "debug"/"optimized" keywords to CMake variables or target_link_library() parms)
     @generate_debug_information_enable = false
     @link_incremental = 0 # 1 means NO, thus 2 probably means YES?
     @module_definition_file = nil
@@ -1783,7 +1792,8 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     # write target_link_libraries() in case there's a valid target
     if target_is_valid
       target_info_curr.tools.arr_linker_info.each { |linker_info_curr|
-        write_link_libraries(linker_info_curr.arr_dependencies, map_dependencies)
+        arr_dependencies = linker_info_curr.arr_dependencies.collect { |dep| dep.dependency }
+        write_link_libraries(arr_dependencies, map_dependencies)
       }
     end # target_is_valid
     return target_is_valid
@@ -2561,7 +2571,7 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
       log_debug_class "!!!!! elem_lib_dep #{elem_lib_dep}"
       elem_lib_dep = normalize_path(elem_lib_dep).strip
       dependency_name = File.basename(elem_lib_dep, '.lib')
-      arr_dependencies.push(dependency_name)
+      arr_dependencies.push(V2C_Dependency_Info.new(dependency_name))
     }
   end
   def parse_additional_library_directories(attr_lib_dirs, arr_lib_dirs)
