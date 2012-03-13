@@ -1551,7 +1551,7 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeSyntaxGenerator
           # it's actually some standard MSVS mechanism... FIXME
           log_info_class "#{@project_name}::#{f} registered as a \"source\" file!? Skipping!"
           included_in_build = false
-          return # no complex handling, just return
+          next # no complex handling, just skip
         end
 
         arr_local_sources.push(f)
