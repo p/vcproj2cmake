@@ -15,11 +15,13 @@ def load_configuration_file(str_file, str_descr, arr_descr_loaded)
 end
 
 def load_configuration
-  # FIXME: we should be offering instances of configuration classes!
-  # That way, rather than having the user possibly _create_ ad-hoc global
-  # variables, we'll have a restricted set of class members which the
-  # user may modify --> the user will _know_ immediately in case
-  # a now non-existent variable gets modified
+  # FIXME: we should be offering instances of configuration classes
+  # to be customized in the user settings files!
+  # That way, rather than having the user possibly _create_ ad-hoc
+  # incorrectly spelt global variables, we'll have a restricted set
+  # of class members which the user may modify
+  # --> the user will _know_ immediately in case
+  # a now non-existent class member gets modified
   # (i.e. a config file update happened!).
 
   # load common settings
@@ -43,10 +45,6 @@ def load_configuration
 end
 
 load_configuration()
-
-# global variable to indicate whether we want debug output or not
-# FIXME: deprecated, always directly use $v2c_log_level instead.
-$v2c_debug = ($v2c_log_level >= 4)
 
 # At least currently, this is a custom plugin mechanism.
 # It doesn't have anything to do with e.g.
@@ -505,9 +503,9 @@ class V2C_Target_Config_Build_Info < V2C_Info_Elem_Base
     # 0 == no MFC
     # 1 == static MFC
     # 2 == shared MFC
-    @use_of_mfc = 0 # TODO: perhaps make ATL/MFC values an enum?
+    @use_of_mfc = 0 # V2C_TargetConfig_Defines::MFC_*
     @use_of_atl = 0
-    @charset = 0 # Simply uses VS7 values for now. TODO: should use our own enum definition or so.
+    @charset = 0 # Simply uses VS7 values for now. V2C_TargetConfig_Defines::CHARSET_*
     @whole_program_optimization = 0 # Simply uses VS7 values for now. TODO: should use our own enum definition or so.; it seems for CMake the related setting is target/directory property INTERPROCEDURAL_OPTIMIZATION_<CONFIG> (described by Wikipedia "Interprocedural optimization")
     @use_debug_libs = false
   end
@@ -736,7 +734,7 @@ class V2C_ProjectValidator
     #log_debug "project data: #{@project_info.inspect}"
     if @project_info.orig_environment_shortname.nil?; validation_error('original environment not set!?') end
     if @project_info.name.nil?; validation_error('name not set!?') end
-    # FIXME: Disabled for TESTING only - should re-enable this check once VS10 parsing is complete.
+    # FIXME: Disabled for TESTING only - should re-enable a fileset check once VS10 parsing is complete.
     #if @project_info.main_files.nil?; validation_error('no files!?') end
     arr_config_info = @project_info.arr_config_info
     if arr_config_info.nil? or arr_config_info.size == 0
@@ -835,9 +833,8 @@ class V2C_LoggerBase
   def unhandled_functionality(str_description); log_error(str_description) end
 end
 
-#class V2C_CMakeSyntaxGenerator < V2C_TextStreamSyntaxGeneratorBase
-# FIXME: most likely V2C_CMakeSyntaxGenerator should _not_ be the base class
-# of other CMake generator classes, but rather a _member_ of those classes only.
+# V2C_CMakeSyntaxGenerator isn't a base class of other CMake generator classes,
+# but rather a _member_ of those classes only.
 # Reasoning: that class implements the border crossing towards specific CMake syntax,
 # i.e. it is the _only one_ to know specific CMake syntax (well, "ideally", I have to say, currently).
 # If it was the base class of the various CMake generators,
@@ -861,7 +858,7 @@ class V2C_CMakeSyntaxGenerator < V2C_LoggerBase
     }
   end
   # TODO: ideally we would do single-line/multi-line splitting operation _automatically_
-  # (and bonus points for configure line length...)
+  # (and bonus points for configurable line length...)
   def write_command_list(cmake_command, cmake_command_arg, arr_elems)
     if cmake_command_arg.nil?; cmake_command_arg = '' end
     @textOut.write_line("#{cmake_command}(#{cmake_command_arg}")
@@ -1159,10 +1156,6 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     put_include_vcproj2cmake_func()
     put_hook_pre()
   end
-  def detect_programming_languages(project_info)
-    language_detector = V2C_CMakeProjectLanguageDetector.new(project_info)
-    language_detector.detect
-  end
   def put_project(project_name, arr_progr_languages = nil)
     arr_args_project_name_and_attrs = [ project_name ]
     if arr_progr_languages.nil? or arr_progr_languages.empty?
@@ -1357,7 +1350,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     all_platform_defs = Hash.new
     parse_platform_conversions(all_platform_defs, arr_defs, map_defs)
     all_platform_defs.each { |key, arr_platdefs|
-      #log_info "arr_platdefs: #{arr_platdefs}"
+      #log_info_class "arr_platdefs: #{arr_platdefs}"
       next if arr_platdefs.empty?
       arr_platdefs.uniq!
       next_paragraph()
@@ -1472,6 +1465,10 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # Add project_name as _prefix_ (keep variables grep:able, via "v2c_converted_from")
     write_set_var("#{project_name}_v2c_converted_from", element_handle_quoting(str_from_buildtool_version))
   end
+  def detect_programming_languages(project_info)
+    language_detector = V2C_CMakeProjectLanguageDetector.new(project_info)
+    language_detector.detect
+  end
 end
 
 # Hrmm, I'm not quite sure yet where to aggregate this function...
@@ -1531,7 +1528,7 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeSyntaxGenerator
         # Verbosely ignore IDL generated files
         if f =~ VS7_IDL_FILE_TYPES_REGEX_OBJ
           # see file_mappings.txt comment above
-          log_info "#{@project_name}::#{f} is an IDL generated file: skipping! FIXME: should be platform-dependent."
+          log_info_class "#{@project_name}::#{f} is an IDL generated file: skipping! FIXME: should be platform-dependent."
           included_in_build = false
           next # no complex handling, just skip
         end
@@ -1543,7 +1540,7 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeSyntaxGenerator
           # rebuilds in case of foreign-library header file changes).
           # Not sure whether these were added by users or
           # it's actually some standard MSVS mechanism... FIXME
-          log_info "#{@project_name}::#{f} registered as a \"source\" file!? Skipping!"
+          log_info_class "#{@project_name}::#{f} registered as a \"source\" file!? Skipping!"
           included_in_build = false
           return # no complex handling, just return
         end
@@ -1607,7 +1604,7 @@ class V2C_CMakeFileListsGenerator_VS7 < V2C_CMakeFileListGeneratorBase
     if not arr_sub_filters.nil?
       @textOut.indent_more()
         arr_sub_filters.each { |subfilter|
-          #log_info "writing: #{subfilter}"
+          #log_info_class "writing: #{subfilter}"
           put_file_list_recursive(subfilter, this_source_group, arr_my_sub_sources)
         }
       @textOut.indent_less()
@@ -1710,13 +1707,13 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
   #end
   #
   def write_conditional_target_valid_begin
-    write_conditional_if(get_var_conditional_target(@target.name))
+    write_conditional_if(get_target_syntax_expression(@target.name))
   end
   def write_conditional_target_valid_end
-    write_conditional_end(get_var_conditional_target(@target.name))
+    write_conditional_end(get_target_syntax_expression(@target.name))
   end
 
-  def get_var_conditional_target(target_name); return "TARGET #{target_name}" end
+  def get_target_syntax_expression(target_name); return "TARGET #{target_name}" end
 
   # FIXME: not sure whether map_lib_dirs etc. should be passed in in such a raw way -
   # probably mapping should already have been done at that stage...
@@ -1740,7 +1737,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
   def put_target_type(target, map_dependencies, target_info_curr, target_config_info_curr)
     target_is_valid = false
 
-    str_condition_no_target = get_conditional_inverted(get_var_conditional_target(target.name))
+    str_condition_no_target = get_conditional_inverted(get_target_syntax_expression(target.name))
     write_conditional_if(str_condition_no_target)
           # FIXME: should use a macro like rosbuild_add_executable(),
           # http://www.ros.org/wiki/rosbuild/CMakeLists ,
@@ -1872,7 +1869,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     all_platform_defs = Hash.new
     parse_platform_conversions(all_platform_defs, arr_defs, map_defs)
     all_platform_defs.each { |key, arr_platdefs|
-      #log_info "arr_platdefs: #{arr_platdefs}"
+      #log_info_class "arr_platdefs: #{arr_platdefs}"
       next if arr_platdefs.empty?
       arr_platdefs.uniq!
       next_paragraph()
@@ -1889,7 +1886,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
       # it does NOT provide a per-config COMPILE_FLAGS property! Need to verify ASAP
       # whether compile flags do get passed properly in debug / release.
       # Strangely enough it _does_ have LINK_FLAGS_<CONFIG>, though!
-      conditional_target = get_var_conditional_target(@target.name)
+      conditional_target = get_target_syntax_expression(@target.name)
       cmake_command_arg = "#{conditional_target} APPEND PROPERTY COMPILE_FLAGS_#{config_name_upper}"
       write_command_list('set_property', cmake_command_arg, arr_flags)
     write_conditional_end(str_conditional)
@@ -1899,8 +1896,8 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     config_name_upper = get_config_name_upcase(config_name)
     next_paragraph()
     write_conditional_if(str_conditional)
-      conditional_target = get_var_conditional_target(@target.name)
-      cmake_command_arg = "#{conditional_target} APPEND PROPERTY LINK_FLAGS_#{config_name_upper}"
+      str_target_expr = get_target_syntax_expression(@target.name)
+      cmake_command_arg = "#{str_target_expr} APPEND PROPERTY LINK_FLAGS_#{config_name_upper}"
       write_command_list('set_property', cmake_command_arg, arr_flags)
     write_conditional_end(str_conditional)
   end
@@ -3890,7 +3887,7 @@ class V2C_VS10ProjectFiltersXmlParser < V2C_VSXmlParserBase
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
     when 'Project'
-      # FIXME handle fetch() exception
+      # FIXME handle fetch() exception - somewhere!
       project_info = get_arr_projects().fetch(@idx_target)
       @idx_target += 1
       elem_parser = V2C_VS10ProjectFiltersParser.new(subelem_xml, project_info)
@@ -4032,12 +4029,12 @@ class V2C_CMakeGenerator < V2C_GeneratorBase
         V2C_Util_File.chmod($v2c_generator_file_create_permissions, tmpfile.path)
         V2C_Util_File.mv(tmpfile.path, output_file)
 
-        log_info %{\
+        log_info_class %{\
 Wrote #{output_file}
 Finished. You should make sure to have all important v2c settings includes such as vcproj2cmake_defs.cmake somewhere in your CMAKE_MODULE_PATH
 }
       else
-        log_info "No settings changed, #{output_file} not updated."
+        log_info_class "No settings changed, #{output_file} not updated."
         # tmpfile will auto-delete when finalized...
 
         # Some make dependency mechanisms might require touching (timestamping) the unchanged(!) file
@@ -4202,7 +4199,9 @@ Finished. You should make sure to have all important v2c settings includes such 
 	        # (MFC will define it implicitly),
 	        # thus it's quite likely that our current handling is somewhat incorrect.
                 if target_config_info_curr.use_of_mfc == V2C_TargetConfig_Defines::MFC_DYNAMIC
-                  # FIXME: need to add /MD (dynamic) or /MT (static) switch to compiler-specific info (MSVC) as well!
+                  # FIXME: need to add a compiler flag lookup entry
+                  # to compiler-specific info as well!
+                  # (in case of MSVC it would yield: /MD [dynamic] or /MT [static])
                   hash_defines_actual['_AFXEXT'] = ''
                   hash_defines_actual['_AFXDLL'] = ''
                 end
