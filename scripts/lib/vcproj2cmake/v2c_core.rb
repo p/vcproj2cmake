@@ -2206,6 +2206,9 @@ class V2C_VSXmlParserBase < V2C_ParserBase
 
   private
 
+  # Save a ton of useless comments :) ("be optimistic :)")
+  def be_optimistic; return FOUND_TRUE end
+
   def parse_attributes
     @elem_xml.attributes.each_attribute { |attr_xml|
       log_debug_class "ATTR: #{attr_xml.name}"
@@ -2354,7 +2357,7 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
   include V2C_VSToolDefines
   def get_tool_info; return @info_elem end
   def parse_setting(setting_key, setting_value)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     tool_info = get_tool_info()
     case setting_key
     when TEXT_SUPPRESSSTARTUPBANNER
@@ -2403,7 +2406,7 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
     get_compiler_info().precompiled_header_info = V2C_Precompiled_Header_Info.new
   end
   def parse_setting(setting_key, setting_value)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     case setting_key
     when TEXT_ADDITIONALINCLUDEDIRECTORIES
       parse_additional_include_directories(get_compiler_info(), setting_value)
@@ -2486,7 +2489,7 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
   private
 
   def parse_setting(setting_key, setting_value)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     compiler_info = get_compiler_info()
     case setting_key
     when 'Detect64BitPortabilityProblems'
@@ -2541,7 +2544,7 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
 
   def get_linker_info; return @info_elem end
   def parse_setting(setting_key, setting_value)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     linker_info = get_linker_info()
     case setting_key
     when TEXT_ADDITIONALDEPENDENCIES
@@ -2602,7 +2605,7 @@ class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
   private
 
   def parse_attribute(setting_key, setting_value)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     linker_info = get_linker_info()
     case setting_key
     when TEXT_LINKINCREMENTAL
@@ -2623,7 +2626,7 @@ end
 class V2C_VS7ToolParser < V2C_VSXmlParserBase
   include V2C_VS7ToolDefines
   def parse
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     toolname = @elem_xml.attributes[TEXT_NAME]
     arr_info = nil
     info = nil
@@ -2674,7 +2677,7 @@ class V2C_VS7ConfigurationBaseParser < V2C_VSXmlParserBase
   private
 
   def parse_setting(setting_key, setting_value)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     case setting_key
     when TEXT_CHARACTERSET
       get_target_config_info().charset = parse_charset(setting_value)
@@ -2699,7 +2702,7 @@ class V2C_VS7ConfigurationBaseParser < V2C_VSXmlParserBase
     return found
   end
   def parse_element(subelem_xml)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
     when 'Tool'
@@ -2737,7 +2740,7 @@ class V2C_VS7FileConfigurationParser < V2C_VS7ConfigurationBaseParser
   private
 
   def parse_setting(setting_key, setting_value)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     case setting_key
     when 'ExcludedFromBuild'
       get_config_info().excluded_from_build = get_boolean_value(setting_value)
@@ -2758,7 +2761,7 @@ class V2C_VS7ConfigurationsParser < V2C_VSXmlParserBase
   def get_arr_target_config_info(); return @arr_target_config_info end
 
   def parse_element(subelem_xml)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
     when 'Configuration'
@@ -2838,7 +2841,7 @@ class V2C_VS7FileParser < V2C_VSXmlParserBase
   private
 
   def parse_element(subelem_xml)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     case subelem_xml.name
     when 'FileConfiguration'
       target_config_info_curr = V2C_Target_Config_Build_Info.new
@@ -2853,7 +2856,7 @@ class V2C_VS7FileParser < V2C_VSXmlParserBase
     return found
   end
   def parse_attribute(setting_key, setting_value)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     case setting_key
     when 'RelativePath'
       @info_file.path_relative = normalize_path(setting_value)
@@ -2981,7 +2984,7 @@ class V2C_VS7FilterParser < V2C_VSXmlParserBase
     files_str[:filter_info] = filter_info
   end
   def parse_file_list_attribute(filter_info, setting_key, setting_value)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     case setting_key
     when 'Filter'
       filter_info.arr_scfilter = split_values_list_discard_empty(setting_value)
@@ -3018,7 +3021,7 @@ end
 class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
   include V2C_VSProjectDefines
   def parse_element(subelem_xml)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
     when 'Configurations'
@@ -3041,7 +3044,7 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
   private
 
   def parse_setting(setting_key, setting_value)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     case setting_key
     when TEXT_KEYWORD
       get_project().vs_keyword = setting_value
@@ -3066,7 +3069,7 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
     return found
   end
   def parse_attributes_scc(setting_key, setting_value, scc_info_out)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     case setting_key
     # Hrmm, turns out having SccProjectName is no guarantee that both SccLocalPath and SccProvider
     # exist, too... (one project had SccProvider missing). HOWEVER,
@@ -3141,7 +3144,7 @@ end
 class V2C_VS7ProjectFileXmlParser < V2C_VSProjectFileXmlParserBase
   def parse_element(subelem_xml)
     setting_key = subelem_xml.name
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     case setting_key
     when 'VisualStudioProject'
       project = V2C_Project_Info.new
@@ -3218,7 +3221,7 @@ class V2C_VS10BaseElemParser < V2C_VS10ParserBase
 
   def get_base_elem; return @info_elem end
   def parse_attribute(setting_key, setting_value)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     log_debug(setting_key)
     case setting_key
     when TEXT_CONDITION
@@ -3270,7 +3273,7 @@ class V2C_VS10ItemGroupProjectConfigurationDescriptionParser < V2C_VS10ParserBas
   def get_config_info; return @info_elem end
 
   def parse_setting(setting_key, setting_value)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     # FIXME TODO: use a special class for the build_type/platform mappings.
     #case setting_key
     #when 'Configuration'
@@ -3293,7 +3296,7 @@ class V2C_VS10ItemGroupProjectConfigurationsParser < V2C_VS10ParserBase
 
   def get_arr_config_descr; return @info_elem end
   def parse_element(itemgroup_elem_xml)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     case itemgroup_elem_xml.name
     when 'ProjectConfiguration'
       # FIXME!!! this is _NOT_ supposed to be a V2C_Project_Config_Info here -
@@ -3317,7 +3320,7 @@ end
 class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
   include V2C_VS10FilterDefines
   def parse_attribute(setting_value, setting_key)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     case setting_key
     when 'Include'
        get_filter().name = setting_value
@@ -3327,7 +3330,7 @@ class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
     return found
   end
   def parse_setting(setting_key, setting_value)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     case setting_key
     when TEXT_VS10_EXTENSIONS
       get_filter().arr_scfilter = split_values_list_discard_empty(setting_value)
@@ -3353,7 +3356,7 @@ class V2C_VS10ItemGroupFileElemParser < V2C_VS10ParserBase
   def get_file_elem; return @info_elem end # V2C_Info_File
 
   def parse_attribute(setting_key, setting_value)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     case setting_key
     when 'Include'
       get_file_elem().path_relative = normalize_path(setting_value)
@@ -3394,7 +3397,7 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
     found = FOUND_FALSE
     elem_first = @elem_xml.elements[1] # 1-based index!!
     if not elem_first.nil?
-      found = FOUND_TRUE # be optimistic :)
+      found = be_optimistic()
       elem_name = elem_first.name
       elem_parser = nil
       case elem_name
@@ -3419,7 +3422,7 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
 
   def get_project; return @info_elem end
   def parse_element_DEPRECATED(subelem_xml)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     setting_key = subelem_xml.name
     filter = V2C_Info_Filter.new
     elem_parser = V2C_VS10ItemGroupElemFilterParser.new(subelem_xml, filter)
@@ -3467,7 +3470,7 @@ end
 # V2C_VS10PropertyGroupParser / V2C_VS10ItemGroupParser are pretty much identical.
 class V2C_VS10ItemGroupParser < V2C_VS10ParserBase
   def parse
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     itemgroup_label = @elem_xml.attributes['Label']
     log_debug_class("Label #{itemgroup_label}!")
     item_group_parser = nil
@@ -3509,7 +3512,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
   private
 
   def parse_element(subelem_xml)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     setting_key = subelem_xml.name
     setting_value = subelem_xml.text
     case setting_key
@@ -3589,7 +3592,7 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
   private
 
   def parse_setting(setting_key, setting_value)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     case setting_key
     when TEXT_OPTIMIZEREFERENCES
       get_linker_info().optimize_references_enable = get_boolean_value(setting_value)
@@ -3606,7 +3609,7 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
   def get_config_info; return @info_elem end
   def get_tools_info; return get_config_info().tools end
   def parse_element(subelem_xml)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     setting_key = subelem_xml.name
     item_def_group_parser = nil # IMPORTANT: reset it!
     arr_info = nil
@@ -3647,7 +3650,7 @@ private
   def get_configuration; return @info_elem end
 
   def parse_setting(setting_key, setting_value)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     config_info_curr = get_configuration()
     case setting_key
     when TEXT_CHARACTERSET
@@ -3698,7 +3701,7 @@ class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10BaseElemParser
 
   def get_project; return @info_elem end
   def parse_setting(setting_key, setting_value)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     case setting_key
     when TEXT_KEYWORD
       get_project().vs_keyword = setting_value
@@ -3715,7 +3718,7 @@ class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10BaseElemParser
     return found
   end
   def parse_elements_scc(setting_key, setting_value, scc_info_out)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     case setting_key
     # Hrmm, turns out having SccProjectName is no guarantee that both SccLocalPath and SccProvider
     # exist, too... (one project had SccProvider missing). HOWEVER,
@@ -3757,7 +3760,7 @@ end
 # V2C_VS10PropertyGroupParser / V2C_VS10ItemGroupParser are pretty much identical.
 class V2C_VS10PropertyGroupParser < V2C_VS10BaseElemParser
   def parse
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     propgroup_label = @elem_xml.attributes['Label']
     log_debug_class("Label #{propgroup_label}!")
     case propgroup_label
@@ -3787,7 +3790,7 @@ class V2C_VS10ProjectParser < V2C_VSProjectParserBase
   private
 
   def parse_element(subelem_xml)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
     when 'ItemGroup'
@@ -3817,7 +3820,7 @@ class V2C_VS10ProjectFileXmlParser < V2C_VSProjectFileXmlParserBase
     @filters_only = filters_only
   end
   def parse_element(subelem_xml)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
     when 'Project'
@@ -3864,7 +3867,7 @@ class V2C_VS10ProjectFiltersParser < V2C_VS10ParserBase
 
   def get_project; return @info_elem end
   def parse_element(subelem_xml)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
     when 'ItemGroup'
@@ -3899,7 +3902,7 @@ class V2C_VS10ProjectFiltersXmlParser < V2C_VSXmlParserBase
     log_fixme_class 'filters file exists, needs parsing!'
   end
   def parse_element(subelem_xml)
-    found = FOUND_TRUE # be optimistic :)
+    found = be_optimistic()
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
     when 'Project'
