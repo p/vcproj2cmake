@@ -204,6 +204,8 @@ def read_mappings_combined(filename_mappings, mappings, master_project_dir)
   read_mappings(filename_mappings, mappings)
   return if not master_project_dir
   # read common mappings (in source root) to be used by all sub projects
+  # FIXME: in case of global recursive operation, this data part is _constant_,
+  # thus we should avoid reading it anew for each project!
   read_mappings("#{master_project_dir}/#{filename_mappings}", mappings)
 end
 
@@ -832,6 +834,11 @@ class V2C_TextStreamSyntaxGeneratorBase
   end
 end
 
+# FIXME: currently our classes _derive_ from V2C_LoggerBase in most cases,
+# however it's common practice to have log channel provided as a class member
+# or even a global variable. Should thus rework things to have a class member each
+# (best supplied as ctor param, to have flexible output channel configuration
+# by external elements).
 class V2C_LoggerBase
   def log_error_class(str); log_error "#{self.class.name}: #{str}" end
   def log_fixme_class(str); log_error "#{self.class.name}: FIXME: #{str}" end
@@ -842,16 +849,10 @@ class V2C_LoggerBase
   def unhandled_functionality(str_description); log_error(str_description) end
 end
 
-# V2C_CMakeSyntaxGenerator isn't a base class of other CMake generator classes,
-# but rather a _member_ of those classes only.
-# Reasoning: that class implements the border crossing towards specific CMake syntax,
-# i.e. it is the _only one_ to know specific CMake syntax (well, "ideally", I have to say, currently).
-# If it was the base class of the various CMake generators,
-# then it would be _hard-coded_ i.e. not configurable (which would be the case
-# when having ctor parameterisation from the outside).
-class V2C_CMakeSyntaxGenerator < V2C_LoggerBase
-  VCPROJ2CMAKE_FUNC_CMAKE = 'vcproj2cmake_func.cmake'
-  V2C_ATTRIBUTE_NOT_PROVIDED_MARKER = 'V2C_NOT_PROVIDED'
+# @brief syntax generator base class.
+#        Strictly about converting requests into specific CMake syntax,
+#        no build-specific generator knowledge at this level!
+class V2C_CMakeSyntaxGeneratorBase < V2C_LoggerBase
   def initialize(textOut)
     @textOut = textOut
     # internal CMake generator helpers
@@ -967,9 +968,6 @@ class V2C_CMakeSyntaxGenerator < V2C_LoggerBase
   def write_include_from_cmake_var(include_file_var, optional = false)
     write_include(dereference_variable_name(include_file_var), optional)
   end
-  def write_vcproj2cmake_func_comment()
-    write_comment_at_level(2, "See function implementation/docs in #{$v2c_module_path_root}/#{VCPROJ2CMAKE_FUNC_CMAKE}")
-  end
   def write_cmake_policy(policy_num, set_to_new, comment)
     str_policy = '%s%04d' % [ 'CMP', policy_num ]
     str_conditional = "POLICY #{str_policy}"
@@ -1009,20 +1007,6 @@ class V2C_CMakeSyntaxGenerator < V2C_LoggerBase
   # purpose. Probably some hierarchy is not really clean.
   def prepare_string_literal(str_in)
     return element_handle_quoting(str_in)
-  end
-
-  # Hrmm, I'm not quite sure yet where to aggregate this function...
-  def get_var_name_of_condition(condition)
-    # HACK: very Q&D handling, to make things work quickly.
-    # Should think of implementing a proper abstraction for handling of conditions.
-    # Probably we _at least_ need to create a _condition generator_ class.
-
-    # Hrmm, for now we'll abuse a method at the V2C_Info_Condition class,
-    # but I'm not convinced at all that this is how things should be structured.
-    build_type = condition.get_build_type()
-    # Name may contain spaces - need to handle them!
-    config_name = util_flatten_string(build_type)
-    return "v2c_want_buildcfg_#{config_name}"
   end
   private
 
@@ -1103,6 +1087,44 @@ class V2C_CMakeSyntaxGenerator < V2C_LoggerBase
   end
 end
 
+# @brief contains extended functions that aren't strictly about
+# CMake syntax generation any more.
+# V2C_CMakeSyntaxGenerator isn't a base class of other CMake generator classes,
+# but rather a _member_ of those classes only.
+# Reasoning: that class implements the border crossing towards specific CMake syntax,
+# i.e. it is the _only one_ to know specific CMake syntax (well, "ideally", I have to say, currently).
+# If it was the base class of the various CMake generators,
+# then it would be _hard-coded_ i.e. not configurable (which would be the case
+# when having ctor parameterisation from the outside).
+class V2C_CMakeSyntaxGenerator < V2C_CMakeSyntaxGeneratorBase
+  VCPROJ2CMAKE_FUNC_CMAKE = 'vcproj2cmake_func.cmake'
+  V2C_ATTRIBUTE_NOT_PROVIDED_MARKER = 'V2C_NOT_PROVIDED'
+  def write_vcproj2cmake_func_comment()
+    write_comment_at_level(2, "See function implementation/docs in #{$v2c_module_path_root}/#{VCPROJ2CMAKE_FUNC_CMAKE}")
+  end
+  def put_customization_hook(include_file)
+    return if $v2c_generator_one_time_conversion_only
+    write_include(include_file, true)
+  end
+  def put_customization_hook_from_cmake_var(include_file_var)
+    return if $v2c_generator_one_time_conversion_only
+    write_include_from_cmake_var(include_file_var, true)
+  end
+  # Hrmm, I'm not quite sure yet where to aggregate this function...
+  def get_var_name_of_condition(condition)
+    # HACK: very Q&D handling, to make things work quickly.
+    # Should think of implementing a proper abstraction for handling of conditions.
+    # Probably we _at least_ need to create a _condition generator_ class.
+
+    # Hrmm, for now we'll abuse a method at the V2C_Info_Condition class,
+    # but I'm not convinced at all that this is how things should be structured.
+    build_type = condition.get_build_type()
+    # Name may contain spaces - need to handle them!
+    config_name = util_flatten_string(build_type)
+    return "v2c_want_buildcfg_#{config_name}"
+  end
+end
+
 class V2C_CMakeGlobalGenerator < V2C_CMakeSyntaxGenerator
   def put_configuration_types(configuration_types)
     configuration_types_list = separate_arguments(configuration_types)
@@ -1154,6 +1176,13 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # FIXME: handle arr_config_var_handling appropriately
     # (place the translated CMake commands somewhere suitable)
     @arr_config_var_handling = Array.new
+  end
+  def generate_file_leadin(project_info)
+    put_file_header()
+    write_project(project_info)
+    put_conversion_details(project_info.name, project_info.orig_environment_shortname)
+    put_include_MasterProjectDefaults_vcproj2cmake()
+    put_hook_project()
   end
   def put_file_header
     @textOut.put_file_header_temporary_marker()
@@ -1221,14 +1250,6 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     )
     put_customization_hook_from_cmake_var('V2C_HOOK_PROJECT')
   end
-  def put_customization_hook(include_file)
-    return if $v2c_generator_one_time_conversion_only
-    write_include(include_file, true)
-  end
-  def put_customization_hook_from_cmake_var(include_file_var)
-    return if $v2c_generator_one_time_conversion_only
-    write_include_from_cmake_var(include_file_var, true)
-  end
 
   def put_include_project_source_dir
     # AFAIK .vcproj implicitly adds the project root to standard include path
@@ -1239,7 +1260,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     arr_directories = [ dereference_variable_name('PROJECT_SOURCE_DIR') ]
     put_include_directories(arr_directories, false, true)
   end
-  def generate_build_type_variables_assignments(arr_config_info)
+  def generate_assignments_of_build_type_variables(arr_config_info)
     # ARGH, we have an issue with CMake not being fully up to speed with
     # multi-configuration generators (e.g. .vcproj/.vcxproj):
     # it should be able to declare _all_ configuration-dependent settings
@@ -1816,12 +1837,12 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     )
     @localGenerator.put_customization_hook_from_cmake_var('V2C_HOOK_POST_TARGET')
   end
-  COMPILE_DEF_NEEDS_ESCAPING_REGEX_OBJ = %r{[\(\)]+}
+  COMPILE_DEF_NEEDS_CMAKE_ESCAPING_REGEX_OBJ = %r{[\(\)]+}
   def generate_property_compile_definitions(config_name_upper, arr_platdefs, str_platform)
       write_conditional_if(str_platform)
         arr_compile_defn = arr_platdefs.collect do |compile_defn|
     	  # Need to escape the value part of the key=value definition:
-          if compile_defn =~ COMPILE_DEF_NEEDS_ESCAPING_REGEX_OBJ
+          if compile_defn =~ COMPILE_DEF_NEEDS_CMAKE_ESCAPING_REGEX_OBJ
             escape_char(compile_defn, '\\(')
             escape_char(compile_defn, '\\)')
           end
@@ -1867,7 +1888,10 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     # TODO: this might be relocatable to a common generator base helper method.
     arr_defs = Array.new
     hash_defs.each { |key, value|
-      next if key.match(VS10_EXTENSION_VAR_MATCH_REGEX_OBJ)
+      if key.match(VS10_EXTENSION_VAR_MATCH_REGEX_OBJ)
+        log_fixme_class("skipping unhandled VS10 variable (#{key})")
+        next
+      end
       str_define = value.empty? ? key : "#{key}=#{value}"
       arr_defs.push(str_define)
     }
@@ -4076,7 +4100,8 @@ Finished. You should make sure to have all important v2c settings includes such 
         read_mappings_combined(FILENAME_MAP_DEF, map_defines, master_project_dir)
 
 	textOut = V2C_TextStreamSyntaxGeneratorBase.new(out, $v2c_generator_indent_initial_num_spaces, $v2c_generator_indent_step, $v2c_generator_comments_level)
-        syntax_generator = V2C_CMakeSyntaxGenerator.new(textOut)
+
+        #global_generator = V2C_CMakeGlobalGenerator.new(out)
 
         # we likely shouldn't declare this, since for single-configuration
         # generators CMAKE_CONFIGURATION_TYPES shouldn't be set
@@ -4087,21 +4112,7 @@ Finished. You should make sure to have all important v2c settings includes such 
 
         local_generator = V2C_CMakeLocalGenerator.new(textOut)
 
-        local_generator.put_file_header()
-        local_generator.write_project(project_info)
-	local_generator.put_conversion_details(project_info.name, project_info.orig_environment_shortname)
-
-        #global_generator = V2C_CMakeGlobalGenerator.new(out)
-
-        ## sub projects will inherit, and we _don't_ want that...
-        # DISABLED: now to be done by MasterProjectDefaults_vcproj2cmake module if needed
-        #syntax_generator.write_line('# reset project-local variables')
-        #syntax_generator.write_set_var('V2C_LIBS', '')
-        #syntax_generator.write_set_var('V2C_SOURCES', '')
-
-        local_generator.put_include_MasterProjectDefaults_vcproj2cmake()
-
-        local_generator.put_hook_project()
+	local_generator.generate_file_leadin(project_info)
 
         target_generator = V2C_CMakeTargetGenerator.new(project_info, @project_dir, local_generator, textOut)
 
@@ -4139,7 +4150,7 @@ Finished. You should make sure to have all important v2c settings includes such 
 
 	arr_config_info = project_info.arr_config_info
 
-        local_generator.generate_build_type_variables_assignments(arr_config_info)
+        local_generator.generate_assignments_of_build_type_variables(arr_config_info)
 
 	arr_target_config_info = project_info.arr_target_config_info
         arr_target_config_info.each { |target_config_info_curr|
@@ -4147,10 +4158,10 @@ Finished. You should make sure to have all important v2c settings includes such 
         }
 
         arr_config_info.each { |config_info_curr|
-          syntax_generator.next_paragraph()
+          target_generator.next_paragraph()
           condition = config_info_curr.condition
-          var_v2c_want_buildcfg_curr = syntax_generator.get_var_name_of_condition(condition)
-          syntax_generator.write_conditional_if(var_v2c_want_buildcfg_curr)
+          var_v2c_want_buildcfg_curr = target_generator.get_var_name_of_condition(condition)
+          target_generator.write_conditional_if(var_v2c_want_buildcfg_curr)
 
           config_info_curr.tools.arr_compiler_info.each { |compiler_info_curr|
             arr_includes = compiler_info_curr.get_include_dirs(false, false)
@@ -4175,7 +4186,7 @@ Finished. You should make sure to have all important v2c settings includes such 
             }
           end # target.have_build_units
 
-          syntax_generator.write_conditional_end(var_v2c_want_buildcfg_curr)
+          target_generator.write_conditional_end(var_v2c_want_buildcfg_curr)
         } # [END per-config handling]
 
         # Now that we likely _do_ have a valid target
