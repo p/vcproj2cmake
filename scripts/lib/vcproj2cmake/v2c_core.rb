@@ -265,10 +265,34 @@ end
 # target generator: generates targets. This is the one creating/producing the output file stream. Not provided by all generators (VS10 yes, VS7 no).
 
 class V2C_Info_Condition
-  def initialize(str_condition)
+  def initialize(str_condition = nil)
     @str_condition = str_condition
+    @build_type = nil # WARNING: it may contain spaces!
+    @platform = nil
   end
-  attr_accessor :str_condition
+  attr_reader :str_condition
+  attr_reader :platform
+  # FIXME: Q&D interim function - I don't think such raw handling should be in this data container...
+  def get_build_type
+    # For now, prefer raw build_type (VS7) only in case no complex condition string is available.
+    if str_condition.nil?
+      build_type = @build_type
+    else
+      log_debug "condition: #{@str_condition}"
+      build_type = nil
+      @str_condition.scan(/^'\$\(Configuration\)\|\$\(Platform\)'=='(.*)\|.*$/) {
+        build_type = $1
+      }
+      if build_type.nil? or build_type.empty?
+        # TODO!!
+        log_fatal "could not parse build type from condition #{str_condition}"
+      end
+      @build_type = build_type
+    end
+    return @build_type
+  end
+  def set_build_type(build_type); @build_type = build_type end
+  def set_platform(platform); @platform = platform end
 end
 
 # @brief Mostly used to manage the condition element...
@@ -456,7 +480,7 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
   attr_accessor :arr_tool_variant_specific_info
 end
 
-module V2C_BaseConfig_Defines
+module V2C_TargetConfig_Defines
   CFG_TYPE_INVALID = -1 # detect improper entries
   CFG_TYPE_UNKNOWN = 0 # VS7/10 typeUnknown (utility), 0
   CFG_TYPE_APP = 1 # VS7/10 typeApplication (.exe), 1
@@ -470,12 +494,12 @@ module V2C_BaseConfig_Defines
   MFC_DYNAMIC = 2
 end
 
-# Common base class of both file config and project config.
-class V2C_Config_Base_Info < V2C_Info_Elem_Base
-  include V2C_BaseConfig_Defines
+# FIXME: all related parts should be renamed into something like
+# Framework_Config or Toolkit_Config or some such,
+# depending on which members this class ends up containing.
+class V2C_Target_Config_Build_Info < V2C_Info_Elem_Base
+  include V2C_TargetConfig_Defines
   def initialize
-    @build_type = '' # WARNING: it may contain spaces!
-    @platform = ''
     @cfg_type = CFG_TYPE_INVALID
 
     # 0 == no MFC
@@ -486,19 +510,30 @@ class V2C_Config_Base_Info < V2C_Info_Elem_Base
     @charset = 0 # Simply uses VS7 values for now. TODO: should use our own enum definition or so.
     @whole_program_optimization = 0 # Simply uses VS7 values for now. TODO: should use our own enum definition or so.; it seems for CMake the related setting is target/directory property INTERPROCEDURAL_OPTIMIZATION_<CONFIG> (described by Wikipedia "Interprocedural optimization")
     @use_debug_libs = false
-    @arr_compiler_info = Array.new
-    @arr_linker_info = Array.new
   end
-  attr_accessor :build_type
-  attr_accessor :platform
   attr_accessor :cfg_type
   attr_accessor :use_of_mfc
   attr_accessor :use_of_atl
   attr_accessor :charset
   attr_accessor :whole_program_optimization
   attr_accessor :use_debug_libs
+end
+
+class V2C_Tools_Info < V2C_Info_Elem_Base
+  def initialize
+    @arr_compiler_info = Array.new
+    @arr_linker_info = Array.new
+  end
   attr_accessor :arr_compiler_info
   attr_accessor :arr_linker_info
+end
+
+# Common base class of both file config and project config.
+class V2C_Config_Base_Info < V2C_Info_Elem_Base
+  def initialize
+    @tools = V2C_Tools_Info.new
+  end
+  attr_accessor :tools
 end
 
 # Carries project-global configuration data.
@@ -520,15 +555,6 @@ class V2C_File_Config_Info < V2C_Config_Base_Info
     @excluded_from_build = false
   end
   attr_accessor :excluded_from_build
-end
-
-# FIXME UNUSED
-class V2C_Makefile
-  def initialize
-    @config_info = V2C_Project_Config_Info.new
-  end
-
-  attr_accessor :config_info
 end
 
 # Carries Source Control Management (SCM) setup.
@@ -647,7 +673,9 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
     # (to enable Qt integration, etc.):
     @vs_keyword = nil
     @scc_info = V2C_SCC_Info.new
-    @arr_config_info = Array.new
+    @arr_config_descr = Array.new # VS10 only: maps strings such as "Release|Win32" to e.g. Configuration "Release", Platform "Win32"...
+    @arr_target_config_info = Array.new # V2C_Target_Config_Build_Info
+    @arr_config_info = Array.new # V2C_Project_Config_Info
     @file_lists = V2C_File_Lists_Container.new
     @filters = V2C_Filters_Container.new
     @main_files = nil # FIXME get rid of this VS7 crap, rework file list/filters handling there!
@@ -673,7 +701,9 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
   attr_accessor :version
   attr_accessor :vs_keyword
   attr_accessor :scc_info
+  attr_accessor :arr_config_descr
   attr_accessor :arr_config_info
+  attr_accessor :arr_target_config_info
   attr_accessor :file_lists
   attr_accessor :filters
   attr_accessor :main_files
@@ -691,18 +721,18 @@ class V2C_ProjectValidator
     validate_project
   end
   private
-  def validate_config(config_info)
-    if config_info.cfg_type == V2C_BaseConfig_Defines::CFG_TYPE_INVALID
+  def validate_config(target_config_info)
+    if target_config_info.cfg_type == V2C_TargetConfig_Defines::CFG_TYPE_INVALID
       validation_error('config type not set!?')
     end
   end
-  def validate_configs(arr_config_info)
-    arr_config_info.each { |config_info_curr|
-      validate_config(config_info_curr)
+  def validate_target_configs(arr_target_config_info)
+    arr_target_config_info.each { |target_config_info|
+      validate_config(target_config_info)
     }
   end
   def validate_project
-    validate_configs(@project_info.arr_config_info)
+    validate_target_configs(@project_info.arr_target_config_info)
     #log_debug "project data: #{@project_info.inspect}"
     if @project_info.orig_environment_shortname.nil?; validation_error('original environment not set!?') end
     if @project_info.name.nil?; validation_error('name not set!?') end
@@ -975,6 +1005,19 @@ class V2C_CMakeSyntaxGenerator < V2C_LoggerBase
     return element_handle_quoting(str_in)
   end
 
+  # Hrmm, I'm not quite sure yet where to aggregate this function...
+  def get_var_name_of_condition(condition)
+    # HACK: very Q&D handling, to make things work quickly.
+    # Should think of implementing a proper abstraction for handling of conditions.
+    # Probably we _at least_ need to create a _condition generator_ class.
+
+    # Hrmm, for now we'll abuse a method at the V2C_Info_Condition class,
+    # but I'm not convinced at all that this is how things should be structured.
+    build_type = condition.get_build_type()
+    # Name may contain spaces - need to handle them!
+    config_name = util_flatten_string(build_type)
+    return "v2c_want_buildcfg_#{config_name}"
+  end
   private
 
   def element_manual_quoting(elem)
@@ -1194,7 +1237,56 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     arr_directories = [ dereference_variable_name('PROJECT_SOURCE_DIR') ]
     put_include_directories(arr_directories, false, true)
   end
-  def put_cmake_mfc_atl_flag(config_info)
+  def generate_build_type_variables_assignments(arr_config_info)
+    # ARGH, we have an issue with CMake not being fully up to speed with
+    # multi-configuration generators (e.g. .vcproj/.vcxproj):
+    # it should be able to declare _all_ configuration-dependent settings
+    # in a .vcproj file as configuration-dependent variables
+    # (just like set_property(... COMPILE_DEFINITIONS_DEBUG ...)),
+    # but with configuration-specific(!) include directories on .vcproj side,
+    # there's currently only a _generic_ include_directories() command :-(
+    # (dito with target_link_libraries() - or are we supposed to create an imported
+    # target for each dependency, for more precise configuration-specific library names??)
+    # Thus we should specifically specify include_directories() where we can
+    # discern the configuration type (in single-configuration generators using
+    # CMAKE_BUILD_TYPE) and - in the case of multi-config generators - pray
+    # that the authoritative configuration has an AdditionalIncludeDirectories setting
+    # that matches that of all other configs, since we're unable to specify
+    # it in a configuration-specific way :(
+    # Well, in that case we should simply resort to generating
+    # the _union_ of all include directories of all configurations...
+    # "Re: [CMake] debug/optimized include directories"
+    #   http://www.mail-archive.com/cmake@cmake.org/msg38940.html
+    # is a long discussion of this severe issue.
+    # Probably the best we can do is to add a function to add to vcproj2cmake_func.cmake which calls either raw include_directories() or sets the future
+    # target property, depending on a pre-determined support flag
+    # for proper include dirs setting.
+
+    # HACK global var (multi-thread unsafety!)
+    # Thus make sure to have a local copy, for internal modifications.
+    config_multi_authoritative = $config_multi_authoritative
+    if config_multi_authoritative.empty?
+      # Hrmm, we used to fetch this via REXML next_element,
+      # which returned the _second_ setting (index 1)
+      # i.e. Release in a certain file,
+      # while we now get the first config, Debug, in that file.
+      config_multi_authoritative = arr_config_info[0].condition.get_build_type()
+    end
+
+    arr_config_info.each { |config_info_curr|
+      condition = config_info_curr.condition
+      str_cmake_build_type_condition = ''
+      build_type_cooked = prepare_string_literal(condition.get_build_type())
+      if config_multi_authoritative == condition.get_build_type()
+        str_cmake_build_type_condition = "CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
+      else
+        # YES, this condition is supposed to NOT trigger in case of a multi-configuration generator
+        str_cmake_build_type_condition = "CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
+      end
+      write_set_var_bool_conditional(get_var_name_of_condition(condition), str_cmake_build_type_condition)
+    }
+  end
+  def put_cmake_mfc_atl_flag(target_config_info)
     # Hmm, do we need to actively _reset_ CMAKE_MFC_FLAG / CMAKE_ATL_FLAG
     # (i.e. _unconditionally_ set() it, even if it's 0),
     # since projects in subdirs shouldn't inherit?
@@ -1205,17 +1297,17 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # See also "Re: [CMake] CMAKE_MFC_FLAG not working in functions"
     #   http://www.mail-archive.com/cmake@cmake.org/msg38677.html
 
-    #if config_info.use_of_mfc > V2C_BaseConfig_Defines::MFC_FALSE
-      write_set_var('CMAKE_MFC_FLAG', config_info.use_of_mfc)
+    #if target_config_info.use_of_mfc > V2C_TargetConfig_Defines::MFC_FALSE
+      write_set_var('CMAKE_MFC_FLAG', target_config_info.use_of_mfc)
     #end
     # ok, there's no CMAKE_ATL_FLAG yet, AFAIK, but still prepare
     # for it (also to let people probe on this in hook includes)
     # FIXME: since this flag does not exist yet yet MFC sort-of
     # includes ATL configuration, perhaps as a workaround one should
     # set the MFC flag if use_of_atl is true?
-    #if config_info.use_of_atl > 0
+    #if target_config_info.use_of_atl > 0
       # TODO: should also set the per-configuration-type variable variant
-      write_set_var('CMAKE_ATL_FLAG', config_info.use_of_atl)
+      write_set_var('CMAKE_ATL_FLAG', target_config_info.use_of_atl)
     #end
   end
   def write_include_directories(arr_includes, map_includes)
@@ -1628,30 +1720,24 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
 
   # FIXME: not sure whether map_lib_dirs etc. should be passed in in such a raw way -
   # probably mapping should already have been done at that stage...
-  def put_target(target, arr_sub_source_list_var_names, map_lib_dirs, map_dependencies, config_info_curr)
+  def put_target(target, arr_sub_source_list_var_names, map_lib_dirs, map_dependencies, config_info_curr, target_config_info_curr)
     target_is_valid = false
 
-    # create a target only in case we do have any meat at all
-    #if not main_files[:arr_sub_filters].empty? or not main_files[:arr_file_infos].empty?
-    #if not arr_sub_source_list_var_names.empty?
-    if target.have_build_units
+    # first add source reference, then do linker setup, then create target
 
-      # first add source reference, then do linker setup, then create target
+    put_source_vars(arr_sub_source_list_var_names)
 
-      put_source_vars(arr_sub_source_list_var_names)
+    # write link_directories() (BEFORE establishing a target!)
+    config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
+      @localGenerator.write_link_directories(linker_info_curr.arr_lib_dirs, map_lib_dirs)
+    }
 
-      # write link_directories() (BEFORE establishing a target!)
-      config_info_curr.arr_linker_info.each { |linker_info_curr|
-        @localGenerator.write_link_directories(linker_info_curr.arr_lib_dirs, map_lib_dirs)
-      }
-
-      target_is_valid = put_target_type(target, map_dependencies, config_info_curr)
-    end # target.have_build_units
+    target_is_valid = put_target_type(target, map_dependencies, config_info_curr, target_config_info_curr)
 
     put_hook_post_target()
     return target_is_valid
   end
-  def put_target_type(target, map_dependencies, config_info_curr)
+  def put_target_type(target, map_dependencies, target_info_curr, target_config_info_curr)
     target_is_valid = false
 
     str_condition_no_target = get_conditional_inverted(get_var_conditional_target(target.name))
@@ -1663,8 +1749,8 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
           # and add a hook to handle them specially.
 
           # see VCProjectEngine ConfigurationTypes enumeration
-    case config_info_curr.cfg_type
-    when V2C_BaseConfig_Defines::CFG_TYPE_APP
+    case target_config_info_curr.cfg_type
+    when V2C_TargetConfig_Defines::CFG_TYPE_APP
       target_is_valid = true
       #syntax_generator.write_line("add_executable_vcproj2cmake( #{target.name} WIN32 ${SOURCES} )")
       # TODO: perhaps for real cross-platform binaries (i.e.
@@ -1672,7 +1758,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
       # this and not use WIN32 in this case...
       # Well, this toggle probably is related to the .vcproj Keyword attribute...
       write_target_executable()
-    when V2C_BaseConfig_Defines::CFG_TYPE_DLL
+    when V2C_TargetConfig_Defines::CFG_TYPE_DLL
       target_is_valid = true
       #syntax_generator.write_line("add_library_vcproj2cmake( #{target.name} SHARED ${SOURCES} )")
       # add_library() docs: "If no type is given explicitly the type is STATIC or  SHARED
@@ -1685,21 +1771,21 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
       # Or perhaps make use of new V2C_TARGET_LINKAGE_{SHARED|STATIC}_LIB
       # variables here, to be able to define "SHARED"/"STATIC" externally?
       write_target_library_dynamic()
-    when V2C_BaseConfig_Defines::CFG_TYPE_STATIC_LIB
+    when V2C_TargetConfig_Defines::CFG_TYPE_STATIC_LIB
       target_is_valid = true
       write_target_library_static()
-    when V2C_BaseConfig_Defines::CFG_TYPE_UNKNOWN
+    when V2C_TargetConfig_Defines::CFG_TYPE_UNKNOWN
       log_warn "Project type 0 (typeUnknown - utility, configured for target #{target.name}) is a _custom command_ type and thus probably cannot be supported easily. We will not abort and thus do write out a file, but it probably needs fixup (hook scripts?) to work properly. If this project type happens to use VCNMakeTool tool, then I would suggest to examine BuildCommandLine/ReBuildCommandLine/CleanCommandLine attributes for clues on how to proceed."
     else
     #when 10    # typeGeneric (Makefile) [and possibly other things...]
       # TODO: we _should_ somehow support these project types...
-      log_fatal "Project type #{config_info_curr.cfg_type} not supported."
+      log_fatal "Project type #{target_config_info_curr.cfg_type} not supported."
     end
     write_conditional_end(str_condition_no_target)
 
     # write target_link_libraries() in case there's a valid target
     if target_is_valid
-      config_info_curr.arr_linker_info.each { |linker_info_curr|
+      target_info_curr.tools.arr_linker_info.each { |linker_info_curr|
         write_link_libraries(linker_info_curr.arr_dependencies, map_dependencies)
       }
     end # target_is_valid
@@ -2540,11 +2626,11 @@ class V2C_VS7ToolParser < V2C_VSXmlParserBase
     elem_parser = nil
     case toolname
     when TEXT_VCCLCOMPILERTOOL
-      arr_info = get_project().arr_compiler_info
+      arr_info = get_tools_info().arr_compiler_info
       info = V2C_Tool_Compiler_Info.new(V2C_Tool_Compiler_Specific_Info_MSVC7.new)
       elem_parser = V2C_VS7ToolCompilerParser.new(@elem_xml, info)
     when TEXT_VCLINKERTOOL
-      arr_info = get_project().arr_linker_info
+      arr_info = get_tools_info().arr_linker_info
       info = V2C_Tool_Linker_Info.new(V2C_Tool_Linker_Specific_Info_MSVC7.new)
       elem_parser = V2C_VS7ToolLinkerParser.new(@elem_xml, info)
     else
@@ -2558,7 +2644,7 @@ class V2C_VS7ToolParser < V2C_VSXmlParserBase
   end
   private
 
-  def get_project; return @info_elem end
+  def get_tools_info; return @info_elem end
 end
 
 module V2C_VSConfigurationDefines
@@ -2575,27 +2661,34 @@ end
 
 class V2C_VS7ConfigurationBaseParser < V2C_VSXmlParserBase
   include V2C_VS7ConfigurationDefines
+  # VS10 has added a separation of these structs,
+  # thus we need to pass _two_ distinct params even in VS7...
+  def initialize(elem_xml, target_config_info_out, config_info_out)
+    super(elem_xml, target_config_info_out)
+    @config_info = config_info_out
+  end
   private
 
   def parse_setting(setting_key, setting_value)
     found = FOUND_TRUE # be optimistic :)
     case setting_key
     when TEXT_CHARACTERSET
-      get_config_info().charset = parse_charset(setting_value)
+      get_target_config_info().charset = parse_charset(setting_value)
     when TEXT_CONFIGURATIONTYPE
-      get_config_info().cfg_type = parse_configuration_type(setting_value)
+      get_target_config_info().cfg_type = parse_configuration_type(setting_value)
     when 'Name'
+      get_target_config_info().condition = V2C_Info_Condition.new
       arr_name = setting_value.split('|')
-      get_config_info().build_type = arr_name[0]
-      get_config_info().platform = arr_name[1]
+      get_target_config_info().condition.set_build_type(arr_name[0])
+      get_target_config_info().condition.set_platform(arr_name[1])
     when TEXT_VS7_USEOFATL
-      get_config_info().use_of_atl = setting_value.to_i
+      get_target_config_info().use_of_atl = setting_value.to_i
     when TEXT_VS7_USEOFMFC
       # VS7 does not seem to use string values (only 0/1/2 integers), while VS10 additionally does.
       # NOTE SPELLING DIFFERENCE: MSVS7 has UseOfMFC, MSVS10 has UseOfMfc (see CMake MSVS generators)
-      get_config_info().use_of_mfc = setting_value.to_i
+      get_target_config_info().use_of_mfc = setting_value.to_i
     when TEXT_WHOLEPROGRAMOPTIMIZATION
-      get_config_info().whole_program_optimization = parse_wp_optimization(setting_value)
+      get_target_config_info().whole_program_optimization = parse_wp_optimization(setting_value)
     else
       found = super
     end
@@ -2606,7 +2699,7 @@ class V2C_VS7ConfigurationBaseParser < V2C_VSXmlParserBase
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
     when 'Tool'
-      elem_parser = V2C_VS7ToolParser.new(subelem_xml, get_config_info())
+      elem_parser = V2C_VS7ToolParser.new(subelem_xml, get_tools_info())
     end
     if not elem_parser.nil?
       elem_parser.parse
@@ -2615,7 +2708,15 @@ class V2C_VS7ConfigurationBaseParser < V2C_VSXmlParserBase
     end
     return found
   end
-  def get_config_info; return @info_elem end
+  def parse_post_hook
+    # While the conditional-related information is only available (parsed) once,
+    # it needs to be passed to _both_ V2C_Target_Config_Build_Info _and_
+    # V2C_Config_Base_Info:
+    get_config_info().condition = get_target_config_info().condition
+  end
+  def get_target_config_info; return @info_elem end
+  def get_config_info; return @config_info end
+  def get_tools_info; return get_config_info().tools end
   def parse_charset(str_charset); return str_charset.to_i end
   def parse_configuration_type(str_configuration_type); return str_configuration_type.to_i end
   def parse_wp_optimization(str_opt); return str_opt.to_i end
@@ -2644,17 +2745,25 @@ class V2C_VS7FileConfigurationParser < V2C_VS7ConfigurationBaseParser
 end
 
 class V2C_VS7ConfigurationsParser < V2C_VSXmlParserBase
+  def initialize(elem_xml, info_elem_out, arr_target_config_info_out)
+    super(elem_xml, info_elem_out)
+    @arr_target_config_info = arr_target_config_info_out
+  end
   private
+  def get_arr_config_info(); return @info_elem end
+  def get_arr_target_config_info(); return @arr_target_config_info end
 
   def parse_element(subelem_xml)
     found = FOUND_TRUE # be optimistic :)
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
     when 'Configuration'
+      target_config_info_curr = V2C_Target_Config_Build_Info.new
       config_info_curr = V2C_Project_Config_Info.new
-      elem_parser = V2C_VS7ProjectConfigurationParser.new(subelem_xml, config_info_curr)
+      elem_parser = V2C_VS7ProjectConfigurationParser.new(subelem_xml, target_config_info_curr, config_info_curr)
       if elem_parser.parse
-        @info_elem.push(config_info_curr)
+        get_arr_target_config_info().push(target_config_info_curr)
+        get_arr_config_info().push(config_info_curr)
       end
     else
       found = super
@@ -2665,9 +2774,11 @@ end
 
 class V2C_Info_File
   def initialize
+    @target_config_info = nil
     @config_info = nil
     @path_relative = ''
   end
+  attr_accessor :target_config_info
   attr_accessor :config_info
   attr_accessor :path_relative
 end
@@ -2723,9 +2834,11 @@ class V2C_VS7FileParser < V2C_VSXmlParserBase
     found = FOUND_TRUE # be optimistic :)
     case subelem_xml.name
     when 'FileConfiguration'
+      target_config_info_curr = V2C_Target_Config_Build_Info.new
       config_info_curr = V2C_File_Config_Info.new
-      elem_parser = V2C_VS7FileConfigurationParser.new(subelem_xml, config_info_curr)
+      elem_parser = V2C_VS7FileConfigurationParser.new(subelem_xml, target_config_info_curr, config_info_curr)
       elem_parser.parse
+      @info_file.target_config_info = target_config_info_curr
       @info_file.config_info = config_info_curr
     else
       found = super
@@ -2896,7 +3009,7 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
     when 'Configurations'
-      elem_parser = V2C_VS7ConfigurationsParser.new(subelem_xml, get_project().arr_config_info)
+      elem_parser = V2C_VS7ConfigurationsParser.new(subelem_xml, get_project().arr_config_info, get_project().arr_target_config_info)
     when 'Files' # "Files" simply appears to be a special "Filter" element without any filter conditions.
       # FIXME: we most likely shouldn't pass a rather global "target" object here! (pass a file info object)
       get_project().main_files = Files_str.new
@@ -3088,8 +3201,12 @@ class V2C_VS10BaseElemParser < V2C_VS10ParserBase
     super(elem_xml, info_elem_out)
     @have_condition = false
   end
+  private
+
+  def get_base_elem; return @info_elem end
   def parse_attribute(setting_key, setting_value)
     found = FOUND_TRUE # be optimistic :)
+    log_debug(setting_key)
     case setting_key
     when TEXT_CONDITION
       # set have_condition bool to true,
@@ -3099,10 +3216,10 @@ class V2C_VS10BaseElemParser < V2C_VS10ParserBase
       # (upon "Condition" attribute parsing the exact property item class often is not known yet i.e. nil!!).
       # Or is there a better way to achieve common, reliable parsing of that condition information?
       @have_condition = true
-      if not @info_elem.condition.nil?
+      if not get_base_elem().condition.nil?
         parser_error 'huh, pre-existing condition!?'
       else
-        @info_elem.condition = V2C_Info_Condition.new(setting_value)
+        get_base_elem().condition = V2C_Info_Condition.new(setting_value)
       end
     else
       found = super
@@ -3127,7 +3244,7 @@ class V2C_VS10BaseElemParser < V2C_VS10ParserBase
       end
     end
     if @have_condition
-      if @info_elem.condition.nil?
+      if get_base_elem().condition.nil?
         success = false
       end
     end
@@ -3135,42 +3252,43 @@ class V2C_VS10BaseElemParser < V2C_VS10ParserBase
   end
 end
 
-class V2C_VS10ItemGroupProjectConfigurationParser < V2C_VS10ParserBase
+class V2C_VS10ItemGroupProjectConfigurationDescriptionParser < V2C_VS10ParserBase
   private
   def get_config_info; return @info_elem end
 
-  def parse_element(subelem_xml)
-    setting_key = subelem_xml.name
-    setting_value = subelem_xml.text
+  def parse_setting(setting_key, setting_value)
     found = FOUND_TRUE # be optimistic :)
-    case setting_key
-    when 'Configuration'
-      get_config_info().build_type = setting_value
-    when 'Platform'
-      get_config_info().platform = setting_value
-    else
-      found = super
-    end
+    # FIXME TODO: use a special class for the build_type/platform mappings.
+    #case setting_key
+    #when 'Configuration'
+    #  get_config_info().condition.build_type = setting_value
+    #when 'Platform'
+    #  get_config_info().condition.platform = setting_value
+    #else
+    #  found = super
+    #end
     return found
   end
   def parse_post_hook
     super
-    log_debug_class("build type #{get_config_info().build_type}, platform #{get_config_info().platform}")
+    # FIXME #log_debug_class("build type #{get_config_info().build_type}, platform #{get_config_info().platform}")
   end
 end
 
 class V2C_VS10ItemGroupProjectConfigurationsParser < V2C_VS10ParserBase
   private
 
-  def get_arr_config_info; return @info_elem end
+  def get_arr_config_descr; return @info_elem end
   def parse_element(itemgroup_elem_xml)
     found = FOUND_TRUE # be optimistic :)
     case itemgroup_elem_xml.name
     when 'ProjectConfiguration'
-      config_info = V2C_Project_Config_Info.new
-      projconf_parser = V2C_VS10ItemGroupProjectConfigurationParser.new(itemgroup_elem_xml, config_info)
+      # FIXME!!! this is _NOT_ supposed to be a V2C_Project_Config_Info here -
+      # this entry is a configuration _mapping_!
+      config_descr = V2C_Project_Config_Info.new
+      projconf_parser = V2C_VS10ItemGroupProjectConfigurationDescriptionParser.new(itemgroup_elem_xml, config_descr)
       projconf_parser.parse
-      get_arr_config_info().push(config_info)
+      get_arr_config_descr().push(config_descr)
     else
       found = super
     end
@@ -3342,7 +3460,7 @@ class V2C_VS10ItemGroupParser < V2C_VS10ParserBase
     item_group_parser = nil
     case itemgroup_label
     when 'ProjectConfigurations'
-      item_group_parser = V2C_VS10ItemGroupProjectConfigurationsParser.new(@elem_xml, get_project().arr_config_info)
+      item_group_parser = V2C_VS10ItemGroupProjectConfigurationsParser.new(@elem_xml, get_project().arr_config_descr)
     when nil
       item_group_parser = V2C_VS10ItemGroupAnonymousParser.new(@elem_xml, get_project())
     end
@@ -3470,21 +3588,25 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
 end
 
 class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
-  def get_project; return @info_elem end
+  private
+
+  def get_config_info; return @info_elem end
+  def get_tools_info; return get_config_info().tools end
   def parse_element(subelem_xml)
     found = FOUND_TRUE # be optimistic :)
     setting_key = subelem_xml.name
     item_def_group_parser = nil # IMPORTANT: reset it!
     arr_info = nil
     info = nil
+    log_debug(setting_key)
     case setting_key
     when 'ClCompile'
-      arr_info = get_project().arr_compiler_info
+      arr_info = get_tools_info().arr_compiler_info
       info = V2C_Tool_Compiler_Info.new(V2C_Tool_Compiler_Specific_Info_MSVC10.new)
       item_def_group_parser = V2C_VS10ToolCompilerParser.new(subelem_xml, info)
     #when 'ResourceCompile'
     when 'Link'
-      arr_info = get_project().arr_linker_info
+      arr_info = get_tools_info().arr_linker_info
       info = V2C_Tool_Linker_Info.new(V2C_Tool_Linker_Specific_Info_MSVC10.new)
       item_def_group_parser = V2C_VS10ToolLinkerParser.new(subelem_xml, info)
     when 'Midl'
@@ -3509,27 +3631,27 @@ end
 class V2C_VS10PropertyGroupConfigurationParser < V2C_VS10BaseElemParser
   include V2C_VS10ConfigurationDefines
 private
+  def get_configuration; return @info_elem end
 
   def parse_setting(setting_key, setting_value)
     found = FOUND_TRUE # be optimistic :)
+    config_info_curr = get_configuration()
     case setting_key
     when TEXT_CHARACTERSET
-      @info_elem.charset = parse_charset(setting_value)
+      config_info_curr.charset = parse_charset(setting_value)
     when TEXT_CONFIGURATIONTYPE
-      @info_elem.cfg_type = parse_configuration_type(setting_value)
+      config_info_curr.cfg_type = parse_configuration_type(setting_value)
     when TEXT_VS10_USEOFATL
-      @info_elem.use_of_atl = parse_use_of_atl_mfc(setting_value)
+      config_info_curr.use_of_atl = parse_use_of_atl_mfc(setting_value)
     when TEXT_VS10_USEOFMFC
-      @info_elem.use_of_mfc = parse_use_of_atl_mfc(setting_value)
+      config_info_curr.use_of_mfc = parse_use_of_atl_mfc(setting_value)
     when TEXT_WHOLEPROGRAMOPTIMIZATION
-      @info_elem.whole_program_optimization = parse_wp_optimization(setting_value)
+      config_info_curr.whole_program_optimization = parse_wp_optimization(setting_value)
     else
       found = super
     end
     return found
   end
-
-  private
 
   def parse_charset(str_charset)
     # Possibly useful related link: "[CMake] Bug #12189"
@@ -3627,10 +3749,10 @@ class V2C_VS10PropertyGroupParser < V2C_VS10BaseElemParser
     log_debug_class("Label #{propgroup_label}!")
     case propgroup_label
     when 'Configuration'
-      config_info_curr = V2C_Project_Config_Info.new
-      propgroup_parser = V2C_VS10PropertyGroupConfigurationParser.new(@elem_xml, config_info_curr)
+      target_config_info = V2C_Target_Config_Build_Info.new
+      propgroup_parser = V2C_VS10PropertyGroupConfigurationParser.new(@elem_xml, target_config_info)
       propgroup_parser.parse
-      get_project().arr_config_info.push(config_info_curr)
+      get_project().arr_target_config_info.push(target_config_info)
     when 'Globals'
       propgroup_parser = V2C_VS10PropertyGroupGlobalsParser.new(@elem_xml, get_project())
       propgroup_parser.parse
@@ -3971,7 +4093,7 @@ Finished. You should make sure to have all important v2c settings includes such 
         arr_sub_source_list_var_names = Array.new
         target_generator.put_file_list_source_group_recursive(project_info.name, project_info.main_files, nil, arr_sub_source_list_var_names)
 
-        # VERY DIRTY interim handling:
+        # FIXME VERY DIRTY interim handling:
         if project_info.have_build_units == false
           project_info.file_lists.arr_file_lists.each { |file_list|
             arr_file_infos = file_list.arr_files
@@ -4001,62 +4123,20 @@ Finished. You should make sure to have all important v2c settings includes such 
 
 	arr_config_info = project_info.arr_config_info
 
-        # ARGH, we have an issue with CMake not being fully up to speed with
-        # multi-configuration generators (e.g. .vcproj):
-        # it should be able to declare _all_ configuration-dependent settings
-        # in a .vcproj file as configuration-dependent variables
-        # (just like set_property(... COMPILE_DEFINITIONS_DEBUG ...)),
-        # but with configuration-specific(!) include directories on .vcproj side,
-        # there's currently only a _generic_ include_directories() command :-(
-        # (dito with target_link_libraries() - or are we supposed to create an imported
-        # target for each dependency, for more precise configuration-specific library names??)
-        # Thus we should specifically specify include_directories() where we can
-        # discern the configuration type (in single-configuration generators using
-        # CMAKE_BUILD_TYPE) and - in the case of multi-config generators - pray
-        # that the authoritative configuration has an AdditionalIncludeDirectories setting
-        # that matches that of all other configs, since we're unable to specify
-        # it in a configuration-specific way :(
-        # Well, in that case we should simply resort to generating
-        # the _union_ of all include directories of all configurations...
-        # "Re: [CMake] debug/optimized include directories"
-        #   http://www.mail-archive.com/cmake@cmake.org/msg38940.html
-        # is a long discussion of this severe issue.
-        # Probably the best we can do is to add a function to add to vcproj2cmake_func.cmake which calls either raw include_directories() or sets the future
-        # target property, depending on a pre-determined support flag
-        # for proper include dirs setting.
+        local_generator.generate_build_type_variables_assignments(arr_config_info)
 
-        # HACK global var (multi-thread unsafety!)
-        # Thus make sure to have a local copy, for internal modifications.
-        config_multi_authoritative = $config_multi_authoritative
-        if config_multi_authoritative.empty?
-          # Hrmm, we used to fetch this via REXML next_element,
-          # which returned the _second_ setting (index 1)
-          # i.e. Release in a certain file,
-          # while we now get the first config, Debug, in that file.
-          config_multi_authoritative = arr_config_info[0].build_type
-        end
-
-        arr_config_info.each { |config_info_curr|
-          log_debug "config_info #{config_info_curr.inspect}"
-          build_type_condition = ''
-          build_type_cooked = syntax_generator.prepare_string_literal(config_info_curr.build_type)
-          if config_multi_authoritative == config_info_curr.build_type
-  	    build_type_condition = "CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
-          else
-  	    # YES, this condition is supposed to NOT trigger in case of a multi-configuration generator
-  	    build_type_condition = "CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
-  	  end
-  	  syntax_generator.write_set_var_bool_conditional(get_var_name_of_config_info_condition(config_info_curr), build_type_condition)
+	arr_target_config_info = project_info.arr_target_config_info
+        arr_target_config_info.each { |target_config_info_curr|
+          local_generator.put_cmake_mfc_atl_flag(target_config_info_curr)
         }
 
         arr_config_info.each { |config_info_curr|
-          var_v2c_want_buildcfg_curr = get_var_name_of_config_info_condition(config_info_curr)
           syntax_generator.next_paragraph()
+          condition = config_info_curr.condition
+          var_v2c_want_buildcfg_curr = syntax_generator.get_var_name_of_condition(condition)
           syntax_generator.write_conditional_if(var_v2c_want_buildcfg_curr)
 
-          local_generator.put_cmake_mfc_atl_flag(config_info_curr)
-
-          config_info_curr.arr_compiler_info.each { |compiler_info_curr|
+          config_info_curr.tools.arr_compiler_info.each { |compiler_info_curr|
             arr_includes = compiler_info_curr.get_include_dirs(false, false)
             local_generator.write_include_directories(arr_includes, generator_base.map_includes)
           }
@@ -4071,19 +4151,31 @@ Finished. You should make sure to have all important v2c settings includes such 
           # as the exact target name (we are unable to define separate PROJ_lib and PROJ_exe target names,
           # since other .vcproj file contents always link to our target via the main project name only!!).
           # Thus we need to declare the target _outside_ the scope of per-config handling :(
-          target_is_valid = target_generator.put_target(project_info, arr_sub_source_list_var_names, map_lib_dirs, map_dependencies, config_info_curr)
+
+          # create a target only in case we do have any meat at all
+          if project_info.have_build_units
+            arr_target_config_info.each { |target_config_info_curr|
+              target_is_valid = target_generator.put_target(project_info, arr_sub_source_list_var_names, map_lib_dirs, map_dependencies, config_info_curr, target_config_info_curr)
+            }
+          end # target.have_build_units
 
           syntax_generator.write_conditional_end(var_v2c_want_buildcfg_curr)
         } # [END per-config handling]
 
         # Now that we likely _do_ have a valid target
         # (created by at least one of the Debug/Release/... build configs),
-        # *iterate through the configs again* and add config-specific
+        # _iterate through the configs again_ and add config-specific
         # definitions. This is necessary (fix for multi-config
         # environment).
+        #
+        # UGH, now added yet another loop iteration.
+        # FIXME This is getting waaaaay too messy, need to refactor it to have a
+        # clean hierarchy.
         if target_is_valid
           target_generator.write_conditional_target_valid_begin()
           arr_config_info.each { |config_info_curr|
+            condition = config_info_curr.condition
+
             # NOTE: the commands below can stay in the general section (outside of
             # var_v2c_want_buildcfg_curr above), but only since they define properties
             # which are clearly named as being configuration-_specific_ already!
@@ -4091,53 +4183,55 @@ Finished. You should make sure to have all important v2c settings includes such 
   	    # I don't know WhyTH we're iterating over a compiler_info here,
   	    # but let's just do it like that for now since it's required
   	    # by our current data model:
-  	    config_info_curr.arr_compiler_info.each { |compiler_info_curr|
+  	    config_info_curr.tools.arr_compiler_info.each { |compiler_info_curr|
 
               # Since the precompiled header CMake module currently
               # _resets_ a target's COMPILE_FLAGS property,
               # make sure to generate it _before_ generating COMPILE_FLAGS:
-              target_generator.write_precompiled_header(config_info_curr.build_type, compiler_info_curr.precompiled_header_info)
+              target_generator.write_precompiled_header(condition.get_build_type(), compiler_info_curr.precompiled_header_info)
 
-	      hash_defines_actual = compiler_info_curr.hash_defines.clone
-	      # Hrmm, are we even supposed to be doing this?
-	      # On Windows I guess UseOfMfc in generated VS project files
-	      # would automatically cater for it, and all other platforms
-	      # would have to handle it some way or another anyway.
-	      # But then I guess there are other build environments on Windows
-	      # which would need us handling it here manually, so let's just keep it for now.
-	      # Plus, defining _AFXEXT already includes the _AFXDLL setting
-	      # (MFC will define it implicitly),
-	      # thus it's quite likely that our current handling is somewhat incorrect.
-              if config_info_curr.use_of_mfc == V2C_BaseConfig_Defines::MFC_DYNAMIC
-                # FIXME: need to add /MD (dynamic) or /MT (static) switch to compiler-specific info (MSVC) as well!
-                hash_defines_actual['_AFXEXT'] = ''
-                hash_defines_actual['_AFXDLL'] = ''
-              end
-	      case config_info_curr.charset
-              when V2C_BaseConfig_Defines::CHARSET_SBCS # nothing to do?
-              when V2C_BaseConfig_Defines::CHARSET_UNICODE
-                # http://blog.m-ri.de/index.php/2007/05/31/_unicode-versus-unicode-und-so-manches-eigentuemliche/
-                #   "    "Use Unicode Character Set" setzt beide Defines _UNICODE und UNICODE
-                #       "Use Multi-Byte Character Set" setzt nur _MBCS.
-                #           "Not set" setzt Erwartungsgemäß keinen der Defines..."
-                hash_defines_actual['_UNICODE'] = ''
-                hash_defines_actual['UNICODE'] = ''
-              when V2C_BaseConfig_Defines::CHARSET_MBCS
-                hash_defines_actual['_MBCS'] = ''
-              else
-                log_implementation_bug('unknown charset type!?')
-              end
-              target_generator.write_property_compile_definitions(config_info_curr.build_type, hash_defines_actual, map_defines)
-              # Original compiler flags are MSVC-only, of course. TODO: provide an automatic conversion towards gcc?
-              str_conditional_compiler_platform = nil
-              compiler_info_curr.arr_tool_variant_specific_info.each { |compiler_specific|
-		str_conditional_compiler_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.compiler_name)
-                # I don't think we need this (we have per-target properties), thus we'll NOT write it!
-                #local_generator.write_directory_property_compile_flags(attr_options)
-                target_generator.write_property_compile_flags(config_info_curr.build_type, compiler_specific.arr_flags, str_conditional_compiler_platform)
+              arr_target_config_info.each { |target_config_info_curr|
+	        hash_defines_actual = compiler_info_curr.hash_defines.clone
+	        # Hrmm, are we even supposed to be doing this?
+	        # On Windows I guess UseOfMfc in generated VS project files
+	        # would automatically cater for it, and all other platforms
+	        # would have to handle it some way or another anyway.
+	        # But then I guess there are other build environments on Windows
+	        # which would need us handling it here manually, so let's just keep it for now.
+	        # Plus, defining _AFXEXT already includes the _AFXDLL setting
+	        # (MFC will define it implicitly),
+	        # thus it's quite likely that our current handling is somewhat incorrect.
+                if target_config_info_curr.use_of_mfc == V2C_TargetConfig_Defines::MFC_DYNAMIC
+                  # FIXME: need to add /MD (dynamic) or /MT (static) switch to compiler-specific info (MSVC) as well!
+                  hash_defines_actual['_AFXEXT'] = ''
+                  hash_defines_actual['_AFXDLL'] = ''
+                end
+  	        case target_config_info_curr.charset
+                when V2C_TargetConfig_Defines::CHARSET_SBCS # nothing to do?
+                when V2C_TargetConfig_Defines::CHARSET_UNICODE
+                  # http://blog.m-ri.de/index.php/2007/05/31/_unicode-versus-unicode-und-so-manches-eigentuemliche/
+                  #   "    "Use Unicode Character Set" setzt beide Defines _UNICODE und UNICODE
+                  #       "Use Multi-Byte Character Set" setzt nur _MBCS.
+                  #           "Not set" setzt Erwartungsgemäß keinen der Defines..."
+                  hash_defines_actual['_UNICODE'] = ''
+                  hash_defines_actual['UNICODE'] = ''
+                when V2C_TargetConfig_Defines::CHARSET_MBCS
+                  hash_defines_actual['_MBCS'] = ''
+                else
+                  log_implementation_bug('unknown charset type!?')
+                end
+                target_generator.write_property_compile_definitions(condition.get_build_type(), hash_defines_actual, map_defines)
+                # Original compiler flags are MSVC-only, of course. TODO: provide an automatic conversion towards gcc?
+                str_conditional_compiler_platform = nil
+                compiler_info_curr.arr_tool_variant_specific_info.each { |compiler_specific|
+  		str_conditional_compiler_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.compiler_name)
+                  # I don't think we need this (we have per-target properties), thus we'll NOT write it!
+                  #local_generator.write_directory_property_compile_flags(attr_options)
+                  target_generator.write_property_compile_flags(condition.get_build_type(), compiler_specific.arr_flags, str_conditional_compiler_platform)
+                } # compiler.tool_specific.each
               }
             }
-            config_info_curr.arr_linker_info.each { |linker_info_curr|
+            config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
               str_conditional_linker_platform = nil
               linker_info_curr.arr_tool_variant_specific_info.each { |linker_specific|
 		str_conditional_linker_platform = map_linker_name_to_cmake_platform_conditional(linker_specific.linker_name)
@@ -4145,9 +4239,9 @@ Finished. You should make sure to have all important v2c settings includes such 
                 # CMAKE_SHARED_LINKER_FLAGS / CMAKE_MODULE_LINKER_FLAGS / CMAKE_EXE_LINKER_FLAGS
                 # depending on target type, and make sure to filter out options pre-defined by CMake platform
                 # setup modules)
-                target_generator.write_property_link_flags(config_info_curr.build_type, linker_specific.arr_flags, str_conditional_linker_platform)
-              }
-            }
+                target_generator.write_property_link_flags(condition.get_build_type(), linker_specific.arr_flags, str_conditional_linker_platform)
+              } # linker.tool_specific.each
+            } # arr_linker_info.each
           }
           target_generator.write_conditional_target_valid_end()
         end
@@ -4170,29 +4264,6 @@ Finished. You should make sure to have all important v2c settings includes such 
 
   private
 
-  # Hrmm, I'm not quite sure yet where to aggregate this function...
-  def get_var_name_of_config_info_condition(config_info)
-    # HACK: very Q&D handling, to make things work quickly.
-    # Should think of implementing a proper abstraction for handling of conditions.
-    # Probably we _at least_ need to create a _condition generator_ class.
-    if config_info.condition.nil?
-      build_type = config_info.build_type
-    else
-      str_condition = config_info.condition.str_condition
-      log_debug "condition: #{str_condition}"
-      build_type = nil
-      str_condition.scan(/^'\$\(Configuration\)\|\$\(Platform\)'=='(.*)\|.*$/) {
-        build_type = $1
-      }
-      if build_type.nil? or build_type.empty?
-        # TODO!! (see above)
-        generator_error "could not parse build type from condition #{str_condition}"
-      end
-    end
-    # Name may contain spaces - need to handle them!
-    config_name = util_flatten_string(build_type)
-    return "v2c_want_buildcfg_#{config_name}"
-  end
   V2C_COMPILER_MSVC_REGEX_OBJ = %r{^MSVC}
   def map_compiler_name_to_cmake_platform_conditional(compiler_name)
     str_conditional_compiler_platform = nil
