@@ -2736,7 +2736,7 @@ class V2C_VS7FileConfigurationParser < V2C_VS7ConfigurationBaseParser
     found = FOUND_TRUE # be optimistic :)
     case setting_key
     when 'ExcludedFromBuild'
-      @info_elem.excluded_from_build = get_boolean_value(setting_value)
+      get_config_info().excluded_from_build = get_boolean_value(setting_value)
     else
       found = super
     end
