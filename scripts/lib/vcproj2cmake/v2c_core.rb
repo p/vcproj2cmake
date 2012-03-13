@@ -159,7 +159,7 @@ def log_implementation_bug(str); log_fatal(str) end
 def normalize_path(p)
   felems = p.tr('\\', '/').split('/')
   # DON'T eradicate single '.' !!
-  felems.shift if felems[0] == '.' and felems.size > 1
+  felems.shift if felems[0] == '.' and felems.size >= 2
   File.join(felems)
 end
 
@@ -737,7 +737,7 @@ class V2C_ProjectValidator
     # FIXME: Disabled for TESTING only - should re-enable a fileset check once VS10 parsing is complete.
     #if @project_info.main_files.nil?; validation_error('no files!?') end
     arr_config_info = @project_info.arr_config_info
-    if arr_config_info.nil? or arr_config_info.size == 0
+    if arr_config_info.nil? or arr_config_info.empty?
       validation_error('no config information!?')
     end
   end
