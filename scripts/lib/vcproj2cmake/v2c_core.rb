@@ -414,6 +414,7 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
     super(tool_variant_specific_info)
     @arr_info_include_dirs = Array.new
     @hash_defines = Hash.new
+    @asm_listing_location = nil
     @rtti = true
     @precompiled_header_info = nil
     @detect_64bit_porting_problems_enable = true # TODO: translate into MSVC /Wp64 flag; Enabled by default is preferable, right?
@@ -429,6 +430,7 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
   end
   attr_accessor :arr_info_include_dirs
   attr_accessor :hash_defines
+  attr_accessor :asm_listing_location
   attr_accessor :rtti
   attr_accessor :precompiled_header_info
   attr_accessor :detect_64bit_porting_problems_enable
@@ -487,23 +489,39 @@ class V2C_Dependency_Info
   attr_accessor :is_target_name
 end
 
+module V2C_Linker_Defines
+  BASE_ADDRESS_NOT_SET = 0xffffffff
+  SUBSYSTEM_UNKNOWN_FIXME = 0 # FIXME is this a correct/good value to use?
+  SUBSYSTEM_CONSOLE = 1 # VS10 "Console"
+  SUBSYSTEM_WINDOWS = 2 # VS10 "Windows"
+  MACHINE_X86 = 1 # x86 / i386; VS7: 1
+  MACHINE_X64 = 17 # VS7: 17
+end
+
 class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
+  include V2C_Linker_Defines
   def initialize(tool_variant_specific_info = nil)
     super(tool_variant_specific_info)
     @arr_dependencies = Array.new # V2C_Dependency_Info (we need an attribute which indicates whether this dependency is a library _file_ or a target name, since we should be reliably able to decide whether we can add "debug"/"optimized" keywords to CMake variables or target_link_library() parms)
+    @base_address = BASE_ADDRESS_NOT_SET
     @generate_debug_information_enable = false
     @link_incremental = 0 # 1 means NO, thus 2 probably means YES?
     @module_definition_file = nil
     @optimize_references_enable = false
     @pdb_file = nil
+    @subsystem = SUBSYSTEM_CONSOLE
+    @target_machine = MACHINE_X86
     @arr_lib_dirs = Array.new
   end
   attr_accessor :arr_dependencies
+  attr_accessor :base_address
   attr_accessor :generate_debug_information_enable
   attr_accessor :link_incremental
   attr_accessor :module_definition_file
   attr_accessor :optimize_references_enable
   attr_accessor :pdb_file
+  attr_accessor :subsystem
+  attr_accessor :target_machine
   attr_accessor :arr_lib_dirs
   attr_accessor :arr_tool_variant_specific_info
 end
@@ -538,6 +556,7 @@ class V2C_Target_Config_Build_Info < V2C_Info_Elem_Base
     @charset = 0 # Simply uses VS7 values for now. V2C_TargetConfig_Defines::CHARSET_*
     @whole_program_optimization = 0 # Simply uses VS7 values for now. TODO: should use our own enum definition or so.; it seems for CMake the related setting is target/directory property INTERPROCEDURAL_OPTIMIZATION_<CONFIG> (described by Wikipedia "Interprocedural optimization")
     @use_debug_libs = false
+    @atl_minimizes_crt_lib_usage_enable = false
   end
   attr_accessor :cfg_type
   attr_accessor :use_of_mfc
@@ -545,6 +564,7 @@ class V2C_Target_Config_Build_Info < V2C_Info_Elem_Base
   attr_accessor :charset
   attr_accessor :whole_program_optimization
   attr_accessor :use_debug_libs
+  attr_accessor :atl_minimizes_crt_lib_usage_enable
 end
 
 class V2C_Tools_Info < V2C_Info_Elem_Base
@@ -2433,6 +2453,7 @@ end
 module V2C_VSToolCompilerDefines
   include V2C_VSToolDefines
   TEXT_ADDITIONALINCLUDEDIRECTORIES = 'AdditionalIncludeDirectories'
+  TEXT_ASSEMBLERLISTINGLOCATION = 'AssemblerListingLocation'
   TEXT_DISABLESPECIFICWARNINGS = 'DisableSpecificWarnings'
   TEXT_ENABLEPREFAST = 'EnablePREfast'
   TEXT_EXCEPTIONHANDLING = 'ExceptionHandling'
@@ -2464,12 +2485,18 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
       get_compiler_info().arr_info_include_dirs.concat(arr_include_dirs)
     when TEXT_ADDITIONALOPTIONS
       parse_additional_options(get_compiler_info().arr_tool_variant_specific_info[0].arr_flags, setting_value)
+    when TEXT_ASSEMBLERLISTINGLOCATION
+      get_compiler_info().asm_listing_location = normalize_path(setting_value).strip
     when TEXT_DISABLESPECIFICWARNINGS
       parse_disable_specific_warnings(get_compiler_info().arr_tool_variant_specific_info[0].arr_disable_warnings, setting_value)
     when TEXT_ENABLEPREFAST
       get_compiler_info().static_code_analysis_enable = get_boolean_value(setting_value)
+    when TEXT_EXCEPTIONHANDLING
+      get_compiler_info().exception_handling = parse_exception_handling(setting_value)
     when TEXT_MINIMALREBUILD
       get_compiler_info().minimal_rebuild_enable = get_boolean_value(setting_value)
+    when TEXT_OPTIMIZATION
+      get_compiler_info().optimization = parse_optimization(setting_value)
     when TEXT_PROGRAMDATABASEFILENAME
       get_compiler_info().pdb_filename = normalize_path(setting_value)
     when TEXT_PREPROCESSORDEFINITIONS
@@ -2480,6 +2507,8 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
       get_compiler_info().show_includes_enable = get_boolean_value(setting_value)
     when TEXT_TREAT_WCHAR_T_AS_BUILTIN_TYPE
       get_compiler_info().treat_wchar_t_as_builtin_type_enable = get_boolean_value(setting_value)
+    when TEXT_WARNINGLEVEL
+      get_compiler_info().arr_tool_variant_specific_info[0].warning_level = parse_warning_level(setting_value)
     else
       found = super
     end
@@ -2544,12 +2573,8 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
     when 'Detect64BitPortabilityProblems'
       # TODO: add /Wp64 to flags of an MSVC compiler info...
       compiler_info.detect_64bit_porting_problems_enable = get_boolean_value(setting_value)
-    when TEXT_EXCEPTIONHANDLING
-      compiler_info.exception_handling = setting_value.to_i
     when TEXT_NAME
       compiler_info.name = setting_value
-    when TEXT_OPTIMIZATION
-      compiler_info.optimization = setting_value.to_i
     when TEXT_PRECOMPILEDHEADERFILE_BINARY
       allocate_precompiled_header_info(compiler_info)
       compiler_info.precompiled_header_info.header_binary_name = normalize_path(setting_value)
@@ -2561,35 +2586,40 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
       compiler_info.precompiled_header_info.use_mode = parse_use_precompiled_header(setting_value)
     when TEXT_WARNASERROR
       compiler_info.warnings_are_errors_enable = get_boolean_value(setting_value)
-    when TEXT_WARNINGLEVEL
-      compiler_info.arr_tool_variant_specific_info[0].warning_level = setting_value.to_i
     else
       found = super
     end
     return found
   end
+  def parse_exception_handling(setting_value); return setting_value.to_i end
+  def parse_optimization(setting_value); return setting_value.to_i end
   def parse_use_precompiled_header(value_use_precompiled_header)
     use_val = value_use_precompiled_header.to_i
     if use_val == 3; use_val = 2 end # VS7 --> VS8 migration change: all values of 3 have been replaced by 2, it seems...
     return use_val
   end
+  def parse_warning_level(setting_value); return setting_value.to_i end
 end
 
 module V2C_VSToolLinkerDefines
   include V2C_VSToolDefines
   TEXT_ADDITIONALDEPENDENCIES = 'AdditionalDependencies'
   TEXT_ADDITIONALLIBRARYDIRECTORIES = 'AdditionalLibraryDirectories'
+  TEXT_BASEADDRESS = 'BaseAddress'
   TEXT_GENERATEDEBUGINFORMATION = 'GenerateDebugInformation'
   TEXT_LINKINCREMENTAL = 'LinkIncremental'
   TEXT_MODULEDEFINITIONFILE = 'ModuleDefinitionFile'
   TEXT_OPTIMIZEREFERENCES = 'OptimizeReferences'
   TEXT_PROGRAMDATABASEFILE = 'ProgramDatabaseFile'
+  TEXT_SUBSYSTEM = 'SubSystem'
+  TEXT_TARGETMACHINE = 'TargetMachine'
+  VS_DEFAULT_SETTING_SUBSYSTEM = V2C_Linker_Defines::SUBSYSTEM_WINDOWS
+  VS_DEFAULT_SETTING_TARGET_MACHINE = V2C_Linker_Defines::MACHINE_X86
 end
 
 class V2C_VSToolLinkerParser < V2C_VSToolParserBase
-  include V2C_VSToolLinkerDefines
-
   private
+  include V2C_VSToolLinkerDefines
 
   def get_linker_info; return @info_elem end
   def parse_setting(setting_key, setting_value)
@@ -2602,12 +2632,20 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
       parse_additional_library_directories(setting_value, linker_info.arr_lib_dirs)
     when TEXT_ADDITIONALOPTIONS
       parse_additional_options(linker_info.arr_tool_variant_specific_info[0].arr_flags, setting_value)
+    when TEXT_BASEADDRESS
+      linker_info.base_address = setting_value.hex
     when TEXT_GENERATEDEBUGINFORMATION
       linker_info.generate_debug_information_enable = get_boolean_value(setting_value)
     when TEXT_MODULEDEFINITIONFILE
       linker_info.module_definition_file = parse_module_definition_file(setting_value)
+    when TEXT_OPTIMIZEREFERENCES
+      linker_info.optimize_references_enable = parse_optimize_references(setting_value)
     when TEXT_PROGRAMDATABASEFILE
       linker_info.pdb_file = parse_pdb_file(setting_value)
+    when TEXT_SUBSYSTEM
+      linker_info.subsystem = parse_subsystem(setting_value)
+    when TEXT_TARGETMACHINE
+      linker_info.target_machine = parse_target_machine(setting_value)
     else
       found = super
     end
@@ -2650,12 +2688,12 @@ module V2C_VS7ToolLinkerDefines
 end
 
 class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
-  include V2C_VS7ToolLinkerDefines
   def initialize(linker_xml, linker_info_out)
     super(linker_xml, linker_info_out)
   end
 
   private
+  include V2C_VS7ToolLinkerDefines
 
   def parse_attribute(setting_key, setting_value)
     found = be_optimistic()
@@ -2665,19 +2703,30 @@ class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
       linker_info.link_incremental = parse_link_incremental(setting_value)
     when TEXT_NAME
       linker_info.name = setting_value
-    when TEXT_OPTIMIZEREFERENCES
-      linker_info.optimize_references_enable = setting_value.to_i
     else
       found = super
     end
     return found
   end
   def parse_link_incremental(str_link_incremental); return str_link_incremental.to_i end
+  def parse_optimize_references(setting_value); return setting_value.to_i end
+  def parse_subsystem(setting_value); return setting_value.to_i end
+  def parse_target_machine(setting_value)
+     machine = VS_DEFAULT_SETTING_TARGET_MACHINE
+     case setting_value.to_i
+     when 1
+       machine = V2C_Linker_Defines::MACHINE_X86
+     when 17
+       machine = V2C_Linker_Defines::MACHINE_X64
+     else
+       parser_error("unknown target machine #{setting_value}")
+     end
+     return machine
+  end
 end
 
 # Simple forwarder class. Creates specific parsers and invokes them.
 class V2C_VS7ToolParser < V2C_VSXmlParserBase
-  include V2C_VS7ToolDefines
   def parse
     found = be_optimistic()
     toolname = @elem_xml.attributes[TEXT_NAME]
@@ -2703,14 +2752,19 @@ class V2C_VS7ToolParser < V2C_VSXmlParserBase
     return found
   end
   private
+  include V2C_VS7ToolDefines
 
   def get_tools_info; return @info_elem end
 end
 
 module V2C_VSConfigurationDefines
+  TEXT_ATLMINIMIZESCRUNTIMELIBRARYUSAGE = 'ATLMinimizesCRunTimeLibraryUsage'
   TEXT_CHARACTERSET = 'CharacterSet'
   TEXT_CONFIGURATIONTYPE = 'ConfigurationType'
   TEXT_WHOLEPROGRAMOPTIMIZATION = 'WholeProgramOptimization'
+  VS_DEFAULT_SETTING_CHARSET = V2C_TargetConfig_Defines::CHARSET_UNICODE # FIXME proper default??
+  VS_DEFAULT_SETTING_CONFIGURATIONTYPE = V2C_TargetConfig_Defines::CFG_TYPE_UNKNOWN # FIXME proper default??
+  VS_DEFAULT_SETTING_MFC = V2C_TargetConfig_Defines::MFC_FALSE
 end
 
 module V2C_VS7ConfigurationDefines
@@ -2720,7 +2774,6 @@ module V2C_VS7ConfigurationDefines
 end
 
 class V2C_VS7ConfigurationBaseParser < V2C_VSXmlParserBase
-  include V2C_VS7ConfigurationDefines
   # VS10 has added a separation of these structs,
   # thus we need to pass _two_ distinct params even in VS7...
   def initialize(elem_xml, target_config_info_out, config_info_out)
@@ -2728,10 +2781,13 @@ class V2C_VS7ConfigurationBaseParser < V2C_VSXmlParserBase
     @config_info = config_info_out
   end
   private
+  include V2C_VS7ConfigurationDefines
 
   def parse_setting(setting_key, setting_value)
     found = be_optimistic()
     case setting_key
+    when TEXT_ATLMINIMIZESCRUNTIMELIBRARYUSAGE
+      get_target_config_info().atl_minimizes_crt_lib_usage_enable = get_boolean_value(setting_value)
     when TEXT_CHARACTERSET
       get_target_config_info().charset = parse_charset(setting_value)
     when TEXT_CONFIGURATIONTYPE
@@ -2949,16 +3005,17 @@ module V2C_VSFilterDefines
 end
 
 class V2C_VS7FilterParser < V2C_VSXmlParserBase
-  include V2C_VSFilterDefines
   def initialize(files_xml, project_out, files_str_out)
     super(files_xml, project_out)
     @files_str = files_str_out
   end
-  def get_project; return @info_elem end
   def parse
     res = parse_file_list(@elem_xml, @files_str)
     return res
   end
+  private
+  include V2C_VSFilterDefines
+  def get_project; return @info_elem end
   def parse_file_list(vcproj_filter_xml, files_str)
     parse_file_list_attributes(vcproj_filter_xml, files_str)
 
@@ -3072,6 +3129,7 @@ module V2C_VSProjectDefines
 end
 
 class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
+  private
   include V2C_VSProjectDefines
   def parse_element(subelem_xml)
     found = be_optimistic()
@@ -3093,8 +3151,6 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
     end
     return found
   end
-
-  private
 
   def parse_setting(setting_key, setting_value)
     found = be_optimistic()
@@ -3277,12 +3333,12 @@ end
 
 # Parses elements with optional conditional information (Condition=xxx).
 class V2C_VS10BaseElemParser < V2C_VS10ParserBase
-  include V2C_VS10Defines
   def initialize(elem_xml, info_elem_out)
     super(elem_xml, info_elem_out)
     @have_condition = false
   end
   private
+  include V2C_VS10Defines
 
   def get_base_elem; return @info_elem end
   def parse_attribute(setting_key, setting_value)
@@ -3383,6 +3439,7 @@ module V2C_VS10FilterDefines
 end
 
 class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
+  private
   include V2C_VS10FilterDefines
   def parse_attribute(setting_value, setting_key)
     found = be_optimistic()
@@ -3572,26 +3629,19 @@ module V2C_VS10ToolCompilerDefines
 end
 
 class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
-  include V2C_VS10ToolCompilerDefines
-
   private
+  include V2C_VS10ToolCompilerDefines
 
   def parse_element(subelem_xml)
     found = be_optimistic()
     setting_key = subelem_xml.name
     setting_value = subelem_xml.text
     case setting_key
-    when 'AssemblerListingLocation'
-      skipped_element_warn(setting_key)
     when 'MultiProcessorCompilation'
       get_compiler_info().multi_core_compilation_enable = get_boolean_value(setting_value)
     when 'ObjectFileName'
        # TODO: support it - but with a CMake out-of-tree build this setting is very unimportant methinks.
        skipped_element_warn(setting_key)
-    when TEXT_EXCEPTIONHANDLING
-      get_compiler_info().exception_handling = parse_exception_handling(setting_value)
-    when TEXT_OPTIMIZATION
-      get_compiler_info().optimization = parse_optimization(setting_value)
     when TEXT_PRECOMPILEDHEADER
       allocate_precompiled_header_info(get_compiler_info())
       get_compiler_info().precompiled_header_info.use_mode = parse_use_precompiled_header(setting_value)
@@ -3603,8 +3653,6 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
       get_compiler_info().precompiled_header_info.header_binary_name = normalize_path(setting_value)
     when TEXT_TREATWARNINGASERROR
       get_compiler_info().warnings_are_errors_enable = get_boolean_value(setting_value)
-    when TEXT_WARNINGLEVEL
-      get_compiler_info().arr_tool_variant_specific_info[0].warning_level = parse_warning_level(setting_value)
     else
       found = super
     end
@@ -3653,18 +3701,27 @@ end
 
 class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
   include V2C_VS10ToolLinkerDefines
-
+  include V2C_Linker_Defines
   private
 
-  def parse_setting(setting_key, setting_value)
-    found = be_optimistic()
-    case setting_key
-    when TEXT_OPTIMIZEREFERENCES
-      get_linker_info().optimize_references_enable = get_boolean_value(setting_value)
-    else
-      found = super
-    end
-    return found
+  #def parse_setting(setting_key, setting_value)
+  #  found = be_optimistic()
+  #  case setting_key
+  #  when TEXT_OPTIMIZEREFERENCES
+  #    get_linker_info().optimize_references_enable = get_boolean_value(setting_value)
+  #  else
+  #    found = super
+  #  end
+  #  return found
+  #end
+  def parse_optimize_references(setting_value); return get_boolean_value(setting_value) end
+  def parse_subsystem(str_subsystem)
+    arr_subsystem = [
+      'UNKNOWN_FIXME', # 0, UNKNOWN
+      'Console', # VS7: 1
+      'Windows' # VS7: 2
+    ]
+    return string_to_index(arr_subsystem, str_subsystem, VS_DEFAULT_SETTING_SUBSYSTEM)
   end
 end
 
@@ -3710,8 +3767,9 @@ module V2C_VS10ConfigurationDefines
 end
 
 class V2C_VS10PropertyGroupConfigurationParser < V2C_VS10BaseElemParser
-  include V2C_VS10ConfigurationDefines
 private
+  include V2C_VS10ConfigurationDefines
+  include V2C_TargetConfig_Defines
   def get_configuration; return @info_elem end
 
   def parse_setting(setting_key, setting_value)
@@ -3742,7 +3800,7 @@ private
       'Unicode', # 1 (The Healthy Choice)
       'MultiByte' # 2 (MBCS)
     ]
-    return string_to_index(arr_charset, str_charset, 0)
+    return string_to_index(arr_charset, str_charset, VS_DEFAULT_SETTING_CHARSET)
   end
   def parse_configuration_type(str_configuration_type)
     arr_config_type = [
@@ -3752,17 +3810,17 @@ private
       'UNKNOWN_FIXME', # 3
       'StaticLibrary' # 4, typeStaticLibrary
     ]
-    return string_to_index(arr_config_type, str_configuration_type, 0)
+    return string_to_index(arr_config_type, str_configuration_type, VS_DEFAULT_SETTING_CONFIGURATIONTYPE)
   end
   def parse_use_of_atl_mfc(str_use_of_atl_mfc)
-    return string_to_index([ 'false', 'Static', 'Dynamic' ], str_use_of_atl_mfc, 0)
+    return string_to_index([ 'false', 'Static', 'Dynamic' ], str_use_of_atl_mfc, VS_DEFAULT_SETTING_MFC)
   end
   def parse_wp_optimization(str_opt); return get_boolean_value(str_opt) end
 end
 
 class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10BaseElemParser
-  include V2C_VSProjectDefines
   private
+  include V2C_VSProjectDefines
 
   def get_project; return @info_elem end
   def parse_setting(setting_key, setting_value)
