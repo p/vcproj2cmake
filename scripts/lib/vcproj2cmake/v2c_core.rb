@@ -293,6 +293,25 @@ class V2C_Info_Condition
   end
   def set_build_type(build_type); @build_type = build_type end
   def set_platform(platform); @platform = platform end
+
+  # Returns true if we are at least as strict as the other condition,
+  # i.e. indicates whether the other condition is fulfilled within our realms.
+  # For the theory behind this, see e.g. Truth Table
+  # ( http://en.wikipedia.org/wiki/Truth_table ) and
+  # http://en.wikipedia.org/wiki/Logical_conditional and http://en.wikipedia.org/wiki/Entailment
+  def entails(condition_other)
+    if not condition_other.nil?
+      platform_other = condition_other.platform
+      if not platform_other.nil?
+        return false if platform_other != @platform
+      end
+      build_type_other = condition_other.get_build_type()
+      if not build_type_other.nil?
+        return false if build_type_other != @build_type
+      end
+    end
+    return true
+  end
 end
 
 # @brief Mostly used to manage the condition element...
@@ -4182,6 +4201,7 @@ Finished. You should make sure to have all important v2c settings includes such 
           # create a target only in case we do have any meat at all
           if project_info.have_build_units
             arr_target_config_info.each { |target_config_info_curr|
+	      next if not condition.entails(target_config_info_curr.condition)
               target_is_valid = target_generator.put_target(project_info, arr_sub_source_list_var_names, map_lib_dirs, map_dependencies, config_info_curr, target_config_info_curr)
             }
           end # target.have_build_units
@@ -4218,6 +4238,8 @@ Finished. You should make sure to have all important v2c settings includes such 
               target_generator.write_precompiled_header(condition.get_build_type(), compiler_info_curr.precompiled_header_info)
 
               arr_target_config_info.each { |target_config_info_curr|
+	        next if not condition.entails(target_config_info_curr.condition)
+
 	        hash_defines_actual = compiler_info_curr.hash_defines.clone
 	        # Hrmm, are we even supposed to be doing this?
 	        # On Windows I guess UseOfMfc in generated VS project files
@@ -4258,8 +4280,8 @@ Finished. You should make sure to have all important v2c settings includes such 
                   #local_generator.write_directory_property_compile_flags(attr_options)
                   target_generator.write_property_compile_flags(condition.get_build_type(), compiler_specific.arr_flags, str_conditional_compiler_platform)
                 } # compiler.tool_specific.each
-              }
-            }
+              } # arr_target_config_info.each
+            } # config_info_curr.tools.arr_compiler_info.each
             config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
               str_conditional_linker_platform = nil
               linker_info_curr.arr_tool_variant_specific_info.each { |linker_specific|
