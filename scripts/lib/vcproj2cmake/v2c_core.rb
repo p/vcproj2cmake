@@ -868,15 +868,24 @@ class V2C_LoggerBase
   def unhandled_functionality(str_description); log_error(str_description) end
 end
 
-# @brief syntax generator base class.
-#        Strictly about converting requests into specific CMake syntax,
-#        no build-specific generator knowledge at this level!
-class V2C_CMakeSyntaxGeneratorBase < V2C_LoggerBase
+# FIXME: very rough handling - what to do with those VS10 %(XXX) variables?
+# Well, one idea would be to append entries (include directories, dependencies etc.)
+# to individual list vars that are being scoped within a
+# CMake parent directory chain. But these lists should be implementation details
+# hidden behind v2c_xxx(_target _build_type _entries) funcs, of course.
+VS10_EXTENSION_VAR_MATCH_REGEX_OBJ = %r{%([^\s]*)}
+
+
+class V2C_SyntaxGeneratorBase < V2C_LoggerBase
   def initialize(textOut)
     @textOut = textOut
-    # internal CMake generator helpers
   end
+end
 
+# @brief CMake syntax generator base class.
+#        Strictly about converting requests into specific CMake syntax,
+#        no build-specific generator knowledge at this level!
+class V2C_CMakeSyntaxGeneratorBase < V2C_SyntaxGeneratorBase
   def next_paragraph()
     @textOut.write_empty_line()
   end
@@ -1182,8 +1191,10 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
       end
       if @arr_languages.empty?
         @arr_languages.push('C', 'CXX')
-        generator_error 'Could not detect programming language! (FIXME)'
+        log_error_class 'Could not detect programming language! (FIXME)'
       end
+    else
+      log_info_class 'project has no build units, language set to NONE'
     end
     return @arr_languages
   end
@@ -1364,7 +1375,6 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
     # CMake dox currently don't offer such details... (yet!)
     return if arr_includes.empty?
     arr_includes_translated = arr_includes.collect { |elem_inc_dir|
-      next if elem_inc_dir.match(VS10_EXTENSION_VAR_MATCH_REGEX_OBJ)
       vs7_create_config_variable_translation(elem_inc_dir, @arr_config_var_handling)
     }
     write_build_attributes('include_directories', arr_includes_translated, map_includes, nil)
@@ -1540,14 +1550,6 @@ def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_de
   end
   return file_accessible
 end
-
-# FIXME: very rough handling - what to do with those VS10 %(XXX) variables?
-# Well, one idea would be to append entries (include directories, dependencies etc.)
-# to individual list vars that are being scoped within a
-# CMake parent directory chain. But these lists should be implementation details
-# hidden behind v2c_xxx(_target _build_type _entries) funcs, of course.
-VS10_EXTENSION_VAR_MATCH_REGEX_OBJ = %r{%([^\s]*)}
-
 
 class V2C_CMakeFileListGeneratorBase < V2C_CMakeSyntaxGenerator
   VS7_UNWANTED_FILE_TYPES_REGEX_OBJ = %r{\.(lex|y|ico|bmp|txt)$}
@@ -1907,10 +1909,6 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     # TODO: this might be relocatable to a common generator base helper method.
     arr_defs = Array.new
     hash_defs.each { |key, value|
-      if key.match(VS10_EXTENSION_VAR_MATCH_REGEX_OBJ)
-        log_fixme_class("skipping unhandled VS10 variable (#{key})")
-        next
-      end
       str_define = value.empty? ? key : "#{key}=#{value}"
       arr_defs.push(str_define)
     }
@@ -1943,10 +1941,10 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
   end
   def write_property_link_flags(config_name, arr_flags, str_conditional)
     return if arr_flags.empty?
-    config_name_upper = get_config_name_upcase(config_name)
     next_paragraph()
     write_conditional_if(str_conditional)
       str_target_expr = get_target_syntax_expression(@target.name)
+      config_name_upper = get_config_name_upcase(config_name)
       cmake_command_arg = "#{str_target_expr} APPEND PROPERTY LINK_FLAGS_#{config_name_upper}"
       write_command_list('set_property', cmake_command_arg, arr_flags)
     write_conditional_end(str_conditional)
@@ -2059,6 +2057,9 @@ Files_str = Struct.new(:filter_info, :arr_sub_filters, :arr_file_infos)
 # To examine real-life values of such MSVS configuration/environment variables,
 # open a Visual Studio project's additional library directories dialog,
 # then press its "macros" button for a nice list.
+# Well, the terminus technicus for such custom $(ZZZZ) variables
+# appears to be "User Macros" (at least in VS10), thus we should
+# probably rename all handling here to reflect that proper name.
 def vs7_create_config_variable_translation(str, arr_config_var_handling)
   # http://langref.org/all-languages/pattern-matching/searching/loop-through-a-string-matching-a-regex-and-performing-an-action-for-each-match
   str_scan_copy = str.dup # create a deep copy of string, to avoid "`scan': string modified (RuntimeError)"
@@ -2395,6 +2396,7 @@ module V2C_VSToolDefines
 end
 
 class V2C_VSToolParserBase < V2C_VSXmlParserBase
+  VS_ADDOPT_VALUE_SEPARATOR_REGEX_OBJ = %r{[;\s]}
   private
 
   include V2C_VSToolDefines
@@ -2419,7 +2421,12 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
 
     # TODO: add translation table for specific compiler flag settings such as MinimalRebuild:
     # simply make reverse use of existing translation table in CMake source.
-    arr_flags.replace(attr_options.split(';'))
+    # FIXME: can we use the full set of VS_VALUE_SEPARATOR_REGEX_OBJ
+    # for AdditionalOptions content, too?
+    arr_flags = attr_options.split(VS_ADDOPT_VALUE_SEPARATOR_REGEX_OBJ).collect { |opt|
+      next if skip_vs10_precent_sign_var(opt)
+      opt
+    }
   end
 end
 
@@ -2452,7 +2459,9 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
     found = be_optimistic()
     case setting_key
     when TEXT_ADDITIONALINCLUDEDIRECTORIES
-      parse_additional_include_directories(get_compiler_info(), setting_value)
+      arr_include_dirs = Array.new
+      parse_additional_include_directories(arr_include_dirs, setting_value)
+      get_compiler_info().arr_info_include_dirs.concat(arr_include_dirs)
     when TEXT_ADDITIONALOPTIONS
       parse_additional_options(get_compiler_info().arr_tool_variant_specific_info[0].arr_flags, setting_value)
     when TEXT_DISABLESPECIFICWARNINGS
@@ -2479,19 +2488,15 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
 
   private
 
-  def parse_additional_include_directories(compiler_info, attr_incdir)
-    arr_includes = Array.new
+  def parse_additional_include_directories(arr_include_dirs_out, attr_incdir)
     split_values_list_preserve_ws_discard_empty(attr_incdir).each { |elem_inc_dir|
+      next if skip_vs10_precent_sign_var(elem_inc_dir)
       elem_inc_dir = normalize_path(elem_inc_dir).strip
       #log_info_class "include is '#{elem_inc_dir}'"
-      arr_includes.push(elem_inc_dir)
-    }
-    arr_include_dirs = arr_includes.collect { |inc_dir|
       info_inc_dir = V2C_Info_Include_Dir.new
-      info_inc_dir.dir = inc_dir
-      info_inc_dir
+      info_inc_dir.dir = elem_inc_dir
+      arr_include_dirs_out.push(info_inc_dir)
     }
-    get_compiler_info().arr_info_include_dirs.concat(arr_include_dirs)
   end
   def parse_disable_specific_warnings(arr_disable_warnings, attr_disable_warnings)
     arr_disable_warnings.replace(split_values_list_discard_empty(attr_disable_warnings))
@@ -2499,6 +2504,7 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
   def parse_preprocessor_definitions(hash_defines, attr_defines)
     split_values_list_discard_empty(attr_defines).each { |elem_define|
       str_define_key, str_define_value = elem_define.strip.split('=')
+      next if skip_vs10_precent_sign_var(str_define_key)
       # Since a Hash will indicate nil for any non-existing key,
       # we do need to fill in _empty_ value for our _existing_ key.
       if str_define_value.nil?
@@ -2612,6 +2618,7 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
     return if attr_deps.length == 0
     split_values_list_discard_empty(attr_deps).each { |elem_lib_dep|
       log_debug_class "!!!!! elem_lib_dep #{elem_lib_dep}"
+      next if skip_vs10_precent_sign_var(elem_lib_dep)
       elem_lib_dep = normalize_path(elem_lib_dep).strip
       dependency_name = File.basename(elem_lib_dep, '.lib')
       arr_dependencies.push(V2C_Dependency_Info.new(dependency_name))
@@ -2620,6 +2627,7 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
   def parse_additional_library_directories(attr_lib_dirs, arr_lib_dirs)
     return if attr_lib_dirs.length == 0
     split_values_list_preserve_ws_discard_empty(attr_lib_dirs).each { |elem_lib_dir|
+      next if skip_vs10_precent_sign_var(elem_lib_dir)
       elem_lib_dir = normalize_path(elem_lib_dir).strip
       #log_info_class "lib dir is '#{elem_lib_dir}'"
       arr_lib_dirs.push(elem_lib_dir)
@@ -2627,7 +2635,9 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
   end
   # See comment at compiler-side method counterpart
   # It seems VS7 linker arguments are separated by whitespace --> empty split() argument.
-  def parse_additional_options(arr_flags, attr_options); arr_flags.replace(attr_options.split()) end
+  # UPDATE: now commented out since the common base method probably
+  # can handle it correctly.
+  #def parse_additional_options(arr_flags, attr_options); arr_flags.replace(attr_options.split()) end
   def parse_module_definition_file(attr_module_definition_file)
     return normalize_path(attr_module_definition_file)
   end
@@ -3241,6 +3251,18 @@ class V2C_VS7ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
     ## Not sure whether we want to evaluate the settings in .user files...
     #check_unhandled_file_type('user')
   end
+end
+
+# OK, this helper for VS10-specific content
+# really doesn't belong into a _generator-side_ class
+# (these variables should be handled via translation into a common V2C
+# variable convention on the parser side already),
+# but as long as we don't quite know how to best handle it,
+# at least make sure to keep it as a central workaround helper here.
+def skip_vs10_precent_sign_var(str_var)
+  return false if not str_var.match(VS10_EXTENSION_VAR_MATCH_REGEX_OBJ)
+  log_fixme_class("skipping unhandled VS10 variable (#{str_var})")
+  return true
 end
 
 module V2C_VS10Defines
@@ -4131,14 +4153,6 @@ Finished. You should make sure to have all important v2c settings includes such 
 
         local_generator = V2C_CMakeLocalGenerator.new(textOut)
 
-	local_generator.generate_file_leadin(project_info)
-
-        target_generator = V2C_CMakeTargetGenerator.new(project_info, @project_dir, local_generator, textOut)
-
-        # arr_sub_source_list_var_names will receive the names of the individual source list variables:
-        arr_sub_source_list_var_names = Array.new
-        target_generator.put_file_list_source_group_recursive(project_info.name, project_info.main_files, nil, arr_sub_source_list_var_names)
-
         # FIXME VERY DIRTY interim handling:
         if project_info.have_build_units == false
           project_info.file_lists.arr_file_lists.each { |file_list|
@@ -4150,6 +4164,15 @@ Finished. You should make sure to have all important v2c settings includes such 
             end
           }
         end
+
+	local_generator.generate_file_leadin(project_info)
+
+        target_generator = V2C_CMakeTargetGenerator.new(project_info, @project_dir, local_generator, textOut)
+
+        # arr_sub_source_list_var_names will receive the names of the individual source list variables:
+        arr_sub_source_list_var_names = Array.new
+        target_generator.put_file_list_source_group_recursive(project_info.name, project_info.main_files, nil, arr_sub_source_list_var_names)
+
         target_generator.put_file_list_vs10(project_info.name, project_info.file_lists, nil, arr_sub_source_list_var_names)
 
         if not arr_sub_source_list_var_names.empty?
