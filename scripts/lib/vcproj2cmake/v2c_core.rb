@@ -491,9 +491,17 @@ end
 
 module V2C_Linker_Defines
   BASE_ADDRESS_NOT_SET = 0xffffffff
-  SUBSYSTEM_UNKNOWN_FIXME = 0 # FIXME is this a correct/good value to use?
+  # FIXME: there are some other subsystems such as Native (NT driver) and POSIX
+  SUBSYSTEM_NOT_SET = 0
   SUBSYSTEM_CONSOLE = 1 # VS10 "Console"
   SUBSYSTEM_WINDOWS = 2 # VS10 "Windows"
+  SUBSYSTEM_NATIVE = 3 # VS10 "Native"
+  SUBSYSTEM_EFI_APPLICATION = 4 # VS10 "EFIApplication"
+  SUBSYSTEM_EFI_BOOT_SERVICE = 5 # VS10 "EFIBootService"
+  SUBSYSTEM_EFI_ROM = 6 # VS10 "EFIROM"
+  SUBSYSTEM_EFI_RUNTIME = 7 # VS10 "EFIRuntime"
+  SUBSYSTEM_POSIX = 8 # VS10 "Posix"
+  SUBSYSTEM_WINDOWS_CE = 9 # VS10 "WindowsCE"
   MACHINE_X86 = 1 # x86 / i386; VS7: 1
   MACHINE_X64 = 17 # VS7: 17
 end
@@ -2793,10 +2801,11 @@ class V2C_VS7ConfigurationBaseParser < V2C_VSXmlParserBase
     when TEXT_CONFIGURATIONTYPE
       get_target_config_info().cfg_type = parse_configuration_type(setting_value)
     when 'Name'
-      get_target_config_info().condition = V2C_Info_Condition.new
+      condition = V2C_Info_Condition.new
       arr_name = setting_value.split('|')
-      get_target_config_info().condition.set_build_type(arr_name[0])
-      get_target_config_info().condition.set_platform(arr_name[1])
+      condition.set_build_type(arr_name[0])
+      condition.set_platform(arr_name[1])
+      get_target_config_info().condition = condition
     when TEXT_VS7_USEOFATL
       get_target_config_info().use_of_atl = setting_value.to_i
     when TEXT_VS7_USEOFMFC
@@ -3717,9 +3726,16 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
   def parse_optimize_references(setting_value); return get_boolean_value(setting_value) end
   def parse_subsystem(str_subsystem)
     arr_subsystem = [
-      'UNKNOWN_FIXME', # 0, UNKNOWN
+      'NotSet', # VS7: 0
       'Console', # VS7: 1
-      'Windows' # VS7: 2
+      'Windows', # VS7: 2
+      'Native', # VS7: 3
+      'EFIApplication', # VS7: 4
+      'EFIBootService', # VS7: 5
+      'EFIROM', # VS7: 6
+      'EFIRuntime', # VS7: 7
+      'Posix', # VS7: 8
+      'WindowsCE' # VS7: 9
     ]
     return string_to_index(arr_subsystem, str_subsystem, VS_DEFAULT_SETTING_SUBSYSTEM)
   end
