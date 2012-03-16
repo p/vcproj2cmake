@@ -502,6 +502,7 @@ module V2C_Linker_Defines
   SUBSYSTEM_EFI_RUNTIME = 7 # VS10 "EFIRuntime"
   SUBSYSTEM_POSIX = 8 # VS10 "Posix"
   SUBSYSTEM_WINDOWS_CE = 9 # VS10 "WindowsCE"
+  MACHINE_NOT_SET = 0 # VS10: "Not Set", VS7: 0
   MACHINE_X86 = 1 # x86 / i386; VS7: 1
   MACHINE_X64 = 17 # VS7: 17
 end
@@ -518,7 +519,7 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
     @optimize_references_enable = false
     @pdb_file = nil
     @subsystem = SUBSYSTEM_CONSOLE
-    @target_machine = MACHINE_X86
+    @target_machine = MACHINE_NOT_SET
     @arr_lib_dirs = Array.new
   end
   attr_accessor :arr_dependencies
@@ -2239,7 +2240,7 @@ class V2C_VSXmlParserBase < V2C_ParserBase
         value = false
       else
         # Hrmm, did we hit a totally unexpected (new) element value!?
-        parser_error("unknown value text #{str_value}")
+        parser_error("unknown value text \"#{str_value}\"")
       end
     end
     return value
@@ -2406,7 +2407,7 @@ class V2C_VSXmlParserBase < V2C_ParserBase
 end
 
 class V2C_VSProjectFileXmlParserBase < V2C_VSXmlParserBase
-  def get_arr_projects_new; return @info_elem end
+  def get_arr_projects_out; return @info_elem end
 end
 
 class V2C_VSProjectParserBase < V2C_VSXmlParserBase
@@ -2623,7 +2624,7 @@ module V2C_VSToolLinkerDefines
   TEXT_SUBSYSTEM = 'SubSystem'
   TEXT_TARGETMACHINE = 'TargetMachine'
   VS_DEFAULT_SETTING_SUBSYSTEM = V2C_Linker_Defines::SUBSYSTEM_WINDOWS
-  VS_DEFAULT_SETTING_TARGET_MACHINE = V2C_Linker_Defines::MACHINE_X86
+  VS_DEFAULT_SETTING_TARGET_MACHINE = V2C_Linker_Defines::MACHINE_NOT_SET
 end
 
 class V2C_VSToolLinkerParser < V2C_VSToolParserBase
@@ -2723,6 +2724,8 @@ class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
   def parse_target_machine(setting_value)
      machine = VS_DEFAULT_SETTING_TARGET_MACHINE
      case setting_value.to_i
+     when 0
+       machine = V2C_Linker_Defines::MACHINE_NOT_SET
      when 1
        machine = V2C_Linker_Defines::MACHINE_X86
      when 17
@@ -3214,11 +3217,11 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
 end
 
 class V2C_VSProjectFilesBundleParserBase
-  def initialize(p_parser_proj_file, str_orig_environment_shortname, arr_projects_new)
+  def initialize(p_parser_proj_file, str_orig_environment_shortname, arr_projects_out)
     @p_parser_proj_file = p_parser_proj_file
     @proj_filename = p_parser_proj_file.to_s # FIXME: do we want to keep the string-based filename? We should probably change several sub classes to be Pathname-based...
     @str_orig_environment_shortname = str_orig_environment_shortname
-    @arr_projects_new = arr_projects_new # We'll keep a project _array_ as member since it's conceivable that both VS7 and VS10 might have several project elements in their XML files.
+    @arr_projects_out = arr_projects_out # We'll keep a project _array_ as member since it's conceivable that both VS7 and VS10 might have several project elements in their XML files.
   end
   def parse
     parse_project_files
@@ -3246,12 +3249,12 @@ class V2C_VSProjectFilesBundleParserBase
     mark_projects_default_project_name(project_name_default)
   end
   def mark_projects_orig_environment_shortname(str_orig_environment_shortname)
-    @arr_projects_new.each { |project_new|
+    @arr_projects_out.each { |project_new|
       project_new.orig_environment_shortname = str_orig_environment_shortname
     }
   end
   def mark_projects_default_project_name(project_name_default)
-    @arr_projects_new.each { |project_new|
+    @arr_projects_out.each { |project_new|
       if project_new.name.nil?
         project_new.name = project_name_default
       end
@@ -3270,7 +3273,7 @@ class V2C_VS7ProjectFileXmlParser < V2C_VSProjectFileXmlParserBase
       project_parser = V2C_VS7ProjectParser.new(subelem_xml, project)
       project_parser.parse
 
-      get_arr_projects_new().push(project)
+      get_arr_projects_out().push(project)
     else
       found = super
     end
@@ -3280,10 +3283,10 @@ end
 
 # Project parser variant which works on file-based input
 class V2C_VSProjectFileParserBase < V2C_ParserBase
-  def initialize(p_parser_proj_file, arr_projects_new)
+  def initialize(p_parser_proj_file, arr_projects_out)
     @p_parser_proj_file = p_parser_proj_file
     @proj_filename = p_parser_proj_file.to_s
-    @arr_projects_new = arr_projects_new
+    @arr_projects_out = arr_projects_out
     @proj_xml_parser = nil
   end
 end
@@ -3293,7 +3296,7 @@ class V2C_VS7ProjectFileParser < V2C_VSProjectFileParserBase
     File.open(@proj_filename) { |io|
       doc_proj = REXML::Document.new io
 
-      @proj_xml_parser = V2C_VS7ProjectFileXmlParser.new(doc_proj, @arr_projects_new)
+      @proj_xml_parser = V2C_VS7ProjectFileXmlParser.new(doc_proj, @arr_projects_out)
       #super.parse
       @proj_xml_parser.parse
     }
@@ -3301,11 +3304,11 @@ class V2C_VS7ProjectFileParser < V2C_VSProjectFileParserBase
 end
 
 class V2C_VS7ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
-  def initialize(p_parser_proj_file, arr_projects_new)
-    super(p_parser_proj_file, 'MSVS7', arr_projects_new)
+  def initialize(p_parser_proj_file, arr_projects_out)
+    super(p_parser_proj_file, 'MSVS7', arr_projects_out)
   end
   def parse_project_files
-    proj_file_parser = V2C_VS7ProjectFileParser.new(@p_parser_proj_file, @arr_projects_new)
+    proj_file_parser = V2C_VS7ProjectFileParser.new(@p_parser_proj_file, @arr_projects_out)
     proj_file_parser.parse_file
   end
   def check_unhandled_file_types
@@ -3711,6 +3714,7 @@ end
 
 class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
   include V2C_VS10ToolLinkerDefines
+  include V2C_VS10Defines
   include V2C_Linker_Defines
   private
 
@@ -3725,9 +3729,23 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
   #  return found
   #end
   def parse_optimize_references(setting_value); return get_boolean_value(setting_value) end
+  def parse_target_machine(str_machine)
+     machine = VS_DEFAULT_SETTING_TARGET_MACHINE
+     case str_machine
+     when TEXT_VS10_NOTSET
+       machine = V2C_Linker_Defines::MACHINE_NOT_SET
+     when 'MachineX86'
+       machine = V2C_Linker_Defines::MACHINE_X86
+     when 'MachineX64'
+       machine = V2C_Linker_Defines::MACHINE_X64
+     else
+       parser_error("unknown target machine #{str_machine}")
+     end
+     return machine
+  end
   def parse_subsystem(str_subsystem)
     arr_subsystem = [
-      'NotSet', # VS7: 0
+      TEXT_VS10_NOTSET, # VS7: 0
       'Console', # VS7: 1
       'Windows', # VS7: 2
       'Native', # VS7: 3
@@ -3777,8 +3795,13 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
   end
 end
 
+module V2C_VS10Defines
+  TEXT_VS10_NOTSET = 'NotSet'
+end
+
 module V2C_VS10ConfigurationDefines
   include V2C_VSConfigurationDefines
+  include V2C_VS10Defines
   TEXT_VS10_USEOFATL = 'UseOfAtl'
   TEXT_VS10_USEOFMFC = 'UseOfMfc'
 end
@@ -3813,7 +3836,7 @@ private
     # Possibly useful related link: "[CMake] Bug #12189"
     #   http://www.cmake.org/pipermail/cmake/2011-June/045002.html
     arr_charset = [
-      'NotSet',  # 0 (ASCII i.e. SBCS)
+      TEXT_VS10_NOTSET,  # 0 (ASCII i.e. SBCS)
       'Unicode', # 1 (The Healthy Choice)
       'MultiByte' # 2 (MBCS)
     ]
@@ -3955,8 +3978,8 @@ end
 
 # Project parser variant which works on XML-stream-based input
 class V2C_VS10ProjectFileXmlParser < V2C_VSProjectFileXmlParserBase
-  def initialize(doc_proj, arr_projects_new, filters_only)
-    super(doc_proj, arr_projects_new)
+  def initialize(doc_proj, arr_projects_out, filters_only)
+    super(doc_proj, arr_projects_out)
     @filters_only = filters_only
   end
   def parse_element(subelem_xml)
@@ -3967,7 +3990,7 @@ class V2C_VS10ProjectFileXmlParser < V2C_VSProjectFileXmlParserBase
       project_info = V2C_Project_Info.new
       elem_parser = V2C_VS10ProjectParser.new(subelem_xml, project_info)
       elem_parser.parse
-      get_arr_projects_new().push(project_info)
+      get_arr_projects_out().push(project_info)
     else
       found = super
     end
