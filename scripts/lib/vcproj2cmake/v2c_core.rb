@@ -4,12 +4,12 @@
 require 'vcproj2cmake/util_file' # V2C_Util_File.cmp()
 
 def load_configuration_file(str_file, str_descr, arr_descr_loaded)
+  success = false
   begin
-  success = true # be optimistic :)
     load str_file
     arr_descr_loaded.push("#{str_descr} #{str_file}")
+    success = true
   rescue LoadError
-    success = false
   end
   return success
 end
@@ -2175,6 +2175,7 @@ EOF
   return str
 end
 
+# NOTE: should probably re-raise() the exception in most cases...
 def log_error_unhandled_exception(e)
   log_error "unhandled exception occurred! #{e.message}, #{e.backtrace.inspect}"
 end
@@ -3976,8 +3977,8 @@ end
 
 # Project parser variant which works on file-based input
 class V2C_VS10ProjectFileParser < V2C_VSProjectFileParserBase
-  def initialize(p_parser_proj_file, arr_projects_new, filters_only)
-    super(p_parser_proj_file, arr_projects_new)
+  def initialize(p_parser_proj_file, arr_projects_out, filters_only)
+    super(p_parser_proj_file, arr_projects_out)
     @filters_only = filters_only # are we parsing main file or extension file (.filters) only?
   end
   def parse_file
@@ -3987,14 +3988,18 @@ class V2C_VS10ProjectFileParser < V2C_VSProjectFileParserBase
       File.open(@proj_filename) { |io|
         doc_proj = REXML::Document.new io
 
-        @proj_xml_parser = V2C_VS10ProjectFileXmlParser.new(doc_proj, @arr_projects_new, @filters_only)
+        arr_projects_new = Array.new
+        @proj_xml_parser = V2C_VS10ProjectFileXmlParser.new(doc_proj, arr_projects_new, @filters_only)
         #super.parse
         @proj_xml_parser.parse
+        # Everything ok? Append to output...
+        @arr_projects_out.concat(arr_projects_new)
         success = true
       }
     rescue Exception => e
       # File probably does not exiѕt...
       log_error_unhandled_exception(e)
+      raise
     end
     return success
   end
@@ -4062,9 +4067,9 @@ end
 
 # Project filters parser variant which works on file-based input
 class V2C_VS10ProjectFiltersFileParser < V2C_ParserBase
-  def initialize(proj_filters_filename, arr_projects)
+  def initialize(proj_filters_filename, arr_projects_out)
     @proj_filters_filename = proj_filters_filename
-    @arr_projects = arr_projects
+    @arr_projects_out = arr_projects_out
   end
   def parse_file
     success = false
@@ -4074,13 +4079,17 @@ class V2C_VS10ProjectFiltersFileParser < V2C_ParserBase
       File.open(@proj_filters_filename) { |io|
         doc_proj_filters = REXML::Document.new io
 
-        project_filters_parser = V2C_VS10ProjectFiltersXmlParser.new(doc_proj_filters, @arr_projects)
+        arr_projects_new = Array.new
+        project_filters_parser = V2C_VS10ProjectFiltersXmlParser.new(doc_proj_filters, arr_projects_new)
         project_filters_parser.parse
+        # Everything ok? Append to output...
+        @arr_projects_out.concat(arr_projects_new)
         success = true
       }
     rescue Exception => e
       # File probably does not exiѕt...
       log_error_unhandled_exception(e)
+      raise
     end
     return success
   end
@@ -4097,13 +4106,13 @@ end
 # IOW, it seems VS10 parses .filters _after_ having parsed .vcxproj,
 # with certain overriding taking place.
 class V2C_VS10ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
-  def initialize(p_parser_proj_file, arr_projects_new)
-    super(p_parser_proj_file, 'MSVS10', arr_projects_new)
+  def initialize(p_parser_proj_file, arr_projects_out)
+    super(p_parser_proj_file, 'MSVS10', arr_projects_out)
   end
   def parse_project_files
     proj_filename = @p_parser_proj_file.to_s
-    proj_file_parser = V2C_VS10ProjectFileParser.new(@p_parser_proj_file, @arr_projects_new, false)
-    proj_filters_file_parser = V2C_VS10ProjectFiltersFileParser.new("#{@proj_filename}.filters", @arr_projects_new)
+    proj_file_parser = V2C_VS10ProjectFileParser.new(@p_parser_proj_file, @arr_projects_out, false)
+    proj_filters_file_parser = V2C_VS10ProjectFiltersFileParser.new("#{@proj_filename}.filters", @arr_projects_out)
 
     if proj_file_parser.parse_file
        puts "FILTERS FILE PARSING DISABLED, TODO!!"
@@ -4467,6 +4476,9 @@ def v2c_convert_project_inner(p_script, p_parser_proj_file, p_generator_proj_fil
   # (they could easily forget about that).
   # Besides, parsing/generating should be concerned about fast (KISS)
   # parsing/generating only anyway.
+
+  # FIXME: should do the validator/generator processing iteration
+  # per-project...
   projects_valid = true
   begin
     arr_projects.each { |project|
@@ -4483,6 +4495,7 @@ def v2c_convert_project_inner(p_script, p_parser_proj_file, p_generator_proj_fil
     end
   rescue Exception => e
     log_error_unhandled_exception(e)
+    raise
   end
 
   if projects_valid
