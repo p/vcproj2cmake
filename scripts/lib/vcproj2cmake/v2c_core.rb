@@ -1757,6 +1757,22 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
   # should definitely support the following CMake properties, as needed:
   # PUBLIC_HEADER (cmake --help-property PUBLIC_HEADER), PRIVATE_HEADER, HEADER_FILE_ONLY
   # and possibly the PUBLIC_HEADER option of the INSTALL(TARGETS) command.
+  def put_file_list(project_info, arr_sub_source_list_var_names)
+    put_file_list_source_group_recursive(project_info.name, project_info.main_files, nil, arr_sub_source_list_var_names)
+
+    put_file_list_vs10(project_info.name, project_info.file_lists, nil, arr_sub_source_list_var_names)
+
+    if not arr_sub_source_list_var_names.empty?
+      # add a ${V2C_SOURCES} variable to the list, to be able to append
+      # all sorts of (auto-generated, ...) files to this list within
+      # hook includes.
+      # - _right before_ creating the target with its sources
+      # - and not earlier since earlier .vcproj-defined variables should be clean (not be made to contain V2C_SOURCES contents yet)
+      arr_sub_source_list_var_names.push('V2C_SOURCES')
+    else
+      log_warn "#{project_info.name}: no source files at all!? (header-based project?)"
+    end
+  end
   def put_file_list_source_group_recursive(project_name, files_str, parent_source_group, arr_sub_sources_for_parent)
     if files_str.nil?
       puts "ERROR: WHAT THE HELL, NO FILES!?"
@@ -4293,20 +4309,8 @@ Finished. You should make sure to have all important v2c settings includes such 
 
         # arr_sub_source_list_var_names will receive the names of the individual source list variables:
         arr_sub_source_list_var_names = Array.new
-        target_generator.put_file_list_source_group_recursive(project_info.name, project_info.main_files, nil, arr_sub_source_list_var_names)
 
-        target_generator.put_file_list_vs10(project_info.name, project_info.file_lists, nil, arr_sub_source_list_var_names)
-
-        if not arr_sub_source_list_var_names.empty?
-          # add a ${V2C_SOURCES} variable to the list, to be able to append
-          # all sorts of (auto-generated, ...) files to this list within
-          # hook includes.
-  	# - _right before_ creating the target with its sources
-  	# - and not earlier since earlier .vcproj-defined variables should be clean (not be made to contain V2C_SOURCES contents yet)
-          arr_sub_source_list_var_names.push('V2C_SOURCES')
-        else
-          log_warn "#{project_info.name}: no source files at all!? (header-based project?)"
-        end
+        target_generator.put_file_list(project_info, arr_sub_source_list_var_names)
 
         local_generator.put_include_project_source_dir()
 
