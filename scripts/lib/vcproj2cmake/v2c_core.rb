@@ -128,6 +128,7 @@ $config_multi_authoritative = ''
 FILENAME_MAP_DEF = "#{$v2c_config_dir_local}/define_mappings.txt"
 FILENAME_MAP_DEP = "#{$v2c_config_dir_local}/dependency_mappings.txt"
 FILENAME_MAP_LIB_DIRS = "#{$v2c_config_dir_local}/lib_dirs_mappings.txt"
+FILENAME_MAP_LIB_DIRS_DEP = "#{$v2c_config_dir_local}/lib_dirs_dep_mappings.txt"
 
 
 def log_debug(str)
@@ -1144,15 +1145,16 @@ class V2C_CMakeSyntaxGeneratorBase < V2C_SyntaxGeneratorBase
   end
 end
 
-# @brief contains extended functions that aren't strictly about
-# CMake syntax generation any more.
-# V2C_CMakeSyntaxGenerator isn't a base class of other CMake generator classes,
-# but rather a _member_ of those classes only.
+# @brief V2C_CMakeSyntaxGenerator isn't supposed to be a base class
+# of other CMake generator classes, but rather a _member_ of those classes only.
 # Reasoning: that class implements the border crossing towards specific CMake syntax,
 # i.e. it is the _only one_ to know specific CMake syntax (well, "ideally", I have to say, currently).
 # If it was the base class of the various CMake generators,
 # then it would be _hard-coded_ i.e. not configurable (which would be the case
 # when having ctor parameterisation from the outside).
+# This class derived from base contains extended functions
+# that aren't strictly about CMake syntax generation any more
+# (i.e., some build-specific configuration content).
 class V2C_CMakeSyntaxGenerator < V2C_CMakeSyntaxGeneratorBase
   VCPROJ2CMAKE_FUNC_CMAKE = 'vcproj2cmake_func.cmake'
   V2C_ATTRIBUTE_NOT_PROVIDED_MARKER = 'V2C_NOT_PROVIDED'
@@ -1803,7 +1805,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
 
   # FIXME: not sure whether map_lib_dirs etc. should be passed in in such a raw way -
   # probably mapping should already have been done at that stage...
-  def put_target(target, arr_sub_source_list_var_names, map_lib_dirs, map_dependencies, config_info_curr, target_config_info_curr)
+  def put_target(target, arr_sub_source_list_var_names, map_lib_dirs, map_lib_dirs_dep, map_dependencies, config_info_curr, target_config_info_curr)
     target_is_valid = false
 
     # first add source reference, then do linker setup, then create target
@@ -1813,6 +1815,9 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
     # write link_directories() (BEFORE establishing a target!)
     config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
       @localGenerator.write_link_directories(linker_info_curr.arr_lib_dirs, map_lib_dirs)
+      # ...and add a special collection of library dependencies which we translated from a bare link directory auto-link dependency:
+      # Hrmpf, does not work yet...
+      #@localGenerator.write_build_attributes('target_link_libraries', linker_info_curr.arr_lib_dirs, map_lib_dirs_dep, @target.name)
     }
 
     target_is_valid = put_target_type(target, map_dependencies, config_info_curr, target_config_info_curr)
@@ -4250,6 +4255,8 @@ Finished. You should make sure to have all important v2c settings includes such 
         generator_base = V2C_BaseGlobalGenerator.new(master_project_dir)
         map_lib_dirs = Hash.new
         read_mappings_combined(FILENAME_MAP_LIB_DIRS, map_lib_dirs, master_project_dir)
+        map_lib_dirs_dep = Hash.new
+        read_mappings_combined(FILENAME_MAP_LIB_DIRS_DEP, map_lib_dirs_dep, master_project_dir)
         map_dependencies = Hash.new
         read_mappings_combined(FILENAME_MAP_DEP, map_dependencies, master_project_dir)
         map_defines = Hash.new
@@ -4340,7 +4347,7 @@ Finished. You should make sure to have all important v2c settings includes such 
           if project_info.have_build_units
             arr_target_config_info.each { |target_config_info_curr|
 	      next if not condition.entails(target_config_info_curr.condition)
-              target_is_valid = target_generator.put_target(project_info, arr_sub_source_list_var_names, map_lib_dirs, map_dependencies, config_info_curr, target_config_info_curr)
+              target_is_valid = target_generator.put_target(project_info, arr_sub_source_list_var_names, map_lib_dirs, map_lib_dirs_dep, map_dependencies, config_info_curr, target_config_info_curr)
             }
           end # target.have_build_units
 
