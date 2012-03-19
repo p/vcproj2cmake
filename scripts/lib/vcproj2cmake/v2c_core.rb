@@ -4188,6 +4188,21 @@ def util_flatten_string(in_string)
   return in_string.gsub(WHITESPACE_REGEX_OBJ, '_')
 end
 
+def util_permanentize_temp_file(tmpfile, output_file_fqpn, create_permissions)
+  have_old_file = true if File.exists?(output_file_fqpn)
+  if have_old_file
+    # Move away old file.
+    # Usability trick:
+    # rename to <file>.<ext>.previous and not <file>.previous.<ext>
+    # since grepping for all *.<ext> files would then hit these outdated ones.
+    V2C_Util_File.mv(output_file_fqpn, output_file_fqpn + '.previous')
+  end
+  # activate our version
+  # [for chmod() comments, see our $v2c_generator_file_create_permissions settings variable]
+  V2C_Util_File.chmod(create_permissions, tmpfile.path)
+  V2C_Util_File.mv(tmpfile.path, output_file_fqpn)
+end
+
 class V2C_GeneratorBase < V2C_LoggerBase
   def generator_error(str_description); log_error_class(str_description) end
 end
@@ -4225,10 +4240,8 @@ class V2C_CMakeGenerator < V2C_GeneratorBase
       # source on NFS mount.
 
       configuration_changed = false
-      have_old_file = false
       output_file = @cmakelists_output_file
       if File.exists?(output_file)
-        have_old_file = true
         if not V2C_Util_File.cmp(tmpfile.path, output_file)
           configuration_changed = true
         end
@@ -4237,18 +4250,7 @@ class V2C_CMakeGenerator < V2C_GeneratorBase
       end
 
       if configuration_changed
-        if have_old_file
-          # Move away old file.
-          # Usability trick:
-          # rename to CMakeLists.txt.previous and not CMakeLists.previous.txt
-          # since grepping for all *.txt files would then hit these outdated ones.
-          V2C_Util_File.mv(output_file, output_file + '.previous')
-        end
-        # activate our version
-        # [for chmod() comments, see our $v2c_generator_file_create_permissions settings variable]
-        V2C_Util_File.chmod($v2c_generator_file_create_permissions, tmpfile.path)
-        V2C_Util_File.mv(tmpfile.path, output_file)
-
+        util_permanentize_temp_file(tmpfile, output_file, $v2c_generator_file_create_permissions)
         log_info_class %{\
 Wrote #{output_file}
 Finished. You should make sure to have all important v2c settings includes such as vcproj2cmake_defs.cmake somewhere in your CMAKE_MODULE_PATH

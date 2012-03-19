@@ -278,7 +278,7 @@ else # non-threaded
   }
 end
 
-def write_projects_list_file(str_file_fqpn, create_permissions, arr_project_subdirs)
+def write_projects_list_file(output_file_fqpn, create_permissions, arr_project_subdirs)
   # write into temporary file, to avoid corrupting previous file due to syntax error abort, disk space or failure issues
   begin
     tmpfile = Tempfile.new('vcproj2cmake_recursive')
@@ -301,11 +301,7 @@ def write_projects_list_file(str_file_fqpn, create_permissions, arr_project_subd
     tmpfile.close
   end
 
-  # FIXME: implement common helper for tmpfile renaming as done in
-  # vcproj2cmake.rb, then use it here as well.
-
-  V2C_Util_File.chmod(create_permissions, tmpfile.path)
-  V2C_Util_File.mv(tmpfile.path, str_file_fqpn)
+  util_permanentize_temp_file(tmpfile, output_file_fqpn, create_permissions)
 end
 
 # Finally, write out the file for the projects list (separate from any
