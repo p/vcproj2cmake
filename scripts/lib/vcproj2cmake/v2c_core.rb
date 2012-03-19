@@ -1197,6 +1197,9 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
   attr_accessor :arr_languages
   def detect
     # ok, let's try some initial Q&D handling...
+    # Perhaps one should have a language enum in the project info
+    # (with a "string-type" setting and a string member -
+    # in case of custom languages...).
     if @project_info.have_build_units == true
       if not @project_info.type.nil?
         case @project_info.type
@@ -1208,6 +1211,8 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
           # Hmm, and for .vcxproj, the language is perhaps encoded in the
           # <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
           # line only (i.e. the .props file).
+          # Or is it this line?:
+          # <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
           @arr_languages.push('C', 'CXX')
         else
           log_fixme_class("unknown project type #{@project_info.type}, cannot determine programming language!")
@@ -1219,11 +1224,13 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
         end
       end
       if @arr_languages.empty?
-        @arr_languages.push('C', 'CXX')
         log_error_class 'Could not detect programming language! (FIXME)'
+        # We'll explicitly keep the array _empty_ (rather than specifying 'NONE'),
+        # to give it another chance via CMake's language auto-detection mechanism.
       end
     else
-      log_info_class 'project has no build units, language set to NONE'
+      log_info_class 'project has no build units --> language set to NONE'
+      @arr_languages.push('NONE')
     end
     return @arr_languages
   end
@@ -1256,9 +1263,11 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
   def put_project(project_name, arr_progr_languages = nil)
     arr_args_project_name_and_attrs = [ project_name ]
     if arr_progr_languages.nil? or arr_progr_languages.empty?
-      # No programming language given? Indicate special marker "NONE"
-      # to skip any compiler checks.
-      arr_args_project_name_and_attrs.push('NONE')
+      ## No programming language given? Indicate special marker "NONE"
+      ## to skip any compiler checks.
+      # Nope, no language means "unknown", thus don't specify anything -
+      # to keep CMake's auto-detection mechanism active.
+      #arr_args_project_name_and_attrs.push('NONE')
     else
       arr_args_project_name_and_attrs.concat(arr_progr_languages)
     end
