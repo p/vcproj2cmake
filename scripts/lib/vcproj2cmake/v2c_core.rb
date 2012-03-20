@@ -216,46 +216,6 @@ def push_platform_defn(platform_defs, platform, defn_value)
   platform_defs[platform].push(defn_value)
 end
 
-def parse_platform_conversions(platform_defs, arr_defs, map_defs)
-  arr_defs.each { |curr_defn|
-    #log_debug map_defs[curr_defn]
-    map_line = map_defs[curr_defn]
-    if map_line.nil?
-      # hmm, no direct match! Try to figure out whether any map entry
-      # is a regex which would match our curr_defn
-      map_defs.each do |key_regex, value|
-        if curr_defn =~ /^#{key_regex}$/
-          log_debug "KEY: #{key_regex} curr_defn #{curr_defn}"
-          map_line = value
-          break
-        end
-      end
-    end
-    if map_line.nil?
-      # no mapping? --> unconditionally use the original define
-      push_platform_defn(platform_defs, 'ALL', curr_defn)
-    else
-      # Tech note: chomp on map_line should not be needed as long as
-      # original constant input has already been pre-treated (chomped).
-      map_line.split('|').each do |platform_element|
-        #log_debug "platform_element #{platform_element}"
-        platform, replacement_defn = platform_element.split('=')
-        if platform.empty?
-          # specified a replacement without a specific platform?
-          # ("tag:=REPLACEMENT")
-          # --> unconditionally use it!
-          platform = 'ALL'
-        else
-          if replacement_defn.nil?
-            replacement_defn = curr_defn
-          end
-        end
-        push_platform_defn(platform_defs, platform, replacement_defn)
-      end
-    end
-  }
-end
-
 # IMPORTANT NOTE: the generator/target/parser class hierarchy and _naming_
 # is supposed to be eerily similar to the one used by CMake.
 # Dito for naming of individual methods...
@@ -915,7 +875,7 @@ end
 # @brief CMake syntax generator base class.
 #        Strictly about converting requests into specific CMake syntax,
 #        no build-specific generator knowledge at this level!
-class V2C_CMakeSyntaxGeneratorBase < V2C_SyntaxGeneratorBase
+class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def next_paragraph()
     @textOut.write_empty_line()
   end
@@ -1143,9 +1103,13 @@ class V2C_CMakeSyntaxGeneratorBase < V2C_SyntaxGeneratorBase
     #return (not (str_elem.match(CMAKE_IS_LIST_VAR_CONTENT_REGEX_OBJ) == nil))
     return (not str_elem.match(CMAKE_IS_LIST_VAR_CONTENT_REGEX_OBJ).nil?)
   end
+  def get_config_name_upcase(config_name)
+    # need to also convert config names with spaces into underscore variants, right?
+    config_name.clone.upcase.tr(' ','_')
+  end
 end
 
-# @brief V2C_CMakeSyntaxGenerator isn't supposed to be a base class
+# @brief V2C_CMakeV2CSyntaxGenerator isn't supposed to be a base class
 # of other CMake generator classes, but rather a _member_ of those classes only.
 # Reasoning: that class implements the border crossing towards specific CMake syntax,
 # i.e. it is the _only one_ to know specific CMake syntax (well, "ideally", I have to say, currently).
@@ -1155,9 +1119,10 @@ end
 # This class derived from base contains extended functions
 # that aren't strictly about CMake syntax generation any more
 # (i.e., some build-specific configuration content).
-class V2C_CMakeSyntaxGenerator < V2C_CMakeSyntaxGeneratorBase
+class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
   VCPROJ2CMAKE_FUNC_CMAKE = 'vcproj2cmake_func.cmake'
   V2C_ATTRIBUTE_NOT_PROVIDED_MARKER = 'V2C_NOT_PROVIDED'
+  V2C_ALL_PLATFORMS_MARKER = 'ALL'
   def write_vcproj2cmake_func_comment()
     write_comment_at_level(2, "See function implementation/docs in #{$v2c_module_path_root}/#{VCPROJ2CMAKE_FUNC_CMAKE}")
   end
@@ -1182,9 +1147,48 @@ class V2C_CMakeSyntaxGenerator < V2C_CMakeSyntaxGeneratorBase
     config_name = util_flatten_string(build_type)
     return "v2c_want_buildcfg_#{config_name}"
   end
+  def parse_platform_conversions(platform_defs, arr_defs, map_defs)
+    arr_defs.each { |curr_defn|
+      #log_debug map_defs[curr_defn]
+      map_line = map_defs[curr_defn]
+      if map_line.nil?
+        # hmm, no direct match! Try to figure out whether any map entry
+        # is a regex which would match our curr_defn
+        map_defs.each do |key_regex, value|
+          if curr_defn =~ /^#{key_regex}$/
+            log_debug "KEY: #{key_regex} curr_defn #{curr_defn}"
+            map_line = value
+            break
+          end
+        end
+      end
+      if map_line.nil?
+        # no mapping? --> unconditionally use the original define
+        push_platform_defn(platform_defs, V2C_ALL_PLATFORMS_MARKER, curr_defn)
+      else
+        # Tech note: chomp on map_line should not be needed as long as
+        # original constant input has already been pre-treated (chomped).
+        map_line.split('|').each do |platform_element|
+          #log_debug "platform_element #{platform_element}"
+          platform, replacement_defn = platform_element.split('=')
+          if platform.empty?
+            # specified a replacement without a specific platform?
+            # ("tag:=REPLACEMENT")
+            # --> unconditionally use it!
+            platform = V2C_ALL_PLATFORMS_MARKER
+          else
+            if replacement_defn.nil?
+              replacement_defn = curr_defn
+            end
+          end
+          push_platform_defn(platform_defs, platform, replacement_defn)
+        end
+      end
+    }
+  end
 end
 
-class V2C_CMakeGlobalGenerator < V2C_CMakeSyntaxGenerator
+class V2C_CMakeGlobalGenerator < V2C_CMakeV2CSyntaxGenerator
   def put_configuration_types(configuration_types)
     configuration_types_list = separate_arguments(configuration_types)
     write_set_var_quoted('CMAKE_CONFIGURATION_TYPES', configuration_types_list)
@@ -1238,7 +1242,7 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
   end
 end
 
-class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
+class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
   def initialize(textOut)
     super(textOut)
     # FIXME: handle arr_config_var_handling appropriately
@@ -1453,7 +1457,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeSyntaxGenerator
       next if arr_platdefs.empty?
       arr_platdefs.uniq!
       next_paragraph()
-      str_platform = key if not key.eql?('ALL')
+      str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
       write_conditional_if(str_platform)
         write_command_list_quoted(cmake_command, cmake_command_arg, arr_platdefs)
       write_conditional_end(str_platform)
@@ -1591,7 +1595,7 @@ def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_de
   return file_accessible
 end
 
-class V2C_CMakeFileListGeneratorBase < V2C_CMakeSyntaxGenerator
+class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
   VS7_UNWANTED_FILE_TYPES_REGEX_OBJ = %r{\.(lex|y|ico|bmp|txt)$}
   VS7_LIB_FILE_TYPES_REGEX_OBJ = %r{\.lib$}
   def initialize(textOut, project_name, project_dir, arr_sub_sources_for_parent)
@@ -1745,7 +1749,7 @@ class V2C_CMakeFileListGenerator_VS10 < V2C_CMakeFileListGeneratorBase
   end
 end
 
-class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
+class V2C_CMakeTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def initialize(target, project_dir, localGenerator, textOut)
     super(textOut)
     @target = target
@@ -1980,7 +1984,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
       next if arr_platdefs.empty?
       arr_platdefs.uniq!
       next_paragraph()
-      str_platform = key if not key.eql?('ALL')
+      str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
       generate_property_compile_definitions(config_name_upper, arr_platdefs, str_platform)
     }
   end
@@ -2069,11 +2073,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeSyntaxGenerator
 
   private
 
-  def get_config_name_upcase(config_name)
-    # need to also convert config names with spaces into underscore variants, right?
-    config_name.clone.upcase.tr(' ','_')
-  end
-
+  # _target_ generator specific method.
   def set_property(target_name, property, value)
     arr_args_func = [ 'TARGET', target_name, 'PROPERTY', property, value ]
     write_command_list_quoted('set_property', nil, arr_args_func)
