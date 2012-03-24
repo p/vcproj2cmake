@@ -1245,7 +1245,7 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
         end
       end
       if not @project_info.creator.nil?
-        if not @project_info.creator.index('Fortran').nil?
+        if @project_info.creator.include?('Fortran')
           @arr_languages.push('Fortran')
         end
       end
@@ -2489,7 +2489,7 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
     # FIXME: can we use the full set of VS_VALUE_SEPARATOR_REGEX_OBJ
     # for AdditionalOptions content, too?
     arr_flags = attr_options.split(VS_ADDOPT_VALUE_SEPARATOR_REGEX_OBJ).collect { |opt|
-      next if skip_vs10_precent_sign_var(opt)
+      next if skip_vs10_percent_sign_var(opt)
       opt
     }
   end
@@ -2564,7 +2564,7 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
 
   def parse_additional_include_directories(arr_include_dirs_out, attr_incdir)
     split_values_list_preserve_ws_discard_empty(attr_incdir).each { |elem_inc_dir|
-      next if skip_vs10_precent_sign_var(elem_inc_dir)
+      next if skip_vs10_percent_sign_var(elem_inc_dir)
       elem_inc_dir = normalize_path(elem_inc_dir).strip
       #log_info_class "include is '#{elem_inc_dir}'"
       info_inc_dir = V2C_Info_Include_Dir.new
@@ -2578,7 +2578,7 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
   def parse_preprocessor_definitions(hash_defines, attr_defines)
     split_values_list_discard_empty(attr_defines).each { |elem_define|
       str_define_key, str_define_value = elem_define.strip.split('=')
-      next if skip_vs10_precent_sign_var(str_define_key)
+      next if skip_vs10_percent_sign_var(str_define_key)
       # Since a Hash will indicate nil for any non-existing key,
       # we do need to fill in _empty_ value for our _existing_ key.
       if str_define_value.nil?
@@ -2701,7 +2701,7 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
     return if attr_deps.length == 0
     split_values_list_discard_empty(attr_deps).each { |elem_lib_dep|
       log_debug_class "!!!!! elem_lib_dep #{elem_lib_dep}"
-      next if skip_vs10_precent_sign_var(elem_lib_dep)
+      next if skip_vs10_percent_sign_var(elem_lib_dep)
       elem_lib_dep = normalize_path(elem_lib_dep).strip
       dependency_name = File.basename(elem_lib_dep, '.lib')
       arr_dependencies.push(V2C_Dependency_Info.new(dependency_name))
@@ -2710,7 +2710,7 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
   def parse_additional_library_directories(attr_lib_dirs, arr_lib_dirs)
     return if attr_lib_dirs.length == 0
     split_values_list_preserve_ws_discard_empty(attr_lib_dirs).each { |elem_lib_dir|
-      next if skip_vs10_precent_sign_var(elem_lib_dir)
+      next if skip_vs10_percent_sign_var(elem_lib_dir)
       elem_lib_dir = normalize_path(elem_lib_dir).strip
       #log_info_class "lib dir is '#{elem_lib_dir}'"
       arr_lib_dirs.push(elem_lib_dir)
@@ -3363,7 +3363,10 @@ end
 # variable convention on the parser side already),
 # but as long as we don't quite know how to best handle it,
 # at least make sure to keep it as a central workaround helper here.
-def skip_vs10_precent_sign_var(str_var)
+def skip_vs10_percent_sign_var(str_var)
+  # shortcut :)
+  return false if not str_var.include?('%')
+
   return false if not str_var.match(VS10_EXTENSION_VAR_MATCH_REGEX_OBJ)
   log_fixme_class("skipping unhandled VS10 variable (#{str_var})")
   return true
