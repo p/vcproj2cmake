@@ -5,8 +5,9 @@
 # file (for local customization of the settings in this more
 # global/default file) will be loaded if available.
 
-# Script execution log level (0: no logging, 1: errors only, 2: +warnings, 3: +info, 4: +debug, 5: all).
-$v2c_log_level = 3
+# Script execution log level, specified via V2C_LOG_LEVEL_* constants.
+# OFF: no logging, FATAL: fatal errors only, ERROR: +non-fatal errors, WARN: +warnings, INFO: +info, DEBUG: +debug, TRACE: +trace/all.
+$v2c_log_level = V2C_LOG_LEVEL_INFO
 
 # local config directory as created in every project which needs specific settings
 # (possibly required in root project space only)

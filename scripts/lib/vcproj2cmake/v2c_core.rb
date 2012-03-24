@@ -3,6 +3,14 @@
 
 require 'vcproj2cmake/util_file' # V2C_Util_File.cmp()
 
+V2C_LOG_LEVEL_OFF = 0
+V2C_LOG_LEVEL_FATAL = 1
+V2C_LOG_LEVEL_ERROR = 2
+V2C_LOG_LEVEL_WARN = 3
+V2C_LOG_LEVEL_INFO = 4
+V2C_LOG_LEVEL_DEBUG = 5
+V2C_LOG_LEVEL_TRACE = 6
+
 def load_configuration_file(str_file, str_descr, arr_descr_loaded)
   success = false
   begin
@@ -132,7 +140,7 @@ FILENAME_MAP_LIB_DIRS_DEP = "#{$v2c_config_dir_local}/lib_dirs_dep_mappings.txt"
 
 
 def log_debug(str)
-  return if $v2c_log_level < 4
+  return if $v2c_log_level < V2C_LOG_LEVEL_DEBUG
   puts str
 end
 
@@ -141,18 +149,18 @@ def log_info(str)
   puts str
 end
 
-def log_warn(str); puts "WARNING: #{str}" if $v2c_log_level >= 2 end
+def log_warn(str); puts "WARNING: #{str}" if $v2c_log_level >= V2C_LOG_LEVEL_WARN end
 
-def log_todo(str); puts "TODO: #{str}" if $v2c_log_level >= 1 end
+def log_todo(str); puts "TODO: #{str}" if $v2c_log_level >= V2C_LOG_LEVEL_ERROR end
 
-def log_error(str); $stderr.puts "ERROR: #{str}" if $v2c_log_level >= 1 end
+def log_error(str); $stderr.puts "ERROR: #{str}" if $v2c_log_level >= V2C_LOG_LEVEL_ERROR end
 
 # FIXME: should probably replace most log_fatal()
 # with exceptions since in many cases
 # one would want to have _partial_ aborts of processing only.
 # Soft error handling via exceptions would apply to errors due to problematic input -
 # but errors due to bugs in our code should cause immediate abort.
-def log_fatal(str); log_error "#{str}. Aborting!" if $v2c_log_level > 0; exit 1 end
+def log_fatal(str); log_error "#{str}. Aborting!" if $v2c_log_level > V2C_LOG_LEVEL_OFF; exit 1 end
 
 def log_implementation_bug(str); log_fatal(str) end
 
