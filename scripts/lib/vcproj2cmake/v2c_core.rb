@@ -234,6 +234,7 @@ class V2C_Info_Condition
   attr_reader :str_condition
   attr_reader :platform
   # FIXME: Q&D interim function - I don't think such raw handling should be in this data container...
+  BUILD_TYPE_SCAN_QD_REGEX_OBJ = %r{^'\$\(Configuration\)\|\$\(Platform\)'=='(.*)\|.*$}
   def get_build_type
     # For now, prefer raw build_type (VS7) only in case no complex condition string is available.
     if str_condition.nil?
@@ -241,7 +242,7 @@ class V2C_Info_Condition
     else
       log_debug "condition: #{@str_condition}"
       build_type = nil
-      @str_condition.scan(/^'\$\(Configuration\)\|\$\(Platform\)'=='(.*)\|.*$/) {
+      @str_condition.scan(BUILD_TYPE_SCAN_QD_REGEX_OBJ) {
         build_type = $1
       }
       if build_type.nil? or build_type.empty?
@@ -1107,6 +1108,17 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     # need to also convert config names with spaces into underscore variants, right?
     config_name.clone.upcase.tr(' ','_')
   end
+  COMPILE_DEF_NEEDS_CMAKE_ESCAPING_REGEX_OBJ = %r{[\(\)]+}
+  def cmake_escape_compile_definitions(arr_compile_defn)
+    arr_compile_defn.collect do |compile_defn|
+      # Need to escape the value part of the key=value definition:
+      if compile_defn =~ COMPILE_DEF_NEEDS_CMAKE_ESCAPING_REGEX_OBJ
+        escape_char(compile_defn, '\\(')
+        escape_char(compile_defn, '\\)')
+      end
+      compile_defn
+    end
+  end
 end
 
 # @brief V2C_CMakeV2CSyntaxGenerator isn't supposed to be a base class
@@ -1225,7 +1237,7 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
         end
       end
       if not @project_info.creator.nil?
-        if @project_info.creator.match(/Fortran/)
+        if not @project_info.creator.index('Fortran').nil?
           @arr_languages.push('Fortran')
         end
       end
@@ -1921,21 +1933,17 @@ class V2C_CMakeTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     )
     @localGenerator.put_customization_hook_from_cmake_var('V2C_HOOK_POST_TARGET')
   end
-  COMPILE_DEF_NEEDS_CMAKE_ESCAPING_REGEX_OBJ = %r{[\(\)]+}
-  def generate_property_compile_definitions(config_name_upper, arr_platdefs, str_platform)
-      write_conditional_if(str_platform)
-        arr_compile_defn = arr_platdefs.collect do |compile_defn|
-    	  # Need to escape the value part of the key=value definition:
-          if compile_defn =~ COMPILE_DEF_NEEDS_CMAKE_ESCAPING_REGEX_OBJ
-            escape_char(compile_defn, '\\(')
-            escape_char(compile_defn, '\\)')
-          end
-          compile_defn
-        end
-        # make sure to specify APPEND for greater flexibility (hooks etc.)
-        cmake_command_arg = "TARGET #{@target.name} APPEND PROPERTY COMPILE_DEFINITIONS_#{config_name_upper}"
-	write_command_list('set_property', cmake_command_arg, arr_compile_defn)
-      write_conditional_end(str_platform)
+  def put_property_compile_definitions(config_name, arr_compile_defn)
+    arr_compile_defn_cooked = cmake_escape_compile_definitions(arr_compile_defn)
+    config_name_upper = get_config_name_upcase(config_name)
+    # make sure to specify APPEND for greater flexibility (hooks etc.)
+    cmake_command_arg = "TARGET #{@target.name} APPEND PROPERTY COMPILE_DEFINITIONS_#{config_name_upper}"
+    write_command_list('set_property', cmake_command_arg, arr_compile_defn_cooked)
+  end
+  def generate_property_compile_definitions_per_platform(config_name, arr_platdefs, str_platform)
+    write_conditional_if(str_platform)
+      put_property_compile_definitions(config_name, arr_platdefs)    
+    write_conditional_end(str_platform)
   end
   def put_precompiled_header(target_name, build_type, pch_use_mode, pch_source_name)
     # FIXME: empty filename may happen in case of precompiled file
@@ -1964,28 +1972,17 @@ class V2C_CMakeTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       precompiled_header_info.header_source_name
     )
   end
-  def write_property_compile_definitions(config_name, hash_defs, map_defs)
-    # Convert hash into array as required by common helper functions
-    # (it's probably a good idea to provide "key=value" entries
-    # for more complete matching possibilities
-    # within the regex matching parts done by those functions).
-    # TODO: this might be relocatable to a common generator base helper method.
-    arr_defs = Array.new
-    hash_defs.each { |key, value|
-      str_define = value.empty? ? key : "#{key}=#{value}"
-      arr_defs.push(str_define)
-    }
-    config_name_upper = get_config_name_upcase(config_name)
+  def write_property_compile_definitions(config_name, arr_defs_assignments, map_defs)
     # the container for the list of _actual_ dependencies as stated by the project
     all_platform_defs = Hash.new
-    parse_platform_conversions(all_platform_defs, arr_defs, map_defs)
+    parse_platform_conversions(all_platform_defs, arr_defs_assignments, map_defs)
     all_platform_defs.each { |key, arr_platdefs|
       #log_info_class "arr_platdefs: #{arr_platdefs}"
       next if arr_platdefs.empty?
       arr_platdefs.uniq!
       next_paragraph()
       str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
-      generate_property_compile_definitions(config_name_upper, arr_platdefs, str_platform)
+      generate_property_compile_definitions_per_platform(config_name, arr_platdefs, str_platform)
     }
   end
   def write_property_compile_flags(config_name, arr_flags, str_conditional)
@@ -4208,15 +4205,15 @@ class V2C_GeneratorBase < V2C_LoggerBase
 end
 
 class V2C_CMakeGenerator < V2C_GeneratorBase
-  def initialize(p_script, p_master_project, p_parser_proj_file, p_generator_proj_file, arr_projects)
+  def initialize(p_v2c_script, p_master_project, p_parser_proj_file, p_generator_proj_file, arr_projects)
     @p_master_project = p_master_project
     @orig_proj_file_basename = p_parser_proj_file.basename
     # figure out a project_dir variable from the generated project file location
     @project_dir = p_generator_proj_file.dirname
     @cmakelists_output_file = p_generator_proj_file.to_s
     @arr_projects = arr_projects
-    @script_location_relative_to_master = p_script.relative_path_from(p_master_project)
-    #log_debug_class "p_script #{p_script} | p_master_project #{p_master_project} | @script_location_relative_to_master #{@script_location_relative_to_master}"
+    @script_location_relative_to_master = p_v2c_script.relative_path_from(p_master_project)
+    #log_debug_class "p_v2c_script #{p_v2c_script} | p_master_project #{p_master_project} | @script_location_relative_to_master #{@script_location_relative_to_master}"
   end
   def generate
     @arr_projects.each { |project_info|
@@ -4224,10 +4221,12 @@ class V2C_CMakeGenerator < V2C_GeneratorBase
       tmpfile = Tempfile.new('vcproj2cmake')
 
       File.open(tmpfile.path, 'w') { |out|
-        project_generate_cmake(@p_master_project, @orig_proj_file_basename, out, project_info)
-
-        # Close file, since Fileutils.mv on an open file will barf on XP
-        out.close
+        begin
+          project_generate_cmake(@p_master_project, @orig_proj_file_basename, out, project_info)
+        rescue
+          # Close file, since Fileutils.mv on an open file will barf on XP
+          out.close
+        end
       }
 
       # make sure to close that one as well...
@@ -4422,7 +4421,17 @@ Finished. You should make sure to have all important v2c settings includes such 
                 else
                   log_implementation_bug('unknown charset type!?')
                 end
-                target_generator.write_property_compile_definitions(condition.get_build_type(), hash_defines_actual, map_defines)
+                # Convert hash into array as required by the definitions helper function
+                # (it's probably a good idea to provide "cooked" "key=value" entries
+                # for more complete matching possibilities
+                # within the regex matching parts done by it).
+                # TODO: this might be relocatable to a common generator base helper method.
+                arr_defs_assignments = Array.new
+                hash_defines_actual.each { |key, value|
+                  str_define = value.empty? ? key : "#{key}=#{value}"
+                  arr_defs_assignments.push(str_define)
+                }
+                target_generator.write_property_compile_definitions(condition.get_build_type(), arr_defs_assignments, map_defines)
                 # Original compiler flags are MSVC-only, of course. TODO: provide an automatic conversion towards gcc?
                 str_conditional_compiler_platform = nil
                 compiler_info_curr.arr_tool_variant_specific_info.each { |compiler_specific|
