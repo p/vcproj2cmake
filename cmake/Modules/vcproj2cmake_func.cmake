@@ -33,17 +33,6 @@ if(V2C_FUNC_DEFINED)
 endif(V2C_FUNC_DEFINED)
 set(V2C_FUNC_DEFINED true)
 
-# Define a couple global constant settings
-# (make sure to keep outside of repeatedly invoked functions below)
-
-# FIXME: should obey V2C_LOCAL_CONFIG_DIR setting!! Nope, this is a
-# reference to the _global_ one here... Hmm, is there a config variable for
-# that? At least set a local variable here for now.
-set(v2c_global_config_subdir_my "cmake/vcproj2cmake")
-set(v2c_mappings_files_expr "${v2c_global_config_subdir_my}/*_mappings.txt")
-
-file(GLOB root_mappings_files_list "${CMAKE_SOURCE_DIR}/${v2c_mappings_files_expr}")
-
 
 # Sanitize CMAKE_BUILD_TYPE setting:
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
@@ -56,30 +45,55 @@ if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 endif(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 
 
+# Define a couple global constant settings
+# (make sure to keep outside of repeatedly invoked functions below)
+
+# There's a scope discrepancy between functions (_globally_ valid)
+# and ordinary variables (valid within sub scope only), which causes
+# problems when invoking certain functions from within the "wrong" scope
+# (e.g. directory), since accessing pre-defined variables
+# within functions will fail.
+# This annoying problem needs to be "fixed" somehow,
+# which can be done using either global properties (preferable)
+# or internal cache variables (iff persistence
+# of settings is required, i.e. user-customization needs to be preserved).
+# See also "[CMake] global variable vs cache variable"
+#   http://www.cmake.org/pipermail/cmake/2011-November/047676.html
+# Also, let's have versioned v2c global property variables,
+# to be able to detect mismatches in case of incompatible updates
+# (querying deprecated variables - missing result).
+
+
 if(NOT V2C_STAMP_FILES_SUBDIR)
   set(V2C_STAMP_FILES_SUBDIR "stamps")
 endif(NOT V2C_STAMP_FILES_SUBDIR)
-set(v2c_stamp_files_dir "${CMAKE_BINARY_DIR}/${v2c_global_config_subdir_my}/${V2C_STAMP_FILES_SUBDIR}")
-file(MAKE_DIRECTORY "${v2c_stamp_files_dir}")
+# Enable customization (via cache entry), someone might need it.
+set(V2C_STAMP_FILES_DIR "${CMAKE_BINARY_DIR}/${v2c_global_config_subdir_my}/${V2C_STAMP_FILES_SUBDIR}" CACHE STRING "The directory to place any stamp files used by vcproj2cmake in.")
+mark_as_advanced(V2C_STAMP_FILES_DIR)
+file(MAKE_DIRECTORY "${V2C_STAMP_FILES_DIR}")
 
 
-# Debug-only helper!
-function(_v2c_target_log_configuration _target)
-  if(TARGET ${_target})
-    get_property(vs_scc_projectname_ TARGET ${_target} PROPERTY VS_SCC_PROJECTNAME)
-    get_property(vs_scc_localpath_ TARGET ${_target} PROPERTY VS_SCC_LOCALPATH)
-    get_property(vs_scc_provider_ TARGET ${_target} PROPERTY VS_SCC_PROVIDER)
-    get_property(vs_scc_auxpath_ TARGET ${_target} PROPERTY VS_SCC_AUXPATH)
-    message(FATAL_ERROR "Properties/settings target ${_target}:\n\tvs_scc_projectname_ ${vs_scc_projectname_}\n\tvs_scc_localpath_ ${vs_scc_localpath_}\n\tvs_scc_provider_ ${vs_scc_provider_}\n\tvs_scc_auxpath_ ${vs_scc_auxpath_}")
-  endif(TARGET ${_target})
-endfunction(_v2c_target_log_configuration _target)
 
+# Sets a V2C config value.
+# Most input is versioned (ZZZZ_vY), to be able to do clean changes
+# and detect out-of-sync impl / user.
+function(_v2c_config_set _cfg_key _cfg_value)
+  set(cfg_key_full_ _v2c_${_cfg_key})
+  set_property(GLOBAL PROPERTY ${cfg_key_full_} "${_cfg_value}")
+endfunction(_v2c_config_set _cfg_key _cfg_value)
 
-if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
+function(_v2c_config_get _cfg_key _cfg_value_out)
+  set(cfg_key_full_ _v2c_${_cfg_key})
+  get_property(cfg_value_set_ GLOBAL PROPERTY ${cfg_key_full_} SET)
+  if(NOT cfg_value_set_)
+    message(FATAL_ERROR "_v2c_config_get: config var ${_cfg_key} not set!?")
+  endif(NOT cfg_value_set_)
+  get_property(cfg_value_ GLOBAL PROPERTY ${cfg_key_full_})
+  set(${_cfg_value_out} "${cfg_value_}" PARENT_SCOPE)
+endfunction(_v2c_config_get _cfg_key _cfg_value_out)
+
+function(_v2c_config_setup_rebuilder)
   # Some one-time setup steps:
-
-  set(v2c_cmakelists_target_rebuild_all_name update_cmakelists_rebuild_recursive_ALL)
-  set(v2c_project_exclude_list_file_location "${CMAKE_SOURCE_DIR}/${v2c_global_config_subdir_my}/project_exclude_list.txt")
 
   # Have an update_cmakelists_ALL convenience target
   # to be able to update _all_ outdated CMakeLists.txt files within a project hierarchy
@@ -100,14 +114,14 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     endif(NOT V2C_RUBY_BIN)
   endif(NOT V2C_RUBY_BIN)
 
-  set(v2c_cmakelists_rebuilder_deps_static_list
-    ${root_mappings_files_list}
-    "${v2c_project_exclude_list_file_location}"
+  _v2c_config_set(cmakelists_rebuilder_deps_static_list_v1
+    ${root_mappings_files_list_}
+    "${project_exclude_list_file_location_}"
     "${V2C_RUBY_BIN}"
     # TODO add any other relevant dependencies here
   )
 
-  set(v2c_cmakelists_update_check_stamp_file "${v2c_stamp_files_dir}/v2c_cmakelists_update_check_done.stamp")
+  _v2c_config_set(cmakelists_update_check_stamp_file_v1 "${V2C_STAMP_FILES_DIR}/v2c_cmakelists_update_check_done.stamp")
 
   if(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD)
     # See also
@@ -122,49 +136,91 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     # to determine whether a (supposedly entire) build
     # was aborted due to CMakeLists.txt conversion and thus they
     # should immediately resume with a new build...
-    set(cmakelists_update_check_did_abort_public_marker_file "${v2c_stamp_files_dir}/v2c_cmakelists_update_check_did_abort.marker")
+    _v2c_config_set(cmakelists_update_check_did_abort_public_marker_file_v1 "${V2C_STAMP_FILES_DIR}/v2c_cmakelists_update_check_did_abort.marker")
     # This is the stamp file for the subsequent "cleanup" target
     # (oh yay, we even need to have the marker file removed on next build launch again).
-    set(v2c_update_cmakelists_abort_build_after_update_cleanup_stamp_file "${v2c_stamp_files_dir}/v2c_cmakelists_update_abort_cleanup_done.stamp")
+    _v2c_config_set(update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1 "${V2C_STAMP_FILES_DIR}/v2c_cmakelists_update_abort_cleanup_done.stamp")
   endif(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD)
+endfunction(_v2c_config_setup_rebuilder)
 
+function(_v2c_config_setup)
+  # FIXME: should obey V2C_LOCAL_CONFIG_DIR setting!! Nope, this is a
+  # reference to the _global_ one here... Hmm, is there a config variable for
+  # that? At least set a local variable here for now.
+  set(global_config_subdir_ "cmake/vcproj2cmake")
+
+  set(project_exclude_list_file_location_ "${CMAKE_SOURCE_DIR}/${global_config_subdir_}/project_exclude_list.txt")
+  _v2c_config_set(project_exclude_list_file_location_v1 "${project_exclude_list_file_location_}")
+
+  set(mappings_files_expr_ "${global_config_subdir_}/*_mappings.txt")
+  _v2c_config_set(mappings_files_expr_v1 "${mappings_files_expr_}")
+
+  file(GLOB root_mappings_files_list_ "${CMAKE_SOURCE_DIR}/${mappings_files_expr_}")
+  _v2c_config_set(root_mappings_files_list_v1 "${root_mappings_files_list_}")
+ 
+
+  # Now do rebuilder setup within this function, too,
+  # to have direct access to important configuration variables.
+  if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
+    _v2c_config_setup_rebuilder()
+  endif(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
+endfunction(_v2c_config_setup)
+
+_v2c_config_setup()
+
+
+# Debug-only helper!
+function(_v2c_target_log_configuration _target)
+  if(TARGET ${_target})
+    get_property(vs_scc_projectname_ TARGET ${_target} PROPERTY VS_SCC_PROJECTNAME)
+    get_property(vs_scc_localpath_ TARGET ${_target} PROPERTY VS_SCC_LOCALPATH)
+    get_property(vs_scc_provider_ TARGET ${_target} PROPERTY VS_SCC_PROVIDER)
+    get_property(vs_scc_auxpath_ TARGET ${_target} PROPERTY VS_SCC_AUXPATH)
+    message(FATAL_ERROR "Properties/settings target ${_target}:\n\tvs_scc_projectname_ ${vs_scc_projectname_}\n\tvs_scc_localpath_ ${vs_scc_localpath_}\n\tvs_scc_provider_ ${vs_scc_provider_}\n\tvs_scc_auxpath_ ${vs_scc_auxpath_}")
+  endif(TARGET ${_target})
+endfunction(_v2c_target_log_configuration _target)
+
+
+if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
   function(_v2c_cmakelists_rebuild_recursively _v2c_scripts_base_path _v2c_cmakelists_rebuilder_deps_common_list)
-    if(TARGET ${v2c_cmakelists_target_rebuild_all_name})
+    set(cmakelists_target_rebuild_all_name_ update_cmakelists_rebuild_recursive_ALL)
+    if(TARGET ${cmakelists_target_rebuild_all_name_})
       return() # Nothing left to do...
-    endif(TARGET ${v2c_cmakelists_target_rebuild_all_name})
+    endif(TARGET ${cmakelists_target_rebuild_all_name_})
     # Need to manually derive the name of the recursive script...
     set(script_recursive_ "${_v2c_scripts_base_path}/vcproj2cmake_recursive.rb")
     if(NOT EXISTS "${script_recursive_}")
       return()
     endif(NOT EXISTS "${script_recursive_}")
-    message(STATUS "Providing fully recursive CMakeLists.txt rebuilder target ${v2c_cmakelists_target_rebuild_all_name}, to forcibly enact a recursive .vcproj --> CMake reconversion of all source tree sub directories.")
+    message(STATUS "Providing fully recursive CMakeLists.txt rebuilder target ${cmakelists_target_rebuild_all_name_}, to forcibly enact a recursive .vcproj --> CMake reconversion of all source tree sub directories.")
     set(cmakelists_update_recursively_updated_stamp_file_ "${CMAKE_CURRENT_BINARY_DIR}/cmakelists_recursive_converter_done.stamp")
-    set(v2c_cmakelists_rebuilder_deps_recursive_list_
+    set(cmakelists_rebuilder_deps_recursive_list_
       ${_v2c_cmakelists_rebuilder_deps_common_list}
       "${script_recursive_}"
     )
-    # For now, we'll NOT add the "ALL" marker since this global recursive
-    # target is supposed to be a _forced_, one-time explicitly
-    # user-requested operation.
-    add_custom_target(${v2c_cmakelists_target_rebuild_all_name}
+    # For now, we'll NOT add the "ALL" attribute
+    # since this global recursive target is supposed to be
+    # a _forced_, one-time explicitly user-requested operation.
+    add_custom_target(${cmakelists_target_rebuild_all_name_}
       COMMAND "${V2C_RUBY_BIN}" "${script_recursive_}"
       WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-      DEPENDS ${v2c_cmakelists_rebuilder_deps_recursive_list_}
+      DEPENDS ${cmakelists_rebuilder_deps_recursive_list_}
       COMMENT "Doing recursive .vcproj --> CMakeLists.txt conversion in all source root sub directories."
     )
     # TODO: I wanted to add an extra target as an observer of the excluded projects file,
     # but this does not work properly yet -
-    # ${v2c_cmakelists_target_rebuild_all_name} should run unconditionally,
+    # ${cmakelists_target_rebuild_all_name_} should run unconditionally,
     # yet the depending observer target is supposed to be an ALL target which only triggers rerun
     # in case of that excluded projects file dependency being dirty -
     # which does not work since the rebuilder target will then _always_ run on a "make all" build.
     #set(cmakelists_update_recursively_updated_observer_stamp_file_ "${CMAKE_CURRENT_BINARY_DIR}/cmakelists_recursive_converter_observer_done.stamp")
+    # _v2c_config_get(project_exclude_list_file_location_v1 project_exclude_list_file_location_v1_)
     #add_custom_command(OUTPUT "${cmakelists_update_recursively_updated_observer_stamp_file_}"
     #  COMMAND "${CMAKE_COMMAND}" -E touch "${cmakelists_update_recursively_updated_observer_stamp_file_}"
-    #  DEPENDS "${v2c_project_exclude_list_file_location}"
+    #  DEPENDS "${project_exclude_list_file_location_v1_}"
     #)
     #add_custom_target(update_cmakelists_rebuild_recursive_ALL_observer ALL DEPENDS "${cmakelists_update_recursively_updated_observer_stamp_file_}")
-    #add_dependencies(update_cmakelists_rebuild_recursive_ALL_observer ${v2c_cmakelists_target_rebuild_all_name})
+    #add_dependencies(update_cmakelists_rebuild_recursive_ALL_observer ${cmakelists_target_rebuild_all_name_})
   endfunction(_v2c_cmakelists_rebuild_recursively _v2c_scripts_base_path _v2c_cmakelists_rebuilder_deps_common_list)
 
   # Function to automagically rebuild our converted CMakeLists.txt
@@ -198,28 +254,32 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     endif(EXISTS "${script_settings_user_check_}")
     # All v2c scripts, MINUS the two script frontends
     # that our specific targets happen to use.
-    set(v2c_cmakelists_rebuilder_deps_v2c_common_list_
+    set(cmakelists_rebuilder_deps_v2c_common_list_
       "${script_core_}"
       "${script_settings_}"
       "${script_settings_user_}"
     )
 
-    set(v2c_cmakelists_rebuilder_deps_common_list_
-      ${v2c_cmakelists_rebuilder_deps_static_list}
-      ${v2c_cmakelists_rebuilder_deps_v2c_common_list_}
+    _v2c_config_get(cmakelists_rebuilder_deps_static_list_v1 cmakelists_rebuilder_deps_static_list_v1_)
+    set(cmakelists_rebuilder_deps_common_list_
+      ${cmakelists_rebuilder_deps_static_list_v1_}
+      ${cmakelists_rebuilder_deps_v2c_common_list_}
     )
     # TODO add any other relevant dependencies here
 
     # Hrmm, this is a wee bit unclean: since we gather access to the script name
     # only in case of an invocation of this function,
     # we'll have to invoke the recursive-rebuild function _within_ here, too.
-    _v2c_cmakelists_rebuild_recursively("${v2c_scripts_base_path_}" "${v2c_cmakelists_rebuilder_deps_common_list_}")
+    _v2c_cmakelists_rebuild_recursively("${v2c_scripts_base_path_}" "${cmakelists_rebuilder_deps_common_list_}")
 
     # Collect dependencies for mappings files in current project, too:
-    file(GLOB proj_mappings_files_list_ "${v2c_mappings_files_expr}")
+    _v2c_config_get(mappings_files_expr_v1 mappings_files_expr_v1_)
+    file(GLOB proj_mappings_files_list_ "${mappings_files_expr_v1_}")
 
-    set(v2c_cmakelists_rebuilder_deps_list_ "${_vcproj_file}" "${_script}" ${proj_mappings_files_list_} ${v2c_cmakelists_rebuilder_deps_common_list_})
-    #message(FATAL_ERROR "v2c_cmakelists_rebuilder_deps_list_ ${v2c_cmakelists_rebuilder_deps_list_}")
+    set(cmakelists_rebuilder_deps_list_ "${_vcproj_file}" "${_script}" ${proj_mappings_files_list_} ${cmakelists_rebuilder_deps_common_list_})
+    #message(FATAL_ERROR "cmakelists_rebuilder_deps_list_ ${cmakelists_rebuilder_deps_list_}")
+
+    _v2c_config_get(cmakelists_update_check_stamp_file_v1 cmakelists_update_check_stamp_file_v1_)
 
     # Need an intermediate stamp file, otherwise "make clean" will clean
     # our live output file (CMakeLists.txt), yet we crucially need to preserve it
@@ -227,9 +287,9 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     set(cmakelists_update_this_proj_updated_stamp_file_ "${CMAKE_CURRENT_BINARY_DIR}/cmakelists_rebuilder_done.stamp")
     add_custom_command(OUTPUT "${cmakelists_update_this_proj_updated_stamp_file_}"
       COMMAND "${V2C_RUBY_BIN}" "${_script}" "${_vcproj_file}" "${_cmakelists_file}" "${_master_proj_dir}"
-      COMMAND "${CMAKE_COMMAND}" -E remove -f "${v2c_cmakelists_update_check_stamp_file}"
+      COMMAND "${CMAKE_COMMAND}" -E remove -f "${cmakelists_update_check_stamp_file_v1_}"
       COMMAND "${CMAKE_COMMAND}" -E touch "${cmakelists_update_this_proj_updated_stamp_file_}"
-      DEPENDS ${v2c_cmakelists_rebuilder_deps_list_}
+      DEPENDS ${cmakelists_rebuilder_deps_list_}
       COMMENT "vcproj settings changed, rebuilding ${_cmakelists_file}"
     )
     # TODO: do we have to set_source_files_properties(GENERATED) on ${_cmakelists_file}?
@@ -247,7 +307,7 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
 #      # Define a "rebuild of any CMakeLists.txt file occurred" marker
 #      # file. This will be used to trigger subsequent targets which will
 #      # abort the build.
-#      set(rebuild_occurred_marker_file "${v2c_stamp_files_dir}/v2c_cmakelists_rebuild_occurred.marker")
+#      set(rebuild_occurred_marker_file "${V2C_STAMP_FILES_DIR}/v2c_cmakelists_rebuild_occurred.marker")
 #      add_custom_command(OUTPUT "${rebuild_occurred_marker_file}"
 #        COMMAND "${CMAKE_COMMAND}" -E touch "${rebuild_occurred_marker_file}"
 #      )
@@ -286,11 +346,14 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     # to establish (during one-time setup) a _dummy/non-dummy_ _function_ for rebuild abort handling.
     if(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD)
       if(need_init_main_targets_this_time_)
-        add_custom_command(OUTPUT "${v2c_cmakelists_update_check_stamp_file}"
+        _v2c_config_get(cmakelists_update_check_did_abort_public_marker_file_v1 cmakelists_update_check_did_abort_public_marker_file_v1_)
+        _v2c_config_get(update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1 update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1_)
+)
+        add_custom_command(OUTPUT "${cmakelists_update_check_stamp_file_v1_}"
           # Obviously we need to touch the output file (success indicator) _before_ aborting by invoking false.
           # Also, we need to touch the public marker file as well.
-          COMMAND "${CMAKE_COMMAND}" -E touch "${v2c_cmakelists_update_check_stamp_file}" "${cmakelists_update_check_did_abort_public_marker_file}"
-          COMMAND "${CMAKE_COMMAND}" -E remove -f "${v2c_update_cmakelists_abort_build_after_update_cleanup_stamp_file}"
+          COMMAND "${CMAKE_COMMAND}" -E touch "${cmakelists_update_check_stamp_file_v1_}" "${cmakelists_update_check_did_abort_public_marker_file_v1_}"
+          COMMAND "${CMAKE_COMMAND}" -E remove -f "${update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1_}"
           COMMAND "${v2c_abort_BIN}"
           # ...and of course add another clever message command
           # right _after_ the abort processing,
@@ -303,17 +366,17 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
 #          DEPENDS "${rebuild_occurred_marker_file}"
           COMMENT ">>> === Detected a rebuild of CMakeLists.txt files - forcefully aborting the current outdated build run (force new updated-settings configure run)! <<< ==="
         )
-        add_custom_target(update_cmakelists_abort_build_after_update DEPENDS "${v2c_cmakelists_update_check_stamp_file}")
+        add_custom_target(update_cmakelists_abort_build_after_update DEPENDS "${cmakelists_update_check_stamp_file_v1_}")
 
-        add_custom_command(OUTPUT "${v2c_update_cmakelists_abort_build_after_update_cleanup_stamp_file}"
-          COMMAND "${CMAKE_COMMAND}" -E remove -f "${cmakelists_update_check_did_abort_public_marker_file}"
-          COMMAND "${CMAKE_COMMAND}" -E touch "${v2c_update_cmakelists_abort_build_after_update_cleanup_stamp_file}"
+        add_custom_command(OUTPUT "${update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1_}"
+          COMMAND "${CMAKE_COMMAND}" -E remove -f "${cmakelists_update_check_did_abort_public_marker_file_v1_}"
+          COMMAND "${CMAKE_COMMAND}" -E touch "${update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1_}"
           COMMENT "removed public marker file (for newly converted CMakeLists.txt signalling)!"
         )
         # Mark this target as ALL since it's VERY important that it gets
         # executed ASAP.
         add_custom_target(update_cmakelists_abort_build_after_update_cleanup ALL
-          DEPENDS "${v2c_update_cmakelists_abort_build_after_update_cleanup_stamp_file}")
+          DEPENDS "${update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1_}")
 
         add_dependencies(update_cmakelists_ALL update_cmakelists_abort_build_after_update_cleanup)
         add_dependencies(update_cmakelists_abort_build_after_update_cleanup update_cmakelists_abort_build_after_update)
@@ -361,8 +424,6 @@ endif(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
 # Admittedly this is the worst case (which should be avoidable),
 # but it does happen and it's not pretty.
 function(v2c_target_add_precompiled_header _target _build_type _use _header_file)
-  function(blubb)
-  endfunction(blubb)
   if(NOT _build_type)
     message("v2c_target_add_precompiled_header: empty build type!? Exit...")
     return()
@@ -399,12 +460,14 @@ function(v2c_target_add_precompiled_header _target _build_type _use _header_file
     include_directories(${CMAKE_CURRENT_BINARY_DIR})
     # FIXME: needs investigation whether use/create distinction
     # is being serviced properly by the function that the module file offers.
-    #
-    # 0/1/2 probably is "NotUsing"/"Create"/"Use":
-    if(_use EQUAL 1 OR _use EQUAL 2)
+    # Same values as used by VS7:
+    set(pch_not_using_ 0)
+    set(pch_create_ 1)
+    set(pch_use_ 2)
+    if(_use EQUAL ${pch_create_} OR _use EQUAL ${pch_use_})
       add_precompiled_header(${_target} "${header_file_location_}")
       message(STATUS "v2c_target_add_precompiled_header: added header ${_header_file} to target ${_target}")
-    endif(_use EQUAL 1 OR _use EQUAL 2)
+    endif(_use EQUAL ${pch_create_} OR _use EQUAL ${pch_use_})
   else(COMMAND add_precompiled_header)
     message("could not figure out add_precompiled_header() function (missing module file?) - precompiled header support disabled.")
   endif(COMMAND add_precompiled_header)
@@ -476,53 +539,49 @@ endif(NOT V2C_INSTALL_ENABLE)
 # whether target is mentioned in a global list.
 # Example: V2C_INSTALL_ENABLE_${_target}, or
 #          V2C_INSTALL_ENABLE_TARGETS_LIST contains ${_target}
-function(v2c_target_install_get_flag__helper _target _var_prefix _result_out)
-  set(v2c_flag_result_ false)
+function(_v2c_target_install_get_flag__helper _target _var_prefix _result_out)
+  set(flag_result_ false)
   if(${_var_prefix}_${_target})
-    set(v2c_flag_result_ true)
+    set(flag_result_ true)
   else(${_var_prefix}_${_target})
     if(${_var_prefix}_TARGETS_LIST)
       foreach(v2c_target_current_ ${${_var_prefix}_TARGETS_LIST})
         if(v2c_target_current_ STREQUAL _target)
-          set(v2c_flag_result_ true)
+          set(flag_result_ true)
           break()
         endif(v2c_target_current_ STREQUAL _target)
       endforeach(v2c_target_current_ ${${_var_prefix}_TARGETS_LIST})
     endif(${_var_prefix}_TARGETS_LIST)
   endif(${_var_prefix}_${_target})
-  set(${_result_out} ${v2c_flag_result_} PARENT_SCOPE)
-endfunction(v2c_target_install_get_flag__helper _target _var_prefix _result_out)
+  set(${_result_out} ${flag_result_} PARENT_SCOPE)
+endfunction(_v2c_target_install_get_flag__helper _target _var_prefix _result_out)
 
 
 # Determines whether a specific target is allowed to be installed.
-function(v2c_target_install_is_enabled__helper _target _install_enabled_out)
-  set(v2c_install_enabled_ false)
+function(_v2c_target_install_is_enabled__helper _target _install_enabled_out)
+  set(install_enabled_ false)
   # v2c-based installation globally enabled?
   if(V2C_INSTALL_ENABLE)
     # First, adopt all-targets setting, then, in case all-targets setting was false,
     # check whether specific setting is enabled.
     # Finally, if we think we're allowed to install it,
     # make sure to check a skip flag _last_, to veto the operation.
-    set(v2c_install_enabled_ ${V2C_INSTALL_ENABLE_ALL_TARGETS})
-    if(NOT v2c_install_enabled_)
-      v2c_target_install_get_flag__helper(${_target} "V2C_INSTALL_ENABLE" v2c_install_enabled_)
-    endif(NOT v2c_install_enabled_)
-    if(v2c_install_enabled_)
-      v2c_target_install_get_flag__helper(${_target} "V2C_INSTALL_SKIP" v2c_install_skip_)
+    set(install_enabled_ ${V2C_INSTALL_ENABLE_ALL_TARGETS})
+    if(NOT install_enabled_)
+      _v2c_target_install_get_flag__helper(${_target} "V2C_INSTALL_ENABLE" install_enabled_)
+    endif(NOT install_enabled_)
+    if(install_enabled_)
+      _v2c_target_install_get_flag__helper(${_target} "V2C_INSTALL_SKIP" v2c_install_skip_)
       if(v2c_install_skip_)
-        set(v2c_install_enabled_ false)
+        set(install_enabled_ false)
       endif(v2c_install_skip_)
-    endif(v2c_install_enabled_)
-    if(NOT v2c_install_enabled_)
+    endif(install_enabled_)
+    if(NOT install_enabled_)
       message("v2c_target_install: asked to skip install of target ${_target}")
-    endif(NOT v2c_install_enabled_)
+    endif(NOT install_enabled_)
   endif(V2C_INSTALL_ENABLE)
-  set(${_install_enabled_out} ${v2c_install_enabled_} PARENT_SCOPE)
-endfunction(v2c_target_install_is_enabled__helper _target _install_enabled_out)
-
-# Internal variable - lists the parameter types
-# which an install() command supports. Upper-case!!
-set(v2c_install_param_list EXPORT DESTINATION PERMISSIONS CONFIGURATIONS COMPONENT)
+  set(${_install_enabled_out} ${install_enabled_} PARENT_SCOPE)
+endfunction(_v2c_target_install_is_enabled__helper _target _install_enabled_out)
 
 # This is the main pretty flexible install() helper function,
 # as used by all vcproj2cmake-generated CMakeLists.txt.
@@ -548,58 +607,60 @@ function(v2c_target_install _target)
 
   # Do external configuration variables indicate
   # that we're allowed to install this target?
-  v2c_target_install_is_enabled__helper(${_target} v2c_install_enabled_)
-  if(NOT v2c_install_enabled_)
+  _v2c_target_install_is_enabled__helper(${_target} install_enabled_)
+  if(NOT install_enabled_)
     return() # bummer...
-  endif(NOT v2c_install_enabled_)
+  endif(NOT install_enabled_)
 
   # Since install() commands are (probably rightfully) very picky
   # about incomplete/incorrect parameters, we actually need to conditionally
   # compile a list of parameters to actually feed into it.
   #
-  #set(v2c_install_params_values_list_ ) # no need to unset (function scope!)
+  #set(install_params_values_list_ ) # no need to unset (function scope!)
 
-  list(APPEND v2c_install_params_values_list_ TARGETS ${_target})
-  foreach(v2c_install_param_ ${v2c_install_param_list})
-
-    set(v2c_install_param_value_ )
+  list(APPEND install_params_values_list_ TARGETS ${_target})
+  # Internal variable - lists the parameter types
+  # which an install() command supports. Elements are upper-case!!
+  set(install_param_list_ EXPORT DESTINATION PERMISSIONS CONFIGURATIONS COMPONENT)
+  foreach(install_param_ ${install_param_list_})
+    set(install_param_value_ )
 
     # First, query availability of target-specific settings,
     # then query availability of common settings.
-    if(V2C_INSTALL_${v2c_install_param_}_${_target})
-      set(v2c_install_param_value_ "${V2C_INSTALL_${v2c_install_param_}_${_target}}")
-    else(V2C_INSTALL_${v2c_install_param_}_${_target})
+    if(V2C_INSTALL_${install_param_}_${_target})
+      set(install_param_value_ "${V2C_INSTALL_${install_param_}_${_target}}")
+    else(V2C_INSTALL_${install_param_}_${_target})
 
       # Unfortunately, DESTINATION param needs some extra handling
       # (want to support per-target-type destinations):
-      if(v2c_install_param_ STREQUAL DESTINATION)
+      if(install_param_ STREQUAL DESTINATION)
         # result is one of STATIC_LIBRARY, MODULE_LIBRARY, SHARED_LIBRARY, EXECUTABLE
         get_property(target_type_ TARGET ${_target} PROPERTY TYPE)
         #message("target ${_target} type ${target_type_}")
-        if(V2C_INSTALL_${v2c_install_param_}_${target_type_})
-          set(v2c_install_param_value_ "${V2C_INSTALL_${v2c_install_param_}_${target_type_}}")
-        endif(V2C_INSTALL_${v2c_install_param_}_${target_type_})
-      endif(v2c_install_param_ STREQUAL DESTINATION)
+        if(V2C_INSTALL_${install_param_}_${target_type_})
+          set(install_param_value_ "${V2C_INSTALL_${install_param_}_${target_type_}}")
+        endif(V2C_INSTALL_${install_param_}_${target_type_})
+      endif(install_param_ STREQUAL DESTINATION)
 
-      if(NOT v2c_install_param_value_)
+      if(NOT install_param_value_)
         # Adopt global setting if specified:
-        if(V2C_INSTALL_${v2c_install_param_})
-          set(v2c_install_param_value_ "${V2C_INSTALL_${v2c_install_param_}}")
-        endif(V2C_INSTALL_${v2c_install_param_})
-      endif(NOT v2c_install_param_value_)
-    endif(V2C_INSTALL_${v2c_install_param_}_${_target})
-    if(v2c_install_param_value_)
-      list(APPEND v2c_install_params_values_list_ ${v2c_install_param_} "${v2c_install_param_value_}")
-    else(v2c_install_param_value_)
-      # v2c_install_param_value_ unset? bail out in case of mandatory parameters (DESTINATION)
-      if(v2c_install_param_ STREQUAL DESTINATION)
-        message(FATAL_ERROR "Variable V2C_INSTALL_${v2c_install_param_}_${_target} or V2C_INSTALL_${v2c_install_param_} not specified!")
-      endif(v2c_install_param_ STREQUAL DESTINATION)
-    endif(v2c_install_param_value_)
-  endforeach(v2c_install_param_ ${v2c_install_param_list})
+        if(V2C_INSTALL_${install_param_})
+          set(install_param_value_ "${V2C_INSTALL_${install_param_}}")
+        endif(V2C_INSTALL_${install_param_})
+      endif(NOT install_param_value_)
+    endif(V2C_INSTALL_${install_param_}_${_target})
+    if(install_param_value_)
+      list(APPEND install_params_values_list_ ${install_param_} "${install_param_value_}")
+    else(install_param_value_)
+      # install_param_value_ unset? bail out in case of mandatory parameters (DESTINATION)
+      if(install_param_ STREQUAL DESTINATION)
+        message(FATAL_ERROR "Variable V2C_INSTALL_${install_param_}_${_target} or V2C_INSTALL_${install_param_} not specified!")
+      endif(install_param_ STREQUAL DESTINATION)
+    endif(install_param_value_)
+  endforeach(install_param_ ${install_param_list_})
 
-  message(STATUS "v2c_target_install: install(${v2c_install_params_values_list_})")
-  install(${v2c_install_params_values_list_})
+  message(STATUS "v2c_target_install: install(${install_params_values_list_})")
+  install(${install_params_values_list_})
 endfunction(v2c_target_install _target)
 
 function(v2c_target_post_setup _target _project_label _vs_keyword)
