@@ -1141,7 +1141,7 @@ end
 # (i.e., some build-specific configuration content).
 class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
   VCPROJ2CMAKE_FUNC_CMAKE = 'vcproj2cmake_func.cmake'
-  V2C_ATTRIBUTE_NOT_PROVIDED_MARKER = 'V2C_NOT_PROVIDED'
+  V2C_ATTRIBUTE_NOT_PROVIDED_MARKER = 'V2C_NOT_PROVIDED' # WARNING KEEP IN SYNC: that exact string literal is being checked by vcproj2cmake_func.cmake!
   V2C_ALL_PLATFORMS_MARKER = 'ALL'
   def write_vcproj2cmake_func_comment()
     write_comment_at_level(2, "See function implementation/docs in #{$v2c_module_path_root}/#{VCPROJ2CMAKE_FUNC_CMAKE}")
