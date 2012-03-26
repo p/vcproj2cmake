@@ -1185,7 +1185,7 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
     config_name = util_flatten_string(build_type)
     return "v2c_want_buildcfg_#{config_name}"
   end
-  def parse_platform_conversions(platform_defs, arr_defs, map_defs)
+  def parse_platform_conversions_internal(platform_defs, arr_defs, map_defs)
     arr_defs.each { |curr_defn|
       #log_debug map_defs[curr_defn]
       map_line = map_defs[curr_defn]
@@ -1223,6 +1223,16 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
         end
       end
     }
+  end
+  def parse_platform_conversions(platform_defs, arr_defs, map_defs)
+    platform_defs_raw = Hash.new
+    parse_platform_conversions_internal(platform_defs_raw, arr_defs, map_defs)
+    platform_defs_raw.each do |key, arr_platdefs|
+      #log_info_class "arr_platdefs: #{arr_platdefs}"
+      next if arr_platdefs.empty?
+      arr_platdefs.uniq!
+      platform_defs[key] = arr_platdefs
+    end
     ensure_sorted_hash(platform_defs)
   end
 end
@@ -1493,8 +1503,6 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     parse_platform_conversions(all_platform_defs, arr_defs, map_defs)
     all_platform_defs.each { |key, arr_platdefs|
       #log_info_class "arr_platdefs: #{arr_platdefs}"
-      next if arr_platdefs.empty?
-      arr_platdefs.uniq!
       next_paragraph()
       str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
       write_conditional_if(str_platform)
@@ -2005,8 +2013,6 @@ class V2C_CMakeTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     parse_platform_conversions(all_platform_defs, arr_defs_assignments, map_defs)
     all_platform_defs.each { |key, arr_platdefs|
       #log_info_class "arr_platdefs: #{arr_platdefs}"
-      next if arr_platdefs.empty?
-      arr_platdefs.uniq!
       next_paragraph()
       str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
       generate_property_compile_definitions_per_platform(config_name, arr_platdefs, str_platform)
