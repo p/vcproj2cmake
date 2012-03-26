@@ -7,4 +7,4 @@
 # this will break in case of FindBoost offering a different version.
 # Thus translating the hardcoded dir name into BOOST_LIBRARYDIR is _required_
 # (but again, possibly on Win32 only, see above).
-.*/Boost/1_.*/lib:WIN32=${BOOST_LIBRARYDIR}
+.*/Boost/1_.*/lib.*:WIN32=${BOOST_LIBRARYDIR}

@@ -1,0 +1,1 @@
+.*/Boost/1_.*/lib.*:UNIX=${Boost_LIBRARIES}

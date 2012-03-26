@@ -1185,7 +1185,7 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
     config_name = util_flatten_string(build_type)
     return "v2c_want_buildcfg_#{config_name}"
   end
-  def parse_platform_conversions_internal(platform_defs, arr_defs, map_defs)
+  def parse_platform_conversions_internal(platform_defs, arr_defs, map_defs, skip_failed_lookups)
     arr_defs.each { |curr_defn|
       #log_debug map_defs[curr_defn]
       map_line = map_defs[curr_defn]
@@ -1202,7 +1202,9 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
       end
       if map_line.nil?
         # no mapping? --> unconditionally use the original define
-        push_platform_defn(platform_defs, V2C_ALL_PLATFORMS_MARKER, curr_defn)
+        if not skip_failed_lookups == true
+          push_platform_defn(platform_defs, V2C_ALL_PLATFORMS_MARKER, curr_defn)
+        end
       else
         # Tech note: chomp on map_line should not be needed as long as
         # original _constant_ input has already been pre-treated (chomped).
@@ -1224,9 +1226,9 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
       end
     }
   end
-  def parse_platform_conversions(platform_defs, arr_defs, map_defs)
+  def parse_platform_conversions(platform_defs, arr_defs, map_defs, skip_failed_lookups)
     platform_defs_raw = Hash.new
-    parse_platform_conversions_internal(platform_defs_raw, arr_defs, map_defs)
+    parse_platform_conversions_internal(platform_defs_raw, arr_defs, map_defs, skip_failed_lookups)
     platform_defs_raw.each do |key, arr_platdefs|
       #log_info_class "arr_platdefs: #{arr_platdefs}"
       next if arr_platdefs.empty?
@@ -1484,8 +1486,10 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     )
     write_build_attributes('link_directories', arr_lib_dirs_translated, map_lib_dirs, nil)
   end
+  def put_directory_property_compile_flags(attr_opts, flag_append)
+    write_command_single_line('set_property', "DIRECTORY APPEND PROPERTY COMPILE_FLAGS #{attr_opts}")
+  end
   def write_directory_property_compile_flags(attr_opts)
-    return if attr_opts.nil?
     next_paragraph()
     # Query WIN32 instead of MSVC, since AFAICS there's nothing in the
     # .vcproj to indicate tool specifics, thus these seem to
@@ -1493,14 +1497,14 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     # on the Win32 side (.vcproj in general).
     str_platform = 'WIN32'
     write_conditional_if(str_platform)
-      write_command_single_line('set_property', "DIRECTORY APPEND PROPERTY COMPILE_FLAGS #{attr_opts}")
+      put_directory_property_compile_flags(attr_opts, true)
     write_conditional_end(str_platform)
   end
   # FIXME private!
-  def write_build_attributes(cmake_command, arr_defs, map_defs, cmake_command_arg)
+  def write_build_attributes(cmake_command, arr_defs, map_defs, cmake_command_arg, skip_failed_lookups = false)
     # the container for the list of _actual_ dependencies as stated by the project
     all_platform_defs = Hash.new
-    parse_platform_conversions(all_platform_defs, arr_defs, map_defs)
+    parse_platform_conversions(all_platform_defs, arr_defs, map_defs, skip_failed_lookups)
     all_platform_defs.each { |key, arr_platdefs|
       #log_info_class "arr_platdefs: #{arr_platdefs}"
       next_paragraph()
@@ -1882,9 +1886,9 @@ class V2C_CMakeTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # write link_directories() (BEFORE establishing a target!)
     config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
       @localGenerator.write_link_directories(linker_info_curr.arr_lib_dirs, map_lib_dirs)
-      # ...and add a special collection of library dependencies which we translated from a bare link directory auto-link dependency:
-      # Hrmpf, does not work yet...
-      #@localGenerator.write_build_attributes('target_link_libraries', linker_info_curr.arr_lib_dirs, map_lib_dirs_dep, @target.name)
+      # ...and add a special collection of those library dependencies
+      # which we successfully translated from a bare link directory auto-link dependency:
+      @localGenerator.write_build_attributes('target_link_libraries', linker_info_curr.arr_lib_dirs, map_lib_dirs_dep, @target.name, true)
     }
 
     target_is_valid = put_target_type(target, map_dependencies, config_info_curr, target_config_info_curr)
@@ -2010,7 +2014,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def write_property_compile_definitions(config_name, arr_defs_assignments, map_defs)
     # the container for the list of _actual_ dependencies as stated by the project
     all_platform_defs = Hash.new
-    parse_platform_conversions(all_platform_defs, arr_defs_assignments, map_defs)
+    parse_platform_conversions(all_platform_defs, arr_defs_assignments, map_defs, false)
     all_platform_defs.each { |key, arr_platdefs|
       #log_info_class "arr_platdefs: #{arr_platdefs}"
       next_paragraph()
@@ -4474,7 +4478,9 @@ Finished. You should make sure to have all important v2c settings includes such 
                 compiler_info_curr.arr_tool_variant_specific_info.each { |compiler_specific|
   		str_conditional_compiler_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.compiler_name)
                   # I don't think we need this (we have per-target properties), thus we'll NOT write it!
-                  #local_generator.write_directory_property_compile_flags(attr_options)
+                  #if not attr_opts.nil?
+                  #  local_generator.write_directory_property_compile_flags(attr_options)
+                  #end
                   target_generator.write_property_compile_flags(condition.get_build_type(), compiler_specific.arr_flags, str_conditional_compiler_platform)
                 } # compiler.tool_specific.each
               } # arr_target_config_info.each

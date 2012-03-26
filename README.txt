@@ -158,6 +158,39 @@ Note that ideally you merely need to centrally maintain all mappings in your roo
 collect information from the root project in addition to their (optional) local mappings files.
 
 
+lib_dirs_dep_mappings.txt is a bit special in that it will translate
+library _directory_ (link directory) statements
+into appropriate ${YYYY_LIBRARIES} library _dependency_ variables
+(or an open-coded list of libraries if the Find module does not provide a *_LIBRARIES variable),
+iff(!) a matching entry can be found.
+This mechanism can easily be required on Non-Windows platforms since
+on Windows MSVC supports "auto-linking" (i.e., auto-discovery)
+of required library dependencies via
+#pragma comment(lib, ...)
+lines in header files (thus it's only a library directory which needs to be specified),
+whereas on Non-Windows each library needs to be explicitly listed.
+See also
+  http://en.wikipedia.org/wiki/Auto-linking
+  [related documentation of a very popular example of auto-linking]:
+  http://www.boost.org/doc/libs/1_48_0/more/getting_started/windows.html#auto-linking
+  http://stackoverflow.com/questions/1875388/help-on-linking-in-gcc
+  http://stackoverflow.com/questions/1685206/pragma-commentlib-xxx-lib-equivalent-under-linux
+  "#pragma comment GCC equivelent" http://www.cplusplus.com/forum/general/52941/
+  http://cboard.cprogramming.com/c-programming/124805-%5Bgcc%5D-specifying-include-libraries-source-files.html
+  "Passing names of libraries to linker." http://gcc.gnu.org/ml/gcc-help/2005-06/msg00205.html
+
+This sufficiently automatic and easy conversion mechanism unfortunately has certain drawbacks:
+E.g. in case of Boost, it will cause linking of a target
+to the _full_ list of libraries contained within ${Boost_LIBRARIES}.
+If you don't want to pay this link and bloat penalty, then you will have to add each
+dependency to the AdditionalDependencies (library dependency) elements in your Visual Studio
+projects, mentioning the _full_, _versioned_ library name.
+This specific semi-redundant information, of course,
+is something that Windows-side VS projects possibly don't want to have to maintain
+(or, as happened in my case, are happy to remove on a whim during an upgrade).
+
+
+
 === Miscellaneous ===
 
 vcproj2cmake_recursive.rb supports skipping of certain unwanted sub projects
