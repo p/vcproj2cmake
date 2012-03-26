@@ -188,6 +188,21 @@ def escape_backslash(in_string)
   in_string.gsub!(BACKSLASH_REGEX_OBJ, '\\\\\\\\')
 end
 
+# Helper for Ruby 1.8 unsorted hash vs. Ruby 1.9 sorted hash.
+# We _definitely_ want output files to be generated from sorted hashes,
+# since they _are required_ to end up with reproducible, identical content -
+# if content happened to change from conversion run to the next one,
+# then a huge penalty of a _full rebuild_ of an entire build tree would ensue!
+
+# See syntax at http://www.ruby-mine.de/2006/12/4/gef-hrliche-sicherheitsl-cken-in-cgi-rb
+if (RUBY_VERSION < '1.9') # FIXME exact version where it got introduced?
+  def ensure_sorted_hash(hash)
+    hash = hash.sort
+  end
+else
+  def ensure_sorted_hash(hash); end # DUMMY (>= 1.9 hash is sorted by default)
+end
+
 COMMENT_LINE_REGEX_OBJ = %r{^\s*#}
 def read_mappings(filename_mappings, mappings)
   # line format is: "tag:PLATFORM1:PLATFORM2=tag_replacement2:PLATFORM3=tag_replacement3"
@@ -216,6 +231,7 @@ def read_mappings_combined(filename_mappings, mappings, master_project_dir)
   # FIXME: in case of global recursive operation, this data part is _constant_,
   # thus we should avoid reading it anew for each project!
   read_mappings("#{master_project_dir}/#{filename_mappings}", mappings)
+  ensure_sorted_hash(mappings)
 end
 
 def push_platform_defn(platform_defs, platform, defn_value)
@@ -605,7 +621,7 @@ class V2C_Filters_Container
     # In addition to the filters Array, we also need a filters Hash
     # for fast lookup when intending to insert a new file item of the project.
     # There's now a new ordered hash which might preserve the ordering
-    # as guaranteed by an Array, but it's too new (Ruby 1.9!).
+    # as guaranteed by an Array, but we cannot use it since it's too new (Ruby 1.9!).
     @hash_filters = Hash.new
   end
   def append(filter_info)
@@ -648,6 +664,8 @@ end
 
 class V2C_File_Lists_Container
   def initialize
+    # FIXME: the array/hash combo should perhaps be merged
+    # with identical functionality in V2C_Filters_Container (new class?).
     @arr_file_lists = Array.new # V2C_File_List_Info:s, array (serves to maintain ordering)
     @hash_file_lists = Hash.new # dito, but hashed! (serves to maintain fast lookup)
   end
@@ -1187,7 +1205,7 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
         push_platform_defn(platform_defs, V2C_ALL_PLATFORMS_MARKER, curr_defn)
       else
         # Tech note: chomp on map_line should not be needed as long as
-        # original constant input has already been pre-treated (chomped).
+        # original _constant_ input has already been pre-treated (chomped).
         map_line.split('|').each do |platform_element|
           #log_debug "platform_element #{platform_element}"
           platform, replacement_defn = platform_element.split('=')
@@ -1205,6 +1223,7 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
         end
       end
     }
+    ensure_sorted_hash(platform_defs)
   end
 end
 
@@ -4432,6 +4451,7 @@ Finished. You should make sure to have all important v2c settings includes such 
                 else
                   log_implementation_bug('unknown charset type!?')
                 end
+                ensure_sorted_hash(hash_defines_actual)
                 # Convert hash into array as required by the definitions helper function
                 # (it's probably a good idea to provide "cooked" "key=value" entries
                 # for more complete matching possibilities
