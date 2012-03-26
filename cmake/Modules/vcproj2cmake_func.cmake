@@ -89,6 +89,7 @@ function(_v2c_config_get _cfg_key _cfg_value_out)
     message(FATAL_ERROR "_v2c_config_get: config var ${_cfg_key} not set!?")
   endif(NOT cfg_value_set_)
   get_property(cfg_value_ GLOBAL PROPERTY ${cfg_key_full_})
+  #message("_v2c_config_get ${_cfg_key}: ${cfg_value_}")
   set(${_cfg_value_out} "${cfg_value_}" PARENT_SCOPE)
 endfunction(_v2c_config_get _cfg_key _cfg_value_out)
 
@@ -348,7 +349,6 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
       if(need_init_main_targets_this_time_)
         _v2c_config_get(cmakelists_update_check_did_abort_public_marker_file_v1 cmakelists_update_check_did_abort_public_marker_file_v1_)
         _v2c_config_get(update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1 update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1_)
-)
         add_custom_command(OUTPUT "${cmakelists_update_check_stamp_file_v1_}"
           # Obviously we need to touch the output file (success indicator) _before_ aborting by invoking false.
           # Also, we need to touch the public marker file as well.
