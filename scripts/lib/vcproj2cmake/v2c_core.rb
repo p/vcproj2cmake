@@ -188,6 +188,15 @@ def escape_backslash(in_string)
   in_string.gsub!(BACKSLASH_REGEX_OBJ, '\\\\\\\\')
 end
 
+# This method's output is quite a bit better
+# than a simple #{hash.inspect}.
+def log_hash(hash)
+  log_debug '** log_hash **'
+  hash.each { |key, value|
+    log_debug "#{key} --> #{value}"
+  }
+end
+
 # Helper for Ruby 1.8 unsorted hash vs. Ruby 1.9 sorted hash.
 # We _definitely_ want output files to be generated from sorted hashes,
 # since they _are required_ to end up with reproducible, identical content -
@@ -196,11 +205,16 @@ end
 
 # See syntax at http://www.ruby-mine.de/2006/12/4/gef-hrliche-sicherheitsl-cken-in-cgi-rb
 if (RUBY_VERSION < '1.9') # FIXME exact version where it got introduced?
-  def ensure_sorted_hash(hash)
-    hash = hash.sort
+  def ensure_sorted_hash(hash_out)
+    # NOTE: if this method bombs with a weird "undefined method <=> for nil:NilClass" sort error,
+    # then this quite certainly means that one of the hash entries
+    # is a (quite useless) nil mapping.
+    # --> fix the invoking code to not add such an entry.
+    #log_hash(hash_out)
+    hash_out = hash_out.sort
   end
 else
-  def ensure_sorted_hash(hash); end # DUMMY (>= 1.9 hash is sorted by default)
+  def ensure_sorted_hash(hash_out); end # DUMMY (>= 1.9 hash is sorted by default)
 end
 
 COMMENT_LINE_REGEX_OBJ = %r{^\s*#}
@@ -211,7 +225,9 @@ def read_mappings(filename_mappings, mappings)
     File.open(filename_mappings, 'r').each do |line|
       next if line =~ COMMENT_LINE_REGEX_OBJ
       b, c = line.chomp.split(':')
-      mappings[b] = c
+      if not b.nil?
+        mappings[b] = c
+      end
     end
   else
     log_debug "NOTE: #{filename_mappings} NOT AVAILABLE"
@@ -231,6 +247,7 @@ def read_mappings_combined(filename_mappings, mappings, master_project_dir)
   # FIXME: in case of global recursive operation, this data part is _constant_,
   # thus we should avoid reading it anew for each project!
   read_mappings("#{master_project_dir}/#{filename_mappings}", mappings)
+  #log_hash(mappings)
   ensure_sorted_hash(mappings)
 end
 
@@ -4266,6 +4283,7 @@ class V2C_CMakeGenerator < V2C_GeneratorBase
         rescue
           # Close file, since Fileutils.mv on an open file will barf on XP
           out.close
+          raise
         end
       }
 
