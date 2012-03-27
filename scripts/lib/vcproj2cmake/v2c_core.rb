@@ -4275,52 +4275,57 @@ class V2C_CMakeGenerator < V2C_GeneratorBase
   def generate
     @arr_projects.each { |project_info|
       # write into temporary file, to avoid corrupting previous CMakeLists.txt due to syntax error abort, disk space or failure issues
-      tmpfile = Tempfile.new('vcproj2cmake')
-
-      File.open(tmpfile.path, 'w') { |out|
+      Tempfile.open('vcproj2cmake') { |tmpfile|
         begin
-          project_generate_cmake(@p_master_project, @orig_proj_file_basename, out, project_info)
+          project_generate_cmake(@p_master_project, @orig_proj_file_basename, tmpfile, project_info)
         rescue
           # Close file, since Fileutils.mv on an open file will barf on XP
-          out.close
+          tmpfile.close
           raise
         end
-      }
-
-      # make sure to close that one as well...
-      tmpfile.close
-
-      # Since we're forced to fumble our source tree (a definite no-no in all other cases!)
-      # by writing our CMakeLists.txt there, use a write-back-when-updated approach
-      # to make sure we only write back the live CMakeLists.txt in case anything did change.
-      # This is especially important in case of multiple concurrent builds on a shared
-      # source on NFS mount.
-
-      configuration_changed = false
-      output_file = @cmakelists_output_file
-      if File.exists?(output_file)
-        if not V2C_Util_File.cmp(tmpfile.path, output_file)
-          configuration_changed = true
+        tmpfile_ok = true
+        # This can happen in case of ignored exceptions...
+        if tmpfile.size() == 0
+          log_error_class 'zero-size tempfile!?!? Skipping replace of output file...'
+          #tmpfile_ok = false
+          # FIXME: should probably improve things to have the main
+          # script file exit with failure exit code...
         end
-      else
-        configuration_changed = true
-      end
 
-      if configuration_changed
-        util_permanentize_temp_file(tmpfile, output_file, $v2c_generator_file_create_permissions)
-        log_info_class %{\
+        if tmpfile_ok == true
+          # Since we're forced to fumble our source tree (a definite no-no in all other cases!)
+          # by writing our CMakeLists.txt there, use a write-back-when-updated approach
+          # to make sure we only write back the live CMakeLists.txt in case anything did change.
+          # This is especially important in case of multiple concurrent builds on a shared
+          # source on NFS mount.
+
+          configuration_changed = false
+          output_file = @cmakelists_output_file
+          if File.exists?(output_file)
+            if not V2C_Util_File.cmp(tmpfile.path, output_file)
+              configuration_changed = true
+            end
+          else
+            configuration_changed = true
+          end
+
+          if configuration_changed
+            util_permanentize_temp_file(tmpfile, output_file, $v2c_generator_file_create_permissions)
+            log_info_class %{\
 Wrote #{output_file}
 Finished. You should make sure to have all important v2c settings includes such as vcproj2cmake_defs.cmake somewhere in your CMAKE_MODULE_PATH
 }
-      else
-        log_info_class "No settings changed, #{output_file} not updated."
-        # tmpfile will auto-delete when finalized...
+          else
+            log_info_class "No settings changed, #{output_file} not updated."
+            # tmpfile will auto-delete when finalized...
 
-        # Some make dependency mechanisms might require touching (timestamping) the unchanged(!) file
-        # to indicate that it's up-to-date,
-        # however we won't do this here since it's not such a good idea.
-        # Any user who needs that should do a manual touch subsequently.
-      end
+            # Some make dependency mechanisms might require touching (timestamping) the unchanged(!) file
+            # to indicate that it's up-to-date,
+            # however we won't do this here since it's not such a good idea.
+            # Any user who needs that should do a manual touch subsequently.
+          end
+        end
+      }
     }
   end
   def project_generate_cmake(p_master_project, orig_proj_file_basename, out, project_info)
