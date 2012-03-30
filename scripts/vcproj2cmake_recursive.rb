@@ -287,9 +287,9 @@ def write_projects_list_file(output_file_fqpn, create_permissions, arr_project_s
     arr_project_subdirs.each { |subdir|
       # FIXME: should be using the CMake syntax generator class for this add_subdirectory() stuff as well...
       if subdir.include? ' ' # quote strings containing spaces!!
-        projlistfile.puts("add_subdirectory( \"#{subdir}\" )")
+        projlistfile.puts("add_subdirectory(\"#{subdir}\")")
       else
-        projlistfile.puts("add_subdirectory( #{subdir} )")
+        projlistfile.puts("add_subdirectory(#{subdir})")
       end
     }
 
