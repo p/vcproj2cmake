@@ -1905,12 +1905,16 @@ class V2C_CMakeTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # write link_directories() (BEFORE establishing a target!)
     config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
       @localGenerator.write_link_directories(linker_info_curr.arr_lib_dirs, map_lib_dirs)
-      # ...and add a special collection of those library dependencies
-      # which we successfully translated from a bare link directory auto-link dependency:
-      @localGenerator.write_build_attributes('target_link_libraries', linker_info_curr.arr_lib_dirs, map_lib_dirs_dep, @target.name, true)
     }
 
     target_is_valid = put_target_type(target, map_dependencies, config_info_curr, target_config_info_curr)
+
+    # Add a special collection of those library dependencies
+    # which we successfully translated from a bare link directory auto-link dependency
+    # (AFTER establishing a target!):
+    config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
+      @localGenerator.write_build_attributes('target_link_libraries', linker_info_curr.arr_lib_dirs, map_lib_dirs_dep, @target.name, true)
+    }
 
     put_hook_post_target()
     return target_is_valid
