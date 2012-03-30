@@ -654,6 +654,7 @@ module V2C_File_List_Types
   TYPE_COMPILES = 1
   TYPE_INCLUDES = 2
   TYPE_RESOURCES = 3
+  TYPE_MIDL = 4
 end
 
 class V2C_File_List_Info
@@ -672,7 +673,8 @@ class V2C_File_List_Info
      [ 'unknown', # VS10: None
        'sources', # VS10: ClCompile
        'headers', # VS10: ClInclude
-       'resources' # VS10: ResourceCompile
+       'resources', # VS10: ResourceCompile
+       'midl' # VS10: Midl
      ]
     type = @type <= TYPE_RESOURCES ? @type : TYPE_NONE
     return list_types[type]
@@ -899,7 +901,7 @@ class V2C_LoggerBase
   def log_debug_class(str); log_debug "#{self.class.name}: #{str}" end
   # "Ruby Exceptions", http://rubylearning.com/satishtalim/ruby_exceptions.html
   def unhandled_exception(e); log_error_unhandled_exception(e) end
-  def unhandled_functionality(str_description); log_error(str_description) end
+  def unhandled_functionality(str_description); log_error("unhandled functionality: #{str_description}") end
 end
 
 # FIXME: very rough handling - what to do with those VS10 %(XXX) variables?
@@ -3676,6 +3678,8 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
       type = V2C_File_List_Types::TYPE_INCLUDES
     when 'ResourceCompile'
       type = V2C_File_List_Types::TYPE_RESOURCES
+    when 'Midl'
+      type = V2C_File_List_Types::TYPE_MIDL
     else
       unhandled_functionality("file list name #{file_list_name}")
       type = V2C_File_List_Types::TYPE_NONE
