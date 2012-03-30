@@ -115,11 +115,14 @@ function(_v2c_config_setup_rebuilder)
     endif(NOT V2C_RUBY_BIN)
   endif(NOT V2C_RUBY_BIN)
 
-  _v2c_config_set(cmakelists_rebuilder_deps_static_list_v1
+  set(cmakelists_rebuilder_deps_static_list_
     ${root_mappings_files_list_}
     "${project_exclude_list_file_location_}"
     "${V2C_RUBY_BIN}"
     # TODO add any other relevant dependencies here
+  )
+  _v2c_config_set(cmakelists_rebuilder_deps_static_list_v1
+    "${cmakelists_rebuilder_deps_static_list_}"
   )
 
   _v2c_config_set(cmakelists_update_check_stamp_file_v1 "${V2C_STAMP_FILES_DIR}/v2c_cmakelists_update_check_done.stamp")
