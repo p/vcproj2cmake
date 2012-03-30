@@ -1,5 +1,5 @@
 ###########################################################################
-# Windows libraries (please always reference as lower-case name in original .vcproj)
+# Windows libraries (please always reference as lower-case name in original .vc[x]proj)
 advapi32:WIN32|UNIX=${WIN32_LIBRARIES}
 comdlg32:WIN32|UNIX=${WIN32_LIBRARIES}
 ddraw:WIN32|UNIX=${WIN32_LIBRARIES}
@@ -30,6 +30,7 @@ version:WIN32|UNIX=${WIN32_LIBRARIES}
 wininet:WIN32|UNIX=${WIN32_LIBRARIES}
 winmm:WIN32|UNIX=${WIN32_LIBRARIES}
 winspool:WIN32|UNIX=${WIN32_LIBRARIES}
+ws2_32:WIN32|UNIX=${WIN32_LIBRARIES}
 wtsapi32:WIN32|UNIX=${WIN32_LIBRARIES}
 ###########################################################################
 # third-party libraries
@@ -57,6 +58,12 @@ libboost_unit_test_framework-.*-1_.*:=${Boost_UNIT_TEST_FRAMEWORK_LIBRARY}
 # It seems that on Windows, wserialization implicitly fetches serialization dependency.
 libboost_wserialization-.*-1_.*:=${Boost_WSERIALIZATION_LIBRARY} ${Boost_SERIALIZATION_LIBRARY}
 libcurl:=${CURL_LIBRARIES}
+# Hmm, the mapping of OpenSSL libeay32 and ssleay32 seems weird.
+# For ssleay32, converting to the more specific OPENSSL_SSL_LIBRARIES
+# probably is ok, but libeay32 probably needs to map to the more general
+# OPENSSL_LIBRARIES, to include OPENSSL_CRYPTO_LIBRARY (libcrypto.so).
+libeay32.*:=${OPENSSL_LIBRARIES}
+ssleay32.*:=${OPENSSL_SSL_LIBRARIES}
 libpng:=${PNG_LIBRARIES}
 libxml2:=${LIBXML2_LIBRARIES}
 # WARNING: LTDL is LGPL (no static linking for proprietary apps!)
