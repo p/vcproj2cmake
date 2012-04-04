@@ -428,6 +428,7 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
     @warnings_are_errors_enable = false # TODO: translate into MSVC /WX flag
     @show_includes_enable = false # Whether to show the filenames of included header files. TODO: translate into MSVC /showIncludes flag
     @static_code_analysis_enable = false # TODO: translate into MSVC7/10 /analyze flag
+    @string_pooling_enable = false
     @treat_wchar_t_as_builtin_type_enable = false
     @optimization = 0 # currently supporting these values: 0 == Non Debug, 1 == Min Size, 2 == Max Speed, 3 == Max Optimization
   end
@@ -444,6 +445,7 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
   attr_accessor :warnings_are_errors_enable
   attr_accessor :show_includes_enable
   attr_accessor :static_code_analysis_enable
+  attr_accessor :string_pooling_enable
   attr_accessor :treat_wchar_t_as_builtin_type_enable
   attr_accessor :optimization
   attr_accessor :arr_tool_variant_specific_info
@@ -538,6 +540,42 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
   attr_accessor :arr_tool_variant_specific_info
 end
 
+class V2C_Tool_MIDL_Specific_Info < V2C_Tool_Specific_Info_Base
+  def initialize(midl_name)
+    super()
+    @midl_name = midl_name
+    @arr_flags = Array.new
+  end
+  attr_accessor :midl_name
+  attr_accessor :arr_flags
+end
+
+class V2C_Tool_MIDL_Specific_Info_MSVC7 < V2C_Tool_MIDL_Specific_Info
+  def initialize()
+    super('MSVC7')
+  end
+end
+
+class V2C_Tool_MIDL_Specific_Info_MSVC10 < V2C_Tool_MIDL_Specific_Info
+  def initialize()
+    super('MSVC10')
+  end
+end
+
+class V2C_Tool_MIDL_Info < V2C_Tool_Base_Info
+  def initialize(tool_variant_specific_info = nil)
+    super(tool_variant_specific_info)
+    @header_file_name = nil
+    @iface_id_file_name = nil
+    @mktyplib_compatible = false
+    @type_library_name = nil
+  end
+  attr_accessor :header_file_name
+  attr_accessor :iface_id_file_name
+  attr_accessor :mktyplib_compatible
+  attr_accessor :type_library_name
+end
+
 module V2C_TargetConfig_Defines
   CFG_TYPE_INVALID = -1 # detect improper entries
   CFG_TYPE_UNKNOWN = 0 # VS7/10 typeUnknown (utility), 0
@@ -583,9 +621,11 @@ class V2C_Tools_Info < V2C_Info_Elem_Base
   def initialize
     @arr_compiler_info = Array.new
     @arr_linker_info = Array.new
+    @arr_midl_info = Array.new
   end
   attr_accessor :arr_compiler_info
   attr_accessor :arr_linker_info
+  attr_accessor :arr_midl_info
 end
 
 # Common base class of both file config and project config.
@@ -1300,7 +1340,7 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
         end
       end
       if @arr_languages.empty?
-        log_error_class 'Could not detect programming language! (FIXME)'
+        log_error_class 'Could not figure out any pre-set programming language types (FIXME?) - will let auto-detection do its thing...'
         # We'll explicitly keep the array _empty_ (rather than specifying 'NONE'),
         # to give it another chance via CMake's language auto-detection mechanism.
       end
@@ -2332,6 +2372,10 @@ class V2C_VSXmlParserBase < V2C_ParserBase
     end
     return value
   end
+  def get_filesystem_location(path)
+    path_cooked = normalize_path(path).strip
+    return path_cooked.empty? ? nil : path_cooked
+  end
   def split_values_list(str_value)
     arr_str = str_value.split(VS_VALUE_SEPARATOR_REGEX_OBJ)
     #arr_str.each { |str| log_debug_class "SPLIT #{str}" }
@@ -2560,6 +2604,7 @@ module V2C_VSToolCompilerDefines
   TEXT_PREPROCESSORDEFINITIONS = 'PreprocessorDefinitions'
   TEXT_RUNTIMETYPEINFO = 'RuntimeTypeInfo'
   TEXT_SHOWINCLUDES = 'ShowIncludes'
+  TEXT_STRINGPOOLING = 'StringPooling'
   TEXT_TREAT_WCHAR_T_AS_BUILTIN_TYPE = 'TreatWChar_tAsBuiltInType'
   TEXT_WARNINGLEVEL = 'WarningLevel'
 end
@@ -2583,7 +2628,7 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
     when TEXT_ADDITIONALOPTIONS
       parse_additional_options(get_compiler_info().arr_tool_variant_specific_info[0].arr_flags, setting_value)
     when TEXT_ASSEMBLERLISTINGLOCATION
-      get_compiler_info().asm_listing_location = normalize_path(setting_value).strip
+      get_compiler_info().asm_listing_location = get_filesystem_location(setting_value)
     when TEXT_DISABLESPECIFICWARNINGS
       parse_disable_specific_warnings(get_compiler_info().arr_tool_variant_specific_info[0].arr_disable_warnings, setting_value)
     when TEXT_ENABLEPREFAST
@@ -2595,13 +2640,15 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
     when TEXT_OPTIMIZATION
       get_compiler_info().optimization = parse_optimization(setting_value)
     when TEXT_PROGRAMDATABASEFILENAME
-      get_compiler_info().pdb_filename = normalize_path(setting_value)
+      get_compiler_info().pdb_filename = get_filesystem_location(setting_value)
     when TEXT_PREPROCESSORDEFINITIONS
       parse_preprocessor_definitions(get_compiler_info().hash_defines, setting_value)
     when TEXT_RUNTIMETYPEINFO
       get_compiler_info().rtti = get_boolean_value(setting_value)
     when TEXT_SHOWINCLUDES
       get_compiler_info().show_includes_enable = get_boolean_value(setting_value)
+    when TEXT_STRINGPOOLING
+      get_compiler_info().string_pooling_enable = get_boolean_value(setting_value)
     when TEXT_TREAT_WCHAR_T_AS_BUILTIN_TYPE
       get_compiler_info().treat_wchar_t_as_builtin_type_enable = get_boolean_value(setting_value)
     when TEXT_WARNINGLEVEL
@@ -2617,7 +2664,8 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
   def parse_additional_include_directories(arr_include_dirs_out, attr_incdir)
     split_values_list_preserve_ws_discard_empty(attr_incdir).each { |elem_inc_dir|
       next if skip_vs10_percent_sign_var(elem_inc_dir)
-      elem_inc_dir = normalize_path(elem_inc_dir).strip
+      elem_inc_dir = get_filesystem_location(elem_inc_dir)
+      next if elem_inc_dir.nil?
       #log_info_class "include is '#{elem_inc_dir}'"
       info_inc_dir = V2C_Info_Include_Dir.new
       info_inc_dir.dir = elem_inc_dir
@@ -2674,10 +2722,10 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
       compiler_info.name = setting_value
     when TEXT_PRECOMPILEDHEADERFILE_BINARY
       allocate_precompiled_header_info(compiler_info)
-      compiler_info.precompiled_header_info.header_binary_name = normalize_path(setting_value)
+      compiler_info.precompiled_header_info.header_binary_name = get_filesystem_location(setting_value)
     when TEXT_PRECOMPILEDHEADERFILE_SOURCE
       allocate_precompiled_header_info(compiler_info)
-      compiler_info.precompiled_header_info.header_source_name = normalize_path(setting_value)
+      compiler_info.precompiled_header_info.header_source_name = get_filesystem_location(setting_value)
     when TEXT_USEPRECOMPILEDHEADER
       allocate_precompiled_header_info(compiler_info)
       compiler_info.precompiled_header_info.use_mode = parse_use_precompiled_header(setting_value)
@@ -2754,7 +2802,8 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
     split_values_list_discard_empty(attr_deps).each { |elem_lib_dep|
       log_debug_class "!!!!! elem_lib_dep #{elem_lib_dep}"
       next if skip_vs10_percent_sign_var(elem_lib_dep)
-      elem_lib_dep = normalize_path(elem_lib_dep).strip
+      elem_lib_dep = get_filesystem_location(elem_lib_dep)
+      next if elem_lib_dep.nil?
       dependency_name = File.basename(elem_lib_dep, '.lib')
       arr_dependencies.push(V2C_Dependency_Info.new(dependency_name))
     }
@@ -2763,7 +2812,8 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
     return if attr_lib_dirs.length == 0
     split_values_list_preserve_ws_discard_empty(attr_lib_dirs).each { |elem_lib_dir|
       next if skip_vs10_percent_sign_var(elem_lib_dir)
-      elem_lib_dir = normalize_path(elem_lib_dir).strip
+      elem_lib_dir = get_filesystem_location(elem_lib_dir)
+      next if elem_lib_dir.nil?
       #log_info_class "lib dir is '#{elem_lib_dir}'"
       arr_lib_dirs.push(elem_lib_dir)
     }
@@ -2774,9 +2824,9 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
   # can handle it correctly.
   #def parse_additional_options(arr_flags, attr_options); arr_flags.replace(attr_options.split()) end
   def parse_module_definition_file(attr_module_definition_file)
-    return normalize_path(attr_module_definition_file)
+    return get_filesystem_location(attr_module_definition_file)
   end
-  def parse_pdb_file(attr_pdb_file); return normalize_path(attr_pdb_file) end
+  def parse_pdb_file(attr_pdb_file); return get_filesystem_location(attr_pdb_file) end
 end
 
 module V2C_VS7ToolLinkerDefines
@@ -2822,6 +2872,39 @@ class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
      end
      return machine
   end
+end
+
+module V2C_VSToolMIDLDefines
+  TEXT_HEADERFILENAME = 'HeaderFileName'
+  TEXT_INTERFACEIDENTIFIERFILENAME = 'InterfaceIdentifierFileName'
+  TEXT_MKTYPLIBCOMPATIBLE = 'MkTypLibCompatible'
+  TEXT_TYPELIBRARYNAME = 'TypeLibraryName'
+end
+
+class V2C_VSToolMIDLParser < V2C_VSToolParserBase
+  private
+  include V2C_VSToolMIDLDefines
+
+  def get_midl_info; return @info_elem end
+  def parse_setting(setting_key, setting_value)
+    found = be_optimistic()
+    case setting_key
+    when TEXT_HEADERFILENAME
+      get_midl_info().header_file_name = get_filesystem_location(setting_value)
+    when TEXT_INTERFACEIDENTIFIERFILENAME
+      get_midl_info().iface_id_file_name = get_filesystem_location(setting_value)
+    when TEXT_MKTYPLIBCOMPATIBLE
+      get_midl_info().mktyplib_compatible = get_boolean_value(setting_value)
+    when TEXT_TYPELIBRARYNAME
+      get_midl_info().type_library_name = get_filesystem_location(setting_value)
+    else
+      found = super
+    end
+    return found
+  end
+end
+
+class V2C_VS10ToolMIDLParser < V2C_VSToolMIDLParser
 end
 
 # Simple forwarder class. Creates specific parsers and invokes them.
@@ -3068,7 +3151,7 @@ class V2C_VS7FileParser < V2C_VSXmlParserBase
     found = be_optimistic()
     case setting_key
     when 'RelativePath'
-      @info_file.path_relative = normalize_path(setting_value)
+      @info_file.path_relative = get_filesystem_location(setting_value)
       # Verbosely catch IDL generated files
       if @info_file.path_relative =~ VS7_IDL_FILE_TYPES_REGEX_OBJ
         # see file_mappings.txt comment above
@@ -3584,7 +3667,7 @@ class V2C_VS10ItemGroupFileElemParser < V2C_VS10ParserBase
     found = be_optimistic()
     case setting_key
     when 'Include'
-      get_file_elem().path_relative = normalize_path(setting_value)
+      get_file_elem().path_relative = get_filesystem_location(setting_value)
     else
       found = super
     end
@@ -3752,10 +3835,10 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
       get_compiler_info().precompiled_header_info.use_mode = parse_use_precompiled_header(setting_value)
     when TEXT_PRECOMPILEDHEADERFILE
       allocate_precompiled_header_info(get_compiler_info())
-      get_compiler_info().precompiled_header_info.header_source_name = normalize_path(setting_value)
+      get_compiler_info().precompiled_header_info.header_source_name = get_filesystem_location(setting_value)
     when TEXT_PRECOMPILEDHEADEROUTPUTFILE
       allocate_precompiled_header_info(get_compiler_info())
-      get_compiler_info().precompiled_header_info.header_binary_name = normalize_path(setting_value)
+      get_compiler_info().precompiled_header_info.header_binary_name = get_filesystem_location(setting_value)
     when TEXT_TREATWARNINGASERROR
       get_compiler_info().warnings_are_errors_enable = get_boolean_value(setting_value)
     else
@@ -3875,7 +3958,9 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
       info = V2C_Tool_Linker_Info.new(V2C_Tool_Linker_Specific_Info_MSVC10.new)
       item_def_group_parser = V2C_VS10ToolLinkerParser.new(subelem_xml, info)
     when 'Midl'
-      found = FOUND_SKIP
+      arr_info = get_tools_info().arr_midl_info
+      info = V2C_Tool_MIDL_Info.new(V2C_Tool_MIDL_Specific_Info_MSVC10.new)
+      item_def_group_parser = V2C_VS10ToolMIDLParser.new(subelem_xml, info)
     else
       found = super
     end
@@ -4402,6 +4487,19 @@ Finished. You should make sure to have all important v2c settings includes such 
           condition = config_info_curr.condition
           var_v2c_want_buildcfg_curr = target_generator.get_var_name_of_condition(condition)
           target_generator.write_conditional_if(var_v2c_want_buildcfg_curr)
+
+          # VERY Q&D way to mark MIDL-related files as GENERATED.
+          arr_midl_info = config_info_curr.tools.arr_midl_info
+          if not arr_midl_info.empty?
+            midl_info = arr_midl_info[0]
+            arr_midl_files = [ midl_info.header_file_name, midl_info.iface_id_file_name ]
+            arr_midl_files.each { |file|
+              # FIXME: should actually do an intersection between these file names
+              # and the file lists of the project.
+              # As a shortcut, we'll simply mark the two file locations as GENERATED directly.
+              # FIXME continue: local_generator.set_source_file_property(...)
+            }
+          end
 
           config_info_curr.tools.arr_compiler_info.each { |compiler_info_curr|
             arr_includes = compiler_info_curr.get_include_dirs(false, false)
