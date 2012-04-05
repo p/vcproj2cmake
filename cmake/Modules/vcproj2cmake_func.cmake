@@ -361,13 +361,13 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
           # ...and of course add another clever message command
           # right _after_ the abort processing,
           # to alert people whenever aborting happened to fail:
-          COMMAND "${CMAKE_COMMAND}" -E echo "Huh, attempting to abort the build (via ${v2c_abort_BIN}) failed?? Probably this simply is an ignore-errors build run, otherwise PLEASE REPORT..."
+          COMMAND "${CMAKE_COMMAND}" -E echo "Huh, attempting to abort the build [via ${v2c_abort_BIN}] failed?? Probably this simply is an ignore-errors build run, otherwise PLEASE REPORT..."
           # Hrmm, I thought that we _need_ this dependency, otherwise at least on Ninja the
           # command will not get triggered _within_ the same build run (by the preceding target
           # removing the output file). But apparently that does not help
           # either.
 #          DEPENDS "${rebuild_occurred_marker_file}"
-          COMMENT ">>> === Detected a rebuild of CMakeLists.txt files - forcefully aborting the current outdated build run (force new updated-settings configure run)! <<< ==="
+          COMMENT ">>> === Detected a rebuild of CMakeLists.txt files - forcefully aborting the current outdated build run [force new updated-settings configure run]! <<< ==="
         )
         add_custom_target(update_cmakelists_abort_build_after_update DEPENDS "${cmakelists_update_check_stamp_file_v1_}")
 
