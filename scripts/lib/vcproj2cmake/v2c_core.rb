@@ -205,7 +205,7 @@ end
 
 # See syntax at http://www.ruby-mine.de/2006/12/4/gef-hrliche-sicherheitsl-cken-in-cgi-rb
 if (RUBY_VERSION < '1.9') # FIXME exact version where it got introduced?
-  def ensure_sorted_hash(hash_out)
+  def hash_ensure_sorted(hash_out)
     # NOTE: if this method bombs with a weird "undefined method <=> for nil:NilClass" sort error,
     # then this quite certainly means that one of the hash entries
     # is a (quite useless) nil mapping.
@@ -213,8 +213,17 @@ if (RUBY_VERSION < '1.9') # FIXME exact version where it got introduced?
     #log_hash(hash_out)
     hash_out = hash_out.sort
   end
+  # Hrmm, hash_ensure_sorted() does not work - introduce
+  # hash_ensure_sorted_each() instead which returns either Array or
+  # sorted Hash, for use of .each().
+  def hash_ensure_sorted_each(hash_out)
+    return hash_out.sort # returns an _Array_
+  end
 else
-  def ensure_sorted_hash(hash_out); end # DUMMY (>= 1.9 hash is sorted by default)
+  def hash_ensure_sorted(hash_out); end # DUMMY (>= 1.9 hash is sorted by default)
+  def hash_ensure_sorted_each(hash_out)
+    return hash_out.sort # returns a _Hash_
+  end
 end
 
 COMMENT_LINE_REGEX_OBJ = %r{^\s*#}
@@ -248,7 +257,7 @@ def read_mappings_combined(filename_mappings, mappings, master_project_dir)
   # thus we should avoid reading it anew for each project!
   read_mappings("#{master_project_dir}/#{filename_mappings}", mappings)
   #log_hash(mappings)
-  ensure_sorted_hash(mappings)
+  #hash_ensure_sorted(mappings)
 end
 
 def push_platform_defn(platform_defs, platform, defn_value)
@@ -1251,7 +1260,7 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
       if map_line.nil?
         # hmm, no direct match! Try to figure out whether any map entry
         # is a regex which would match our curr_defn
-        map_defs.each do |key_regex, value|
+        hash_ensure_sorted_each(map_defs).each do |key_regex, value|
           if curr_defn =~ /^#{key_regex}$/
             log_debug "KEY: #{key_regex} curr_defn #{curr_defn}"
             map_line = value
@@ -1294,7 +1303,7 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
       arr_platdefs.uniq!
       platform_defs[key] = arr_platdefs
     end
-    ensure_sorted_hash(platform_defs)
+    #hash_ensure_sorted(platform_defs)
   end
 end
 
@@ -1564,7 +1573,8 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     # the container for the list of _actual_ dependencies as stated by the project
     all_platform_defs = Hash.new
     parse_platform_conversions(all_platform_defs, arr_defs, map_defs, skip_failed_lookups)
-    all_platform_defs.each { |key, arr_platdefs|
+    # HACK: yes, we do need to re-sort this Hash _right before_ using it...
+    hash_ensure_sorted_each(all_platform_defs).each { |key, arr_platdefs|
       #log_info_class "arr_platdefs: #{arr_platdefs}"
       next_paragraph()
       str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
@@ -2078,7 +2088,7 @@ class V2C_CMakeTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # the container for the list of _actual_ dependencies as stated by the project
     all_platform_defs = Hash.new
     parse_platform_conversions(all_platform_defs, arr_defs_assignments, map_defs, false)
-    all_platform_defs.each { |key, arr_platdefs|
+    hash_ensure_sorted_each(all_platform_defs).each { |key, arr_platdefs|
       #log_info_class "arr_platdefs: #{arr_platdefs}"
       next_paragraph()
       str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
@@ -4590,14 +4600,13 @@ Finished. You should make sure to have all important v2c settings includes such 
                 else
                   log_implementation_bug('unknown charset type!?')
                 end
-                ensure_sorted_hash(hash_defines_actual)
                 # Convert hash into array as required by the definitions helper function
                 # (it's probably a good idea to provide "cooked" "key=value" entries
                 # for more complete matching possibilities
                 # within the regex matching parts done by it).
                 # TODO: this might be relocatable to a common generator base helper method.
                 arr_defs_assignments = Array.new
-                hash_defines_actual.each { |key, value|
+                hash_ensure_sorted_each(hash_defines_actual).each { |key, value|
                   str_define = value.empty? ? key : "#{key}=#{value}"
                   arr_defs_assignments.push(str_define)
                 }
