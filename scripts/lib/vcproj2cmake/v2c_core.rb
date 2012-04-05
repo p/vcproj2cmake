@@ -1391,7 +1391,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
   end
 
   # FIXME: all these function arguments are temporary crap! - they're supposed to be per-ProjectTarget mostly.
-  def generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines, orig_proj_file_basename)
+  def generate_it(local_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines, orig_proj_file_basename)
     put_file_header()
 
     # One-time addition for _all_ projects being added/contained within the current directory...
@@ -1406,7 +1406,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     put_var_converter_script_location(@script_location_relative_to_master)
 
     @arr_local_project_targets.each { |project_info|
-      target_generator = V2C_CMakeProjectTargetGenerator.new(project_info, @project_dir, self, @textOut)
+      target_generator = V2C_CMakeProjectTargetGenerator.new(project_info, local_dir, self, @textOut)
   
       target_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
   
@@ -4707,7 +4707,7 @@ Finished. You should make sure to have all important v2c settings includes such 
 
         local_generator = V2C_CMakeLocalGenerator.new(textOut, [ project_info ], @script_location_relative_to_master)
 
-        local_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines, orig_proj_file_basename)
+        local_generator.generate_it(@project_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines, orig_proj_file_basename)
   end
 end
 
