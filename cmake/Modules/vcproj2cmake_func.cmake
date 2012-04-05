@@ -132,9 +132,9 @@ function(_v2c_config_setup_rebuilder)
     # "Re: Makefile: 'abort' command? / 'elseif' to go with ifeq/else/endif?
     #   (Make newbie)" http://www.mail-archive.com/help-gnu-utils@gnu.org/msg00736.html
     if(UNIX)
-      set(v2c_abort_BIN false)
+      _v2c_config_set(v2c_abort_BIN_v1 false)
     else(UNIX)
-      set(v2c_abort_BIN v2c_invoked_non_existing_command_simply_to_force_build_abort)
+      _v2c_config_set(v2c_abort_BIN_v1 v2c_invoked_non_existing_command_simply_to_force_build_abort)
     endif(UNIX)
     # Provide a marker file, to enable external build invokers
     # to determine whether a (supposedly entire) build
@@ -352,12 +352,13 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
       if(need_init_main_targets_this_time_)
         _v2c_config_get(cmakelists_update_check_did_abort_public_marker_file_v1 cmakelists_update_check_did_abort_public_marker_file_v1_)
         _v2c_config_get(update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1 update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1_)
+        _v2c_config_get(v2c_abort_BIN_v1 v2c_abort_BIN_v1_)
         add_custom_command(OUTPUT "${cmakelists_update_check_stamp_file_v1_}"
           # Obviously we need to touch the output file (success indicator) _before_ aborting by invoking false.
           # Also, we need to touch the public marker file as well.
           COMMAND "${CMAKE_COMMAND}" -E touch "${cmakelists_update_check_stamp_file_v1_}" "${cmakelists_update_check_did_abort_public_marker_file_v1_}"
           COMMAND "${CMAKE_COMMAND}" -E remove -f "${update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1_}"
-          COMMAND "${v2c_abort_BIN}"
+          COMMAND "${v2c_abort_BIN_v1_}"
           # ...and of course add another clever message command
           # right _after_ the abort processing,
           # to alert people whenever aborting happened to fail:
