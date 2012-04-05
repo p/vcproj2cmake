@@ -1390,7 +1390,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     @arr_config_var_handling = Array.new
   end
 
-  # FIXME: all function arguments are crap! - they're supposed to be per-ProjectTarget mostly.
+  # FIXME: all these function arguments are temporary crap! - they're supposed to be per-ProjectTarget mostly.
   def generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines, orig_proj_file_basename)
     put_file_header()
 
@@ -1406,33 +1406,12 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     put_var_converter_script_location(@script_location_relative_to_master)
 
     @arr_local_project_targets.each { |project_info|
-      generate_project_leadin(project_info)
-  
-      # FIXME VERY DIRTY interim handling:
-      if project_info.have_build_units == false
-        project_info.file_lists.arr_file_lists.each { |file_list|
-          arr_file_infos = file_list.arr_files
-          have_build_units = check_have_build_units_in_file_list(arr_file_infos)
-          if have_build_units == true
-            project_info.have_build_units = have_build_units
-            break
-          end
-        }
-      end
-  
       target_generator = V2C_CMakeProjectTargetGenerator.new(project_info, @project_dir, self, @textOut)
   
       target_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
   
       write_func_v2c_project_post_setup(project_info.name, orig_proj_file_basename)
     }
-  end
-  # FIXME: that stuff should most likely be moved to target generator.
-  def generate_project_leadin(project_info)
-    write_project(project_info)
-    put_conversion_details(project_info.name, project_info.orig_environment_shortname)
-    put_include_MasterProjectDefaults_vcproj2cmake()
-    put_hook_project()
   end
   def put_file_header
     @textOut.put_file_header_temporary_marker()
@@ -1444,65 +1423,6 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     put_include_vcproj2cmake_func()
     put_hook_pre()
   end
-  def put_project(project_name, arr_progr_languages = nil)
-    arr_args_project_name_and_attrs = [ project_name ]
-    if arr_progr_languages.nil? or arr_progr_languages.empty?
-      ## No programming language given? Indicate special marker "NONE"
-      ## to skip any compiler checks.
-      # Nope, no language means "unknown", thus don't specify anything -
-      # to keep CMake's auto-detection mechanism active.
-      #arr_args_project_name_and_attrs.push('NONE')
-    else
-      arr_args_project_name_and_attrs.concat(arr_progr_languages)
-    end
-    write_command_list_single_line('project', arr_args_project_name_and_attrs)
-  end
-  def write_project(project_info)
-    # Figure out language type (C CXX etc.) and add it to project() command
-    arr_languages = detect_programming_languages(project_info)
-    put_project(project_info.name, arr_languages)
-  end
-  def put_conversion_details(project_name, orig_environment_shortname)
-    # We could have stored all information in one (list) variable,
-    # but generating two lines instead of one isn't much waste
-    # and actually much easier to parse.
-    put_converted_timestamp(project_name)
-    put_converted_from_marker(project_name, orig_environment_shortname)
-  end
-  def put_include_MasterProjectDefaults_vcproj2cmake
-    if @textOut.generated_comments_level() >= 2
-      @textOut.write_data %{\
-
-# this part is for including a file which contains
-# _globally_ applicable settings for all sub projects of a master project
-# (compiler flags, path settings, platform stuff, ...)
-# e.g. have vcproj2cmake-specific MasterProjectDefaults_vcproj2cmake
-# which then _also_ includes a global MasterProjectDefaults module
-# for _all_ CMakeLists.txt. This needs to sit post-project()
-# since e.g. compiler info is dependent on a valid project.
-}
-      @textOut.write_block( \
-	"# MasterProjectDefaults_vcproj2cmake is supposed to define generic settings\n" \
-        "# (such as V2C_HOOK_PROJECT, defined as e.g.\n" \
-        "# #{$v2c_config_dir_local}/hook_project.txt,\n" \
-        "# and other hook include variables below).\n" \
-        "# NOTE: it usually should also reset variables\n" \
-        "# V2C_LIBS, V2C_SOURCES etc. as used below since they should contain\n" \
-        "# directory-specific contents only, not accumulate!" \
-      )
-    end
-    # (side note: see "ldd -u -r" on Linux for superfluous link parts potentially caused by this!)
-    write_include('MasterProjectDefaults_vcproj2cmake', true)
-  end
-  def put_hook_project
-    write_comment_at_level(2, \
-	"hook e.g. for invoking Find scripts as expected by\n" \
-	"the _LIBRARIES / _INCLUDE_DIRS mappings created\n" \
-	"by your include/dependency map files." \
-    )
-    put_customization_hook_from_cmake_var('V2C_HOOK_PROJECT')
-  end
-
   def put_include_dir_project_source_dir
     # AFAIK .vcproj implicitly adds the project root to standard include path
     # (for automatic stdafx.h resolution etc.), thus add this
@@ -1681,30 +1601,6 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     # if(PLATFORM) message(STATUS "not supported") return() ...
     # (note that we appended CMAKE_MODULE_PATH _prior_ to this include()!)
     put_customization_hook('${V2C_CONFIG_DIR_LOCAL}/hook_pre.txt')
-  end
-  def put_converted_timestamp(project_name)
-    # Add an explicit file generation timestamp,
-    # to enable easy identification (grepping) of files of a certain age
-    # (a filesystem-based creation/modification timestamp might be unreliable
-    # due to copying/modification).
-    timestamp_format = $v2c_generator_timestamp_format
-    return if timestamp_format.nil? or timestamp_format.length == 0
-    timestamp_format_docs = timestamp_format.tr('%', '')
-    write_comment_at_level(3, "Indicates project conversion moment in time (UTC, format #{timestamp_format_docs})")
-    time = Time.new
-    str_time = time.utc.strftime(timestamp_format)
-    # Add project_name as _prefix_ (keep variables grep:able, via "v2c_converted_at_utc")
-    # Since timestamp format now is user-configurable, quote potential whitespace.
-    write_set_var("#{project_name}_v2c_converted_at_utc", element_handle_quoting(str_time))
-  end
-  def put_converted_from_marker(project_name, str_from_buildtool_version)
-    write_comment_at_level(3, 'Indicates originating build environment / IDE')
-    # Add project_name as _prefix_ (keep variables grep:able, via "v2c_converted_from")
-    write_set_var("#{project_name}_v2c_converted_from", element_handle_quoting(str_from_buildtool_version))
-  end
-  def detect_programming_languages(project_info)
-    language_detector = V2C_CMakeProjectLanguageDetector.new(project_info)
-    language_detector.detect
   end
 end
 
@@ -2249,6 +2145,20 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
     project_info = @target # HACK
 
+    generate_project_leadin(project_info)
+  
+    # FIXME VERY DIRTY interim handling:
+    if project_info.have_build_units == false
+      project_info.file_lists.arr_file_lists.each { |file_list|
+        arr_file_infos = file_list.arr_files
+        have_build_units = check_have_build_units_in_file_list(arr_file_infos)
+        if have_build_units == true
+          project_info.have_build_units = have_build_units
+          break
+        end
+      }
+    end
+  
     target_is_valid = false
 
     # arr_sub_source_list_var_names will receive the names of the individual source list variables:
@@ -2428,6 +2338,95 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
   private
 
+  def put_project(project_name, arr_progr_languages = nil)
+    arr_args_project_name_and_attrs = [ project_name ]
+    if arr_progr_languages.nil? or arr_progr_languages.empty?
+      ## No programming language given? Indicate special marker "NONE"
+      ## to skip any compiler checks.
+      # Nope, no language means "unknown", thus don't specify anything -
+      # to keep CMake's auto-detection mechanism active.
+      #arr_args_project_name_and_attrs.push('NONE')
+    else
+      arr_args_project_name_and_attrs.concat(arr_progr_languages)
+    end
+    write_command_list_single_line('project', arr_args_project_name_and_attrs)
+  end
+  def write_project(project_info)
+    # Figure out language type (C CXX etc.) and add it to project() command
+    arr_languages = detect_programming_languages(project_info)
+    put_project(project_info.name, arr_languages)
+  end
+  def put_converted_timestamp(project_name)
+    # Add an explicit file generation timestamp,
+    # to enable easy identification (grepping) of files of a certain age
+    # (a filesystem-based creation/modification timestamp might be unreliable
+    # due to copying/modification).
+    timestamp_format = $v2c_generator_timestamp_format
+    return if timestamp_format.nil? or timestamp_format.length == 0
+    timestamp_format_docs = timestamp_format.tr('%', '')
+    write_comment_at_level(3, "Indicates project conversion moment in time (UTC, format #{timestamp_format_docs})")
+    time = Time.new
+    str_time = time.utc.strftime(timestamp_format)
+    # Add project_name as _prefix_ (keep variables grep:able, via "v2c_converted_at_utc")
+    # Since timestamp format now is user-configurable, quote potential whitespace.
+    write_set_var("#{project_name}_v2c_converted_at_utc", element_handle_quoting(str_time))
+  end
+  def put_converted_from_marker(project_name, str_from_buildtool_version)
+    write_comment_at_level(3, 'Indicates originating build environment / IDE')
+    # Add project_name as _prefix_ (keep variables grep:able, via "v2c_converted_from")
+    write_set_var("#{project_name}_v2c_converted_from", element_handle_quoting(str_from_buildtool_version))
+  end
+  def detect_programming_languages(project_info)
+    language_detector = V2C_CMakeProjectLanguageDetector.new(project_info)
+    language_detector.detect
+  end
+  def put_conversion_details(project_name, orig_environment_shortname)
+    # We could have stored all information in one (list) variable,
+    # but generating two lines instead of one isn't much waste
+    # and actually much easier to parse.
+    put_converted_timestamp(project_name)
+    put_converted_from_marker(project_name, orig_environment_shortname)
+  end
+  def put_include_MasterProjectDefaults_vcproj2cmake
+    if @textOut.generated_comments_level() >= 2
+      @textOut.write_data %{\
+
+# this part is for including a file which contains
+# _globally_ applicable settings for all sub projects of a master project
+# (compiler flags, path settings, platform stuff, ...)
+# e.g. have vcproj2cmake-specific MasterProjectDefaults_vcproj2cmake
+# which then _also_ includes a global MasterProjectDefaults module
+# for _all_ CMakeLists.txt. This needs to sit post-project()
+# since e.g. compiler info is dependent on a valid project.
+}
+      @textOut.write_block( \
+	"# MasterProjectDefaults_vcproj2cmake is supposed to define generic settings\n" \
+        "# (such as V2C_HOOK_PROJECT, defined as e.g.\n" \
+        "# #{$v2c_config_dir_local}/hook_project.txt,\n" \
+        "# and other hook include variables below).\n" \
+        "# NOTE: it usually should also reset variables\n" \
+        "# V2C_LIBS, V2C_SOURCES etc. as used below since they should contain\n" \
+        "# directory-specific contents only, not accumulate!" \
+      )
+    end
+    # (side note: see "ldd -u -r" on Linux for superfluous link parts potentially caused by this!)
+    write_include('MasterProjectDefaults_vcproj2cmake', true)
+  end
+  def put_hook_project
+    write_comment_at_level(2, \
+	"hook e.g. for invoking Find scripts as expected by\n" \
+	"the _LIBRARIES / _INCLUDE_DIRS mappings created\n" \
+	"by your include/dependency map files." \
+    )
+    put_customization_hook_from_cmake_var('V2C_HOOK_PROJECT')
+  end
+
+  def generate_project_leadin(project_info)
+    write_project(project_info)
+    put_conversion_details(project_info.name, project_info.orig_environment_shortname)
+    put_include_MasterProjectDefaults_vcproj2cmake()
+    put_hook_project()
+  end
   # _target_ generator specific method.
   def set_property(target_name, property, value)
     arr_args_func = [ 'TARGET', target_name, 'PROPERTY', property, value ]
