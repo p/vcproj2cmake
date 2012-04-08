@@ -1249,6 +1249,15 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
   def write_vcproj2cmake_func_comment()
     write_comment_at_level(2, "See function implementation/docs in #{$v2c_module_path_root}/#{VCPROJ2CMAKE_FUNC_CMAKE}")
   end
+  def put_include_dir_project_source_dir
+    # AFAIK .vcproj implicitly adds the project root to standard include path
+    # (for automatic stdafx.h resolution etc.), thus add this
+    # (and make sure to add it with high priority, i.e. use BEFORE).
+    # For now sitting in LocalGenerator and not per-target handling since this setting is valid for the entire directory.
+    next_paragraph()
+    arr_directories = [ dereference_variable_name('PROJECT_SOURCE_DIR') ]
+    put_include_directories(arr_directories, false, true)
+  end
   def put_customization_hook(include_file)
     return if $v2c_generator_one_time_conversion_only
     write_include(include_file, true)
@@ -1411,9 +1420,6 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
   def generate_it(local_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines, orig_proj_file_basename)
     put_file_header()
 
-    # One-time addition for _all_ projects being added/contained within the current directory...
-    put_include_dir_project_source_dir()
-
     # FIXME: reconversion currently would _not_ be able to support
     # _multiple_ project()s (i.e. VS project files)
     # per _single_ CMakeLists.txt file (i.e. directory), since it only converts a single project file.
@@ -1439,15 +1445,6 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     put_var_config_dir_local()
     put_include_vcproj2cmake_func()
     put_hook_pre()
-  end
-  def put_include_dir_project_source_dir
-    # AFAIK .vcproj implicitly adds the project root to standard include path
-    # (for automatic stdafx.h resolution etc.), thus add this
-    # (and make sure to add it with high priority, i.e. use BEFORE).
-    # For now sitting in LocalGenerator and not per-target handling since this setting is valid for the entire directory.
-    next_paragraph()
-    arr_directories = [ dereference_variable_name('PROJECT_SOURCE_DIR') ]
-    put_include_directories(arr_directories, false, true)
   end
   def put_cmake_mfc_atl_flag(target_config_info)
     # CMAKE_MFC_FLAG setting is supposed to be done _before_
@@ -2223,6 +2220,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_sub_source_list_var_names = Array.new
 
     put_file_list(project_info, arr_sub_source_list_var_names)
+
+    put_include_dir_project_source_dir()
 
     put_hook_post_sources()
 
