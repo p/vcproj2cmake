@@ -284,22 +284,25 @@ class V2C_Info_Condition
   attr_reader :str_condition
   attr_reader :platform
   # FIXME: Q&D interim function - I don't think such raw handling should be in this data container...
-  BUILD_TYPE_SCAN_QD_REGEX_OBJ = %r{^'\$\(Configuration\)\|\$\(Platform\)'=='(.*)\|.*$}
+  BUILD_TYPE_SCAN_QD_REGEX_OBJ = %r{^'\$\(Configuration\)\|\$\(Platform\)'=='(.*)\|(.*)'$}
   def get_build_type
     # For now, prefer raw build_type (VS7) only in case no complex condition string is available.
     if str_condition.nil?
       build_type = @build_type
     else
-      log_debug "condition: #{@str_condition}"
+      log_debug "str_condition: #{@str_condition}"
       build_type = nil
+      platform = nil
       @str_condition.scan(BUILD_TYPE_SCAN_QD_REGEX_OBJ) {
         build_type = $1
+        platform = $2
       }
       if build_type.nil? or build_type.empty?
         # TODO!!
         log_fatal "could not parse build type from condition #{str_condition}"
       end
       @build_type = build_type
+      @platform = platform
     end
     return @build_type
   end
@@ -312,16 +315,19 @@ class V2C_Info_Condition
   # ( http://en.wikipedia.org/wiki/Truth_table ) and
   # http://en.wikipedia.org/wiki/Logical_conditional and http://en.wikipedia.org/wiki/Entailment
   def entails(condition_other)
+    log_debug "condition: build_type #{get_build_type()} platform #{platform}"
     if not condition_other.nil?
-      platform_other = condition_other.platform
-      if not platform_other.nil?
-        return false if platform_other != @platform
-      end
+      log_debug "condition_other: build_type #{condition_other.get_build_type()} platform #{condition_other.platform}"
       build_type_other = condition_other.get_build_type()
       if not build_type_other.nil?
         return false if build_type_other != @build_type
       end
+      platform_other = condition_other.platform
+      if not platform_other.nil?
+        return false if platform_other != @platform
+      end
     end
+    log_debug "ENTAILS!"
     return true
   end
 end
@@ -1267,7 +1273,7 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
     write_include_from_cmake_var(include_file_var, true)
   end
   # Hrmm, I'm not quite sure yet where to aggregate this function...
-  def get_var_name_of_condition(condition)
+  def get_buildcfg_var_name_of_condition(condition)
     # HACK: very Q&D handling, to make things work quickly.
     # Should think of implementing a proper abstraction for handling of conditions.
     # Probably we _at least_ need to create a _condition generator_ class.
@@ -1275,9 +1281,29 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
     # Hrmm, for now we'll abuse a method at the V2C_Info_Condition class,
     # but I'm not convinced at all that this is how things should be structured.
     build_type = condition.get_build_type()
-    # Name may contain spaces - need to handle them!
-    config_name = util_flatten_string(build_type)
-    return "v2c_want_buildcfg_#{config_name}"
+    var_name = nil
+    if not build_type.nil?
+      # Name may contain spaces - need to handle them!
+      config_name = util_flatten_string(build_type)
+      var_name = "v2c_want_buildcfg_#{config_name}"
+    end
+    return var_name
+  end
+  def get_platform_var_name_of_condition(condition)
+    # HACK: very Q&D handling, to make things work quickly.
+    # Should think of implementing a proper abstraction for handling of conditions.
+    # Probably we _at least_ need to create a _condition generator_ class.
+
+    # Hrmm, for now we'll abuse a method at the V2C_Info_Condition class,
+    # but I'm not convinced at all that this is how things should be structured.
+    platform = condition.platform
+    var_name = nil
+    if not platform.nil?
+      # Name may contain spaces - need to handle them!
+      platform_flattened = util_flatten_string(platform)
+      var_name = "v2c_want_platform_#{platform_flattened}"
+    end
+    return var_name
   end
   def parse_platform_conversions_internal(platform_defs, arr_defs, map_defs, skip_failed_lookups)
     arr_defs.each { |curr_defn|
@@ -1863,7 +1889,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         # YES, this condition is supposed to NOT trigger in case of a multi-configuration generator
         str_cmake_build_type_condition = "CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
       end
-      write_set_var_bool_conditional(get_var_name_of_condition(condition), str_cmake_build_type_condition)
+      write_set_var_bool_conditional(get_buildcfg_var_name_of_condition(condition), str_cmake_build_type_condition)
     }
   end
   # File-related TODO:
@@ -1925,6 +1951,33 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 	"(but _before_ target is created using the source list!)" \
     )
     @localGenerator.put_customization_hook_from_cmake_var('V2C_HOOK_POST_DEFINITIONS')
+  end
+  def mark_midl_files_as_generated(file_lists, config_info)
+    # VERY Q&D way to mark MIDL-related files as GENERATED.
+    arr_midl_info = config_info.tools.arr_midl_info
+    if not arr_midl_info.empty?
+      arr_generated_files = Array.new
+      midl_info = arr_midl_info[0]
+      arr_midl_file_names = [ midl_info.header_file_name, midl_info.iface_id_file_name ]
+      arr_midl_file_names.each { |file_name|
+        file_lists.arr_file_lists.each { |file_list|
+          file_list.arr_files.each { |file_info|
+            #puts "path_relative #{file_info.path_relative} filename #{file_name}"
+            if file_info.path_relative == file_name
+              arr_generated_files.push(file_name)
+              #file_info.enable_attribute(V2C_Info_File::ATTR_GENERATED)
+              break
+            end
+          }
+        }
+      }
+      if not arr_generated_files.empty?
+        # FIXME: doing correct handling of quoting for these files!?
+        str_cmake_command_args = "SOURCE #{arr_generated_files.join(' ')} PROPERTY GENERATED"
+        @localGenerator.write_command_single_line('set_property', str_cmake_command_args)
+        arr_generated_files.join(' ')
+      end
+    end
   end
   #def evaluate_precompiled_header_config(target, files_str)
   #end
@@ -2130,7 +2183,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_args_func = [ project_name, project_keyword ]
     write_invoke_config_object_function_quoted('v2c_target_post_setup', @target.name, arr_args_func)
   end
-  def set_properties_vs_scc(scc_info_in)
+  def set_properties_vs_scc(target_name, scc_info_in)
     # Keep source control integration in our conversion!
     # FIXME: does it really work? Then reply to
     # http://www.itk.org/Bug/view.php?id=10237 !!
@@ -2172,7 +2225,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     next_paragraph()
     write_vcproj2cmake_func_comment()
     arr_args_func = [ scc_info_cmake.project_name, scc_info_cmake.local_path, scc_info_cmake.provider, scc_info_cmake.aux_path ]
-    write_invoke_config_object_function_quoted('v2c_target_set_properties_vs_scc', @target.name, arr_args_func)
+    write_invoke_config_object_function_quoted('v2c_target_set_properties_vs_scc', target_name, arr_args_func)
   end
 
   def add_target_config_specific_definitions(target_config_info, hash_defines)
@@ -2214,8 +2267,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
     generate_project_leadin(project_info)
   
-    target_is_valid = false
-
     # arr_sub_source_list_var_names will receive the names of the individual source list variables:
     arr_sub_source_list_var_names = Array.new
 
@@ -2225,43 +2276,24 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
     put_hook_post_sources()
 
-	arr_config_info = project_info.arr_config_info
+    arr_config_info = project_info.arr_config_info
 
     generate_assignments_of_build_type_variables(arr_config_info)
 
     arr_target_config_info = project_info.arr_target_config_info
 
+    target_is_valid = false
+
     arr_config_info.each { |config_info_curr|
       next_paragraph()
       condition = config_info_curr.condition
-      var_v2c_want_buildcfg_curr = get_var_name_of_condition(condition)
+      # TODO: add code to properly support platform conditionals!
+      #var_v2c_want_platform_curr = get_platform_var_name_of_condition(condition)
+      #write_conditional_if(var_v2c_want_platform_curr)
+      var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
       write_conditional_if(var_v2c_want_buildcfg_curr)
 
-      # VERY Q&D way to mark MIDL-related files as GENERATED.
-      arr_midl_info = config_info_curr.tools.arr_midl_info
-      if not arr_midl_info.empty?
-        arr_generated_files = Array.new
-        midl_info = arr_midl_info[0]
-        arr_midl_file_names = [ midl_info.header_file_name, midl_info.iface_id_file_name ]
-        arr_midl_file_names.each { |file_name|
-          project_info.file_lists.arr_file_lists.each { |file_list|
-            file_list.arr_files.each { |file_info|
-              #puts "path_relative #{file_info.path_relative} filename #{file_name}"
-              if file_info.path_relative == file_name
-                arr_generated_files.push(file_name)
-                #file_info.enable_attribute(V2C_Info_File::ATTR_GENERATED)
-                break
-              end
-            }
-          }
-        }
-        if not arr_generated_files.empty?
-          # FIXME: doing correct handling of quoting for these files!?
-          str_cmake_command_args = "SOURCE #{arr_generated_files.join(' ')} PROPERTY GENERATED"
-          @localGenerator.write_command_single_line('set_property', str_cmake_command_args)
-          arr_generated_files.join(' ')
-        end
-      end
+      mark_midl_files_as_generated(project_info.file_lists, config_info_curr)
 
       config_info_curr.tools.arr_compiler_info.each { |compiler_info_curr|
         arr_includes = compiler_info_curr.get_include_dirs(false, false)
@@ -2297,12 +2329,13 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # create a target only in case we do have any meat at all
       if project_info.have_build_units
         arr_target_config_info.each { |target_config_info_curr|
-	      next if not condition.entails(target_config_info_curr.condition)
+          next if not condition.entails(target_config_info_curr.condition)
           target_is_valid = put_target(project_info, arr_sub_source_list_var_names, map_lib_dirs, map_lib_dirs_dep, map_dependencies, config_info_curr, target_config_info_curr)
         }
       end # target.have_build_units
 
       write_conditional_end(var_v2c_want_buildcfg_curr)
+      #write_conditional_end(var_v2c_want_platform_curr)
     } # [END per-config handling]
 
     # Now that we likely _do_ have a valid target
@@ -2382,7 +2415,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     if target_is_valid
       write_func_v2c_target_post_setup(project_info.name, project_info.vs_keyword)
 
-      set_properties_vs_scc(project_info.scc_info)
+      set_properties_vs_scc(@target.name, project_info.scc_info)
 
       # TODO: might want to set a target's FOLDER property, too...
       # (and perhaps a .vcproj has a corresponding attribute
@@ -4188,7 +4221,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
     return string_to_index(arr_optimization, str_optimization, 0)
   end
   def parse_use_precompiled_header(str_use_precompiled_header)
-    return string_to_index([ 'NotUsing', 'Create', 'Use' ], str_use_precompiled_header, 0)
+    return string_to_index([ 'NotUsing', 'Create', 'Use' ], str_use_precompiled_header.strip, 0)
   end
   def parse_warning_level(str_warning_level)
     arr_warn_level = [
