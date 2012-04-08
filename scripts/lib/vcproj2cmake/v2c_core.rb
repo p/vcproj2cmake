@@ -711,7 +711,7 @@ class V2C_File_List_Info
   def initialize(name, type = TYPE_NONE)
     @name = name # VS10: One of None, ClCompile, ClInclude, ResourceCompile; VS7: the name of the filter that contains these files
     @type = type
-    @arr_files = Array.new
+    @arr_files = Array.new # V2C_Info_File elements
   end
   attr_accessor :name
   attr_accessor :type
@@ -723,12 +723,21 @@ class V2C_File_List_Info
        'sources', # VS10: ClCompile
        'headers', # VS10: ClInclude
        'resources', # VS10: ResourceCompile
-       'midl' # VS10: Midl
+       #'midl' # VS10: Midl # MIDL is _not_ supposed to be here, I think (MIDL-related files are sorted within ClCompile/ClInclude categories...)
      ]
     type = @type <= TYPE_RESOURCES ? @type : TYPE_NONE
     return list_types[type]
   end
+  def get_generated_files
+    arr_generated = @arr_files.collect { |file_info|
+      #puts "#{file_info.path_relative} #{file_info.is_generated}"
+      next if not file_info.is_generated
+      file_info.path_relative
+    }
+    return arr_generated
+  end
 end
+
 
 class V2C_File_Lists_Container
   def initialize
@@ -1202,6 +1211,14 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     # need to also convert config names with spaces into underscore variants, right?
     config_name.clone.upcase.tr(' ','_')
   end
+  def get_name_of_per_config_type_property(property_name, config_name)
+    res = property_name
+    if not config_name.nil?
+      config_name_upper = get_config_name_upcase(config_name)
+      res += "_#{config_name_upper}"
+    end
+    return res
+  end
   COMPILE_DEF_NEEDS_CMAKE_ESCAPING_REGEX_OBJ = %r{[\(\)]+}
   def cmake_escape_compile_definitions(arr_compile_defn)
     arr_compile_defn.collect do |compile_defn|
@@ -1433,6 +1450,9 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     put_include_directories(arr_directories, false, true)
   end
   def put_cmake_mfc_atl_flag(target_config_info)
+    # CMAKE_MFC_FLAG setting is supposed to be done _before_
+    # a target gets created (via add_executable() etc.).
+    #
     # Hmm, do we need to actively _reset_ CMAKE_MFC_FLAG / CMAKE_ATL_FLAG
     # (i.e. _unconditionally_ set() it, even if it's 0),
     # since projects in subdirs shouldn't inherit?
@@ -1677,6 +1697,9 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
     write_list_quoted(source_files_variable, arr_sources)
     return source_files_variable
   end
+  def register_new_source_list_variable(sources_variable)
+    @arr_sub_sources_for_parent.push(sources_variable)
+  end
 end
 
 # FIXME: temporarily appended a _VS7 suffix since we're currently changing file list generation during our VS10 generator work.
@@ -1759,7 +1782,10 @@ class V2C_CMakeFileListsGenerator_VS7 < V2C_CMakeFileListGeneratorBase
       end
       next_paragraph()
       write_list_quoted(sources_variable, arr_source_vars)
+      
       # add our source list variable to parent return
+      # FIXME: cannot use register_new_source_list_variable()  (base class) yet -
+      # we're doing our own inner recursion with _changing_ variables!
       arr_sub_sources_for_parent.push(sources_variable)
     end
   end
@@ -1771,11 +1797,14 @@ class V2C_CMakeFileListGenerator_VS10 < V2C_CMakeFileListGeneratorBase
     @file_list = file_list
     @parent_source_group = parent_source_group
   end
-  def generate; put_file_list(@file_list, @arr_sub_sources_for_parent) end
-  def put_file_list(file_list, arr_sub_sources_for_parent)
+  def generate; put_file_list(@file_list) end
+
+  private
+
+  def put_file_list(file_list)
     arr_local_sources = filter_files(file_list.arr_files)
     source_files_variable = write_sources_list(file_list.name, arr_local_sources)
-    arr_sub_sources_for_parent.push(source_files_variable)
+    register_new_source_list_variable(source_files_variable)
   end
 end
 
@@ -1880,6 +1909,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     file_lists.arr_file_lists.each { |file_list|
       filelist_generator = V2C_CMakeFileListGenerator_VS10.new(@textOut, project_name, @project_dir, file_list, parent_source_group, arr_sub_sources_for_parent)
       filelist_generator.generate
+      #arr_generated = file_list.get_generated_files
+      #puts "arr_generated #{arr_generated}"
     }
   end
   def put_source_vars(arr_sub_source_list_var_names)
@@ -2014,9 +2045,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   end
   def put_property_compile_definitions(config_name, arr_compile_defn)
     arr_compile_defn_cooked = cmake_escape_compile_definitions(arr_compile_defn)
-    config_name_upper = get_config_name_upcase(config_name)
+    property_name = get_name_of_per_config_type_property('COMPILE_DEFINITIONS', config_name)
     # make sure to specify APPEND for greater flexibility (hooks etc.)
-    cmake_command_arg = "TARGET #{@target.name} APPEND PROPERTY COMPILE_DEFINITIONS_#{config_name_upper}"
+    cmake_command_arg = "TARGET #{@target.name} APPEND PROPERTY #{property_name}"
     write_command_list('set_property', cmake_command_arg, arr_compile_defn_cooked)
   end
   def generate_property_compile_definitions_per_platform(config_name, arr_platdefs, str_platform)
@@ -2064,7 +2095,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   end
   def write_property_compile_flags(config_name, arr_flags, str_conditional)
     return if arr_flags.empty?
-    config_name_upper = get_config_name_upcase(config_name)
     next_paragraph()
     write_conditional_if(str_conditional)
       # FIXME!!! It appears that while CMake source has COMPILE_DEFINITIONS_<CONFIG>,
@@ -2072,7 +2102,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # whether compile flags do get passed properly in debug / release.
       # Strangely enough it _does_ have LINK_FLAGS_<CONFIG>, though!
       conditional_target = get_target_syntax_expression(@target.name)
-      cmake_command_arg = "#{conditional_target} APPEND PROPERTY COMPILE_FLAGS_#{config_name_upper}"
+      property_name = get_name_of_per_config_type_property('COMPILE_FLAGS', config_name)
+      cmake_command_arg = "#{conditional_target} APPEND PROPERTY #{property_name}"
       write_command_list('set_property', cmake_command_arg, arr_flags)
     write_conditional_end(str_conditional)
   end
@@ -2081,8 +2112,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     next_paragraph()
     write_conditional_if(str_conditional)
       str_target_expr = get_target_syntax_expression(@target.name)
-      config_name_upper = get_config_name_upcase(config_name)
-      cmake_command_arg = "#{str_target_expr} APPEND PROPERTY LINK_FLAGS_#{config_name_upper}"
+      property_name = get_name_of_per_config_type_property('LINK_FLAGS', config_name)
+      cmake_command_arg = "#{str_target_expr} APPEND PROPERTY #{property_name}"
       write_command_list('set_property', cmake_command_arg, arr_flags)
     write_conditional_end(str_conditional)
   end
@@ -2102,14 +2133,16 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_args_func = [ project_name, project_keyword ]
     write_invoke_config_object_function_quoted('v2c_target_post_setup', @target.name, arr_args_func)
   end
-  def set_properties_vs_scc(scc_info)
+  def set_properties_vs_scc(scc_info_in)
     # Keep source control integration in our conversion!
     # FIXME: does it really work? Then reply to
     # http://www.itk.org/Bug/view.php?id=10237 !!
 
     # If even scc_info.project_name is unavailable,
     # then we can bail out right away...
-    return if scc_info.project_name.nil?
+    return if scc_info_in.project_name.nil?
+
+    scc_info_cmake = scc_info_in.clone
 
     # Hmm, perhaps need to use CGI.escape since chars other than just '"' might need to be escaped?
     # NOTE: needed to clone() this string above since otherwise modifying (same) source object!!
@@ -2126,23 +2159,56 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # CMake-side code (i.e. in v2c_target_set_properties_vs_scc()).
     # Note that perhaps we should also escape all other chars
     # as in CMake's EscapeForXML() method.
-    scc_info.project_name.gsub!(/"/, '&quot;')
-    if scc_info.local_path
-      escape_backslash(scc_info.local_path)
-      escape_char(scc_info.local_path, '"')
+    scc_info_cmake.project_name.gsub!(/"/, '&quot;')
+    if scc_info_cmake.local_path
+      escape_backslash(scc_info_cmake.local_path)
+      escape_char(scc_info_cmake.local_path, '"')
     end
-    if scc_info.provider
-      escape_char(scc_info.provider, '"')
+    if scc_info_cmake.provider
+      escape_char(scc_info_cmake.provider, '"')
     end
-    if scc_info.aux_path
-      escape_backslash(scc_info.aux_path)
-      escape_char(scc_info.aux_path, '"')
+    if scc_info_cmake.aux_path
+      escape_backslash(scc_info_cmake.aux_path)
+      escape_char(scc_info_cmake.aux_path, '"')
     end
 
     next_paragraph()
     write_vcproj2cmake_func_comment()
-    arr_args_func = [ scc_info.project_name, scc_info.local_path, scc_info.provider, scc_info.aux_path ]
+    arr_args_func = [ scc_info_cmake.project_name, scc_info_cmake.local_path, scc_info_cmake.provider, scc_info_cmake.aux_path ]
     write_invoke_config_object_function_quoted('v2c_target_set_properties_vs_scc', @target.name, arr_args_func)
+  end
+
+  def add_target_config_specific_definitions(target_config_info, hash_defines)
+    # Hrmm, are we even supposed to be doing this?
+    # On Windows I guess UseOfMfc in generated VS project files
+    # would automatically cater for it, and all other platforms
+    # would have to handle it some way or another anyway.
+    # But then I guess there are other build environments on Windows
+    # which would need us handling it here manually, so let's just keep it for now.
+    # Plus, defining _AFXEXT already includes the _AFXDLL setting
+    # (MFC will define it implicitly),
+    # thus it's quite likely that our current handling is somewhat incorrect.
+    if target_config_info.use_of_mfc == V2C_TargetConfig_Defines::MFC_DYNAMIC
+      # FIXME: need to add a compiler flag lookup entry
+      # to compiler-specific info as well!
+      # (in case of MSVC it would yield: /MD [dynamic] or /MT [static])
+      hash_defines['_AFXEXT'] = ''
+      hash_defines['_AFXDLL'] = ''
+    end
+   case target_config_info.charset
+    when V2C_TargetConfig_Defines::CHARSET_SBCS # nothing to do?
+    when V2C_TargetConfig_Defines::CHARSET_UNICODE
+      # http://blog.m-ri.de/index.php/2007/05/31/_unicode-versus-unicode-und-so-manches-eigentuemliche/
+      #   "    "Use Unicode Character Set" setzt beide Defines _UNICODE und UNICODE
+      #       "Use Multi-Byte Character Set" setzt nur _MBCS.
+      #           "Not set" setzt Erwartungsgemäß keinen der Defines..."
+      hash_defines['_UNICODE'] = ''
+      hash_defines['UNICODE'] = ''
+    when V2C_TargetConfig_Defines::CHARSET_MBCS
+      hash_defines['_MBCS'] = ''
+    else
+      log_implementation_bug('unknown charset type!?')
+    end
   end
 
   def generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
@@ -2150,18 +2216,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     project_info = @target # HACK
 
     generate_project_leadin(project_info)
-  
-    # FIXME VERY DIRTY interim handling:
-    if project_info.have_build_units == false
-      project_info.file_lists.arr_file_lists.each { |file_list|
-        arr_file_infos = file_list.arr_files
-        have_build_units = check_have_build_units_in_file_list(arr_file_infos)
-        if have_build_units == true
-          project_info.have_build_units = have_build_units
-          break
-        end
-      }
-    end
   
     target_is_valid = false
 
@@ -2176,10 +2230,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
     generate_assignments_of_build_type_variables(arr_config_info)
 
-	arr_target_config_info = project_info.arr_target_config_info
-    arr_target_config_info.each { |target_config_info_curr|
-      @localGenerator.put_cmake_mfc_atl_flag(target_config_info_curr)
-    }
+    arr_target_config_info = project_info.arr_target_config_info
 
     arr_config_info.each { |config_info_curr|
       next_paragraph()
@@ -2190,14 +2241,27 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # VERY Q&D way to mark MIDL-related files as GENERATED.
       arr_midl_info = config_info_curr.tools.arr_midl_info
       if not arr_midl_info.empty?
+        arr_generated_files = Array.new
         midl_info = arr_midl_info[0]
-        arr_midl_files = [ midl_info.header_file_name, midl_info.iface_id_file_name ]
-        arr_midl_files.each { |file|
-          # FIXME: should actually do an intersection between these file names
-          # and the file lists of the project.
-          # As a shortcut, we'll simply mark the two file locations as GENERATED directly.
-          # FIXME continue: local_generator.set_source_file_property(...)
+        arr_midl_file_names = [ midl_info.header_file_name, midl_info.iface_id_file_name ]
+        arr_midl_file_names.each { |file_name|
+          project_info.file_lists.arr_file_lists.each { |file_list|
+            file_list.arr_files.each { |file_info|
+              #puts "path_relative #{file_info.path_relative} filename #{file_name}"
+              if file_info.path_relative == file_name
+                arr_generated_files.push(file_name)
+                #file_info.enable_attribute(V2C_Info_File::ATTR_GENERATED)
+                break
+              end
+            }
+          }
         }
+        if not arr_generated_files.empty?
+          # FIXME: doing correct handling of quoting for these files!?
+          str_cmake_command_args = "SOURCE #{arr_generated_files.join(' ')} PROPERTY GENERATED"
+          @localGenerator.write_command_single_line('set_property', str_cmake_command_args)
+          arr_generated_files.join(' ')
+        end
       end
 
       config_info_curr.tools.arr_compiler_info.each { |compiler_info_curr|
@@ -2205,8 +2269,23 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         @localGenerator.write_include_directories(arr_includes, generator_base.map_includes)
       }
 
-	  # FIXME: hohumm, the position of this hook include is outdated, need to update it
-	  put_hook_post_definitions()
+      # At this point, we'll have to iterate through target configs
+      # for all settings which are target related but are (stupidly)
+      # NOT being applied as target properties (i.e. post-target-setup).
+      arr_target_config_info.each { |target_config_info_curr|
+	next if not condition.entails(target_config_info_curr.condition)
+        @localGenerator.put_cmake_mfc_atl_flag(target_config_info_curr)
+      }
+
+      # FIXME: hohumm, the position of this hook include is outdated, need to update it
+      # Well, there's a distinction between
+      # ("dirty") global settings (defined _prior_ to adding a target)
+      # and target-aggregated settings (properties),
+      # thus maybe we need different hooks for these two mechanisms.
+      # Well, but for now at least MAKE SURE TO ALWAYS KEEP IT RIGHT BEFORE
+      # adding the target! (to be able to manipulate _all_ prior settings
+      # if needed).
+      put_hook_post_definitions()
 
       # Technical note: target type (library, executable, ...) in .vcproj can be configured per-config
       # (or, in other words, different configs are capable of generating _different_ target _types_
@@ -2241,89 +2320,63 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       arr_config_info.each { |config_info_curr|
         condition = config_info_curr.condition
 
+        build_type = condition.get_build_type()
+
+        tools = config_info_curr.tools
+
         # NOTE: the commands below can stay in the general section (outside of
         # var_v2c_want_buildcfg_curr above), but only since they define properties
         # which are clearly named as being configuration-_specific_ already!
         #
-  	    # I don't know WhyTH we're iterating over a compiler_info here,
-  	    # but let's just do it like that for now since it's required
-  	    # by our current data model:
-  	    config_info_curr.tools.arr_compiler_info.each { |compiler_info_curr|
+        # I don't know WhyTH we're iterating over a compiler_info here,
+        # but let's just do it like that for now since it's required
+        # by our current data model:
+        tools.arr_compiler_info.each { |compiler_info_curr|
 
           # Since the precompiled header CMake module currently
           # _resets_ a target's COMPILE_FLAGS property,
           # make sure to generate it _before_ generating COMPILE_FLAGS:
-          write_precompiled_header(condition.get_build_type(), compiler_info_curr.precompiled_header_info)
+          write_precompiled_header(build_type, compiler_info_curr.precompiled_header_info)
 
           arr_target_config_info.each { |target_config_info_curr|
-	        next if not condition.entails(target_config_info_curr.condition)
+	    next if not condition.entails(target_config_info_curr.condition)
 
-	        hash_defines_actual = compiler_info_curr.hash_defines.clone
-	        # Hrmm, are we even supposed to be doing this?
-	        # On Windows I guess UseOfMfc in generated VS project files
-	        # would automatically cater for it, and all other platforms
-	        # would have to handle it some way or another anyway.
-	        # But then I guess there are other build environments on Windows
-	        # which would need us handling it here manually, so let's just keep it for now.
-	        # Plus, defining _AFXEXT already includes the _AFXDLL setting
-	        # (MFC will define it implicitly),
-	        # thus it's quite likely that our current handling is somewhat incorrect.
-            if target_config_info_curr.use_of_mfc == V2C_TargetConfig_Defines::MFC_DYNAMIC
-              # FIXME: need to add a compiler flag lookup entry
-              # to compiler-specific info as well!
-              # (in case of MSVC it would yield: /MD [dynamic] or /MT [static])
-              hash_defines_actual['_AFXEXT'] = ''
-              hash_defines_actual['_AFXDLL'] = ''
-            end
-  	        case target_config_info_curr.charset
-            when V2C_TargetConfig_Defines::CHARSET_SBCS # nothing to do?
-            when V2C_TargetConfig_Defines::CHARSET_UNICODE
-              # http://blog.m-ri.de/index.php/2007/05/31/_unicode-versus-unicode-und-so-manches-eigentuemliche/
-              #   "    "Use Unicode Character Set" setzt beide Defines _UNICODE und UNICODE
-              #       "Use Multi-Byte Character Set" setzt nur _MBCS.
-              #           "Not set" setzt Erwartungsgemäß keinen der Defines..."
-              hash_defines_actual['_UNICODE'] = ''
-              hash_defines_actual['UNICODE'] = ''
-            when V2C_TargetConfig_Defines::CHARSET_MBCS
-              hash_defines_actual['_MBCS'] = ''
-            else
-              log_implementation_bug('unknown charset type!?')
-            end
+	    hash_defines_augmented = compiler_info_curr.hash_defines.clone
+
+	    add_target_config_specific_definitions(target_config_info_curr, hash_defines_augmented)
             # Convert hash into array as required by the definitions helper function
             # (it's probably a good idea to provide "cooked" "key=value" entries
             # for more complete matching possibilities
             # within the regex matching parts done by it).
             # TODO: this might be relocatable to a common generator base helper method.
             arr_defs_assignments = Array.new
-            hash_ensure_sorted_each(hash_defines_actual).each { |key, value|
+            hash_ensure_sorted_each(hash_defines_augmented).each { |key, value|
               str_define = value.empty? ? key : "#{key}=#{value}"
               arr_defs_assignments.push(str_define)
             }
-            write_property_compile_definitions(condition.get_build_type(), arr_defs_assignments, map_defines)
+            write_property_compile_definitions(build_type, arr_defs_assignments, map_defines)
             # Original compiler flags are MSVC-only, of course. TODO: provide an automatic conversion towards gcc?
-            str_conditional_compiler_platform = nil
             compiler_info_curr.arr_tool_variant_specific_info.each { |compiler_specific|
-  		str_conditional_compiler_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.compiler_name)
+  	      str_conditional_compiler_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.compiler_name)
               # I don't think we need this (we have per-target properties), thus we'll NOT write it!
               #if not attr_opts.nil?
               #  local_generator.write_directory_property_compile_flags(attr_options)
               #end
-              write_property_compile_flags(condition.get_build_type(), compiler_specific.arr_flags, str_conditional_compiler_platform)
+              write_property_compile_flags(build_type, compiler_specific.arr_flags, str_conditional_compiler_platform)
             } # compiler.tool_specific.each
           } # arr_target_config_info.each
         } # config_info_curr.tools.arr_compiler_info.each
-        config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
-          str_conditional_linker_platform = nil
+        tools.arr_linker_info.each { |linker_info_curr|
           linker_info_curr.arr_tool_variant_specific_info.each { |linker_specific|
-		str_conditional_linker_platform = map_linker_name_to_cmake_platform_conditional(linker_specific.linker_name)
+	    str_conditional_linker_platform = map_linker_name_to_cmake_platform_conditional(linker_specific.linker_name)
             # Probably more linker flags support needed? (mention via
             # CMAKE_SHARED_LINKER_FLAGS / CMAKE_MODULE_LINKER_FLAGS / CMAKE_EXE_LINKER_FLAGS
             # depending on target type, and make sure to filter out options pre-defined by CMake platform
             # setup modules)
-            write_property_link_flags(condition.get_build_type(), linker_specific.arr_flags, str_conditional_linker_platform)
+            write_property_link_flags(build_type, linker_specific.arr_flags, str_conditional_linker_platform)
           } # linker.tool_specific.each
         } # arr_linker_info.each
-      }
+      } # config_info_curr
       write_conditional_target_valid_end()
     end
 
@@ -2634,6 +2687,8 @@ class V2C_VSXmlParserBase < V2C_ParserBase
     return value
   end
   def get_filesystem_location(path)
+    # TODO: should think of a way to do central verification
+    # of existence of the file system paths found here near this helper.
     path_cooked = normalize_path(path).strip
     return path_cooked.empty? ? nil : path_cooked
   end
@@ -3333,16 +3388,21 @@ class V2C_VS7ConfigurationsParser < V2C_VSXmlParserBase
 end
 
 class V2C_Info_File
+  ATTR_GENERATED = 1 # Whether it's an existing file or to be generated by build
+  ATTR_SOURCE_CONTROL_FILE = 2
   def initialize
     @target_config_info = nil
     @config_info = nil
     @path_relative = ''
-    @is_generated = false # Whether it's an existing file or to be generated by build
+    @attr = 0
   end
   attr_accessor :target_config_info
   attr_accessor :config_info
   attr_accessor :path_relative
-  attr_accessor :is_generated
+
+  def enable_attribute(attr); @attr |= attr end
+  def disable_attribute(attr); @attr &= ~attr end
+  def is_generated; return (@attr & ATTR_GENERATED) > 0 end
 end
 
 class V2C_VS7FileParser < V2C_VSXmlParserBase
@@ -3417,7 +3477,7 @@ class V2C_VS7FileParser < V2C_VSXmlParserBase
       if @info_file.path_relative =~ VS7_IDL_FILE_TYPES_REGEX_OBJ
         # see file_mappings.txt comment above
         log_info_class "#{@info_file.path_relative} is an IDL file! FIXME: handling should be platform-dependent."
-        @info_file.is_generated = true
+        @info_file.enable_attribute(V2C_Info_File::ATTR_GENERATED)
       end
     else
       found = super
@@ -4740,6 +4800,20 @@ def v2c_convert_project_inner(p_script, p_parser_proj_file, p_generator_proj_fil
     log_implementation_bug "No project parser found for project file #{p_parser_proj_file.to_s}!?"
   end
 
+  # FIXME VERY DIRTY interim handling:
+  arr_projects.each { |project_info|
+    if project_info.have_build_units == false
+      project_info.file_lists.arr_file_lists.each { |file_list|
+        arr_file_infos = file_list.arr_files
+        have_build_units = check_have_build_units_in_file_list(arr_file_infos)
+        if have_build_units == true
+          project_info.have_build_units = have_build_units
+          break
+        end
+      }
+    end
+  }
+  
   # Now validate the project...
   # This validation step should be _separate_ from both parser _and_ generator implementations,
   # since otherwise each individual parser/generator would have to remember carrying out validation
