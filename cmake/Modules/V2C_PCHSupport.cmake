@@ -234,6 +234,7 @@ MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
     OUTPUT ${_output}
     COMMAND ${_command}
     DEPENDS ${_input}   ${CMAKE_CURRENT_BINARY_DIR}/${_name} ${_targetName}_pch_dephelp
+    VERBATIM
    )
 
 
