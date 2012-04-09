@@ -10,6 +10,12 @@
 #   ADD_NATIVE_PRECOMPILED_HEADER _targetName _input _dowarn
 #   GET_NATIVE_PRECOMPILED_HEADER _targetName _input
 
+# WARNING: this module needs to be _re-include()d_ on each use!
+# Otherwise macros in this file would break
+# since _PCH_include_prefix variable below currently is not a cache var
+# and thus would not be available on foreign scope (unrelated
+# directories etc.)
+
 IF(CMAKE_COMPILER_IS_GNUCXX)
 
     EXEC_PROGRAM(
@@ -55,6 +61,9 @@ MACRO(_PCH_GET_COMPILE_FLAGS _out_compile_flags)
   ENDIF(CMAKE_COMPILER_IS_GNUCXX)
 
   GET_DIRECTORY_PROPERTY(DIRINC INCLUDE_DIRECTORIES )
+  if(NOT _PCH_include_prefix)
+    message(FATAL_ERROR "empty _PCH_include_prefix!?")
+  endif(NOT _PCH_include_prefix)
   FOREACH(item ${DIRINC})
     LIST(APPEND ${_out_compile_flags} "${_PCH_include_prefix}${item}")
   ENDFOREACH(item)
@@ -231,8 +240,7 @@ MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
   #message("_command  ${_input} ${_output}")
   _PCH_GET_COMPILE_COMMAND(_command  ${CMAKE_CURRENT_BINARY_DIR}/${_name} ${_output} )
 
-  #message(${_input} )
-  #message("_output ${_output}")
+  #message("_input ${_input}\n_output ${_output}" )
 
   ADD_CUSTOM_COMMAND(
     OUTPUT ${_output}
