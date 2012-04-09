@@ -928,7 +928,7 @@ class V2C_TextStreamSyntaxGeneratorBase
   end
   def write_line(part)
     @out.print ' ' * get_indent()
-    @out.puts part
+    write_data(part)
   end
 
   def write_empty_line; @out.puts end
@@ -4777,31 +4777,31 @@ Finished. You should make sure to have all important v2c settings includes such 
     }
   end
   def project_generate_cmake(p_master_project, orig_proj_file_basename, out, project_info)
-        master_project_dir = p_master_project.to_s
-        generator_base = V2C_BaseGlobalGenerator.new(master_project_dir)
-        map_lib_dirs = Hash.new
-        read_mappings_combined(FILENAME_MAP_LIB_DIRS, map_lib_dirs, master_project_dir)
-        map_lib_dirs_dep = Hash.new
-        read_mappings_combined(FILENAME_MAP_LIB_DIRS_DEP, map_lib_dirs_dep, master_project_dir)
-        map_dependencies = Hash.new
-        read_mappings_combined(FILENAME_MAP_DEP, map_dependencies, master_project_dir)
-        map_defines = Hash.new
-        read_mappings_combined(FILENAME_MAP_DEF, map_defines, master_project_dir)
+    master_project_dir = p_master_project.to_s
+    generator_base = V2C_BaseGlobalGenerator.new(master_project_dir)
+    map_lib_dirs = Hash.new
+    read_mappings_combined(FILENAME_MAP_LIB_DIRS, map_lib_dirs, master_project_dir)
+    map_lib_dirs_dep = Hash.new
+    read_mappings_combined(FILENAME_MAP_LIB_DIRS_DEP, map_lib_dirs_dep, master_project_dir)
+    map_dependencies = Hash.new
+    read_mappings_combined(FILENAME_MAP_DEP, map_dependencies, master_project_dir)
+    map_defines = Hash.new
+    read_mappings_combined(FILENAME_MAP_DEF, map_defines, master_project_dir)
 
-	textOut = V2C_TextStreamSyntaxGeneratorBase.new(out, $v2c_generator_indent_initial_num_spaces, $v2c_generator_indent_step, $v2c_generator_comments_level)
+    textOut = V2C_TextStreamSyntaxGeneratorBase.new(out, $v2c_generator_indent_initial_num_spaces, $v2c_generator_indent_step, $v2c_generator_comments_level)
 
-        #global_generator = V2C_CMakeGlobalGenerator.new(out)
+    #global_generator = V2C_CMakeGlobalGenerator.new(out)
 
-        # we likely shouldn't declare this, since for single-configuration
-        # generators CMAKE_CONFIGURATION_TYPES shouldn't be set
-        # Also, the configuration_types array should be inferred from arr_config_info.
-        ## configuration types need to be stated _before_ declaring the project()!
-        #syntax_generator.next_paragraph()
-        #global_generator.put_configuration_types(configuration_types)
+    # we likely shouldn't declare this, since for single-configuration
+    # generators CMAKE_CONFIGURATION_TYPES shouldn't be set
+    # Also, the configuration_types array should be inferred from arr_config_info.
+    ## configuration types need to be stated _before_ declaring the project()!
+    #syntax_generator.next_paragraph()
+    #global_generator.put_configuration_types(configuration_types)
 
-        local_generator = V2C_CMakeLocalGenerator.new(textOut, [ project_info ], @script_location_relative_to_master)
+    local_generator = V2C_CMakeLocalGenerator.new(textOut, [ project_info ], @script_location_relative_to_master)
 
-        local_generator.generate_it(@project_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines, orig_proj_file_basename)
+    local_generator.generate_it(@project_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines, orig_proj_file_basename)
   end
 end
 
@@ -4836,16 +4836,15 @@ def v2c_convert_project_inner(p_script, p_parser_proj_file, p_generator_proj_fil
 
   # FIXME VERY DIRTY interim handling:
   arr_projects.each { |project_info|
-    if project_info.have_build_units == false
-      project_info.file_lists.arr_file_lists.each { |file_list|
-        arr_file_infos = file_list.arr_files
-        have_build_units = check_have_build_units_in_file_list(arr_file_infos)
-        if have_build_units == true
-          project_info.have_build_units = have_build_units
-          break
-        end
-      }
-    end
+    next if project_info.have_build_units == true
+    project_info.file_lists.arr_file_lists.each { |file_list|
+      arr_file_infos = file_list.arr_files
+      have_build_units = check_have_build_units_in_file_list(arr_file_infos)
+      if have_build_units == true
+        project_info.have_build_units = have_build_units
+        break
+      end
+    }
   }
   
   # Now validate the project...
