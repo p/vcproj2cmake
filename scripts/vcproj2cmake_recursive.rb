@@ -150,20 +150,31 @@ Find.find('./') do
   str_cmakelists_file = "#{f}/CMakeLists.txt"
 
   # Check whether the directory already contains a CMakeLists.txt,
-  # and if so, whether it can be safely rewritten:
+  # and if so, whether it can be safely rewritten.
+  # These checks arguably perhaps shouldn't be done in the recursive handler,
+  # but directly in the main conversion handler instead. TODO?
   if (!dir_entries.grep(/^CMakeLists.txt$/i).empty?)
     #puts dir_entries
     #puts "CMakeLists.txt exists in #{f}, checking!"
-    auto_generated = ''
+    prior_file_was_generated_by_v2c = ''
     begin
       f_cmakelists = File.new(str_cmakelists_file, 'r')
-      auto_generated = f_cmakelists.grep(CMAKELISTS_AUTO_GENERATED_REGEX_OBJ)
+      prior_file_was_generated_by_v2c = f_cmakelists.grep(CMAKELISTS_AUTO_GENERATED_REGEX_OBJ)
     ensure
       f_cmakelists.close
     end
-    if (auto_generated.empty?)
-      puts "existing #{str_cmakelists_file} is custom, \"native\" form --> skipping!"
-      next
+    was_custom_native_file = prior_file_was_generated_by_v2c.empty?
+    if was_custom_native_file
+      # For zero-size files, the auto-generation marker check above is obviously
+      # not delivering a useful result...
+      if File.zero?(str_cmakelists_file)
+        # zero-size files may have happened due to out-of-disk-space issues,
+        # thus ensure overwriting in such cases.
+        puts 'ZERO-SIZE FILE detected, overwriting!'
+      else
+        puts "existing #{str_cmakelists_file} is custom, \"native\" form --> skipping!"
+        next
+      end
     else
 	# ok, it _is_ a CMakeLists.txt, but a temporary vcproj2cmake one
 	# which we can overwrite.
