@@ -7,6 +7,8 @@
 # Macro:
 #   ADD_PRECOMPILED_HEADER  _targetName _input  _dowarn
 #   ADD_PRECOMPILED_HEADER_TO_TARGET _targetName _input _pch_output_to_use _dowarn
+#   ADD_NATIVE_PRECOMPILED_HEADER _targetName _input _dowarn
+#   GET_NATIVE_PRECOMPILED_HEADER _targetName _input
 
 IF(CMAKE_COMPILER_IS_GNUCXX)
 
@@ -14,7 +16,7 @@ IF(CMAKE_COMPILER_IS_GNUCXX)
     	${CMAKE_CXX_COMPILER}  
         ARGS 	${CMAKE_CXX_COMPILER_ARG1} -dumpversion 
         OUTPUT_VARIABLE gcc_compiler_version)
-    MESSAGE("GCC Version: ${gcc_compiler_version}")
+    #MESSAGE("GCC Version: ${gcc_compiler_version}")
     IF(gcc_compiler_version MATCHES "4\\.[0-9]\\.[0-9]")
         SET(PCHSupport_FOUND TRUE)
     ELSE(gcc_compiler_version MATCHES "4\\.[0-9]\\.[0-9]")
@@ -26,12 +28,12 @@ IF(CMAKE_COMPILER_IS_GNUCXX)
 	SET(_PCH_include_prefix "-I")
 	
 ELSE(CMAKE_COMPILER_IS_GNUCXX)
-IF(WIN32)	
-	SET(PCHSupport_FOUND TRUE) # for experimental msvc support
-	SET(_PCH_include_prefix "/I")
-ELSE(WIN32)
-	SET(PCHSupport_FOUND FALSE)
-ENDIF(WIN32)	
+	IF(WIN32)	
+		SET(PCHSupport_FOUND TRUE) # for experimental msvc support
+		SET(_PCH_include_prefix "/I")
+	ELSE(WIN32)
+		SET(PCHSupport_FOUND FALSE)
+	ENDIF(WIN32)	
 ENDIF(CMAKE_COMPILER_IS_GNUCXX)
 
 
@@ -119,7 +121,6 @@ ENDMACRO(_PCH_GET_COMPILE_COMMAND )
 MACRO(_PCH_GET_TARGET_COMPILE_FLAGS _cflags  _header_name _pch_path _dowarn )
 
   FILE(TO_NATIVE_PATH ${_pch_path} _native_pch_path)
-  message(${_native_pch_path})
   
   IF(CMAKE_COMPILER_IS_GNUCXX)
     # for use with distcc and gcc >4.0.1 if preprocessed files are accessible
@@ -197,6 +198,7 @@ MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
   GET_FILENAME_COMPONENT(_name ${_input} NAME)
   GET_FILENAME_COMPONENT(_path ${_input} PATH)
   GET_PRECOMPILED_HEADER_OUTPUT( ${_targetName} ${_input} _output)
+
   GET_FILENAME_COMPONENT(_outdir ${_output} PATH )
 
   GET_TARGET_PROPERTY(_targetType ${_PCH_current_target} TYPE)
@@ -238,3 +240,80 @@ MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
   ADD_PRECOMPILED_HEADER_TO_TARGET(${_targetName} ${_input}  ${_output} ${_dowarn})
 ENDMACRO(ADD_PRECOMPILED_HEADER)
 
+
+# Generates the use of precompiled in a target,
+# without using depency targets (2 extra for each target)
+# Using Visual, must also add ${_targetName}_pch to sources
+# Not needed by Xcode
+
+MACRO(GET_NATIVE_PRECOMPILED_HEADER _targetName _input)
+
+	if(CMAKE_GENERATOR MATCHES Visual*)
+
+		SET(_dummy_str "#include \"${_input}\"\n"
+										"// This is required to suppress LNK4221.  Very annoying.\n"
+										"void *g_${_targetName}Dummy = 0\;\n")
+
+		# Use of cxx extension for generated files (as Qt does)
+		SET(${_targetName}_pch ${CMAKE_CURRENT_BINARY_DIR}/${_targetName}_pch.cxx)
+		if(EXISTS ${${_targetName}_pch})
+			# Check if contents is the same, if not rewrite
+			# todo
+		else(EXISTS ${${_targetName}_pch})
+			FILE(WRITE ${${_targetName}_pch} ${_dummy_str})
+		endif(EXISTS ${${_targetName}_pch})
+	endif(CMAKE_GENERATOR MATCHES Visual*)
+
+ENDMACRO(GET_NATIVE_PRECOMPILED_HEADER)
+
+
+MACRO(ADD_NATIVE_PRECOMPILED_HEADER _targetName _input)
+
+	IF( "${ARGN}" STREQUAL "0")
+		SET(_dowarn 0)
+	ELSE( "${ARGN}" STREQUAL "0")
+		SET(_dowarn 1)
+	ENDIF("${ARGN}" STREQUAL "0")
+	
+	if(CMAKE_GENERATOR MATCHES Visual*)
+		# Auto include the precompile (useful for moc processing, since the use of 
+		# precompiled is specified at the target level
+		# and I don't want to specifiy /F- for each moc/res/ui generated files (using Qt)
+
+		GET_TARGET_PROPERTY(oldProps ${_targetName} COMPILE_FLAGS)
+		if (${oldProps} MATCHES NOTFOUND)
+			SET(oldProps "")
+		endif(${oldProps} MATCHES NOTFOUND)
+
+		SET(newProperties "${oldProps} /Yu\"${_input}\" /FI\"${_input}\"")
+		SET_TARGET_PROPERTIES(${_targetName} PROPERTIES COMPILE_FLAGS "${newProperties}")
+		
+		#also inlude ${oldProps} to have the same compile options 
+		SET_SOURCE_FILES_PROPERTIES(${${_targetName}_pch} PROPERTIES COMPILE_FLAGS "${oldProps} /Yc\"${_input}\"")
+		
+	else(CMAKE_GENERATOR MATCHES Visual*)
+	
+		if (CMAKE_GENERATOR MATCHES Xcode)
+			# For Xcode, cmake needs my patch to process
+			# GCC_PREFIX_HEADER and GCC_PRECOMPILE_PREFIX_HEADER as target properties
+			
+			GET_TARGET_PROPERTY(oldProps ${_targetName} COMPILE_FLAGS)
+			if (${oldProps} MATCHES NOTFOUND)
+				SET(oldProps "")
+			endif(${oldProps} MATCHES NOTFOUND)
+
+			# When buiding out of the tree, precompiled may not be located
+			# Use full path instead.
+			GET_FILENAME_COMPONENT(fullPath ${_input} ABSOLUTE)
+
+			SET_TARGET_PROPERTIES(${_targetName} PROPERTIES XCODE_ATTRIBUTE_GCC_PREFIX_HEADER "${fullPath}")
+			SET_TARGET_PROPERTIES(${_targetName} PROPERTIES XCODE_ATTRIBUTE_GCC_PRECOMPILE_PREFIX_HEADER "YES")
+
+		else (CMAKE_GENERATOR MATCHES Xcode)
+
+			#Fallback to the "old" precompiled suppport
+			#ADD_PRECOMPILED_HEADER(${_targetName} ${_input} ${_dowarn})
+		endif(CMAKE_GENERATOR MATCHES Xcode)
+	endif(CMAKE_GENERATOR MATCHES Visual*)
+
+ENDMACRO(ADD_NATIVE_PRECOMPILED_HEADER)
