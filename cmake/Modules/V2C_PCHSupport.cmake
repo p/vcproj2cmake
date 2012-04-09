@@ -1,3 +1,20 @@
+# Support Precompiled Headers (PCH).
+# Code taken from upstream PCH development tracker item
+# "0001260: Support for precompiled headers"
+#   http://www.cmake.org/Bug/view.php?id=1260
+#
+# TODO (sorted in order of importance):
+# - make sure to store important settings in global scopes
+#   (global properties or cache vars) - see "WARNING:" below
+# - COMPILE_FLAGS of a target are being _reset_: http://www.cmake.org/Bug/view.php?id=1260#c23633
+# - lots of whitespace escaping missing: http://www.cmake.org/Bug/view.php?id=1260#c27263
+# - catch build-type-dependent things like -DQT_DEBUG: http://www.cmake.org/Bug/view.php?id=1260#c12563
+# - support general COMPILE_DEFINITIONS property: http://www.cmake.org/Bug/view.php?id=1260#c14470
+# - merge possibly existing customizations of PCHSupport_rodlima.cmake?
+#   http://www.cmake.org/Bug/view.php?id=1260#c10865
+#
+#
+#
 # - Try to find precompiled headers support for GCC 3.4 and 4.x
 # Once done this will define:
 #
