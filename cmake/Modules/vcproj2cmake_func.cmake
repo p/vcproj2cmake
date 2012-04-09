@@ -439,10 +439,10 @@ function(v2c_target_add_precompiled_header _target _build_type _use _header_file
     return()
   endif(NOT _use)
   # Need to always re-include() this module,
-  # since it defines some non-cache variables in outer non-macro scope,
+  # since it currently defines some non-cache variables in outer non-macro scope,
   # thus invoking pre-defined macros from foreign scope would be missing
   # these vars.
-  include(vcproj2cmake_PrecompiledHeader OPTIONAL)
+  include(V2C_PCHSupport OPTIONAL)
   if(COMMAND add_precompiled_header)
     if(NOT TARGET ${_target})
       message("v2c_target_add_precompiled_header: no target ${_target}!? Exit...")

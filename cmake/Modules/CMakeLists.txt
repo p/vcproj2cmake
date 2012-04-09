@@ -6,7 +6,14 @@ function(v2c_install_populate_module_path _destination_dir)
   endif(NOT _destination_dir)
 
   message(STATUS "Will install vcproj2cmake-specific CMake modules into ${_destination_dir}.")
-  set(v2c_module_files_list vcproj2cmake_defs.cmake vcproj2cmake_func.cmake)
+  set(v2c_module_files_list
+    # NOTE: new convention is to use V2C_*.cmake for module files
+    # since this is specific enough and short
+    # (and many CMake Module files start with upper-case, too).
+    V2C_PCHSupport.cmake
+    vcproj2cmake_defs.cmake
+    vcproj2cmake_func.cmake
+  )
   foreach(module_file ${v2c_module_files_list})
     install(FILES "${v2c_modules_source_dir}/${module_file}"
       DESTINATION "${_destination_dir}"
