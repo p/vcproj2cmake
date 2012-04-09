@@ -72,7 +72,7 @@ ENDMACRO(_PCH_GET_COMPILE_FLAGS)
 MACRO(_PCH_WRITE_PCHDEP_CXX _targetName _include_file _dephelp)
 
   SET(${_dephelp} ${CMAKE_CURRENT_BINARY_DIR}/${_targetName}_pch_dephelp.cxx)
-  FILE(WRITE  ${${_dephelp}}
+  FILE(WRITE  ${${_dephelp}}.in
 "#include \"${_include_file}\"
 int testfunction()
 {
@@ -80,6 +80,10 @@ int testfunction()
 }
 "
     )
+  # use configure_file() to avoid re-touching the live file
+  # _every_ time thus causing eternal rebuilds
+  # (configure_file() does know to skip if unchanged)
+  configure_file(${${_dephelp}}.in ${${_dephelp}} COPYONLY)
 
 ENDMACRO(_PCH_WRITE_PCHDEP_CXX )
 
