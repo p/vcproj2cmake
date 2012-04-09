@@ -1929,6 +1929,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # we should be adding a custom target
     # (most likely within a new vcproj2cmake_func.cmake helper function)
     # making use of CMAKE_RC_COMPILER.
+    # Also, for resource files we should ideally be setting the
+    # LANGUAGE property of the file (to RC).
     file_lists.arr_file_lists.each { |file_list|
       filelist_generator = V2C_CMakeFileListGenerator_VS10.new(@textOut, project_name, @project_dir, file_list, parent_source_group, arr_sub_sources_for_parent)
       filelist_generator.generate
