@@ -2113,7 +2113,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # (however this is an entry of the .cpp file: not sure whether we can
     # and should derive the header from that - but we could grep the
     # .cpp file for the similarly named include......).
-    return if pch_source_name.nil? or pch_source_name.length == 0
+    return if pch_source_name.nil? or pch_source_name.empty?
     arr_args_precomp_header = [ build_type, "#{pch_use_mode}", pch_source_name ]
     write_invoke_config_object_function_quoted('v2c_target_add_precompiled_header', target_name, arr_args_precomp_header)
   end
@@ -2453,7 +2453,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # (a filesystem-based creation/modification timestamp might be unreliable
     # due to copying/modification).
     timestamp_format = $v2c_generator_timestamp_format
-    return if timestamp_format.nil? or timestamp_format.length == 0
+    return if timestamp_format.nil? or timestamp_format.empty?
     timestamp_format_docs = timestamp_format.tr('%', '')
     write_comment_at_level(3, "Indicates project conversion moment in time (UTC, format #{timestamp_format_docs})")
     time = Time.new
@@ -3148,7 +3148,7 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
   end
 
   def parse_additional_dependencies(attr_deps, arr_dependencies)
-    return if attr_deps.length == 0
+    return if attr_deps.empty?
     split_values_list_discard_empty(attr_deps).each { |elem_lib_dep|
       log_debug_class "!!!!! elem_lib_dep #{elem_lib_dep}"
       next if skip_vs10_percent_sign_var(elem_lib_dep)
@@ -3159,7 +3159,7 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
     }
   end
   def parse_additional_library_directories(attr_lib_dirs, arr_lib_dirs)
-    return if attr_lib_dirs.length == 0
+    return if attr_lib_dirs.empty?
     split_values_list_preserve_ws_discard_empty(attr_lib_dirs).each { |elem_lib_dir|
       next if skip_vs10_percent_sign_var(elem_lib_dir)
       elem_lib_dir = get_filesystem_location(elem_lib_dir)
