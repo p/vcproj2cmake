@@ -935,10 +935,6 @@ class V2C_TextStreamSyntaxGeneratorBase
   end
 
   def write_empty_line; @out.puts end
-  def write_new_line(part)
-    write_empty_line()
-    write_line(part)
-  end
   def put_file_header_temporary_marker
     return if $v2c_generator_one_time_conversion_only
     # WARNING: since this comment header is meant to advertise
@@ -1588,10 +1584,11 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
       "user override mechanism (don't prevent specifying a custom location of this script)" \
     )
     # NOTE: we'll make V2C_SCRIPT_LOCATION express its path via
-    # relative argument to global CMAKE_SOURCE_DIR and _not_ CMAKE_CURRENT_SOURCE_DIR,
+    # relative argument to global V2C_MASTER_PROJECT_DIR (i.e. CMAKE_SOURCE_DIR)
+    # and _not_ CMAKE_CURRENT_SOURCE_DIR,
     # (this provision should even enable people to manually relocate
     # an entire sub project within the source tree).
-    v2c_converter_script_location = "${CMAKE_SOURCE_DIR}/#{script_location_relative_to_master}"
+    v2c_converter_script_location = "${V2C_MASTER_PROJECT_DIR}/#{script_location_relative_to_master}"
     if $v2c_generate_self_contained_file == 1
       write_set_var_if_unset('V2C_SCRIPT_LOCATION', element_manual_quoting(v2c_converter_script_location))
     else
@@ -1639,7 +1636,13 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     # This also contains vcproj2cmake helper modules (these should - just like the CMakeLists.txt -
     # be within the project tree as well, since someone might want to copy the entire project tree
     # including .vcproj conversions to a different machine, thus all v2c components should be available)
-    #write_new_line("set(V2C_MASTER_PROJECT_DIR \"#{@master_project_dir}\")")
+    # NOTE that V2C_MASTER_PROJECT_DIR is a very important variable
+    # which may eventually be supported to end up _different_ from CMAKE_SOURCE_DIR
+    # (e.g. in the case of integrating _multiple_ different solution (.sln) files
+    # - and their project hierarchy each! - into a _higher-level_ natively CMake-based tree!!).
+    # We might possibly eventually want to rename V2C_MASTER_PROJECT_DIR into V2C_SOLUTION_ROOT_DIR
+    # to reflect the fact that a project hierarchy has been created from a solution
+    # that sits in a specific directory...
     next_paragraph()
     write_set_var_quoted('V2C_MASTER_PROJECT_DIR', dereference_variable_name('CMAKE_SOURCE_DIR'))
     # NOTE: use set() instead of list(APPEND...) to _prepend_ path
@@ -2118,7 +2121,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   end
 
   def write_target_library_static
-    #write_new_line("add_library_vcproj2cmake( #{target.name} STATIC ${SOURCES} )")
     next_paragraph()
     write_command_single_line('add_library', "#{@target.name} STATIC ${SOURCES}")
   end
@@ -2525,6 +2527,10 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 # for _all_ CMakeLists.txt. This needs to sit post-project()
 # since e.g. compiler info is dependent on a valid project.
 }
+      # NOTE: V2C_LIBS, V2C_SOURCES are _target_-specific
+      # (one local directory - i.e. one single CMakeLists.txt - may contain _multiple_
+      # project files - i.e. project()s -!). I.e., they need to be reset
+      # per-project()!
       @textOut.write_block( \
 	"# MasterProjectDefaults_vcproj2cmake is supposed to define generic settings\n" \
         "# (such as V2C_HOOK_PROJECT, defined as e.g.\n" \
@@ -2532,7 +2538,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         "# and other hook include variables below).\n" \
         "# NOTE: it usually should also reset variables\n" \
         "# V2C_LIBS, V2C_SOURCES etc. as used below since they should contain\n" \
-        "# directory-specific contents only, not accumulate!" \
+        "# project-specific contents only, not accumulate!" \
       )
     end
     # (side note: see "ldd -u -r" on Linux for superfluous link parts potentially caused by this!)
