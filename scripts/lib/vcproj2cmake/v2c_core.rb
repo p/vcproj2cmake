@@ -1957,25 +1957,27 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     )
     @localGenerator.put_customization_hook_from_cmake_var('V2C_HOOK_POST_DEFINITIONS')
   end
-  def mark_midl_files_as_generated(file_lists, config_info)
-    # VERY Q&D way to mark MIDL-related files as GENERATED.
+  def put_v2c_target_midl_specify_files(target_name, build_type, platform, header_file_name, iface_id_file_name, type_library_name)
+    arr_args_midl = [ build_type, platform, header_file_name, iface_id_file_name, type_library_name ]
+    write_invoke_config_object_function_quoted('v2c_target_midl_specify_files', target_name, arr_args_midl)
+  end
+  def hook_up_midl_files(file_lists, config_info)
+    # VERY Q&D way to mark MIDL-related files as GENERATED,
+    # to keep CMake from erroring out when adding these source files to a target.
+    # Well, even marking these files as GENERATED does not help,
+    # since they simply won't be available for the target --> error.
+    # Instead, we do need to have an add_custom_command()
+    # which generates them (or suitable dummy files if needed).
     arr_midl_info = config_info.tools.arr_midl_info
     if not arr_midl_info.empty?
       arr_generated_files = Array.new
       midl_info = arr_midl_info[0]
-      arr_midl_file_names = [ midl_info.header_file_name, midl_info.iface_id_file_name ]
-      arr_midl_file_names.each { |file_name|
-        file_lists.arr_file_lists.each { |file_list|
-          file_list.arr_files.each { |file_info|
-            #puts "path_relative #{file_info.path_relative} filename #{file_name}"
-            if file_info.path_relative == file_name
-              arr_generated_files.push(file_name)
-              #file_info.enable_attribute(V2C_Info_File::ATTR_GENERATED)
-              break
-            end
-          }
-        }
-      }
+      condition = config_info.condition
+      #put_v2c_target_midl_preprocessor_definitions(...)
+      #put_v2c_target_midl_options(GENERATESTUBLESSPROXIES ... MKTYPLIBCOMPATIBLE ... VALIDATEALLPARAMETERS ...)
+      # put_v2c_target_midl_specify_files() will be the last line to be generated - the invoked function
+      # will then implement the MIDL custom command using all previously configured MIDL target properties settings.
+      put_v2c_target_midl_specify_files(@target.name, condition.get_build_type(), condition.platform, midl_info.header_file_name, midl_info.iface_id_file_name, midl_info.type_library_name)
       if not arr_generated_files.empty?
         # FIXME: doing correct handling of quoting for these files!?
         str_cmake_command_args = "SOURCE #{arr_generated_files.join(' ')} PROPERTY GENERATED"
@@ -2298,7 +2300,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
       write_conditional_if(var_v2c_want_buildcfg_curr)
 
-      mark_midl_files_as_generated(project_info.file_lists, config_info_curr)
+      hook_up_midl_files(project_info.file_lists, config_info_curr)
 
       config_info_curr.tools.arr_compiler_info.each { |compiler_info_curr|
         arr_includes = compiler_info_curr.get_include_dirs(false, false)

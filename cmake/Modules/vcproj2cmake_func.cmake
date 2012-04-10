@@ -478,6 +478,33 @@ function(v2c_target_add_precompiled_header _target _build_type _use _header_file
 endfunction(v2c_target_add_precompiled_header _target _build_type _use _header_file)
 
 
+if(WIN32)
+  function(v2c_target_midl_specify_files _target _build_type _build_platform _header_file_name _iface_id_file_name _type_library_name)
+    # DUMMY - WIN32 (Visual Studio) already has its own implicit custom commands for MIDL generation
+    # (plus, CMake's Visual Studio generator also already properly passes MIDL-related files to the setup...)
+  endfunction(v2c_target_midl_specify_files _target _build_type _build_platform _header_file_name _iface_id_file_name _type_library_name)
+else(WIN32)
+  function(_v2c_target_midl_create_dummy_file _midl_file _description)
+    set(comment_ "WARNING: creating dummy MIDL ${_description} file ${_midl_file}")
+    add_custom_command(OUTPUT "${_midl_file}"
+      COMMAND "${CMAKE_COMMAND}" -E echo "${comment_}"
+      COMMAND "${CMAKE_COMMAND}" -E touch "${_midl_file}"
+      COMMENT "${comment_}"
+    )
+  endfunction(_v2c_target_midl_create_dummy_file _file _description)
+  function(v2c_target_midl_specify_files _target _build_type _build_platform _header_file_name _iface_id_file_name _type_library_name)
+    # For now, all we care about is creating some dummy files to make a target actually build
+    # rather than aborting CMake configuration due to missing source files...
+
+    # TODO: query all the other MIDL-related target properties
+    # which possibly were configured prior to invoking this function.
+
+    _v2c_target_midl_create_dummy_file("${_header_file_name}" "header")
+    _v2c_target_midl_create_dummy_file("${_iface_id_file_name}" "interface identifier")
+  endfunction(v2c_target_midl_specify_files _target _build_type _build_platform _header_file_name _iface_id_file_name _type_library_name)
+endif(WIN32)
+
+
 # This function will set up target properties gathered from
 # Visual Studio Source Control Management (SCM) elements.
 function(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_localpath _vs_scc_provider _vs_scc_auxpath)
