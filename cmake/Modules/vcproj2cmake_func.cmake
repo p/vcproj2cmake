@@ -418,6 +418,19 @@ else(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
   endmacro(v2c_converter_script_set_location _location)
 endif(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
 
+function(v2c_hook_invoke _hook_file_name)
+  include("${_hook_file_name}" OPTIONAL)
+endfunction(v2c_hook_invoke _hook_file_name)
+
+# Configure CMAKE_MFC_FLAG etc.
+# _Unfortunately_ these are very dirty global flags rather than a per-target property.
+# This helper needs to be a _macro_ since it sets externally obeyed variables!!
+macro(v2c_local_set_cmake_atl_mfc_flags _target _build_type _build_platform _atl_flag _mfc_flag)
+  # CMAKE_ATL_FLAG currently is not a (~n official) CMake variable
+  set(CMAKE_ATL_FLAG ${_atl_flag})
+  set(CMAKE_MFC_FLAG ${_mfc_flag})
+endmacro(v2c_local_set_cmake_atl_mfc_flags _target _build_type _build_platform _atl_flag _mfc_flag)
+
 # Helper to hook up a precompiled header that might be enabled
 # by a project configuration.
 # Functionality taken from "Support for precompiled headers"

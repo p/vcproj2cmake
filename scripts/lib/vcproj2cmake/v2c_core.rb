@@ -1270,11 +1270,19 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
   end
   def put_customization_hook(include_file)
     return if $v2c_generator_one_time_conversion_only
-    write_include(include_file, true)
+    if $v2c_generate_self_contained_file == 1
+      write_include(include_file, true)
+    else
+      write_invoke_function_quoted('v2c_hook_invoke', [ include_file ])
+    end
   end
   def put_customization_hook_from_cmake_var(include_file_var)
     return if $v2c_generator_one_time_conversion_only
-    write_include_from_cmake_var(include_file_var, true)
+    if $v2c_generate_self_contained_file == 1
+      write_include_from_cmake_var(include_file_var, true)
+    else
+      write_invoke_function_quoted('v2c_hook_invoke', [ dereference_variable_name(include_file_var) ])
+    end
   end
   # Hrmm, I'm not quite sure yet where to aggregate this function...
   def get_buildcfg_var_name_of_condition(condition)
@@ -1380,6 +1388,38 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
     # BTW, we probably don't have much use for the CMAKE_LINKER variable anywhere, right?
     return map_compiler_name_to_cmake_platform_conditional(linker_name)
   end
+  def do_configure_atl_mfc_flag(target_name, build_type, build_platform, use_of_atl, use_of_mfc)
+    # CMAKE_MFC_FLAG setting is supposed to be done _before_
+    # a target gets created (via add_executable() etc.).
+    #
+    # Hmm, do we need to actively _reset_ CMAKE_MFC_FLAG / CMAKE_ATL_FLAG
+    # (i.e. _unconditionally_ set() it, even if it's 0),
+    # since projects in subdirs shouldn't inherit?
+    # Given the discussion at
+    # "[CMake] CMAKE_MFC_FLAG is inherited in subdirectory ?"
+    #   http://www.cmake.org/pipermail/cmake/2009-February/026896.html
+    # I'd strongly assume yes...
+    # See also "Re: [CMake] CMAKE_MFC_FLAG not working in functions"
+    #   http://www.mail-archive.com/cmake@cmake.org/msg38677.html
+
+    if $v2c_generate_self_contained_file == 1
+      #if use_of_mfc > V2C_TargetConfig_Defines::MFC_FALSE
+        write_set_var('CMAKE_MFC_FLAG', use_of_mfc)
+      #end
+      # ok, there's no CMAKE_ATL_FLAG yet, AFAIK, but still prepare
+      # for it (also to let people probe on this in hook includes)
+      # FIXME: since this flag does not exist yet yet MFC sort-of
+      # includes ATL configuration, perhaps as a workaround one should
+      # set the MFC flag if use_of_atl is true?
+      #if use_of_atl > 0
+        # TODO: should also set the per-configuration-type variable variant
+        write_set_var('CMAKE_ATL_FLAG', use_of_atl)
+      #end
+    else
+      arr_args_func = [ target_name, build_type, build_platform, "#{use_of_atl}", "#{use_of_mfc}" ]
+      write_invoke_function_quoted('v2c_local_set_cmake_atl_mfc_flags', arr_args_func)
+    end
+  end
 end
 
 class V2C_CMakeGlobalGenerator < V2C_CMakeV2CSyntaxGenerator
@@ -1475,33 +1515,6 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     put_var_config_dir_local()
     put_include_vcproj2cmake_func()
     put_hook_pre()
-  end
-  def put_cmake_mfc_atl_flag(target_config_info)
-    # CMAKE_MFC_FLAG setting is supposed to be done _before_
-    # a target gets created (via add_executable() etc.).
-    #
-    # Hmm, do we need to actively _reset_ CMAKE_MFC_FLAG / CMAKE_ATL_FLAG
-    # (i.e. _unconditionally_ set() it, even if it's 0),
-    # since projects in subdirs shouldn't inherit?
-    # Given the discussion at
-    # "[CMake] CMAKE_MFC_FLAG is inherited in subdirectory ?"
-    #   http://www.cmake.org/pipermail/cmake/2009-February/026896.html
-    # I'd strongly assume yes...
-    # See also "Re: [CMake] CMAKE_MFC_FLAG not working in functions"
-    #   http://www.mail-archive.com/cmake@cmake.org/msg38677.html
-
-    #if target_config_info.use_of_mfc > V2C_TargetConfig_Defines::MFC_FALSE
-      write_set_var('CMAKE_MFC_FLAG', target_config_info.use_of_mfc)
-    #end
-    # ok, there's no CMAKE_ATL_FLAG yet, AFAIK, but still prepare
-    # for it (also to let people probe on this in hook includes)
-    # FIXME: since this flag does not exist yet yet MFC sort-of
-    # includes ATL configuration, perhaps as a workaround one should
-    # set the MFC flag if use_of_atl is true?
-    #if target_config_info.use_of_atl > 0
-      # TODO: should also set the per-configuration-type variable variant
-      write_set_var('CMAKE_ATL_FLAG', target_config_info.use_of_atl)
-    #end
   end
   def write_include_directories(arr_includes, map_includes)
     # Side note: unfortunately CMake as of 2.8.7 probably still does not have
@@ -1992,6 +2005,16 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       end
     end
   end
+  def put_atl_mfc_config(target_config_info)
+    str_build_type = ''
+    str_build_platform = ''
+    condition = target_config_info.condition
+    if not condition.nil?
+      str_build_type = condition.get_build_type()
+      str_build_platform = condition.platform
+    end
+    do_configure_atl_mfc_flag(@target.name, str_build_type, str_build_platform, target_config_info.use_of_atl, target_config_info.use_of_mfc)
+  end
   #def evaluate_precompiled_header_config(target, files_str)
   #end
   #
@@ -2319,7 +2342,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # NOT being applied as target properties (i.e. post-target-setup).
       arr_target_config_info.each { |target_config_info_curr|
 	next if not condition.entails(target_config_info_curr.condition)
-        @localGenerator.put_cmake_mfc_atl_flag(target_config_info_curr)
+        put_atl_mfc_config(target_config_info_curr)
       }
 
       # FIXME: hohumm, the position of this hook include is outdated, need to update it
