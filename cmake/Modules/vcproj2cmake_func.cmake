@@ -405,6 +405,18 @@ else(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     # dummy!
   endfunction(_v2c_project_rebuild_on_update _dependent_target _vcproj_file _cmakelists_file _script _master_proj_dir)
 endif(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
+if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
+  macro(v2c_converter_script_set_location _location)
+    # user override mechanism (don't prevent specifying a custom location of this script)
+    if(NOT V2C_SCRIPT_LOCATION)
+      set(V2C_SCRIPT_LOCATION "${_location}")
+    endif(NOT V2C_SCRIPT_LOCATION)
+  endmacro(v2c_converter_script_set_location _location)
+else(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
+  macro(v2c_converter_script_set_location _location)
+    # DUMMY!
+  endmacro(v2c_converter_script_set_location _location)
+endif(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
 
 # Helper to hook up a precompiled header that might be enabled
 # by a project configuration.

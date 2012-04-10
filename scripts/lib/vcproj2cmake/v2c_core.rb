@@ -54,6 +54,9 @@ end
 
 load_configuration()
 
+# TODO: make this a user-visible config setting soon
+$v2c_generate_self_contained_file = 0
+
 # At least currently, this is a custom plugin mechanism.
 # It doesn't have anything to do with e.g.
 # Ruby on Rails Plugins, which is described by
@@ -1066,8 +1069,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   end
   def get_keyword_bool(setting); return setting ? 'true' : 'false' end
   def write_set_var(var_name, setting)
-    arr_args_func = [ setting ]
-    write_command_list('set', var_name, arr_args_func)
+    write_command_list('set', var_name, [ setting ])
   end
   def write_set_var_bool(var_name, setting)
     write_set_var(var_name, get_keyword_bool(setting))
@@ -1088,8 +1090,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   # Hrmm, I'm currently unsure whether there _should_ in fact
   # be any difference between write_set_var() and write_set_var_quoted()...
   def write_set_var_quoted(var_name, setting)
-    arr_args_func = [ setting ]
-    write_command_list_quoted('set', var_name, arr_args_func)
+    write_command_list_quoted('set', var_name, [ setting ])
   end
   def write_include(include_file, optional = false)
     arr_args_include_file = [ element_handle_quoting(include_file) ]
@@ -1455,7 +1456,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     # Should generate a list var in each CMakeLists.txt (e.g. a per-DIRECTORY property)
     # mentioning the projects that this file contains,
     # to be passed to the vcproj2cmake.rb converter rebuilder invocation.
-    put_var_converter_script_location(@script_location_relative_to_master)
+    put_converter_script_location(@script_location_relative_to_master)
 
     @arr_local_project_targets.each { |project_info|
       target_generator = V2C_CMakeProjectTargetGenerator.new(project_info, local_dir, self, @textOut)
@@ -1559,7 +1560,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
       write_conditional_end(str_platform)
     }
   end
-  def put_var_converter_script_location(script_location_relative_to_master)
+  def put_converter_script_location(script_location_relative_to_master)
     return if $v2c_generator_one_time_conversion_only
 
     if script_location_relative_to_master.nil?
@@ -1571,16 +1572,18 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     # to override the script location if needed.
     next_paragraph()
     write_comment_at_level(1, \
-      "user override mechanism (allow defining custom location of script)" \
+      "user override mechanism (don't prevent specifying a custom location of this script)" \
     )
     # NOTE: we'll make V2C_SCRIPT_LOCATION express its path via
     # relative argument to global CMAKE_SOURCE_DIR and _not_ CMAKE_CURRENT_SOURCE_DIR,
     # (this provision should even enable people to manually relocate
     # an entire sub project within the source tree).
-    write_set_var_if_unset(
-      'V2C_SCRIPT_LOCATION',
-      element_manual_quoting("${CMAKE_SOURCE_DIR}/#{script_location_relative_to_master}")
-    )
+    v2c_converter_script_location = "${CMAKE_SOURCE_DIR}/#{script_location_relative_to_master}"
+    if $v2c_generate_self_contained_file == 1
+      write_set_var_if_unset('V2C_SCRIPT_LOCATION', element_manual_quoting(v2c_converter_script_location))
+    else
+      write_invoke_function_quoted('v2c_converter_script_set_location', [ v2c_converter_script_location ])
+    end
   end
   def write_func_v2c_project_post_setup(project_name, orig_project_file_basename)
     # Rationale: keep count of generated lines of CMakeLists.txt to a bare minimum -
@@ -2119,7 +2122,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # and should derive the header from that - but we could grep the
     # .cpp file for the similarly named include......).
     return if pch_source_name.nil? or pch_source_name.empty?
-    arr_args_precomp_header = [ build_type, "#{pch_use_mode}", pch_source_name ]
+    str_pch_use_mode = "#{pch_use_mode}"
+    arr_args_precomp_header = [ build_type, str_pch_use_mode, pch_source_name ]
     write_invoke_config_object_function_quoted('v2c_target_add_precompiled_header', target_name, arr_args_precomp_header)
   end
   def write_precompiled_header(str_build_type, precompiled_header_info)
