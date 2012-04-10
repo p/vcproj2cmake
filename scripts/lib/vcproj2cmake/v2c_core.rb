@@ -969,11 +969,14 @@ class V2C_LoggerBase
 end
 
 # FIXME: very rough handling - what to do with those VS10 %(XXX) variables?
+# (terminus technicus appears to be: "item metadata macro")
 # Well, one idea would be to append entries (include directories, dependencies etc.)
 # to individual list vars that are being scoped within a
 # CMake parent directory chain. But these lists should be implementation details
 # hidden behind v2c_xxx(_target _build_type _entries) funcs, of course.
-VS10_EXTENSION_VAR_MATCH_REGEX_OBJ = %r{%([^\s]*)}
+# Known %(YYY) variable names are:
+# - Filename (e.g. written by CMake VS10 generator)
+VS10_ITEM_METADATA_MACRO_MATCH_REGEX_OBJ = %r{%([^\s]*)}
 
 
 class V2C_SyntaxGeneratorBase < V2C_LoggerBase
@@ -3857,7 +3860,7 @@ def skip_vs10_percent_sign_var(str_var)
   # shortcut :)
   return false if not str_var.include?('%')
 
-  return false if not str_var.match(VS10_EXTENSION_VAR_MATCH_REGEX_OBJ)
+  return false if not str_var.match(VS10_ITEM_METADATA_MACRO_MATCH_REGEX_OBJ)
   log_fixme_class("skipping unhandled VS10 variable (#{str_var})")
   return true
 end
