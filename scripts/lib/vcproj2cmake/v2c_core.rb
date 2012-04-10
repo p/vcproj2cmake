@@ -1264,12 +1264,20 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
     arr_directories = [ dereference_variable_name('PROJECT_SOURCE_DIR') ]
     put_include_directories(arr_directories, false, true)
   end
+  def write_invoke_config_object_v2c_function_quoted(str_function, str_object, arr_args_func)
+    write_vcproj2cmake_func_comment()
+    write_invoke_config_object_function_quoted(str_function, str_object, arr_args_func)
+  end
+  def write_invoke_v2c_function_quoted(str_function, arr_args_func)
+    write_vcproj2cmake_func_comment()
+    write_invoke_function_quoted(str_function, arr_args_func)
+  end
   def put_customization_hook(include_file)
     return if $v2c_generator_one_time_conversion_only
     if $v2c_generate_self_contained_file == 1
       write_include(include_file, true)
     else
-      write_invoke_function_quoted('v2c_hook_invoke', [ include_file ])
+      write_invoke_v2c_function_quoted('v2c_hook_invoke', [ include_file ])
     end
   end
   def put_customization_hook_from_cmake_var(include_file_var)
@@ -1277,7 +1285,7 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
     if $v2c_generate_self_contained_file == 1
       write_include_from_cmake_var(include_file_var, true)
     else
-      write_invoke_function_quoted('v2c_hook_invoke', [ dereference_variable_name(include_file_var) ])
+      write_invoke_v2c_function_quoted('v2c_hook_invoke', [ dereference_variable_name(include_file_var) ])
     end
   end
   # Hrmm, I'm not quite sure yet where to aggregate this function...
@@ -1413,7 +1421,7 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
       #end
     else
       arr_args_func = [ target_name, build_type, build_platform, "#{use_of_atl}", "#{use_of_mfc}" ]
-      write_invoke_function_quoted('v2c_local_set_cmake_atl_mfc_flags', arr_args_func)
+      write_invoke_v2c_function_quoted('v2c_local_set_cmake_atl_mfc_flags', arr_args_func)
     end
   end
 end
@@ -1592,7 +1600,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     if $v2c_generate_self_contained_file == 1
       write_set_var_if_unset('V2C_SCRIPT_LOCATION', element_manual_quoting(v2c_converter_script_location))
     else
-      write_invoke_function_quoted('v2c_converter_script_set_location', [ v2c_converter_script_location ])
+      write_invoke_v2c_function_quoted('v2c_converter_script_set_location', [ v2c_converter_script_location ])
     end
   end
   def write_func_v2c_project_post_setup(project_name, orig_project_file_basename)
@@ -1601,9 +1609,8 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     # of the current generated CMakeLists.txt file - all boilerplate handling functionality
     # that's identical for each project should be implemented by the v2c_project_post_setup() function
     # _internally_.
-    write_vcproj2cmake_func_comment()
     arr_args_func = [ "${CMAKE_CURRENT_SOURCE_DIR}/#{orig_project_file_basename}", dereference_variable_name('CMAKE_CURRENT_LIST_FILE') ]
-    write_invoke_config_object_function_quoted('v2c_project_post_setup', project_name, arr_args_func)
+    write_invoke_config_object_v2c_function_quoted('v2c_project_post_setup', project_name, arr_args_func)
   end
 
   private
@@ -1978,7 +1985,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   end
   def put_v2c_target_midl_specify_files(target_name, build_type, platform, header_file_name, iface_id_file_name, type_library_name)
     arr_args_midl = [ build_type, platform, header_file_name, iface_id_file_name, type_library_name ]
-    write_invoke_config_object_function_quoted('v2c_target_midl_specify_files', target_name, arr_args_midl)
+    write_invoke_config_object_v2c_function_quoted('v2c_target_midl_specify_files', target_name, arr_args_midl)
   end
   def hook_up_midl_files(file_lists, config_info)
     # VERY Q&D way to mark MIDL-related files as GENERATED,
@@ -2152,7 +2159,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     return if pch_source_name.nil? or pch_source_name.empty?
     str_pch_use_mode = "#{pch_use_mode}"
     arr_args_precomp_header = [ build_type, str_pch_use_mode, pch_source_name ]
-    write_invoke_config_object_function_quoted('v2c_target_add_precompiled_header', target_name, arr_args_precomp_header)
+    write_invoke_config_object_v2c_function_quoted('v2c_target_add_precompiled_header', target_name, arr_args_precomp_header)
   end
   def write_precompiled_header(str_build_type, precompiled_header_info)
     return if not $v2c_target_precompiled_header_enable
@@ -2217,10 +2224,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # of the current generated CMakeLists.txt file - all boilerplate handling functionality
     # that's identical for each project should be implemented by the v2c_project_post_setup() function
     # _internally_.
-    write_vcproj2cmake_func_comment()
     if project_keyword.nil?; project_keyword = V2C_ATTRIBUTE_NOT_PROVIDED_MARKER end
     arr_args_func = [ project_name, project_keyword ]
-    write_invoke_config_object_function_quoted('v2c_target_post_setup', @target.name, arr_args_func)
+    write_invoke_config_object_v2c_function_quoted('v2c_target_post_setup', @target.name, arr_args_func)
   end
   def set_properties_vs_scc(target_name, scc_info_in)
     # Keep source control integration in our conversion!
@@ -2262,9 +2268,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     end
 
     next_paragraph()
-    write_vcproj2cmake_func_comment()
     arr_args_func = [ scc_info_cmake.project_name, scc_info_cmake.local_path, scc_info_cmake.provider, scc_info_cmake.aux_path ]
-    write_invoke_config_object_function_quoted('v2c_target_set_properties_vs_scc', target_name, arr_args_func)
+    write_invoke_config_object_v2c_function_quoted('v2c_target_set_properties_vs_scc', target_name, arr_args_func)
   end
 
   def add_target_config_specific_definitions(target_config_info, hash_defines)
