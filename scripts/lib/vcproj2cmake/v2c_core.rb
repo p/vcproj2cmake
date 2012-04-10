@@ -1980,6 +1980,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       #put_v2c_target_midl_options(GENERATESTUBLESSPROXIES ... MKTYPLIBCOMPATIBLE ... VALIDATEALLPARAMETERS ...)
       # put_v2c_target_midl_specify_files() will be the last line to be generated - the invoked function
       # will then implement the MIDL custom command using all previously configured MIDL target properties settings.
+      # FIXME: the .idl file is currently missing (contained within the file list called "Midl")
+      # - possibly we'd need it here, too (at least if we _can_ do something useful with MIDL information
+      # on Non-Win32 platforms...).
       put_v2c_target_midl_specify_files(@target.name, condition.get_build_type(), condition.platform, midl_info.header_file_name, midl_info.iface_id_file_name, midl_info.type_library_name)
       if not arr_generated_files.empty?
         # FIXME: doing correct handling of quoting for these files!?
