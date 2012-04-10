@@ -21,6 +21,13 @@
 # Ruby script vs. module file versions from getting desynchronized.
 
 
+# TODO:
+# - should add a v2c_parse_arguments() macro
+#   (available at http://www.cmake.org/Wiki/CMakeMacroParseArguments ),
+#   to then be used by several of our functions here
+
+
+
 # First, include main file (to be customized by user as needed),
 # to have important vcproj2cmake configuration settings
 # re-defined per each new vcproj-converted project.
