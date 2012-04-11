@@ -343,18 +343,23 @@ class V2C_Info_Elem_Base
   attr_accessor :condition
 end
 
+module V2C_Include_Dir_Defines
+  SYSTEM = 1
+  BEFORE = 2
+  AFTER = 4
+end
+
 class V2C_Info_Include_Dir < V2C_Info_Elem_Base
   def initialize
     super()
     @dir = String.new
-    @attr_after = 0
-    @attr_before = 0
-    @attr_system = 0
+    @flags = 0 # V2C_Include_Dir_Defines::SYSTEM etc.
   end
   attr_accessor :dir
-  attr_accessor :attr_after
-  attr_accessor :attr_before
-  attr_accessor :attr_system
+  attr_accessor :flags
+  def is_system; return (@flags & V2C_Include_Dir_Defines::SYSTEM) > 0 end
+  def is_before; return (@flags & V2C_Include_Dir_Defines::BEFORE) > 0 end
+  def is_after; return (@flags & V2C_Include_Dir_Defines::AFTER) > 0 end
 end
 
 class V2C_Tool_Base_Info
@@ -1121,10 +1126,10 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     # Use multi-line method since source_group() arguments can be very long.
     write_command_list_quoted('source_group', source_group_name, arr_elems)
   end
-  def put_include_directories(arr_directories, flag_system=false, flag_before=false)
+  def put_include_directories(arr_directories, flags)
     arr_args = Array.new
-    arr_args.push('SYSTEM') if flag_system
-    arr_args.push('BEFORE') if flag_before
+    arr_args.push('SYSTEM') if (flags & V2C_Include_Dir_Defines::SYSTEM > 0)
+    arr_args.push('BEFORE') if (flags & V2C_Include_Dir_Defines::BEFORE > 0)
     arr_args.concat(arr_directories)
     write_command_list_quoted('include_directories', nil, arr_args)
   end
@@ -1262,7 +1267,7 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
     # For now sitting in LocalGenerator and not per-target handling since this setting is valid for the entire directory.
     next_paragraph()
     arr_directories = [ dereference_variable_name('PROJECT_SOURCE_DIR') ]
-    put_include_directories(arr_directories, false, true)
+    put_include_directories(arr_directories, V2C_Include_Dir_Defines::BEFORE)
   end
   def write_invoke_config_object_v2c_function_quoted(str_function, str_object, arr_args_func)
     write_vcproj2cmake_func_comment()
@@ -1272,12 +1277,15 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
     write_vcproj2cmake_func_comment()
     write_invoke_function_quoted(str_function, arr_args_func)
   end
+  def put_v2c_hook_invoke(str_filename)
+      write_invoke_v2c_function_quoted('v2c_hook_invoke', [ str_filename ])
+  end
   def put_customization_hook(include_file)
     return if $v2c_generator_one_time_conversion_only
     if $v2c_generate_self_contained_file == 1
       write_include(include_file, true)
     else
-      write_invoke_v2c_function_quoted('v2c_hook_invoke', [ include_file ])
+      put_v2c_hook_invoke(include_file)
     end
   end
   def put_customization_hook_from_cmake_var(include_file_var)
@@ -1285,7 +1293,7 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
     if $v2c_generate_self_contained_file == 1
       write_include_from_cmake_var(include_file_var, true)
     else
-      write_invoke_v2c_function_quoted('v2c_hook_invoke', [ dereference_variable_name(include_file_var) ])
+      put_v2c_hook_invoke(dereference_variable_name(include_file_var))
     end
   end
   # Hrmm, I'm not quite sure yet where to aggregate this function...
@@ -1908,18 +1916,31 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       config_multi_authoritative = arr_config_info[0].condition.get_build_type()
     end
 
-    arr_config_info.each { |config_info_curr|
-      condition = config_info_curr.condition
-      str_cmake_build_type_condition = ''
-      build_type_cooked = prepare_string_literal(condition.get_build_type())
-      if config_multi_authoritative == condition.get_build_type()
-        str_cmake_build_type_condition = "CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
-      else
-        # YES, this condition is supposed to NOT trigger in case of a multi-configuration generator
-        str_cmake_build_type_condition = "CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
-      end
-      write_set_var_bool_conditional(get_buildcfg_var_name_of_condition(condition), str_cmake_build_type_condition)
-    }
+    # Hrmm, this needs further thought...
+    if true
+    #if $v2c_generate_self_contained_file == 1
+      arr_config_info.each { |config_info_curr|
+        condition = config_info_curr.condition
+        build_type = condition.get_build_type()
+        build_type_cooked = prepare_string_literal(build_type)
+        str_cmake_build_type_condition = ''
+        if config_multi_authoritative == build_type
+          str_cmake_build_type_condition = "CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
+        else
+          # YES, this condition is supposed to NOT trigger in case of a multi-configuration generator
+          str_cmake_build_type_condition = "CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
+        end
+        write_set_var_bool_conditional(get_buildcfg_var_name_of_condition(condition), str_cmake_build_type_condition)
+      }
+    else
+      arr_build_types = [ config_multi_authoritative ]
+      arr_config_info.each { |config_info_curr|
+        condition = config_info_curr.condition
+        build_type = condition.get_build_type()
+        arr_build_types.push(build_type)
+      }
+      write_invoke_v2c_function_quoted('v2c_prepare_build_type_variables', arr_build_types)
+    end
   end
   # File-related TODO:
   # should definitely support the following CMake properties, as needed:
