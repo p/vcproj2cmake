@@ -185,7 +185,7 @@ function(_v2c_config_do_setup)
 
   file(GLOB root_mappings_files_list_ "${CMAKE_SOURCE_DIR}/${mappings_files_expr_}")
   _v2c_config_set(root_mappings_files_list_v1 "${root_mappings_files_list_}")
- 
+
 
   # Now do rebuilder setup within this function, too,
   # to have direct access to important configuration variables.
@@ -583,7 +583,7 @@ function(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_lo
   # with a strung-together list of properties, as an optimization.
   # However since certain input property string payload consisted of semicolons
   # (e.g. in the case of "&quot;"), this went completely haywire
-  # with contents partially split off at semicolon borders. 
+  # with contents partially split off at semicolon borders.
   # IOW, definitely make sure to set each property precisely separately.
   # Well, that's not sufficient! The remaining problem was that the property
   # variables SHOULD NOT BE QUOTED, to enable passing of the content as a list,
