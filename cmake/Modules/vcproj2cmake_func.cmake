@@ -443,9 +443,11 @@ else(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
   endmacro(v2c_converter_script_set_location _location)
 endif(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
 
-function(v2c_hook_invoke _hook_file_name)
+# This needs to remain a _macro_, otherwise scoping is broken
+# (newly established function scope).
+macro(v2c_hook_invoke _hook_file_name)
   include("${_hook_file_name}" OPTIONAL)
-endfunction(v2c_hook_invoke _hook_file_name)
+endmacro(v2c_hook_invoke _hook_file_name)
 
 # Configure CMAKE_MFC_FLAG etc.
 # _Unfortunately_ these are very dirty global flags rather than a per-target property.
@@ -535,6 +537,7 @@ if(WIN32)
   endfunction(v2c_target_midl_specify_files _target _build_type _build_platform _header_file_name _iface_id_file_name _type_library_name)
 else(WIN32)
   function(_v2c_target_midl_create_dummy_file _midl_file _description)
+    _v2c_ensure_valid_variables(_midl_file _description)
     set(comment_ "WARNING: creating dummy MIDL ${_description} file ${_midl_file}")
     add_custom_command(OUTPUT "${_midl_file}"
       COMMAND "${CMAKE_COMMAND}" -E echo "${comment_}"
@@ -549,8 +552,12 @@ else(WIN32)
     # TODO: query all the other MIDL-related target properties
     # which possibly were configured prior to invoking this function.
 
-    _v2c_target_midl_create_dummy_file("${_header_file_name}" "header")
-    _v2c_target_midl_create_dummy_file("${_iface_id_file_name}" "interface identifier")
+    if(_header_file_name)
+      _v2c_target_midl_create_dummy_file("${_header_file_name}" "header")
+    endif(_header_file_name)
+    if(_iface_id_file_name)
+      _v2c_target_midl_create_dummy_file("${_iface_id_file_name}" "interface identifier")
+    endif(_iface_id_file_name)
   endfunction(v2c_target_midl_specify_files _target _build_type _build_platform _header_file_name _iface_id_file_name _type_library_name)
 endif(WIN32)
 
