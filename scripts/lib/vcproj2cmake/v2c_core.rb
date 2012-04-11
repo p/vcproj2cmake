@@ -1504,9 +1504,9 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
 
     @arr_local_project_targets.each { |project_info|
       target_generator = V2C_CMakeProjectTargetGenerator.new(project_info, local_dir, self, @textOut)
-  
+
       target_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
-  
+
       write_func_v2c_project_post_setup(project_info.name, orig_proj_file_basename)
     }
   end
@@ -1834,7 +1834,7 @@ class V2C_CMakeFileListsGenerator_VS7 < V2C_CMakeFileListGeneratorBase
       end
       next_paragraph()
       write_list_quoted(sources_variable, arr_source_vars)
-      
+
       # add our source list variable to parent return
       # FIXME: cannot use register_new_source_list_variable()  (base class) yet -
       # we're doing our own inner recursion with _changing_ variables!
@@ -2147,7 +2147,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   end
   def generate_property_compile_definitions_per_platform(config_name, arr_platdefs, str_platform)
     write_conditional_if(str_platform)
-      put_property_compile_definitions(config_name, arr_platdefs)    
+      put_property_compile_definitions(config_name, arr_platdefs)
     write_conditional_end(str_platform)
   end
   def put_precompiled_header(target_name, build_type, pch_use_mode, pch_source_name)
@@ -2310,7 +2310,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     project_info = @target # HACK
 
     generate_project_leadin(project_info)
-  
+
     # arr_sub_source_list_var_names will receive the names of the individual source list variables:
     arr_sub_source_list_var_names = Array.new
 
@@ -4892,7 +4892,7 @@ def v2c_convert_project_inner(p_script, p_parser_proj_file, p_generator_proj_fil
       end
     }
   }
-  
+
   # Now validate the project...
   # This validation step should be _separate_ from both parser _and_ generator implementations,
   # since otherwise each individual parser/generator would have to remember carrying out validation
