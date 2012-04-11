@@ -155,6 +155,7 @@ function(_v2c_config_do_setup_rebuilder)
       # end up with a simple "false" which is highly conflict-prone
       # with CMake's "false" boolean value!!
       find_program(abort_BIN_ false)
+      _v2c_ensure_valid_variables(abort_BIN_)
       _v2c_config_set(abort_BIN_v1 "${abort_BIN_}")
     else(UNIX)
       _v2c_config_set(abort_BIN_v1 v2c_invoked_non_existing_command_simply_to_force_build_abort)
@@ -386,7 +387,7 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
           # ...and of course add another clever message command
           # right _after_ the abort processing,
           # to alert people whenever aborting happened to fail:
-          COMMAND "${CMAKE_COMMAND}" -E echo "Huh, attempting to abort the build [via ${v2c_abort_BIN}] failed?? Probably this simply is an ignore-errors build run, otherwise PLEASE REPORT..."
+          COMMAND "${CMAKE_COMMAND}" -E echo "Huh, attempting to abort the build [via ${abort_BIN_v1_}] failed?? Probably this simply is an ignore-errors build run, otherwise PLEASE REPORT..."
           # Hrmm, I thought that we _need_ this dependency, otherwise at least on Ninja the
           # command will not get triggered _within_ the same build run (by the preceding target
           # removing the output file). But apparently that does not help
