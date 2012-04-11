@@ -80,6 +80,18 @@ mark_as_advanced(V2C_STAMP_FILES_DIR)
 file(MAKE_DIRECTORY "${V2C_STAMP_FILES_DIR}")
 
 
+# Helper to yell loudly in case of unset variables.
+# The input string should _not_ be the dereferenced form,
+# but rather a simple _name_ of the variable.
+function(_v2c_ensure_valid_variables _var_names_list)
+  foreach(var_name_ ${_var_names_list})
+    if(NOT ${var_name_})
+      message(FATAL_ERROR "important vcproj2cmake variable ${var_name_} not valid/available!?")
+    endif(NOT ${var_name_})
+  endforeach(var_name_ ${_var_names_list})
+endfunction(_v2c_ensure_valid_variables _var_names_list)
+
+
 
 # Sets a V2C config value.
 # Most input is versioned (ZZZZ_vY), to be able to do clean changes
@@ -100,7 +112,7 @@ function(_v2c_config_get _cfg_key _cfg_value_out)
   set(${_cfg_value_out} "${cfg_value_}" PARENT_SCOPE)
 endfunction(_v2c_config_get _cfg_key _cfg_value_out)
 
-function(_v2c_config_setup_rebuilder)
+function(_v2c_config_do_setup_rebuilder)
   # Some one-time setup steps:
 
   # Have an update_cmakelists_ALL convenience target
@@ -139,9 +151,13 @@ function(_v2c_config_setup_rebuilder)
     # "Re: Makefile: 'abort' command? / 'elseif' to go with ifeq/else/endif?
     #   (Make newbie)" http://www.mail-archive.com/help-gnu-utils@gnu.org/msg00736.html
     if(UNIX)
-      _v2c_config_set(v2c_abort_BIN_v1 false)
+      # WARNING: make sure to fetch a full path, since otherwise we'd
+      # end up with a simple "false" which is highly conflict-prone
+      # with CMake's "false" boolean value!!
+      find_program(abort_BIN_ false)
+      _v2c_config_set(abort_BIN_v1 "${abort_BIN_}")
     else(UNIX)
-      _v2c_config_set(v2c_abort_BIN_v1 v2c_invoked_non_existing_command_simply_to_force_build_abort)
+      _v2c_config_set(abort_BIN_v1 v2c_invoked_non_existing_command_simply_to_force_build_abort)
     endif(UNIX)
     # Provide a marker file, to enable external build invokers
     # to determine whether a (supposedly entire) build
@@ -152,9 +168,9 @@ function(_v2c_config_setup_rebuilder)
     # (oh yay, we even need to have the marker file removed on next build launch again).
     _v2c_config_set(update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1 "${V2C_STAMP_FILES_DIR}/v2c_cmakelists_update_abort_cleanup_done.stamp")
   endif(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD)
-endfunction(_v2c_config_setup_rebuilder)
+endfunction(_v2c_config_do_setup_rebuilder)
 
-function(_v2c_config_setup)
+function(_v2c_config_do_setup)
   # FIXME: should obey V2C_LOCAL_CONFIG_DIR setting!! Nope, this is a
   # reference to the _global_ one here... Hmm, is there a config variable for
   # that? At least set a local variable here for now.
@@ -173,11 +189,11 @@ function(_v2c_config_setup)
   # Now do rebuilder setup within this function, too,
   # to have direct access to important configuration variables.
   if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
-    _v2c_config_setup_rebuilder()
+    _v2c_config_do_setup_rebuilder()
   endif(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
-endfunction(_v2c_config_setup)
+endfunction(_v2c_config_do_setup)
 
-_v2c_config_setup()
+_v2c_config_do_setup()
 
 
 # Debug-only helper!
@@ -359,13 +375,14 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
       if(need_init_main_targets_this_time_)
         _v2c_config_get(cmakelists_update_check_did_abort_public_marker_file_v1 cmakelists_update_check_did_abort_public_marker_file_v1_)
         _v2c_config_get(update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1 update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1_)
-        _v2c_config_get(v2c_abort_BIN_v1 v2c_abort_BIN_v1_)
+        _v2c_config_get(abort_BIN_v1 abort_BIN_v1_)
+        _v2c_ensure_valid_variables(abort_BIN_v1_)
         add_custom_command(OUTPUT "${cmakelists_update_check_stamp_file_v1_}"
           # Obviously we need to touch the output file (success indicator) _before_ aborting by invoking false.
           # Also, we need to touch the public marker file as well.
           COMMAND "${CMAKE_COMMAND}" -E touch "${cmakelists_update_check_stamp_file_v1_}" "${cmakelists_update_check_did_abort_public_marker_file_v1_}"
           COMMAND "${CMAKE_COMMAND}" -E remove -f "${update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1_}"
-          COMMAND "${v2c_abort_BIN_v1_}"
+          COMMAND "${abort_BIN_v1_}"
           # ...and of course add another clever message command
           # right _after_ the abort processing,
           # to alert people whenever aborting happened to fail:
