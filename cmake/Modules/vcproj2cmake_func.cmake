@@ -22,7 +22,7 @@
 
 
 # TODO:
-# - should add a v2c_parse_arguments() macro
+# - should add a _v2c_parse_arguments() macro
 #   (available at http://www.cmake.org/Wiki/CMakeMacroParseArguments ),
 #   to then be used by several of our functions here
 
@@ -623,6 +623,20 @@ if(NOT V2C_INSTALL_ENABLE)
   endif(NOT V2C_INSTALL_ENABLE_SILENCE_WARNING)
 endif(NOT V2C_INSTALL_ENABLE)
 
+function(_v2c_list_check_item_contained_exact _item _list _res_out)
+  if(_list) # not empty/unset?
+    if(${_list} MATCHES ${_item}) # shortcut :)
+      foreach(list_item_ ${_list})
+        if(${_item} STREQUAL ${list_item_})
+          set(res_ TRUE)
+          break()
+        endif(${_item} STREQUAL ${list_item_})
+      endforeach(list_item_ ${_list})
+    endif(${_list} MATCHES ${_item})
+  endif(_list)
+  set(${_res_out} ${res_} PARENT_SCOPE)
+endfunction(_v2c_list_check_item_contained_exact _item _list _res_out)
+
 # Helper to cleanly evaluate target-specific setting or, failing that,
 # whether target is mentioned in a global list.
 # Example: V2C_INSTALL_ENABLE_${_target}, or
@@ -632,14 +646,7 @@ function(_v2c_target_install_get_flag__helper _target _var_prefix _result_out)
   if(${_var_prefix}_${_target})
     set(flag_result_ true)
   else(${_var_prefix}_${_target})
-    if(${_var_prefix}_TARGETS_LIST)
-      foreach(v2c_target_current_ ${${_var_prefix}_TARGETS_LIST})
-        if(v2c_target_current_ STREQUAL _target)
-          set(flag_result_ true)
-          break()
-        endif(v2c_target_current_ STREQUAL _target)
-      endforeach(v2c_target_current_ ${${_var_prefix}_TARGETS_LIST})
-    endif(${_var_prefix}_TARGETS_LIST)
+    _v2c_list_check_item_contained_exact("${_target}" "${${_var_prefix}_TARGETS_LIST}" flag_result_)
   endif(${_var_prefix}_${_target})
   set(${_result_out} ${flag_result_} PARENT_SCOPE)
 endfunction(_v2c_target_install_get_flag__helper _target _var_prefix _result_out)
