@@ -44,10 +44,10 @@ module V2C_Util_File
   end
   module_function :cmp
 
-  def makedirs(list)
-    return File.makedirs(list)
+  def mkdir_p(list)
+    return $have_ftools ? File.makedirs(list) : FileUtils.mkdir_p(list)
   end
-  module_function :makedirs
+  module_function :mkdir_p
 
   def move(from, to, verbose = false)
     # Side note: FileUtils on ruby 1.9.1p429 mingw32 does not have

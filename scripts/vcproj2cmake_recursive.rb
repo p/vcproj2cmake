@@ -43,7 +43,7 @@ source_root = Dir.pwd
 script_location = "#{script_path}/vcproj2cmake.rb"
 
 if not File.exist?($v2c_config_dir_local)
-  FileUtils.mkdir_p $v2c_config_dir_local
+  V2C_Util_File.mkdir_p $v2c_config_dir_local
 end
 
 time_cmake_root_folder = 0
