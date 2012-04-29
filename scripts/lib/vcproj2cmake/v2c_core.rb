@@ -984,6 +984,11 @@ VS10_ITEM_METADATA_MACRO_MATCH_REGEX_OBJ = %r{%([^\s]*)}
 
 
 class V2C_SyntaxGeneratorBase < V2C_LoggerBase
+  COMMENT_LEVEL_OFF = 0 # no comments generated
+  COMMENT_LEVEL_MINIMUM = 1 # minimum amount of comments
+  COMMENT_LEVEL_STANDARD = 2 # standard setting
+  COMMENT_LEVEL_VERBOSE = 3 # verbose mode - even more comments
+  COMMENT_LEVEL_ALL = 4 # highly verbose, many comments
   def initialize(textOut)
     @textOut = textOut
   end
@@ -1101,12 +1106,12 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def write_include_from_cmake_var(include_file_var, optional = false)
     write_include(dereference_variable_name(include_file_var), optional)
   end
-  def write_cmake_policy(policy_num, set_to_new, comment)
+  def write_cmake_policy(policy_num, set_to_new, comment) # comment parm better not default-nil (enforce commenting)
     str_policy = '%s%04d' % [ 'CMP', policy_num ]
     str_conditional = "POLICY #{str_policy}"
     write_conditional_if(str_conditional)
       if not comment.nil?
-        write_comment_at_level(3, comment)
+        write_comment_at_level(COMMENT_LEVEL_VERBOSE, comment)
       end
       str_OLD_NEW = set_to_new ? 'NEW' : 'OLD'
       arr_args_set_policy = [ 'SET', str_policy, str_OLD_NEW ]
@@ -1258,7 +1263,7 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
   V2C_ATTRIBUTE_NOT_PROVIDED_MARKER = 'V2C_NOT_PROVIDED' # WARNING KEEP IN SYNC: that exact string literal is being checked by vcproj2cmake_func.cmake!
   V2C_ALL_PLATFORMS_MARKER = 'ALL'
   def write_vcproj2cmake_func_comment()
-    write_comment_at_level(2, "See function implementation/docs in #{$v2c_module_path_root}/#{VCPROJ2CMAKE_FUNC_CMAKE}")
+    write_comment_at_level(COMMENT_LEVEL_STANDARD, "See function implementation/docs in #{$v2c_module_path_root}/#{VCPROJ2CMAKE_FUNC_CMAKE}")
   end
   def put_include_dir_project_source_dir
     # AFAIK .vcproj implicitly adds the project root to standard include path
@@ -1555,9 +1560,9 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
       vs7_create_config_variable_translation(elem_lib_dir, @arr_config_var_handling)
     }
     arr_lib_dirs_translated.push(dereference_variable_name('V2C_LIB_DIRS'))
-    write_comment_at_level(3, \
+    write_comment_at_level(COMMENT_LEVEL_VERBOSE,
       "It is said to be much preferable to be able to use target_link_libraries()\n" \
-      "rather than the very unspecific link_directories()." \
+      "rather than the very unspecific link_directories()."
     )
     write_build_attributes('link_directories', arr_lib_dirs_translated, map_lib_dirs, nil)
   end
@@ -1601,8 +1606,8 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     # add handling of a script file location variable, to enable users
     # to override the script location if needed.
     next_paragraph()
-    write_comment_at_level(1, \
-      "user override mechanism (don't prevent specifying a custom location of this script)" \
+    write_comment_at_level(COMMENT_LEVEL_MINIMUM,
+      "user override mechanism (don't prevent specifying a custom location of this script)"
     )
     # NOTE: we'll make V2C_SCRIPT_LOCATION express its path via
     # relative argument to global V2C_MASTER_PROJECT_DIR (i.e. CMAKE_SOURCE_DIR)
@@ -1635,8 +1640,8 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
 
   def put_file_header_cmake_minimum_version
     # Required version line to make cmake happy.
-    write_comment_at_level(1, \
-      ">= 2.6 due to crucial set_property(... COMPILE_DEFINITIONS_* ...)" \
+    write_comment_at_level(COMMENT_LEVEL_MINIMUM,
+      ">= 2.6 due to crucial set_property(... COMPILE_DEFINITIONS_* ...)"
     )
     write_command_single_line('cmake_minimum_required', 'VERSION 2.6')
   end
@@ -1679,9 +1684,9 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
   def put_var_config_dir_local; write_set_var_quoted('V2C_CONFIG_DIR_LOCAL', $v2c_config_dir_local) end
   def put_include_vcproj2cmake_func
     next_paragraph()
-    write_comment_at_level(2, \
+    write_comment_at_level(COMMENT_LEVEL_STANDARD,
       "include the main file for pre-defined vcproj2cmake helper functions\n" \
-      "This module will also include the configuration settings definitions module" \
+      "This module will also include the configuration settings definitions module"
     )
     write_include('vcproj2cmake_func')
   end
@@ -2010,7 +2015,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     next_paragraph()
     @localGenerator.put_customization_hook_commented_from_cmake_var(
       'V2C_HOOK_POST_DEFINITIONS',
-      1,
+      COMMENT_LEVEL_MINIMUM,
       "hook include after all definitions have been made\n" \
       "(but _before_ target is created using the source list!)"
     )
@@ -2167,7 +2172,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     next_paragraph()
     @localGenerator.put_customization_hook_commented_from_cmake_var(
       'V2C_HOOK_POST_TARGET',
-      1,
+      COMMENT_LEVEL_MINIMUM,
       "e.g. to be used for tweaking target properties etc."
     )
   end
@@ -2530,7 +2535,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     timestamp_format = $v2c_generator_timestamp_format
     return if timestamp_format.nil? or timestamp_format.empty?
     timestamp_format_docs = timestamp_format.tr('%', '')
-    write_comment_at_level(3, "Indicates project conversion moment in time (UTC, format #{timestamp_format_docs})")
+    write_comment_at_level(COMMENT_LEVEL_VERBOSE, "Indicates project conversion moment in time (UTC, format #{timestamp_format_docs})")
     time = Time.new
     str_time = time.utc.strftime(timestamp_format)
     # Add project_name as _prefix_ (keep variables grep:able, via "v2c_converted_at_utc")
@@ -2538,7 +2543,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     write_set_var("#{project_name}_v2c_converted_at_utc", element_handle_quoting(str_time))
   end
   def put_converted_from_marker(project_name, str_from_buildtool_version)
-    write_comment_at_level(3, 'Indicates originating build environment / IDE')
+    write_comment_at_level(COMMENT_LEVEL_VERBOSE, 'Indicates originating build environment / IDE')
     # Add project_name as _prefix_ (keep variables grep:able, via "v2c_converted_from")
     write_set_var("#{project_name}_v2c_converted_from", element_handle_quoting(str_from_buildtool_version))
   end
@@ -2585,7 +2590,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def put_hook_project
     put_customization_hook_commented_from_cmake_var(
       'V2C_HOOK_PROJECT',
-      2,
+      COMMENT_LEVEL_STANDARD,
       "hook e.g. for invoking Find scripts as expected by\n" \
       "the _LIBRARIES / _INCLUDE_DIRS mappings created\n" \
       "by your include/dependency map files."
