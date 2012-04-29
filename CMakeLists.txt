@@ -4,22 +4,22 @@ set(vcproj2cmake_cmake_compat_req "2.6.2")
 # ...thus check for it here already (FIXME: this is not customer-friendly - we
 # should check manually and launch a FATAL_ERROR with wording specific to
 # vcproj2cmake tools).
-# And perhaps even gather ("file(READ ...)") the version value directly from our
-# scripts...
+# And perhaps even gather (via "file(READ ...)") the version value directly
+# from our scripts...
 cmake_minimum_required(VERSION ${vcproj2cmake_cmake_compat_req} FATAL_ERROR)
 
 project(v2c_installer NONE)
 
 message(STATUS "Welcome to the installation handler of vcproj2cmake!")
 
-set(v2c_vcproj_proj_source_root_doc "Path to the root directory of the Visual Studio .vcproj-based source project that you would like to CMake-enable")
-
 # Provide a config option to let people choose to automatically
 # download and convert/compile a very nice demo .vcproj app from somewhere...
 set(v2c_vcproj_load_demo_app true CACHE BOOL "Do you want to install/process this converter on a demo tree downloaded from the Internet?")
 if(v2c_vcproj_load_demo_app)
+  set(v2ci_vcproj_proj_source_root_doc_string "Path to the root directory of the Visual Studio .vcproj-based source project that you would like to CMake-enable")
+
   # TODO: perhaps move into a demoApp.cmake file.
-  function(v2c_svn_checkout _repo_url _name _dir)
+  function(v2ci_svn_checkout _repo_url _name _dir)
     find_package(Subversion)
     if(NOT Subversion_FOUND)
       message(FATAL_ERROR "the .vcproj-based demo application ${_name} needs to be fetched via Subversion, which is not installed - please install a Subversion package!")
@@ -36,18 +36,18 @@ if(v2c_vcproj_load_demo_app)
       COMMENT "fetching SVN repository of ${_name} into ${_dir}"
     )
     add_custom_target(svn_checkout_${_name} ALL DEPENDS "${command_output_}")
-  endfunction(v2c_svn_checkout _repo_url _name _dir)
-  function(v2c_fetch_demo_app_osdab _demo_app_root_dir)
+  endfunction(v2ci_svn_checkout _repo_url _name _dir)
+  function(v2ci_fetch_demo_app_osdab _demo_app_root_dir)
     set(demo_app_name_ "osdab")
     set(demo_app_repo_url_ "http://osdab.googlecode.com/svn/trunk/")
-    v2c_svn_checkout("${demo_app_repo_url_}" "${demo_app_name_}" "${_demo_app_root_dir}")
-  endfunction(v2c_fetch_demo_app_osdab _demo_app_root_dir)
+    v2ci_svn_checkout("${demo_app_repo_url_}" "${demo_app_name_}" "${_demo_app_root_dir}")
+  endfunction(v2ci_fetch_demo_app_osdab _demo_app_root_dir)
 
-  function(v2c_fetch_demo_app_sebclient _demo_app_root_dir)
+  function(v2ci_fetch_demo_app_sebclient _demo_app_root_dir)
     set(demo_app_name "SebWindowsClient")
     set(demo_app_repo_url "https://seb.svn.sourceforge.net/svnroot/seb/trunk/win/SebWindowsPackage/SebWindowsClient")
-    v2c_svn_checkout("${demo_app_repo_url}" "${demo_app_name}" "${_demo_app_root_dir}")
-  endfunction(v2c_fetch_demo_app_sebclient _demo_app_root_dir)
+    v2ci_svn_checkout("${demo_app_repo_url}" "${demo_app_name}" "${_demo_app_root_dir}")
+  endfunction(v2ci_fetch_demo_app_sebclient _demo_app_root_dir)
 
   # obey TMPDIR env variable convention:
   set(tmpdir "$ENV{TMPDIR}")
@@ -59,17 +59,17 @@ if(v2c_vcproj_load_demo_app)
     endif(WIN32)
   endif(NOT IS_DIRECTORY "${tmpdir}")
   set(v2c_demo_app_root "${tmpdir}/vcproj2cmake_demo_app")
-  v2c_fetch_demo_app_osdab("${v2c_demo_app_root}")
+  v2ci_fetch_demo_app_osdab("${v2c_demo_app_root}")
   # Ouch, sebclient is _very_ large (139MB) - thus do not offer it as a publicly visible default.
-  #v2c_fetch_demo_app_sebclient("${v2c_demo_app_root}")
+  #v2ci_fetch_demo_app_sebclient("${v2c_demo_app_root}")
 
-  set(v2c_vcproj_proj_source_root "${v2c_demo_app_root}" CACHE STRING "${v2c_vcproj_proj_source_root_doc}" FORCE)
+  set(v2c_vcproj_proj_source_root "${v2c_demo_app_root}" CACHE STRING "${v2ci_vcproj_proj_source_root_doc_string}" FORCE)
   # Originally we had some broken mark_as_advanced() mechanism to hide
   # the source root from the user in case of an app download,
   # but that's stupid since the user should _learn_ where it will get
   # downloaded to.
 else(v2c_vcproj_load_demo_app)
-  set(v2c_vcproj_proj_source_root "" CACHE STRING "${v2c_vcproj_proj_source_root_doc}")
+  set(v2c_vcproj_proj_source_root "" CACHE STRING "${v2ci_vcproj_proj_source_root_doc_string}")
 endif(v2c_vcproj_load_demo_app)
 message(STATUS "root directory of project source configured to ${v2c_vcproj_proj_source_root}")
 
@@ -82,12 +82,10 @@ set(v2c_module_path_subdir "${v2c_module_path_subdir_default_setting}" CACHE STR
 set(v2c_vcproj_proj_do_convert_default_setting true)
 set(v2c_vcproj_proj_do_convert ${v2c_vcproj_proj_do_convert_default_setting} CACHE BOOL "Should we automatically run a recursive conversion of projects to CMakeLists.txt within the source root directory of your .vcproj-based project?")
 
-# We don't want the user to see this - the user should be configuring our
+# We don't want the user to see CMAKE_INSTALL_PREFIX - the user should be configuring our
 # specific source root dir of a .vcproj project.
-mark_as_advanced(CMAKE_INSTALL_PREFIX)
-
-# We don't want the user to see this since we don't need it at all...
-mark_as_advanced(CMAKE_BUILD_TYPE)
+# We don't want the user to see CMAKE_BUILD_TYPE since we don't need it at all...
+mark_as_advanced(CMAKE_INSTALL_PREFIX CMAKE_BUILD_TYPE)
 
 if(v2c_vcproj_proj_source_root)
   # Validate source root, but only in case of a
