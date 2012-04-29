@@ -1296,6 +1296,11 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
       put_v2c_hook_invoke(dereference_variable_name(include_file_var))
     end
   end
+  def put_customization_hook_commented_from_cmake_var(include_file_var, comment_level, comment)
+    return if $v2c_generator_one_time_conversion_only
+    write_comment_at_level(comment_level, comment)
+    put_customization_hook_from_cmake_var(include_file_var)
+  end
   # Hrmm, I'm not quite sure yet where to aggregate this function...
   def get_buildcfg_var_name_of_condition(condition)
     # HACK: very Q&D handling, to make things work quickly.
@@ -1612,6 +1617,11 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     end
   end
   def write_func_v2c_project_post_setup(project_name, orig_project_file_basename)
+    # This function invokes CMakeLists.txt rebuilder only
+    # (TODO: should be changed into specific naming!),
+    # thus skip on one-time generation.
+    return if $v2c_generator_one_time_conversion_only
+
     # Rationale: keep count of generated lines of CMakeLists.txt to a bare minimum -
     # call v2c_project_post_setup(), by simply passing all parameters that are _custom_ data
     # of the current generated CMakeLists.txt file - all boilerplate handling functionality
@@ -1998,11 +2008,12 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def put_hook_post_sources; @localGenerator.put_customization_hook_from_cmake_var('V2C_HOOK_POST_SOURCES') end
   def put_hook_post_definitions
     next_paragraph()
-    write_comment_at_level(1, \
-	"hook include after all definitions have been made\n" \
-	"(but _before_ target is created using the source list!)" \
+    @localGenerator.put_customization_hook_commented_from_cmake_var(
+      'V2C_HOOK_POST_DEFINITIONS',
+      1,
+      "hook include after all definitions have been made\n" \
+      "(but _before_ target is created using the source list!)"
     )
-    @localGenerator.put_customization_hook_from_cmake_var('V2C_HOOK_POST_DEFINITIONS')
   end
   def put_v2c_target_midl_specify_files(target_name, build_type, platform, header_file_name, iface_id_file_name, type_library_name)
     arr_args_midl = [ build_type, platform, header_file_name, iface_id_file_name, type_library_name ]
@@ -2154,10 +2165,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   end
   def put_hook_post_target
     next_paragraph()
-    write_comment_at_level(1, \
-      "e.g. to be used for tweaking target properties etc." \
+    @localGenerator.put_customization_hook_commented_from_cmake_var(
+      'V2C_HOOK_POST_TARGET',
+      1,
+      "e.g. to be used for tweaking target properties etc."
     )
-    @localGenerator.put_customization_hook_from_cmake_var('V2C_HOOK_POST_TARGET')
   end
   def put_property_compile_definitions(config_name, arr_compile_defn)
     arr_compile_defn_cooked = cmake_escape_compile_definitions(arr_compile_defn)
@@ -2571,12 +2583,13 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     write_include('MasterProjectDefaults_vcproj2cmake', true)
   end
   def put_hook_project
-    write_comment_at_level(2, \
-	"hook e.g. for invoking Find scripts as expected by\n" \
-	"the _LIBRARIES / _INCLUDE_DIRS mappings created\n" \
-	"by your include/dependency map files." \
+    put_customization_hook_commented_from_cmake_var(
+      'V2C_HOOK_PROJECT',
+      2,
+      "hook e.g. for invoking Find scripts as expected by\n" \
+      "the _LIBRARIES / _INCLUDE_DIRS mappings created\n" \
+      "by your include/dependency map files."
     )
-    put_customization_hook_from_cmake_var('V2C_HOOK_PROJECT')
   end
 
   def generate_project_leadin(project_info)
