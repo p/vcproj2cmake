@@ -47,7 +47,7 @@ if not File.exist?($v2c_config_dir_local)
 end
 
 time_cmake_root_folder = 0
-arr_excl_proj = Array.new()
+arr_excl_proj_expr = Array.new()
 time_cmake_root_folder = File.stat($v2c_config_dir_local).mtime.to_i
 excluded_projects = "#{$v2c_config_dir_local}/project_exclude_list.txt"
 if File.exist?(excluded_projects)
@@ -59,7 +59,7 @@ if File.exist?(excluded_projects)
       next if exclude_expr.empty?
       # TODO: we probably need a per-platform implementation,
       # since exclusion is most likely per-platform after all
-      arr_excl_proj.push(exclude_expr)
+      arr_excl_proj_expr.push(exclude_expr)
     end
   ensure
     f_excl.close
@@ -85,6 +85,31 @@ arr_project_subdirs = Array.new
 # Hmm, or perhaps port _everything_ back into vcproj2cmake.rb,
 # providing --recursive together with --scan or --convert switches for all_sub_projects.txt generation or use.
 
+
+# Pre-configure a directory exclusion pattern regex:
+arr_excl_dir_expr_skip_recursive_static = [ '\.svn', '\.git' ] # TODO transform this into a config setting?
+
+# NOTE: arr_excl_expr is expected to contain entries with already
+# regex-compatible (potentially escaped) content (we will not run
+# Regexp.escape() on that content, since that would reduce freedom
+# of expression on the user side!)
+
+def generate_multi_regex(regex_prefix, arr_excl_expr)
+  excl_regex = nil
+  if not arr_excl_expr.empty?
+    excl_regex = "#{regex_prefix}\/("
+    excl_regex += arr_excl_expr.join('|')
+    excl_regex += ')$'
+  end
+  return excl_regex
+end
+
+# The regex to exclude a single specific directory within the hierarchy:
+excl_regex_single = generate_multi_regex('^\.', arr_excl_proj_expr)
+
+# The regex to exclude a match (and all children!) within the hierarchy:
+excl_regex_recursive = generate_multi_regex('', arr_excl_dir_expr_skip_recursive_static)
+
 Find.find('./') do
   |f|
   # skip symlinks since they might be pointing _backwards_!
@@ -97,22 +122,22 @@ Find.find('./') do
   if f =~ /^build/i
     is_excluded = true
   else
-    arr_excl_proj.each do |excluded|
-      # Tech note: we could have pre-stored the full regex expression
-      # in the original array already, but this would be less flexible,
-      # thus recreate the regex on each loop:
-      excl_regex = "^\.\/#{excluded}$"
-      #puts "MATCH: #{f} vs. #{excl_regex}"
-      if f.match(excl_regex)
+    if not excl_regex_single.nil?
+      #puts "MATCH: #{f} vs. #{excl_regex_single}"
+      if f.match(excl_regex_single)
         is_excluded = true
-        break
       end
     end
   end
   #puts "excluded: #{is_excluded}"
   if is_excluded == true
-    puts "EXCLUDED #{f}!"
+    puts "EXCLUDED SINGLE #{f}!"
     next
+  end
+
+  if f.match(excl_regex_recursive)
+    puts "EXCLUDED RECURSIVELY #{f}!"
+    Find.prune() # throws exception to skip entire recursive directories block
   end
 
   # HACK: temporary helper to quickly switch between .vcproj/.vcxproj
@@ -268,7 +293,7 @@ end
 # real separate-process handling with clean IPC is a much better idea
 # in several cases).
 if ($v2c_enable_threads)
-  puts 'Recursively converting projects, multi-threaded'
+  puts 'Recursively converting projects, multi-threaded.'
 
   # "Ruby-Threads erzeugen"
   #    http://home.vr-web.de/juergen.katins/ruby/buch/tut_threads.html
@@ -283,7 +308,7 @@ if ($v2c_enable_threads)
 
   threads.each { |aThread| aThread.join }
 else # non-threaded
-  puts 'Recursively converting projects, NON-threaded'
+  puts 'Recursively converting projects, NON-threaded.'
   arr_thread_work.each { |myWork|
     v2c_convert_project_outer(script_location, myWork.str_proj_file_location, myWork.str_cmakelists_file_location, source_root)
   }
