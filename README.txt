@@ -1,5 +1,5 @@
-vcproj2cmake.rb - .vcproj to CMakeLists.txt converter scripts
-written by Jesper Eskilson and Andreas Mohr.
+vcproj2cmake.rb - .vcproj/.vcxproj to CMakeLists.txt converter scripts
+written by Andreas Mohr and Jesper Eskilson.
 License: BSD (see LICENSE.txt)
 
 ----------
@@ -9,14 +9,22 @@ if things break, then you certainly get to keep both parts.
 ----------
 
 
-vcproj2cmake has been strongly tested with CMake 2.6.x only - while some 2.8.x testing has been done,
-support for this version might still be a bit weak.
+=== Environment dependencies / installation requirements  ===
+
+- working CMake installation
+  CMake 2.6.x to 2.8.x recommended (vcproj2cmake has been tested
+  with CMake versions in the ranges of 2.6.x to 2.8.7 only)
+- Ruby
+  Ruby 1.8.x to 1.9.x recommended (while some efforts have been done
+  to ensure compatibility with older Ruby versions [e.g. those found on RHEL3],
+  such support may be spotty)
 
 
 Usage (very rough summary), with Linux/Makefile generator:
 - use existing Visual Studio project source tree which contains a .vcproj file
+- install vcproj2cmake environment to this source tree
 - [OPTIONAL] choose suitable vcproj2cmake converter configuration:
-  create a [PATH_TO_VCPROJ2CMAKE]/scripts/vcproj2cmake_settings.user.rb,
+  create a [PATH_TO_INSTALLED_VCPROJ2CMAKE]/scripts/vcproj2cmake_settings.user.rb,
   or directly modify the vcproj2cmake_settings.rb there
   (not recommended - the non-user file will be overwritten on each repository update,
   thus restoring all settings to default)
@@ -33,15 +41,15 @@ Usage (very rough summary), with Linux/Makefile generator:
 
 ===========================================================================
 Usage, easy mode:
-- run install_me_fully_guided.rb or install_me_fully_guided.sh
+- run install_me_fully_guided.rb or (on UNIX) install_me_fully_guided.sh
 - this will interactively prompt you for everything
 - ideally you will end up with a completely built CMake-enabled build tree
-  of your .vcproj-based source tree if everything goes fine
+  of your .vc[x]proj-based source tree if everything goes fine
 ===========================================================================
 
 
 NOTE: first thing to state is:
-if you do not have any users who are hooked on keep using
+if you do not have any users who are hooked on keeping to use
 their static .vcproj files on Visual Studio, then it perhaps makes less sense
 to use our converter as a somewhat more cumbersome _online converter_ solution
 - instead you may choose to go for a full-scale manual conversion
@@ -55,11 +63,26 @@ authoritative project information in future on all platforms, instead of the sta
 OTOH by using our scripts for one-time-conversion only, you will lose out
 on any of the hopefully substantial further improvements done to our
 online conversion script in the future,
-thus it's a tough initial decision to make on whether to maintain an online conversion
-infrastructure or to go initial-convert only and thus run _all_ sides on a CMake-based
-setup.
+thus it's a tough initial decision to make on whether to maintain
+an online conversion infrastructure or to go initial-convert only and thus
+run _all_ related developers on a CMake-based setup.
 
 
+
+=== Installation notes ===
+
+For more volatile vcproj2cmake parts (those which get updated frequently
+by the vcproj2cmake project, such as vcproj2cmake_func.cmake
+and generated CMakeLists.txt),
+it is recommended to not add them to Source Control Management (SCM).
+Reasons:
+- version of vcproj2cmake_func.cmake etc. should remain synchronized
+  with the main conversion scripts, which can only be guaranteed
+  by always-installing vcproj2cmake_func.cmake etc.
+- a large number of generated CMakeLists.txt files
+  will needlessly clutter the source tree for non-CMake developers
+Mappings files and hook files, OTOH, contain custom project-specific
+persistent information and thus should find their way into SCM.
 
 ===============================================================================
 Explanation of core concepts:
@@ -72,7 +95,7 @@ include(${V2C_HOOK_PROJECT} OPTIONAL)
 These are meant to provide interception points ("hooks") to enhance online-converted
 CMakeLists.txt with specific static content (e.g. to call required CMake Find scripts
 via "find_package(Foobar REQUIRED)",
-or to override some undesireable .vcproj choices, to provide some user-facing
+or to override some undesireable .vc[x]proj choices, to provide some user-facing
 CMake setup cache variables, etc.).
 One could just as easily have written this line like
 include(cmake/vcproj2cmake/hook_project.txt OPTIONAL)
@@ -93,7 +116,7 @@ Well, I'm not sure whether this already deserves being called "Best
 Practice", but...
 
 Since specific hook scripts will get included repeatedly
-(by multiple .vcproj-based projects, possibly located in subsequent
+(by multiple .vc[x]proj-based projects, possibly located in subsequent
 sub directories, i.e. ending up in _same_ CMake scope!!),
 it's probably a very good idea to let the initial hook script
 (probably the V2C_HOOK_PROJECT one) include a _common_ CMake module file
@@ -137,7 +160,7 @@ and certain other defines might need a different replacement on a certain other 
 Dito with library dependencies, and especially with include and library directories.
 
 This is what vcproj2cmake's mappings file mechanism is meant to solve
-(see cmake/vcproj2cmake/include_mappings.txt etc.).
+(see our initial-content sample files at cmake/vcproj2cmake/include_mappings.txt etc.).
 
 
 Basic syntax of mappings files is:
@@ -202,11 +225,12 @@ in the file $v2c_config_dir_local/project_exclude_list.txt
 
 === Automatic re-conversion upon .vcproj changes ===
 
-vcproj2cmake now contains a mechanism for _automatically_ triggered re-conversion of files
+vcproj2cmake now contains a mechanism (added as targets to the build environment)
+for _automatically_ triggered re-conversion of files
 whenever the backing .vcproj file received some updates.
 This is implemented in function
 cmake/Modules/vcproj2cmake_func.cmake/v2c_rebuild_on_update()
-This internal mechanism is enabled by default, you may modify the CMake cache variable
+This internal mechanism is enabled by default - you may modify the CMake cache variable
 V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER to disable it.
 NOTE: in order to have the automatic re-conversion mechanism work properly,
 this currently needs the initial (manual) converter invocation
@@ -215,15 +239,16 @@ to be done from root project, _not_ any other directory (FIXME get rid of this l
 Since the converter will be re-executed from within the generated files (Makefile etc.),
 it will convert the CMakeLists.txt that these are based on _within_ this same process.
 However, it has no means to abort subsequent target execution once it notices that there
-were .vcproj changes which render the current CMake generator build files obsolete.
+were .vc[x]proj changes which render the current CMake generator build files obsolete.
 Thus, the current build instance will run to its end, and it's important to then launch
 it a second time to have CMake start a new configure run with the CMakeLists.txt and
 then re-build all newly modified targets.
 There's no appreciable way to immediately re-build the updated configuration -
 see CMake list "User-accessible hook on internal cmake_check_build_system target?".
 
-To cleanly re-convert all CMakeLists.txt in an isolated way after a source upgrade via SCM,
-you may invoke target update_cmakelists_ALL, followed by doing a full build.
+To cleanly re-convert _all_ CMakeLists.txt in an isolated way
+after a source upgrade via SCM, you may invoke target update_cmakelists_ALL,
+followed by doing a full build.
 
 
 === Troubleshooting ===
@@ -233,29 +258,32 @@ you may invoke target update_cmakelists_ALL, followed by doing a full build.
 - cmake --debug-output --trace
 
 If there's compile failure due to missing includes, then this probably means that
-the newly converted CMakeLists.txt still contains an include_directories() command
+a newly converted CMakeLists.txt still contains an include_directories() command
 which lists some paths in their raw, original, Windows-specific form.
 What should have happened is automatic replacement of such path strings
 with a CMake-side configuration variable (e.g. ${toolkit_INCLUDE_DIR})
 via a regular expression in the mappings file (include_mappings.txt).
 Then CMake will consult the setting at ${toolkit_INCLUDE_DIR}
-(which should have been gathered during a CMake configure run, probably
-within one of the vcproj2cmake hook scripts that are explained above).
+(which should have been gathered during a CMake configure run,
+probably via a find_package() within one of the vcproj2cmake hook scripts
+that are explained above).
 
 If things appear to be failing left and right,
 the reason might be a lack of CMake proficiency, thus it's perhaps best
 to start with a new small CMake sample project
 (perhaps use one of the samples on the internet) before using this converter,
 to gain some CMake experience (CMake itself has a rather steep learning curve,
-thus it might be even worse trying to start with an Alpha-stage
-.vcproj to CMake converter).
+thus it might be even worse trying to start with a somewhat complex
+and semi-mature .vc[x]proj to CMake converter).
 
 
 === Installation/packaging ===
 
-One should probably use GetPrerequisites.cmake on the main project target
-(i.e., the main executable), this lists all sub project targets already
-and allows to install them from a global configuration part.
+To supply sufficient installation information for the foreign-converted
+projects that a main project target (e.g. a main executable) depends on,
+one should probably use GetPrerequisites.cmake on this main project target;
+this lists all sub project targets already and allows to install them
+from a global configuration part.
 
 However, since this probably won't be sufficient in many cases,
 there's now a new pretty flexible yet hopefully very easily usable
@@ -305,7 +333,13 @@ shortcomings, among these:
 - no three-way-merges via common base version, i.e. base-less merge
   http://jamesmckay.net/2011/01/baseless-merges-in-team-foundation-server-why/
 - no disconnected SCM operation (server connection required)
-- installation is a veritable PITA
+- installation is a veritable PITA (e.g. due to multi-server setup for
+  perfect spreading of Microsoft infrastructure lockin)
+- interfacing towards much more strongly cross-platform SCMs such as SVN or git
+  is h*ll (SvnBridge project rates itself as "stable" - everything but
+  as of 2012... [I'm working on getting this fixed];
+  git-tfs is Windows-only, or Mono-tainted untested alternative use;
+  also, OpenTF hasn't seen a commit since 2008)
 
 For a very revealing discussion with lots of experienced SCM/ALM people,
 you may look at
@@ -332,7 +366,7 @@ http://code.google.com/p/gitextensions/
 Whenever something needs better explanation, just tell me and I'll try to improve it.
 Dito if you think that some mechanism is poorly implemented (we're still at pre-Beta stage!).
 
-Despite being at Alpha stage, the converter is now more than usable enough
+Despite being at a semi-finished stage, the converter is now more than usable enough
 to successfully build and install/package a very large project consisting of
 several dozen sub projects.
 
