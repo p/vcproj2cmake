@@ -75,7 +75,7 @@ if(NOT V2C_STAMP_FILES_SUBDIR)
   set(V2C_STAMP_FILES_SUBDIR "stamps")
 endif(NOT V2C_STAMP_FILES_SUBDIR)
 # Enable customization (via cache entry), someone might need it.
-set(V2C_STAMP_FILES_DIR "${CMAKE_BINARY_DIR}/${v2c_global_config_subdir_my}/${V2C_STAMP_FILES_SUBDIR}" CACHE STRING "The directory to place any stamp files used by vcproj2cmake in.")
+set(V2C_STAMP_FILES_DIR "${CMAKE_BINARY_DIR}/${v2c_global_config_subdir_my}/${V2C_STAMP_FILES_SUBDIR}" CACHE PATH "The directory to place any stamp files used by vcproj2cmake in.")
 mark_as_advanced(V2C_STAMP_FILES_DIR)
 file(MAKE_DIRECTORY "${V2C_STAMP_FILES_DIR}")
 

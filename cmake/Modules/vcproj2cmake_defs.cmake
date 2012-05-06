@@ -7,6 +7,8 @@ set(V2C_LIBS )
 set(V2C_LIB_DIRS )
 set(V2C_SOURCES )
 
+# For this path, we intentionally specify STRING rather than PATH (path chooser),
+# since it's a semi-virtual _relative_ path _string_.
 set(V2C_LOCAL_CONFIG_DIR ./cmake/vcproj2cmake CACHE STRING "Relative path to vcproj2cmake-specific content, located within every sub-project")
 
 # Add a filter variable for someone to customize in case he/she doesn't want
