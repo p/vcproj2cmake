@@ -43,7 +43,15 @@ set(V2C_FUNC_DEFINED true)
 
 # Sanitize CMAKE_BUILD_TYPE setting:
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Debug)
+  # Hohumm - need to actively preserve the cache variable documentation string
+  # when doing CACHE FORCE... :-\
+  # DOES NOT WORK - docs will only be available for _defined_ variables,
+  # thus neither FULL_DOCS nor BRIEF_DOCS return anything other than
+  # NOTFOUND. Hrmm.
+  #get_property(cmake_build_type_full_docs CACHE PROPERTY CMAKE_BUILD_TYPE FULL_DOCS)
+  # Oh well... try to adopt a sufficiently original string:
+  set(cmake_build_type_full_docs "Choose the type of build, options are: None(CMAKE_CXX_FLAGS or CMAKE_C_FLAGS used) Debug Release RelWithDebInfo MinSizeRel Maintainer.")
+  set(CMAKE_BUILD_TYPE Debug CACHE STRING "${cmake_build_type_full_docs}" FORCE)
   # Side note: this message may appear during _initial_ configuration run
   # (MSVS 2005 generator). I suppose that this is perfectly ok,
   # since CMake probably still needs to make up its mind as to which
@@ -111,6 +119,79 @@ function(_v2c_config_get _cfg_key _cfg_value_out)
   #message("_v2c_config_get ${_cfg_key}: ${cfg_value_}")
   set(${_cfg_value_out} "${cfg_value_}" PARENT_SCOPE)
 endfunction(_v2c_config_get _cfg_key _cfg_value_out)
+
+# On Non-CMAKE_CONFIGURATION_TYPES generators (Ninja, Makefile, ...),
+# configures the variable indicating the platform to configure the build
+# for, otherwise (Visual Studio etc.) provide dummy.
+if(CMAKE_CONFIGURATION_TYPES)
+  function(v2c_platform_build_setting_configure)
+    # DUMMY (not needed on multi-config generators)
+  endfunction(v2c_platform_build_setting_configure)
+else(CMAKE_CONFIGURATION_TYPES)
+  # TODO: could perhaps try to figure out things in a more precise way,
+  # by intelligently evaluating both a bitwidth (32/64) input parameter
+  # _and_ a platform input parameter (from CMAKE_SYSTEM, uname, ...).
+  function(_v2c_platform_locate_matching_entry _platform_names_list _key _platform_match_out)
+    if(_platform_names_list MATCHES "${_key}")
+      foreach(platform_ ${_platform_names_list})
+        #message("platform_ ${platform_} _key ${_key}")
+        if("${platform_}" MATCHES "${_key}")
+          #message("MATCH!!! ${platform_}, ${_key}")
+          set(platform_match_ "${platform_}")
+          break()
+        endif("${platform_}" MATCHES "${_key}")
+      endforeach(platform_ ${_platform_names_list})
+    endif(_platform_names_list MATCHES "${_key}")
+    set("${_platform_match_out}" "${platform_match_}" PARENT_SCOPE)
+  endfunction(_v2c_platform_locate_matching_entry _platform_names_list _key _platform_match_out)
+
+  function(_v2c_platform_determine_default _platform_names_list _platform_default_out)
+    #message("CMAKE_SIZEOF_VOID_P ${CMAKE_SIZEOF_VOID_P}")
+    # On some platforms CMAKE_SIZEOF_VOID_P isn't set at all :(
+    if(CMAKE_SIZEOF_VOID_P)
+      if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+        set(platform_key_ "32")
+      endif(CMAKE_SIZEOF_VOID_P EQUAL 4)
+      if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(platform_key_ "64")
+      endif(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    else(CMAKE_SIZEOF_VOID_P)
+      # Oh noes... there are multiple reports of CMAKE_SIZEOF_VOID_P not
+      # being reliable
+      # (Win7 x64 CMake platform setup is said to have failed to provide it,
+      # and also arch 64).
+      # In such pathological cases, it might be a good idea to fall back
+      # to some other kind of system introspection
+      # (perhaps try_compile(), execute_process()).
+      message("FIXME: CMAKE_SIZEOF_VOID_P not available - currently assuming 32bit!")
+      set(platform_key_ "32")
+    endif(CMAKE_SIZEOF_VOID_P)
+    if(platform_key_)
+      _v2c_platform_locate_matching_entry("${_platform_names_list}" "${platform_key_}" platform_default_)
+    endif(platform_key_)
+    if(NOT platform_default_)
+      # Oh well... let's fetch the first entry and use that as default...
+      if(_platform_names_list)
+        list(GET _platform_names_list 0 platform_default_)
+      endif(_platform_names_list)
+    endif(NOT platform_default_)
+    set(${_platform_default_out} "${platform_default_}" PARENT_SCOPE)
+  endfunction(_v2c_platform_determine_default _platform_names_list _platform_default_out)
+
+  function(v2c_platform_build_setting_configure)
+    if(NOT V2C_BUILD_PLATFORM) # avoid rerun
+      set(platform_names_list_ ${ARGN})
+      _v2c_platform_determine_default("${platform_names_list_}" platform_default_setting_)
+      set(platform_doc_string_ "The TARGET (not necessarily identical to HOST!) platform to build for [possible values: ${platform_names_list_}]")
+      # Offer the main configuration cache variable to the user:
+      set(V2C_BUILD_PLATFORM "${platform_default_setting_}" CACHE STRING ${platform_doc_string_})
+    endif(NOT V2C_BUILD_PLATFORM)
+    # FIXME: should provide a variable to do first-time-only printing of
+    # this setting. Possibly could even devise a common reusable mechanism for
+    # all kinds of first-time-only printings...
+    message("vcproj2cmake build platform setting user-configured to choose build configuration: ${V2C_BUILD_PLATFORM}.")
+  endfunction(v2c_platform_build_setting_configure)
+endif(CMAKE_CONFIGURATION_TYPES)
 
 function(_v2c_config_do_setup_rebuilder)
   # Some one-time setup steps:
