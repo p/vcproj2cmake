@@ -1,14 +1,33 @@
 # This file is part of the vcproj2cmake build converter (vcproj2cmake.sf.net)
-#
-# This vcproj2cmake-specific CMake module should be available
-# at least in your root project (i.e., PROJECT/cmake/Modules/)
 
 # Some helper functions to be used by all converted projects in the tree
+
+# This vcproj2cmake-specific CMake module should be installed
+# at least to your root project (i.e., PROJECT/cmake/Modules/,
+# an additionally configured local CMake module path).
+#
+# Content rationale:
+# - provide powerful infrastructure to draw as many configuration
+#   aspects of a local project/target (CMakeLists.txt) into our function space
+#   as possible, by hooking up configuration content
+#   at custom V2C properties (target- or directory-specific)
+# - given this rich persistent data, our function space can then have
+#   flexible decision-making depending on CMake version specifics,
+#   build generator specifics etc.
+# - this will enable having huge functions within this module
+#   yet merely tiny amounts of syntax within the repeatedly generated
+#   converted CMakeLists.txt files
+# - implement many flexible base helper functions (list manipulation, ...)
+# - function prefix: _v2c_* indicates internal functions, whereas v2c_* are
+#   relatively public ones
+# - prefer _upper-case_ V2C prefix for _cache variables_ such as V2C_RUBY_BIN,
+#   to ensure that they're all sorted under The One True upper-case "V2C" prefix
+#   in "grouped view" mode of CMake GUI
 
 # Important backwards compatibility comment:
 # Since this file will usually end up in the main custom module path
 # of a source tree and the vcproj2cmake scripts might be kept (and
-# updated!) _external_ to that tree, one should attempt to provide
+# updated!) _external_ to that tree, one should still attempt to provide
 # certain amounts of backwards compatibility in this module,
 # for users who don't automatically and consistently install
 # the new module in their source tree.
@@ -88,6 +107,9 @@ mark_as_advanced(V2C_STAMP_FILES_DIR)
 file(MAKE_DIRECTORY "${V2C_STAMP_FILES_DIR}")
 
 
+# # # # #   COMMON HELPER FUNCTIONS   # # # # #
+
+
 # Helper to yell loudly in case of unset variables.
 # The input string should _not_ be the dereferenced form,
 # but rather a simple _name_ of the variable.
@@ -98,7 +120,6 @@ function(_v2c_ensure_valid_variables _var_names_list)
     endif(NOT ${var_name_})
   endforeach(var_name_ ${_var_names_list})
 endfunction(_v2c_ensure_valid_variables _var_names_list)
-
 
 
 # Sets a V2C config value.
@@ -193,6 +214,9 @@ else(CMAKE_CONFIGURATION_TYPES)
   endfunction(v2c_platform_build_setting_configure)
 endif(CMAKE_CONFIGURATION_TYPES)
 
+
+# # # # #   VCPROJ2CMAKE CONVERTER REBUILDER SETUP   # # # # #
+
 function(_v2c_config_do_setup_rebuilder)
   # Some one-time setup steps:
 
@@ -204,9 +228,6 @@ function(_v2c_config_do_setup_rebuilder)
     add_custom_target(update_cmakelists_ALL)
   endif(NOT TARGET update_cmakelists_ALL)
 
-  # Prefer _upper-case_ V2C prefix for _cache variables_ such as V2C_RUBY_BIN,
-  # to ensure that they're all sorted under
-  # The One True upper-case "V2C" prefix in "grouped view" mode of CMake GUI.
   if(NOT V2C_RUBY_BIN) # avoid repeated checks (see cmake --trace)
     find_program(V2C_RUBY_BIN NAMES ruby)
     if(NOT V2C_RUBY_BIN)
@@ -235,9 +256,9 @@ function(_v2c_config_do_setup_rebuilder)
       # WARNING: make sure to fetch a full path, since otherwise we'd
       # end up with a simple "false" which is highly conflict-prone
       # with CMake's "false" boolean value!!
-      find_program(abort_BIN_ false)
-      _v2c_ensure_valid_variables(abort_BIN_)
-      _v2c_config_set(abort_BIN_v1 "${abort_BIN_}")
+      find_program(V2C_ABORT_BIN false)
+      _v2c_ensure_valid_variables(V2C_ABORT_BIN)
+      _v2c_config_set(abort_BIN_v1 "${V2C_ABORT_BIN}")
     else(UNIX)
       _v2c_config_set(abort_BIN_v1 v2c_invoked_non_existing_command_simply_to_force_build_abort)
     endif(UNIX)
@@ -339,7 +360,7 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
 
     if(NOT EXISTS "${_script}")
       # Perhaps someone manually copied over a set of foreign-machine-converted CMakeLists.txt files...
-      # --> make sure that this use case is working anyway.
+      # --> make sure that this use case does not fail anyway.
       message("WARN: ${_dependent_target}: vcproj2cmake converter script ${_script} not found, cannot activate automatic reconversion functionality!")
       return()
     endif(NOT EXISTS "${_script}")
