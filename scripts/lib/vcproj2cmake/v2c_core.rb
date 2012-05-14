@@ -1355,11 +1355,13 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
     # Hrmm, for now we'll abuse a method at the V2C_Info_Condition class,
     # but I'm not convinced at all that this is how things should be structured.
     build_type = condition.get_build_type()
+    platform_name = condition.platform
     var_name = nil
-    if not build_type.nil?
+    if not build_type.nil? and not platform_name.nil?
       # Name may contain spaces - need to handle them!
-      config_name = util_flatten_string(build_type)
-      var_name = "v2c_want_buildcfg_#{config_name}"
+      build_type_flattened = util_flatten_string(build_type)
+      platform_name_flattened = util_flatten_string(platform_name)
+      var_name = "v2c_want_buildcfg_platform_#{platform_name_flattened}_build_type_#{build_type_flattened}"
     end
     return var_name
   end
@@ -1971,9 +1973,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       config_multi_authoritative = arr_config_info[0].condition.get_build_type()
     end
 
-    # Hrmm, this needs further thought...
-    if true
-    #if $v2c_generate_self_contained_file == 1
+    if $v2c_generate_self_contained_file == 1
       arr_config_info.each { |config_info_curr|
         condition = config_info_curr.condition
         build_type = condition.get_build_type()
@@ -1987,14 +1987,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         end
         write_set_var_bool_conditional(get_buildcfg_var_name_of_condition(condition), str_cmake_build_type_condition)
       }
-    else
-      arr_build_types = [ config_multi_authoritative ]
-      arr_config_info.each { |config_info_curr|
-        condition = config_info_curr.condition
-        build_type = condition.get_build_type()
-        arr_build_types.push(build_type)
-      }
-      write_invoke_v2c_function_quoted('v2c_prepare_build_type_variables', arr_build_types)
+    #else... implicitly being done by v2c_platform_build_setting_configure() invoked later on.
     end
   end
   # File-related TODO:
@@ -2228,7 +2221,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       put_property_compile_definitions(config_name, arr_platdefs)
     write_conditional_end(str_platform)
   end
-  def put_precompiled_header(target_name, build_type, pch_use_mode, pch_source_name)
+  def put_precompiled_header(target_name, platform_name, build_type, pch_use_mode, pch_source_name)
     # FIXME: empty filename may happen in case of precompiled file
     # indicated via VS7 FileConfiguration UsePrecompiledHeader
     # (however this is an entry of the .cpp file: not sure whether we can
@@ -2236,10 +2229,10 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # .cpp file for the similarly named include......).
     return if pch_source_name.nil? or pch_source_name.empty?
     str_pch_use_mode = "#{pch_use_mode}"
-    arr_args_precomp_header = [ build_type, str_pch_use_mode, pch_source_name ]
+    arr_args_precomp_header = [ platform_name, build_type, str_pch_use_mode, pch_source_name ]
     write_invoke_config_object_v2c_function_quoted('v2c_target_add_precompiled_header', target_name, arr_args_precomp_header)
   end
-  def write_precompiled_header(str_build_type, precompiled_header_info)
+  def write_precompiled_header(str_platform_name, str_build_type, precompiled_header_info)
     return if not $v2c_target_precompiled_header_enable
     return if precompiled_header_info.nil?
     return if precompiled_header_info.header_source_name.nil?
@@ -2251,6 +2244,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     return if not pch_ok
     put_precompiled_header(
       @target.name,
+      prepare_string_literal(str_platform_name),
       prepare_string_literal(str_build_type),
       precompiled_header_info.use_mode,
       precompiled_header_info.header_source_name
@@ -2475,6 +2469,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         condition = config_info_curr.condition
 
         build_type = condition.get_build_type()
+        platform_name = condition.platform
 
         tools = config_info_curr.tools
 
@@ -2490,7 +2485,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
           # Since the precompiled header CMake module currently
           # _resets_ a target's COMPILE_FLAGS property,
           # make sure to generate it _before_ generating COMPILE_FLAGS:
-          write_precompiled_header(build_type, compiler_info_curr.precompiled_header_info)
+          write_precompiled_header(platform_name, build_type, compiler_info_curr.precompiled_header_info)
 
           arr_target_config_info.each { |target_config_info_curr|
 	    next if not condition.entails(target_config_info_curr.condition)
@@ -2627,17 +2622,17 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # (side note: see "ldd -u -r" on Linux for superfluous link parts potentially caused by this!)
     write_include('MasterProjectDefaults_vcproj2cmake', true)
   end
-  def write_funcs_v2c_project_platform_configuration_types(project_name, build_platform_configs)
+  def write_funcs_v2c_project_platform_define_build_types(project_name, build_platform_configs)
     build_platform_configs.get_platforms().each { |platform_name|
       arr_platform_build_types = build_platform_configs.get_build_types(platform_name)
-      write_func_v2c_project_platform_configuration_types(project_name, platform_name, arr_platform_build_types)
+      write_func_v2c_project_platform_define_build_types(project_name, platform_name, arr_platform_build_types)
     }
     write_invoke_v2c_function_quoted('v2c_platform_build_setting_configure', [ project_name ])
   end
-  def write_func_v2c_project_platform_configuration_types(project_name, platform_name, arr_platform_build_types)
+  def write_func_v2c_project_platform_define_build_types(project_name, platform_name, arr_platform_build_types)
     arr_args_func = [ platform_name ]
     arr_args_func.concat(arr_platform_build_types)
-    write_invoke_config_object_v2c_function_quoted('v2c_project_platform_configuration_types', project_name, arr_args_func)
+    write_invoke_config_object_v2c_function_quoted('v2c_project_platform_define_build_types', project_name, arr_args_func)
   end
   def put_hook_project
     put_customization_hook_commented_from_cmake_var(
@@ -2653,7 +2648,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     write_project(project_info)
     put_conversion_details(project_info.name, project_info.orig_environment_shortname)
     put_include_MasterProjectDefaults_vcproj2cmake()
-    write_funcs_v2c_project_platform_configuration_types(project_info.name, project_info.build_platform_configs)
+    write_funcs_v2c_project_platform_define_build_types(project_info.name, project_info.build_platform_configs)
     put_hook_project()
   end
   # _target_ generator specific method.
