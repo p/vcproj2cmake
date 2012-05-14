@@ -24,6 +24,14 @@
 #   to ensure that they're all sorted under The One True upper-case "V2C" prefix
 #   in "grouped view" mode of CMake GUI
 
+# Policy descriptions:
+# *V2C_DOCS_POLICY_MACRO*:
+#   All "functions" with this markup need to remain _macros_,
+#   for some of the following (rather similar) reasons:
+#   - otherwise scoping is broken (newly established function scope)
+#   - calls include() (which should remain able to define things in user-side scope!)
+#   - helper sets externally obeyed variables!
+
 # Important backwards compatibility comment:
 # Since this file will usually end up in the main custom module path
 # of a source tree and the vcproj2cmake scripts might be kept (and
@@ -124,6 +132,48 @@ function(_v2c_ensure_valid_variables _var_names_list)
   endforeach(var_name_ ${_var_names_list})
 endfunction(_v2c_ensure_valid_variables _var_names_list)
 
+# Converts strings with whitespace and special characters
+# to a flattened representation (using '_' etc.).
+function(_v2c_flatten_name _in _out)
+  set(special_chars_list_ " ")
+  set(out_ "${_in}")
+  foreach(special_char_ ${special_chars_list_})
+    string(REPLACE "${special_char_}" "_" out_ "${out_}")
+  endforeach(special_char_ ${special_chars_list_})
+  set("${_out}" "${out_}" PARENT_SCOPE)
+endfunction(_v2c_flatten_name _in _out)
+
+
+function(_v2c_list_check_item_contained_exact _item _list _found_out)
+  if(_list) # not empty/unset?
+    if("${_list}" MATCHES ${_item}) # shortcut :)
+      foreach(list_item_ ${_list})
+        if(${_item} STREQUAL ${list_item_})
+          set(found_ TRUE)
+          break()
+        endif(${_item} STREQUAL ${list_item_})
+      endforeach(list_item_ ${_list})
+    endif("${_list}" MATCHES ${_item})
+  endif(_list)
+  set(${_found_out} ${found_} PARENT_SCOPE)
+endfunction(_v2c_list_check_item_contained_exact _item _list _found_out)
+
+function(_v2c_list_locate_similar_entry _list _key _match_out)
+  if(_list) # not empty/unset?
+    if(_list MATCHES "${_key}")
+      foreach(elem_ ${_list})
+        #message("elem_ ${elem_} _key ${_key}")
+        if("${elem_}" MATCHES "${_key}")
+          #message("MATCH!!! ${elem_}, ${_key}")
+          set(match_ "${elem_}")
+          break()
+        endif("${elem_}" MATCHES "${_key}")
+      endforeach(elem_ ${_list})
+    endif(_list MATCHES "${_key}")
+  endif(_list) # not empty/unset?
+  set("${_match_out}" "${match_}" PARENT_SCOPE)
+endfunction(_v2c_list_locate_similar_entry _list _key _match_out)
+
 
 # Sets a V2C config value.
 # Most input is versioned (ZZZZ_vY), to be able to do clean changes
@@ -154,46 +204,22 @@ function(_v2c_config_get _cfg_key _cfg_value_out)
   set(${_cfg_value_out} "${cfg_value_}" PARENT_SCOPE)
 endfunction(_v2c_config_get _cfg_key _cfg_value_out)
 
-
-function(_v2c_list_check_item_contained_exact _item _list _res_out)
-  if(_list) # not empty/unset?
-    if("${_list}" MATCHES ${_item}) # shortcut :)
-      foreach(list_item_ ${_list})
-        if(${_item} STREQUAL ${list_item_})
-          set(res_ TRUE)
-          break()
-        endif(${_item} STREQUAL ${list_item_})
-      endforeach(list_item_ ${_list})
-    endif("${_list}" MATCHES ${_item})
-  endif(_list)
-  set(${_res_out} ${res_} PARENT_SCOPE)
-endfunction(_v2c_list_check_item_contained_exact _item _list _res_out)
-
-function(_v2c_list_locate_similar_entry _list _key _match_out)
-  if(_list) # not empty/unset?
-    if(_list MATCHES "${_key}")
-      foreach(elem_ ${_list})
-        #message("elem_ ${elem_} _key ${_key}")
-        if("${elem_}" MATCHES "${_key}")
-          #message("MATCH!!! ${elem_}, ${_key}")
-          set(match_ "${elem_}")
-          break()
-        endif("${elem_}" MATCHES "${_key}")
-      endforeach(elem_ ${_list})
-    endif(_list MATCHES "${_key}")
-  endif(_list) # not empty/unset?
-  set("${_match_out}" "${match_}" PARENT_SCOPE)
-endfunction(_v2c_list_locate_similar_entry _list _key _match_out)
+function(_v2c_config_append_list_var_entry _cfg_key _cfg_value_append)
+  _v2c_config_get_unchecked(${cfg_key_} cfg_value_)
+  _v2c_list_check_item_contained_exact("${_cfg_value_append}" "${cfg_value_}" found_)
+  if(NOT found_) # only add if not yet contained in list...
+    list(APPEND cfg_value_ "${_cfg_value_append}")
+    _v2c_config_set(${cfg_key_} ${cfg_value_})
+  endif(NOT found_)
+endfunction(_v2c_config_append_list_var_entry _cfg_key _cfg_value_append)
 
 
 # # # # #   BUILD PLATFORM SETUP   # # # # #
 
-function(_v2c_project_platform_append _target _platform)
+function(_v2c_project_platform_append _target _build_platform)
   set(cfg_key_ ${_target}_platforms)
-  _v2c_config_get_unchecked(${cfg_key_} cfg_value_)
-  list(APPEND cfg_value_ "${_platform}")
-  _v2c_config_set(${cfg_key_} ${cfg_value_})
-endfunction(_v2c_project_platform_append _target _platform)
+  _v2c_config_append_list_var_entry(${cfg_key_} "${_build_platform}")
+endfunction(_v2c_project_platform_append _target _build_platform)
 
 function(_v2c_project_platform_get_list _target _platform_list_out)
   set(cfg_key_ ${_target}_platforms)
@@ -202,21 +228,99 @@ function(_v2c_project_platform_get_list _target _platform_list_out)
   set("${_platform_list_out}" "${cfg_value_}" PARENT_SCOPE)
 endfunction(_v2c_project_platform_get_list _target _platform_list_out)
 
-function(v2c_project_platform_configuration_types _target _platform)
-  _v2c_project_platform_append(${_target} ${_platform})
-  set(platform_configuration_types_ ${ARGN})
-  set(cfg_key_ ${_target}_platform_${_platform}_configuration_types)
-  _v2c_config_set(${cfg_key_} ${platform_configuration_types_})
-endfunction(v2c_project_platform_configuration_types _target _platform)
+function(_v2c_buildcfg_get_build_types_config_key _target _build_platform _cfg_key_out)
+  _v2c_flatten_name("${_build_platform}" build_platform_flattened_)
+  set(${_cfg_key_out}
+  "${_target}_platform_${build_platform_flattened_}_configuration_types" PARENT_SCOPE)
+endfunction(_v2c_buildcfg_get_build_types_config_key _target _build_platform _cfg_key_out)
 
-# On Non-CMAKE_CONFIGURATION_TYPES generators (Ninja, Makefile, ...),
-# configures the variable indicating the platform to statically configure
-# the build for, otherwise (Visual Studio etc.) provide dummy.
+# For a certain target (project), adds a supported platform configuration
+# in combination with a list of all its config types (e.g. Debug, Release).
+function(v2c_project_platform_define_build_types _target _build_platform)
+  _v2c_project_platform_append(${_target} ${_build_platform})
+  set(build_types_ ${ARGN})
+  _v2c_buildcfg_get_build_types_config_key("${_target}" "${_build_platform}" cfg_key_)
+  _v2c_config_set(${cfg_key_} ${build_types_})
+endfunction(v2c_project_platform_define_build_types _target _build_platform)
+
+function(_v2c_project_platform_get_build_types _target _build_platform _build_types_list_out)
+  _v2c_buildcfg_get_build_types_config_key("${_target}" "${_build_platform}" cfg_key_)
+  _v2c_config_get_unchecked(${cfg_key_} cfg_value_)
+  set(${_build_types_list_out} "${cfg_value_}" PARENT_SCOPE)
+endfunction(_v2c_project_platform_get_build_types _target _build_platform _build_types_list_out)
+
+function(_v2c_buildcfg_get_magic_conditional_name _target _build_platform _build_type _var_name_out)
+  if(_build_platform AND _build_type)
+  else(_build_platform AND _build_type)
+    message("WARNING: v2c_buildcfg_check_if_platform_buildtype_active: empty platform [${_build_platform}] or build type [${_build_type}]!?")
+  endif(_build_platform AND _build_type)
+  _v2c_flatten_name("${_build_platform}" build_platform_flattened_)
+  _v2c_flatten_name("${_build_type}" build_type_flattened_)
+  set(${_var_name_out} v2c_want_buildcfg_platform_${build_platform_flattened_}_build_type_${build_type_flattened_} PARENT_SCOPE)
+endfunction(_v2c_buildcfg_get_magic_conditional_name _target _build_platform _build_type _var_name_out)
+
 if(CMAKE_CONFIGURATION_TYPES)
-  function(v2c_platform_build_setting_configure _target)
-    # DUMMY (not needed on multi-config generators)
-  endfunction(v2c_platform_build_setting_configure _target)
+  function(_v2c_buildcfg_define_magic_conditional _target _build_platform _build_type _var_out)
+    if(V2C_BUILD_PLATFORM STREQUAL "${_build_platform}")
+      set(val_ TRUE)
+    endif(V2C_BUILD_PLATFORM STREQUAL "${_build_platform}")
+    set(${_var_out} ${val_} PARENT_SCOPE)
+  endfunction(_v2c_buildcfg_define_magic_conditional _target _build_platform _build_type _var_out)
 else(CMAKE_CONFIGURATION_TYPES)
+  function(_v2c_buildcfg_define_magic_conditional _target _build_platform _build_type _var_out)
+    if(V2C_BUILD_PLATFORM STREQUAL "${_build_platform}")
+      if(CMAKE_BUILD_TYPE STREQUAL "${_build_type}")
+        set(val_ TRUE)
+      endif(CMAKE_BUILD_TYPE STREQUAL "${_build_type}")
+    endif(V2C_BUILD_PLATFORM STREQUAL "${_build_platform}")
+    set(${_var_out} ${val_} PARENT_SCOPE)
+  endfunction(_v2c_buildcfg_define_magic_conditional _target _build_platform _build_type _var_out)
+endif(CMAKE_CONFIGURATION_TYPES)
+
+# Sets the values of the magic variables which all the other
+# platform / build type decision-making helpers rely on.
+# *V2C_DOCS_POLICY_MACRO*
+macro(_v2c_buildcfg_define_magic_conditionals _target)
+  _v2c_project_platform_get_list("${_target}" platform_list_)
+  foreach(platform_ ${platform_list_})
+    _v2c_project_platform_get_build_types(${_target} "${platform_}" build_types_list_)
+    foreach(build_type_ ${build_types_list_})
+      _v2c_buildcfg_get_magic_conditional_name(${_target} "${platform_}" "${build_type_}" magic_conditional_name_)
+      _v2c_buildcfg_define_magic_conditional(${_target} "${platform_}" "${build_type_}" value_)
+      set(${magic_conditional_name_} ${value_})
+    endforeach(build_type_ ${build_types_list_})
+  endforeach(platform_ ${platform_list_})
+endmacro(_v2c_buildcfg_define_magic_conditionals _target)
+
+# Pragmatically spoken, it queries a boolean flag that indicates
+# whether we want to include (i.e., activate) certain CMake script parts
+# which are specific to certain platform / build type combinations.
+# This is currently simply done by returning the value of a certain
+# internal boolean marker variable.
+# And here's hope that we can keep doing it this way...
+# This check should actually be nicely compatible with both
+# CMAKE_CONFIGURATION_TYPES-based generators and CMAKE_BUILD_TYPE
+# ones.
+function(v2c_buildcfg_check_if_platform_buildtype_active _target _build_platform _build_type _is_active_out)
+  _v2c_buildcfg_get_magic_conditional_name("${_target}" "${_build_platform}" "${_build_type}" magic_conditional_name_)
+  set(${_is_active_out} "${${magic_conditional_name_}}" PARENT_SCOPE)
+endfunction(v2c_buildcfg_check_if_platform_buildtype_active _target _build_platform _build_type _is_active_out)
+
+# On CMake generators which are not able to switch TARGET platforms
+# on-demand
+# (this is both non-CMAKE_CONFIGURATION_TYPES generators [Ninja, Makefile, ...]
+# *and* generators for actually would-be-runtime-config-capable
+# environments such as Visual Studio!),
+# configures the variable indicating the platform to statically configure
+# the build for,
+# otherwise (for supporting generators, of which there currently are NONE)
+# provide dummy.
+set(_v2c_generator_has_dynamic_platform_switching FALSE)
+if(_v2c_generator_has_dynamic_platform_switching)
+  function(v2c_platform_build_setting_configure _target)
+    # DUMMY (not needed on certain generators)
+  endfunction(v2c_platform_build_setting_configure _target)
+else(_v2c_generator_has_dynamic_platform_switching)
   function(_v2c_platform_determine_default _platform_names_list _platform_default_out _platform_reason_out)
     #message("CMAKE_SIZEOF_VOID_P ${CMAKE_SIZEOF_VOID_P}")
     if(CMAKE_SIZEOF_VOID_P)
@@ -263,7 +367,7 @@ else(CMAKE_CONFIGURATION_TYPES)
     set(${_platform_reason_out} "${platform_reason_}" PARENT_SCOPE)
   endfunction(_v2c_platform_determine_default _platform_names_list _platform_default_out _platform_reason_out)
 
-  function(v2c_platform_build_setting_configure _target)
+  function(_v2c_buildcfg_determine_platform_var _target)
     _v2c_project_platform_get_list(${_target} platform_names_list_)
     if(NOT V2C_BUILD_PLATFORM) # avoid rerun
       _v2c_platform_determine_default("${platform_names_list_}" platform_default_setting_ platform_reason_)
@@ -282,12 +386,18 @@ else(CMAKE_CONFIGURATION_TYPES)
       # FIXME: should provide a variable to do first-time-only printing of
       # this setting. Possibly could even devise a common reusable mechanism for
       # all kinds of first-time-only printings...
-      message("vcproj2cmake chose to adopt the following project-defined build platform setting: ${V2C_BUILD_PLATFORM}. Reason: ${platform_reason_}.")
+      message("vcproj2cmake chose to adopt the following project-defined build platform setting: ${V2C_BUILD_PLATFORM} (reason: ${platform_reason_}).")
     else(platform_ok_)
       message(FATAL_ERROR "V2C_BUILD_PLATFORM contains invalid build platform setting (${V2C_BUILD_PLATFORM}), please correct!")
     endif(platform_ok_)
-  endfunction(v2c_platform_build_setting_configure _target)
-endif(CMAKE_CONFIGURATION_TYPES)
+  endfunction(_v2c_buildcfg_determine_platform_var _target)
+
+  # *V2C_DOCS_POLICY_MACRO*
+  macro(v2c_platform_build_setting_configure _target)
+    _v2c_buildcfg_determine_platform_var(${_target})
+    _v2c_buildcfg_define_magic_conditionals(${_target})
+  endmacro(v2c_platform_build_setting_configure _target)
+endif(_v2c_generator_has_dynamic_platform_switching)
 
 
 # # # # #   VCPROJ2CMAKE CONVERTER REBUILDER SETUP   # # # # #
@@ -608,6 +718,7 @@ else(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
   endfunction(_v2c_project_rebuild_on_update _dependent_target _vcproj_file _cmakelists_file _script _master_proj_dir)
 endif(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
 if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
+  # *V2C_DOCS_POLICY_MACRO*
   macro(v2c_converter_script_set_location _location)
     # user override mechanism (don't prevent specifying a custom location of this script)
     if(NOT V2C_SCRIPT_LOCATION)
@@ -620,19 +731,24 @@ else(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
   endmacro(v2c_converter_script_set_location _location)
 endif(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
 
-# This needs to remain a _macro_, otherwise scoping is broken
-# (newly established function scope).
+# *V2C_DOCS_POLICY_MACRO*
 macro(v2c_hook_invoke _hook_file_name)
   include("${_hook_file_name}" OPTIONAL)
 endmacro(v2c_hook_invoke _hook_file_name)
 
 # Configure CMAKE_MFC_FLAG etc.
-# _Unfortunately_ these are very dirty global flags rather than a per-target property.
-# This helper needs to be a _macro_ since it sets externally obeyed variables!!
+# _Unfortunately_ CMake historically decided to have these very dirty global flags
+# rather than a per-target property. Should eventually be fixed there.
+# *V2C_DOCS_POLICY_MACRO*
 macro(v2c_local_set_cmake_atl_mfc_flags _target _build_type _build_platform _atl_flag _mfc_flag)
-  # CMAKE_ATL_FLAG currently is not a (~n official) CMake variable
-  set(CMAKE_ATL_FLAG ${_atl_flag})
-  set(CMAKE_MFC_FLAG ${_mfc_flag})
+  v2c_buildcfg_check_if_platform_buildtype_active(${_target} "${_build_platform}" "${_build_type}" is_active_)
+  # If active, then _we_ are the one to define the setting,
+  # otherwise some other invocation will define it.
+  if(is_active_)
+    # CMAKE_ATL_FLAG currently is not a (~n official) CMake variable
+    set(CMAKE_ATL_FLAG ${_atl_flag})
+    set(CMAKE_MFC_FLAG ${_mfc_flag})
+  endif(is_active_)
 endmacro(v2c_local_set_cmake_atl_mfc_flags _target _build_type _build_platform _atl_flag _mfc_flag)
 
 # Helper to hook up a precompiled header that might be enabled
@@ -657,18 +773,16 @@ endmacro(v2c_local_set_cmake_atl_mfc_flags _target _build_type _build_platform _
 # Admittedly this is the worst case (which should be avoidable),
 # but it does happen and it's not pretty.
 function(v2c_target_add_precompiled_header _target _build_type _use _header_file)
-  if(NOT _build_type)
-    message("v2c_target_add_precompiled_header: empty build type!? Exit...")
+  v2c_buildcfg_check_if_platform_buildtype_active(${_target} "${_build_platform}" "${_build_type}" is_active_)
+  if(NOT is_active_)
     return()
-  endif(NOT _build_type)
-  if(NOT v2c_want_buildcfg_${_build_type})
-    return()
-  endif(NOT v2c_want_buildcfg_${_build_type})
+  endif(NOT is_active_)
   if(NOT _use)
     return()
   endif(NOT _use)
   # Need to always re-include() this module,
-  # since it currently defines some non-cache variables in outer non-macro scope,
+  # since it currently defines some non-cache variables in outer non-macro scope
+  # (FIXME robustify it!),
   # thus invoking pre-defined macros from foreign scope would be missing
   # these vars.
   include(V2C_PCHSupport OPTIONAL)
@@ -723,6 +837,11 @@ else(WIN32)
     )
   endfunction(_v2c_target_midl_create_dummy_file _file _description)
   function(v2c_target_midl_specify_files _target _build_type _build_platform _header_file_name _iface_id_file_name _type_library_name)
+    v2c_buildcfg_check_if_platform_buildtype_active(${_target} "${_build_platform}" "${_build_type}" is_active_)
+    if(NOT is_active_)
+      return()
+    endif(NOT is_active_)
+
     # For now, all we care about is creating some dummy files to make a target actually build
     # rather than aborting CMake configuration due to missing source files...
 
