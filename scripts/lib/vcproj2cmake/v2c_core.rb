@@ -2702,9 +2702,14 @@ EOF
         # (redirecting to CMakeLists.txt file likely isn't correct/useful).
 	config_var_replacement = '${v2c_VS_ProjectPath}'
       when 'SOLUTIONDIR'
-        # Probability of SolutionDir being identical to CMAKE_SOURCE_DIR
-	# (i.e. the source root dir) ought to be strongly approaching 100%.
-	config_var_replacement = '${CMAKE_SOURCE_DIR}'
+        # We used to replace SolutionDir with CMAKE_SOURCE_DIR,
+	# but since one global CMake build repository might possibly even
+	# end up containing multiple solution-converted V2C environments,
+	# specifying V2C_MASTER_PROJECT_DIR is much more suitable/precise
+	# (BTW, this variable can of course end up with different values -
+	# depending on which of the possibly *multiple* solution sub dir hierarchies
+	# it's being defined by).
+	config_var_replacement = '${V2C_MASTER_PROJECT_DIR}'
       when 'TARGETPATH'
         config_var_emulation_code = ''
         arr_config_var_handling.push(config_var_emulation_code)
