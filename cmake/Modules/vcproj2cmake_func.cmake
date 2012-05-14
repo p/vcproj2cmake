@@ -109,6 +109,9 @@ file(MAKE_DIRECTORY "${V2C_STAMP_FILES_DIR}")
 
 # # # # #   COMMON HELPER FUNCTIONS   # # # # #
 
+function(_v2c_fatal_error_please_report _msg)
+  message(FATAL_ERROR "${_msg} - please report!")
+endfunction(_v2c_fatal_error_please_report _msg)
 
 # Helper to yell loudly in case of unset variables.
 # The input string should _not_ be the dereferenced form,
@@ -125,60 +128,109 @@ endfunction(_v2c_ensure_valid_variables _var_names_list)
 # Sets a V2C config value.
 # Most input is versioned (ZZZZ_vY), to be able to do clean changes
 # and detect out-of-sync impl / user.
-function(_v2c_config_set _cfg_key _cfg_value)
+# Uses ARGN mechanism to transparently support list variables, too
+# (also, you should pass quoted strings
+# when needing to preserve any space-containing content).
+function(_v2c_config_set _cfg_key)
+  set(cfg_values_list_ ${ARGN})
   set(cfg_key_full_ _v2c_${_cfg_key})
-  set_property(GLOBAL PROPERTY ${cfg_key_full_} "${_cfg_value}")
-endfunction(_v2c_config_set _cfg_key _cfg_value)
+  set_property(GLOBAL PROPERTY ${cfg_key_full_} "${cfg_values_list_}")
+endfunction(_v2c_config_set _cfg_key)
 
-function(_v2c_config_get _cfg_key _cfg_value_out)
+function(_v2c_config_get_unchecked _cfg_key _cfg_value_out)
   set(cfg_key_full_ _v2c_${_cfg_key})
-  get_property(cfg_value_set_ GLOBAL PROPERTY ${cfg_key_full_} SET)
-  if(NOT cfg_value_set_)
-    message(FATAL_ERROR "_v2c_config_get: config var ${_cfg_key} not set!?")
-  endif(NOT cfg_value_set_)
   get_property(cfg_value_ GLOBAL PROPERTY ${cfg_key_full_})
   #message("_v2c_config_get ${_cfg_key}: ${cfg_value_}")
   set(${_cfg_value_out} "${cfg_value_}" PARENT_SCOPE)
+endfunction(_v2c_config_get_unchecked _cfg_key _cfg_value_out)
+
+function(_v2c_config_get _cfg_key _cfg_value_out)
+  set(cfg_key_full_ _v2c_${_cfg_key})
+  get_property(cfg_value_is_set_ GLOBAL PROPERTY ${cfg_key_full_} SET)
+  if(NOT cfg_value_is_set_)
+    message(FATAL_ERROR "_v2c_config_get: config var ${_cfg_key} not set!?")
+  endif(NOT cfg_value_is_set_)
+  _v2c_config_get_unchecked(${_cfg_key} cfg_value_)
+  set(${_cfg_value_out} "${cfg_value_}" PARENT_SCOPE)
 endfunction(_v2c_config_get _cfg_key _cfg_value_out)
 
-# On Non-CMAKE_CONFIGURATION_TYPES generators (Ninja, Makefile, ...),
-# configures the variable indicating the platform to configure the build
-# for, otherwise (Visual Studio etc.) provide dummy.
-if(CMAKE_CONFIGURATION_TYPES)
-  function(v2c_platform_build_setting_configure)
-    # DUMMY (not needed on multi-config generators)
-  endfunction(v2c_platform_build_setting_configure)
-else(CMAKE_CONFIGURATION_TYPES)
-  # TODO: could perhaps try to figure out things in a more precise way,
-  # by intelligently evaluating both a bitwidth (32/64) input parameter
-  # _and_ a platform input parameter (from CMAKE_SYSTEM, uname, ...).
-  function(_v2c_platform_locate_matching_entry _platform_names_list _key _platform_match_out)
-    if(_platform_names_list MATCHES "${_key}")
-      foreach(platform_ ${_platform_names_list})
-        #message("platform_ ${platform_} _key ${_key}")
-        if("${platform_}" MATCHES "${_key}")
-          #message("MATCH!!! ${platform_}, ${_key}")
-          set(platform_match_ "${platform_}")
-          break()
-        endif("${platform_}" MATCHES "${_key}")
-      endforeach(platform_ ${_platform_names_list})
-    endif(_platform_names_list MATCHES "${_key}")
-    set("${_platform_match_out}" "${platform_match_}" PARENT_SCOPE)
-  endfunction(_v2c_platform_locate_matching_entry _platform_names_list _key _platform_match_out)
 
-  function(_v2c_platform_determine_default _platform_names_list _platform_default_out)
+function(_v2c_list_check_item_contained_exact _item _list _res_out)
+  if(_list) # not empty/unset?
+    if("${_list}" MATCHES ${_item}) # shortcut :)
+      foreach(list_item_ ${_list})
+        if(${_item} STREQUAL ${list_item_})
+          set(res_ TRUE)
+          break()
+        endif(${_item} STREQUAL ${list_item_})
+      endforeach(list_item_ ${_list})
+    endif("${_list}" MATCHES ${_item})
+  endif(_list)
+  set(${_res_out} ${res_} PARENT_SCOPE)
+endfunction(_v2c_list_check_item_contained_exact _item _list _res_out)
+
+function(_v2c_list_locate_similar_entry _list _key _match_out)
+  if(_list) # not empty/unset?
+    if(_list MATCHES "${_key}")
+      foreach(elem_ ${_list})
+        #message("elem_ ${elem_} _key ${_key}")
+        if("${elem_}" MATCHES "${_key}")
+          #message("MATCH!!! ${elem_}, ${_key}")
+          set(match_ "${elem_}")
+          break()
+        endif("${elem_}" MATCHES "${_key}")
+      endforeach(elem_ ${_list})
+    endif(_list MATCHES "${_key}")
+  endif(_list) # not empty/unset?
+  set("${_match_out}" "${match_}" PARENT_SCOPE)
+endfunction(_v2c_list_locate_similar_entry _list _key _match_out)
+
+
+# # # # #   BUILD PLATFORM SETUP   # # # # #
+
+function(_v2c_project_platform_append _target _platform)
+  set(cfg_key_ ${_target}_platforms)
+  _v2c_config_get_unchecked(${cfg_key_} cfg_value_)
+  list(APPEND cfg_value_ "${_platform}")
+  _v2c_config_set(${cfg_key_} ${cfg_value_})
+endfunction(_v2c_project_platform_append _target _platform)
+
+function(_v2c_project_platform_get_list _target _platform_list_out)
+  set(cfg_key_ ${_target}_platforms)
+  _v2c_config_get_unchecked(${cfg_key_} cfg_value_)
+  #message("platforms: ${cfg_value_}")
+  set("${_platform_list_out}" "${cfg_value_}" PARENT_SCOPE)
+endfunction(_v2c_project_platform_get_list _target _platform_list_out)
+
+function(v2c_project_platform_configuration_types _target _platform)
+  _v2c_project_platform_append(${_target} ${_platform})
+  set(platform_configuration_types_ ${ARGN})
+  set(cfg_key_ ${_target}_platform_${_platform}_configuration_types)
+  _v2c_config_set(${cfg_key_} ${platform_configuration_types_})
+endfunction(v2c_project_platform_configuration_types _target _platform)
+
+# On Non-CMAKE_CONFIGURATION_TYPES generators (Ninja, Makefile, ...),
+# configures the variable indicating the platform to statically configure
+# the build for, otherwise (Visual Studio etc.) provide dummy.
+if(CMAKE_CONFIGURATION_TYPES)
+  function(v2c_platform_build_setting_configure _target)
+    # DUMMY (not needed on multi-config generators)
+  endfunction(v2c_platform_build_setting_configure _target)
+else(CMAKE_CONFIGURATION_TYPES)
+  function(_v2c_platform_determine_default _platform_names_list _platform_default_out _platform_reason_out)
     #message("CMAKE_SIZEOF_VOID_P ${CMAKE_SIZEOF_VOID_P}")
-    # On some platforms CMAKE_SIZEOF_VOID_P isn't set at all :(
     if(CMAKE_SIZEOF_VOID_P)
       if(CMAKE_SIZEOF_VOID_P EQUAL 4)
         set(platform_key_ "32")
+	set(platform_reason_ "detected 32bit platform")
       endif(CMAKE_SIZEOF_VOID_P EQUAL 4)
       if(CMAKE_SIZEOF_VOID_P EQUAL 8)
         set(platform_key_ "64")
+	set(platform_reason_ "detected 64bit platform")
       endif(CMAKE_SIZEOF_VOID_P EQUAL 8)
     else(CMAKE_SIZEOF_VOID_P)
-      # Oh noes... there are multiple reports of CMAKE_SIZEOF_VOID_P not
-      # being reliable
+      # On several platforms (CMake platform setup modules)
+      # CMAKE_SIZEOF_VOID_P isn't set at all :(
       # (Win7 x64 CMake platform setup is said to have failed to provide it,
       # and also arch 64).
       # In such pathological cases, it might be a good idea to fall back
@@ -186,32 +238,55 @@ else(CMAKE_CONFIGURATION_TYPES)
       # (perhaps try_compile(), execute_process()).
       message("FIXME: CMAKE_SIZEOF_VOID_P not available - currently assuming 32bit!")
       set(platform_key_ "32")
+      set(platform_reason_ "unknown platform bitwidth - fallback to 32bit")
     endif(CMAKE_SIZEOF_VOID_P)
     if(platform_key_)
-      _v2c_platform_locate_matching_entry("${_platform_names_list}" "${platform_key_}" platform_default_)
+      # TODO: could perhaps try to figure out things in a more precise way,
+      # by intelligently evaluating both a bitwidth (32/64) input parameter
+      # _and_ a platform input parameter (from CMAKE_SYSTEM, uname, ...).
+      _v2c_list_locate_similar_entry("${_platform_names_list}" "${platform_key_}" platform_default_)
     endif(platform_key_)
     if(NOT platform_default_)
       # Oh well... let's fetch the first entry and use that as default...
       if(_platform_names_list)
         list(GET _platform_names_list 0 platform_default_)
+        set(platform_reason_ "chose first platform entry as default")
       endif(_platform_names_list)
     endif(NOT platform_default_)
+    if(NOT platform_default_)
+      _v2c_fatal_error_please_report("detected final failure to figure out a build platform setting (choices: [${_platform_names_list}])")
+    endif(NOT platform_default_)
+    if(NOT platform_reason_)
+      _v2c_fatal_error_please_report("No reason for platform selection given")
+    endif(NOT platform_reason_)
     set(${_platform_default_out} "${platform_default_}" PARENT_SCOPE)
-  endfunction(_v2c_platform_determine_default _platform_names_list _platform_default_out)
+    set(${_platform_reason_out} "${platform_reason_}" PARENT_SCOPE)
+  endfunction(_v2c_platform_determine_default _platform_names_list _platform_default_out _platform_reason_out)
 
-  function(v2c_platform_build_setting_configure)
+  function(v2c_platform_build_setting_configure _target)
+    _v2c_project_platform_get_list(${_target} platform_names_list_)
     if(NOT V2C_BUILD_PLATFORM) # avoid rerun
-      set(platform_names_list_ ${ARGN})
-      _v2c_platform_determine_default("${platform_names_list_}" platform_default_setting_)
-      set(platform_doc_string_ "The TARGET (not necessarily identical to HOST!) platform to build for [possible values: ${platform_names_list_}]")
+      _v2c_platform_determine_default("${platform_names_list_}" platform_default_setting_ platform_reason_)
+      set(platform_doc_string_ "The TARGET (not necessarily identical to HOST!) platform to build for [possible values: [${platform_names_list_}]]")
       # Offer the main configuration cache variable to the user:
       set(V2C_BUILD_PLATFORM "${platform_default_setting_}" CACHE STRING ${platform_doc_string_})
+    else(NOT V2C_BUILD_PLATFORM)
+      # Hmm... preserving the reason variable content is a bit difficult
+      # in light of V2C_BUILD_PLATFORM being a CACHE variable
+      # (unless we make this CACHE as well).
+      # Thus simply pretend it to be user-selected whenever it's read from cache.
+      set(platform_reason_ "user-selected entry")
     endif(NOT V2C_BUILD_PLATFORM)
-    # FIXME: should provide a variable to do first-time-only printing of
-    # this setting. Possibly could even devise a common reusable mechanism for
-    # all kinds of first-time-only printings...
-    message("vcproj2cmake build platform setting user-configured to choose build configuration: ${V2C_BUILD_PLATFORM}.")
-  endfunction(v2c_platform_build_setting_configure)
+    _v2c_list_check_item_contained_exact("${V2C_BUILD_PLATFORM}" "${platform_names_list_}" platform_ok_)
+    if(platform_ok_)
+      # FIXME: should provide a variable to do first-time-only printing of
+      # this setting. Possibly could even devise a common reusable mechanism for
+      # all kinds of first-time-only printings...
+      message("vcproj2cmake chose to adopt the following project-defined build platform setting: ${V2C_BUILD_PLATFORM}. Reason: ${platform_reason_}.")
+    else(platform_ok_)
+      message(FATAL_ERROR "V2C_BUILD_PLATFORM contains invalid build platform setting (${V2C_BUILD_PLATFORM}), please correct!")
+    endif(platform_ok_)
+  endfunction(v2c_platform_build_setting_configure _target)
 endif(CMAKE_CONFIGURATION_TYPES)
 
 
@@ -724,20 +799,6 @@ if(NOT V2C_INSTALL_ENABLE)
     message("WARNING: ${CMAKE_CURRENT_LIST_FILE}: vcproj2cmake-supplied install handling not activated - targets _need_ to be installed properly one way or another!")
   endif(NOT V2C_INSTALL_ENABLE_SILENCE_WARNING)
 endif(NOT V2C_INSTALL_ENABLE)
-
-function(_v2c_list_check_item_contained_exact _item _list _res_out)
-  if(_list) # not empty/unset?
-    if(${_list} MATCHES ${_item}) # shortcut :)
-      foreach(list_item_ ${_list})
-        if(${_item} STREQUAL ${list_item_})
-          set(res_ TRUE)
-          break()
-        endif(${_item} STREQUAL ${list_item_})
-      endforeach(list_item_ ${_list})
-    endif(${_list} MATCHES ${_item})
-  endif(_list)
-  set(${_res_out} ${res_} PARENT_SCOPE)
-endfunction(_v2c_list_check_item_contained_exact _item _list _res_out)
 
 # Helper to cleanly evaluate target-specific setting or, failing that,
 # whether target is mentioned in a global list.
