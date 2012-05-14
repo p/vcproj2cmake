@@ -695,6 +695,46 @@ class V2C_SCC_Info
   attr_accessor :aux_path
 end
 
+class V2C_BuildConfigurationEntry
+  def initialize
+    @name = nil
+    @platform = nil
+    @build_type = nil
+  end
+  attr_accessor :name
+  attr_accessor :platform
+  attr_accessor :build_type
+end
+
+class V2C_Build_Platform_Configs
+  def initialize
+    @arr_entries = Array.new # V2C_BuildConfigurationEntry
+  end
+  def add(config_entry); @arr_entries.push(config_entry) end
+  def get_platforms()
+    # Cannot use block-based Array.uniq() (Ruby 1.9.x only).
+    arr_platforms = Array.new
+    @arr_entries.each { |entry|
+      platform_name = entry.platform
+      if not arr_platforms.include?(platform_name)
+        arr_platforms.push(platform_name)
+      end
+    }
+    return arr_platforms
+  end
+  def get_build_types(platform_name)
+    arr_build_types = Array.new
+    @arr_entries.each { |entry|
+      next if not entry.platform == platform_name
+      build_type = entry.build_type
+      if not arr_build_types.include?(build_type)
+        arr_build_types.push(build_type)
+      end
+    }
+    return arr_build_types
+  end
+end
+
 class V2C_Filters_Container
   def initialize
     @arr_filters = Array.new # the array which contains V2C_Info_Filter elements. Now supported by VS10 parser. FIXME: rework VS7 parser to also create a linear array of filters!
@@ -809,7 +849,7 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
     # (to enable Qt integration, etc.):
     @vs_keyword = nil
     @scc_info = V2C_SCC_Info.new
-    @arr_config_descr = Array.new # VS10 only: maps strings such as "Release|Win32" to e.g. Configuration "Release", Platform "Win32"...
+    @build_platform_configs = V2C_Build_Platform_Configs.new # VS10 only: manages settings such as e.g. Configuration "Release", Platform "Win32", strings "Release|Win32", ...
     @arr_target_config_info = Array.new # V2C_Target_Config_Build_Info
     @arr_config_info = Array.new # V2C_Project_Config_Info
     @file_lists = V2C_File_Lists_Container.new
@@ -837,7 +877,7 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
   attr_accessor :version
   attr_accessor :vs_keyword
   attr_accessor :scc_info
-  attr_accessor :arr_config_descr
+  attr_accessor :build_platform_configs
   attr_accessor :arr_config_info
   attr_accessor :arr_target_config_info
   attr_accessor :file_lists
@@ -2587,6 +2627,18 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # (side note: see "ldd -u -r" on Linux for superfluous link parts potentially caused by this!)
     write_include('MasterProjectDefaults_vcproj2cmake', true)
   end
+  def write_funcs_v2c_project_platform_configuration_types(project_name, build_platform_configs)
+    build_platform_configs.get_platforms().each { |platform_name|
+      arr_platform_build_types = build_platform_configs.get_build_types(platform_name)
+      write_func_v2c_project_platform_configuration_types(project_name, platform_name, arr_platform_build_types)
+    }
+    write_invoke_v2c_function_quoted('v2c_platform_build_setting_configure', [ project_name ])
+  end
+  def write_func_v2c_project_platform_configuration_types(project_name, platform_name, arr_platform_build_types)
+    arr_args_func = [ platform_name ]
+    arr_args_func.concat(arr_platform_build_types)
+    write_invoke_config_object_v2c_function_quoted('v2c_project_platform_configuration_types', project_name, arr_args_func)
+  end
   def put_hook_project
     put_customization_hook_commented_from_cmake_var(
       'V2C_HOOK_PROJECT',
@@ -2601,6 +2653,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     write_project(project_info)
     put_conversion_details(project_info.name, project_info.orig_environment_shortname)
     put_include_MasterProjectDefaults_vcproj2cmake()
+    write_funcs_v2c_project_platform_configuration_types(project_info.name, project_info.build_platform_configs)
     put_hook_project()
   end
   # _target_ generator specific method.
@@ -2851,7 +2904,7 @@ class V2C_VSXmlParserBase < V2C_ParserBase
 
   private
 
-  # Save a ton of useless comments :) ("be optimistic :)")
+  # @brief Descriptively named helper, to save a ton of useless comments :) ("be optimistic :)")
   def be_optimistic; return FOUND_TRUE end
 
   def parse_attributes
@@ -4022,41 +4075,48 @@ end
 
 class V2C_VS10ItemGroupProjectConfigurationDescriptionParser < V2C_VS10ParserBase
   private
-  def get_config_info; return @info_elem end
+  def get_config_entry; return @info_elem end
 
+  def parse_attribute(setting_key, setting_value)
+    found = be_optimistic()
+    case setting_key
+    when 'Include'
+      get_config_entry().name = setting_value
+    else
+      found = super
+    end
+    return found
+  end
   def parse_setting(setting_key, setting_value)
     found = be_optimistic()
-    # FIXME TODO: use a special class for the build_type/platform mappings.
-    #case setting_key
-    #when 'Configuration'
-    #  get_config_info().condition.build_type = setting_value
-    #when 'Platform'
-    #  get_config_info().condition.platform = setting_value
-    #else
-    #  found = super
-    #end
+    case setting_key
+    when 'Configuration'
+      get_config_entry().build_type = setting_value
+    when 'Platform'
+      get_config_entry().platform = setting_value
+    else
+      found = super
+    end
     return found
   end
   def parse_post_hook
     super
-    # FIXME #log_debug_class("build type #{get_config_info().build_type}, platform #{get_config_info().platform}")
+    log_debug_class("build type #{get_config_entry().build_type}, platform #{get_config_entry().platform}")
   end
 end
 
 class V2C_VS10ItemGroupProjectConfigurationsParser < V2C_VS10ParserBase
   private
 
-  def get_arr_config_descr; return @info_elem end
+  def get_project_configs; return @info_elem end
   def parse_element(itemgroup_elem_xml)
     found = be_optimistic()
     case itemgroup_elem_xml.name
     when 'ProjectConfiguration'
-      # FIXME!!! this is _NOT_ supposed to be a V2C_Project_Config_Info here -
-      # this entry is a configuration _mapping_!
-      config_descr = V2C_Project_Config_Info.new
-      projconf_parser = V2C_VS10ItemGroupProjectConfigurationDescriptionParser.new(itemgroup_elem_xml, config_descr)
+      config_entry = V2C_BuildConfigurationEntry.new
+      projconf_parser = V2C_VS10ItemGroupProjectConfigurationDescriptionParser.new(itemgroup_elem_xml, config_entry)
       projconf_parser.parse
-      get_arr_config_descr().push(config_descr)
+      get_project_configs().add(config_entry)
     else
       found = super
     end
@@ -4231,7 +4291,8 @@ class V2C_VS10ItemGroupParser < V2C_VS10ParserBase
     item_group_parser = nil
     case itemgroup_label
     when 'ProjectConfigurations'
-      item_group_parser = V2C_VS10ItemGroupProjectConfigurationsParser.new(@elem_xml, get_project().arr_config_descr)
+      item_group_parser =
+      V2C_VS10ItemGroupProjectConfigurationsParser.new(@elem_xml, get_project().build_platform_configs)
     when nil
       item_group_parser = V2C_VS10ItemGroupAnonymousParser.new(@elem_xml, get_project())
     end
