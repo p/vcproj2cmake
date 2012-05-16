@@ -278,6 +278,9 @@ end
 #   then generates project files by iterating over the targets via a newly generated target generator each.
 # target generator: generates targets. This is the one creating/producing the output file stream. Not provided by all generators (VS10 yes, VS7 no).
 
+class V2C_ParserError < StandardError
+end
+
 class V2C_Info_Condition
   def initialize(str_condition = nil)
     @str_condition = str_condition
@@ -697,11 +700,11 @@ end
 
 class V2C_BuildConfigurationEntry
   def initialize
-    @name = nil
+    @description = nil
     @platform = nil
     @build_type = nil
   end
-  attr_accessor :name
+  attr_accessor :description
   attr_accessor :platform
   attr_accessor :build_type
 end
@@ -709,8 +712,22 @@ end
 class V2C_Build_Platform_Configs
   def initialize
     @arr_entries = Array.new # V2C_BuildConfigurationEntry
+    @arr_registered_platforms = Array.new # String
   end
-  def add(config_entry); @arr_entries.push(config_entry) end
+  # Register a platform for subsequent addition.
+  # Used to keep a close eye on the platforms a project
+  # pretends to support.
+  def register_platform(platform_name)
+    add_elem_unique(@arr_registered_platforms, platform_name)
+  end
+  # Add a platform data struct
+  # for one of the registered platforms.
+  def add(config_entry)
+    if not @arr_registered_platforms.include?(config_entry.platform)
+      raise V2C_ParserError, "project file failed to supply a registered platform (#{@arr_registered_platforms.inspect}) before adding #{config_entry.inspect}"
+    end
+    @arr_entries.push(config_entry)
+  end
   def get_platforms()
     # Cannot use block-based Array.uniq() (Ruby 1.9.x only).
     arr_platforms = Array.new
@@ -727,11 +744,15 @@ class V2C_Build_Platform_Configs
     @arr_entries.each { |entry|
       next if not entry.platform == platform_name
       build_type = entry.build_type
-      if not arr_build_types.include?(build_type)
-        arr_build_types.push(build_type)
-      end
+      add_elem_unique(arr_build_types, build_type)
     }
     return arr_build_types
+  end
+  private
+  def add_elem_unique(arr, elem)
+    if not arr.include?(elem)
+      arr.push(elem)
+    end
   end
 end
 
@@ -2798,6 +2819,7 @@ class V2C_ParserBase < V2C_LoggerBase
   def initialize(info_elem_out)
     @info_elem = info_elem_out
   end
+  attr_accessor :info_elem
 
   def parser_error(str_description); log_error_class(str_description) end
 end
@@ -3532,13 +3554,15 @@ class V2C_VS7FileConfigurationParser < V2C_VS7ConfigurationBaseParser
 end
 
 class V2C_VS7ConfigurationsParser < V2C_VSXmlParserBase
-  def initialize(elem_xml, info_elem_out, arr_target_config_info_out)
+  def initialize(elem_xml, info_elem_out, arr_target_config_info_out, build_platform_configs_out)
     super(elem_xml, info_elem_out)
     @arr_target_config_info = arr_target_config_info_out
+    @build_platform_configs = build_platform_configs_out
   end
   private
   def get_arr_config_info(); return @info_elem end
   def get_arr_target_config_info(); return @arr_target_config_info end
+  def get_build_platform_configs(); return @build_platform_configs end
 
   def parse_element(subelem_xml)
     found = be_optimistic()
@@ -3551,11 +3575,21 @@ class V2C_VS7ConfigurationsParser < V2C_VSXmlParserBase
       if elem_parser.parse
         get_arr_target_config_info().push(target_config_info_curr)
         get_arr_config_info().push(config_info_curr)
+        # And additionally add a platform config entry:
+        add_platform_config(target_config_info_curr.condition)
       end
     else
       found = super
     end
     return found
+  end
+  def add_platform_config(condition)
+    config_entry = V2C_BuildConfigurationEntry.new
+    build_type = condition.get_build_type()
+    config_entry.description = "#{condition.platform}|#{build_type}"
+    config_entry.build_type = build_type
+    config_entry.platform = condition.platform
+    get_build_platform_configs().add(config_entry)
   end
 end
 
@@ -3799,6 +3833,54 @@ class V2C_VS7FilterParser < V2C_VSXmlParserBase
   end
 end
 
+class V2C_VS7PlatformParser < V2C_VSXmlParserBase
+  def initialize(elem_xml, info_elem_out)
+    super(elem_xml, info_elem_out)
+  end
+  private
+
+  def parse_attribute(setting_key, setting_value)
+    found = be_optimistic()
+    case setting_key
+    when 'Name'
+      @info_elem = setting_value
+    else
+      found = super
+    end
+    return found
+  end
+end
+
+class V2C_VS7PlatformsParser < V2C_VSXmlParserBase
+  def initialize(elem_xml, info_elem_out)
+    super(elem_xml, info_elem_out)
+  end
+  private
+  def get_build_platform_configs(); return @info_elem end
+
+  def parse_element(subelem_xml)
+    found = be_optimistic()
+    elem_parser = nil # IMPORTANT: reset it!
+    case subelem_xml.name
+    when 'Platform'
+      platform_name = ''
+      elem_parser = V2C_VS7PlatformParser.new(subelem_xml, platform_name)
+      if elem_parser.parse
+        # Hrmm... while Ruby does pass string parameters by reference,
+	# once, in this case we do it _twice_ (into class member)
+	# and this seems to mess it up since the internal assignment
+	# doesn't make it back out here. There's no explanation about that
+	# that I could find easily...
+	# Thus resort to elem_parser.info_elem. Ugh.
+        get_build_platform_configs().register_platform(elem_parser.info_elem)
+      end
+    else
+      found = super
+    end
+    return found
+  end
+end
+
 module V2C_VSProjectDefines
   TEXT_KEYWORD = 'Keyword'
   TEXT_ROOTNAMESPACE = 'RootNamespace'
@@ -3812,13 +3894,18 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
     when 'Configurations'
-      elem_parser = V2C_VS7ConfigurationsParser.new(subelem_xml, get_project().arr_config_info, get_project().arr_target_config_info)
+      elem_parser = V2C_VS7ConfigurationsParser.new(
+        subelem_xml,
+        get_project().arr_config_info,
+        get_project().arr_target_config_info,
+        get_project().build_platform_configs
+      )
     when 'Files' # "Files" simply appears to be a special "Filter" element without any filter conditions.
-      # FIXME: we most likely shouldn't pass a rather global "target" object here! (pass a file info object)
+      # FIXME: we most likely shouldn't pass a rather global "project target" object here! (pass a file info object)
       get_project().main_files = Files_str.new
       elem_parser = V2C_VS7FilterParser.new(subelem_xml, get_project(), get_project().main_files)
     when 'Platforms'
-      # nothing yet
+      elem_parser = V2C_VS7PlatformsParser.new(subelem_xml, get_project().build_platform_configs)
     end
     if not elem_parser.nil?
       elem_parser.parse
@@ -4076,7 +4163,7 @@ class V2C_VS10ItemGroupProjectConfigurationDescriptionParser < V2C_VS10ParserBas
     found = be_optimistic()
     case setting_key
     when 'Include'
-      get_config_entry().name = setting_value
+      get_config_entry().description = setting_value
     else
       found = super
     end
@@ -4111,6 +4198,10 @@ class V2C_VS10ItemGroupProjectConfigurationsParser < V2C_VS10ParserBase
       config_entry = V2C_BuildConfigurationEntry.new
       projconf_parser = V2C_VS10ItemGroupProjectConfigurationDescriptionParser.new(itemgroup_elem_xml, config_entry)
       projconf_parser.parse
+      # VS10 does not separately list the platforms that it will provide
+      # configuration for, thus we need to manually register it prior to
+      # adding the full entry.
+      get_project_configs().register_platform(config_entry.platform)
       get_project_configs().add(config_entry)
     else
       found = super
