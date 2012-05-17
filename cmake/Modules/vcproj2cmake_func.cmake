@@ -772,7 +772,7 @@ endmacro(v2c_local_set_cmake_atl_mfc_flags _target _build_type _build_platform _
 # despite only needing a tiny subset of that functionality each.
 # Admittedly this is the worst case (which should be avoidable),
 # but it does happen and it's not pretty.
-function(v2c_target_add_precompiled_header _target _build_type _use _header_file)
+function(v2c_target_add_precompiled_header _target _build_platform _build_type _use _header_file)
   v2c_buildcfg_check_if_platform_buildtype_active(${_target} "${_build_platform}" "${_build_type}" is_active_)
   if(NOT is_active_)
     return()
@@ -818,7 +818,7 @@ function(v2c_target_add_precompiled_header _target _build_type _use _header_file
   else(COMMAND add_precompiled_header)
     message("could not figure out add_precompiled_header() function (missing module file?) - precompiled header support disabled.")
   endif(COMMAND add_precompiled_header)
-endfunction(v2c_target_add_precompiled_header _target _build_type _use _header_file)
+endfunction(v2c_target_add_precompiled_header _target _build_platform _build_type _use _header_file)
 
 
 if(WIN32)
