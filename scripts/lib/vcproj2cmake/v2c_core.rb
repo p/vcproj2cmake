@@ -1606,9 +1606,6 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     # add handling of a script file location variable, to enable users
     # to override the script location if needed.
     next_paragraph()
-    write_comment_at_level(COMMENT_LEVEL_MINIMUM,
-      "user override mechanism (don't prevent specifying a custom location of this script)"
-    )
     # NOTE: we'll make V2C_SCRIPT_LOCATION express its path via
     # relative argument to global V2C_MASTER_PROJECT_DIR (i.e. CMAKE_SOURCE_DIR)
     # and _not_ CMAKE_CURRENT_SOURCE_DIR,
@@ -1616,6 +1613,9 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     # an entire sub project within the source tree).
     v2c_converter_script_location = "${V2C_MASTER_PROJECT_DIR}/#{script_location_relative_to_master}"
     if $v2c_generate_self_contained_file == 1
+      write_comment_at_level(COMMENT_LEVEL_MINIMUM,
+        "user override mechanism (don't prevent specifying a custom location of this script)"
+      )
       write_set_var_if_unset('V2C_SCRIPT_LOCATION', element_manual_quoting(v2c_converter_script_location))
     else
       write_invoke_v2c_function_quoted('v2c_converter_script_set_location', [ v2c_converter_script_location ])
