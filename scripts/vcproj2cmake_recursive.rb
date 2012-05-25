@@ -112,32 +112,40 @@ excl_regex_recursive = generate_multi_regex('', arr_excl_dir_expr_skip_recursive
 
 Find.find('./') do
   |f|
+  next if not test(?d, f)
   # skip symlinks since they might be pointing _backwards_!
   next if FileTest.symlink?(f)
-  next if not test(?d, f)
 
-  # skip CMake build directories! (containing CMake-generated .vcproj files!)
-  # FIXME: more precise checking: check file _content_ against CMake generation!
-  is_excluded = false
-  if f =~ /^build/i
-    is_excluded = true
-  else
-    if not excl_regex_single.nil?
-      #puts "MATCH: #{f} vs. #{excl_regex_single}"
-      if f.match(excl_regex_single)
-        is_excluded = true
-      end
+  is_excluded_recursive = false
+  if not excl_regex_recursive.nil?
+    #puts "MATCH: #{f} vs. #{excl_regex_recursive}"
+    if f.match(excl_regex_recursive)
+      is_excluded_recursive = true
     end
   end
-  #puts "excluded: #{is_excluded}"
-  if is_excluded == true
-    puts "EXCLUDED SINGLE #{f}!"
-    next
+  # Also, skip CMake build directories! (containing CMake-generated .vcproj files!)
+  # FIXME: more precise checking: check file _content_ against CMake generation!
+  if not is_excluded_recursive == true
+    if f =~ /^build/i
+      is_excluded_recursive = true
+    end
   end
-
-  if f.match(excl_regex_recursive)
+  if is_excluded_recursive == true
     puts "EXCLUDED RECURSIVELY #{f}!"
     Find.prune() # throws exception to skip entire recursive directories block
+  end
+
+  is_excluded_single = false
+  if not excl_regex_single.nil?
+    #puts "MATCH: #{f} vs. #{excl_regex_single}"
+    if f.match(excl_regex_single)
+      is_excluded_single = true
+    end
+  end
+  #puts "excluded: #{is_excluded_single}"
+  if is_excluded_single == true
+    puts "EXCLUDED SINGLE #{f}!"
+    next
   end
 
   # HACK: temporary helper to quickly switch between .vcproj/.vcxproj
