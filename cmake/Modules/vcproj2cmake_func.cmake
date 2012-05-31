@@ -123,14 +123,14 @@ endfunction(_v2c_fatal_error_please_report _msg)
 
 # Helper to yell loudly in case of unset variables.
 # The input string should _not_ be the dereferenced form,
-# but rather a simple _name_ of the variable.
-function(_v2c_ensure_valid_variables _var_names_list)
-  foreach(var_name_ ${_var_names_list})
+# but rather list simple _names_ of the variables.
+function(_v2c_ensure_valid_variables)
+  foreach(var_name_ ${ARGV})
     if(NOT ${var_name_})
       message(FATAL_ERROR "important vcproj2cmake variable ${var_name_} not valid/available!?")
     endif(NOT ${var_name_})
-  endforeach(var_name_ ${_var_names_list})
-endfunction(_v2c_ensure_valid_variables _var_names_list)
+  endforeach(var_name_ ${ARGV})
+endfunction(_v2c_ensure_valid_variables)
 
 # Converts strings with whitespace and special characters
 # to a flattened representation (using '_' etc.).
