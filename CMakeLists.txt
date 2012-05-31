@@ -38,10 +38,20 @@ if(v2ci_vcproj_load_demo_app)
   endfunction(v2ci_fetch_demo_app_osdab _demo_app_root_dir)
 
   function(v2ci_fetch_demo_app_sebclient _demo_app_root_dir)
-    set(demo_app_name "SebWindowsClient")
-    set(demo_app_repo_url "https://seb.svn.sourceforge.net/svnroot/seb/trunk/win/SebWindowsPackage/SebWindowsClient")
-    v2ci_svn_checkout("${demo_app_repo_url}" "${demo_app_name}" "${_demo_app_root_dir}")
+    set(demo_app_name_ "SebWindowsClient")
+    set(demo_app_repo_url_ "https://seb.svn.sourceforge.net/svnroot/seb/trunk/win/SebWindowsPackage/SebWindowsClient")
+    v2ci_svn_checkout("${demo_app_repo_url_}" "${demo_app_name_}" "${_demo_app_root_dir}")
   endfunction(v2ci_fetch_demo_app_sebclient _demo_app_root_dir)
+
+  function(v2ci_fetch_demo_app_coinmp _demo_app_root_dir)
+    # CoinMP sez:
+    # "To build the 'CoinMP.dll', start MS Visual Studio 8 (2005) or 9 (2008),
+    #  open the solution file 'CoinMP.sln' in the CoinMP\MSVisualStudio\v8
+    #  folder and select 'Build Solution' from the 'Build' menu."
+    set(demo_app_name_ "CoinMP")
+    set(demo_app_repo_url_ "https://projects.coin-or.org/svn/CoinMP/trunk")
+    v2ci_svn_checkout("${demo_app_repo_url_}" "${demo_app_name_}" "${_demo_app_root_dir}")
+  endfunction(v2ci_fetch_demo_app_coinmp _demo_app_root_dir)
 
   function(v2ci_get_temp_dir _temp_dir_out)
     # "[CMake] Fwd: Finding the "Temp" directory code"
@@ -69,6 +79,8 @@ if(v2ci_vcproj_load_demo_app)
   endfunction(v2ci_get_temp_dir _temp_dir_out)
   v2ci_get_temp_dir(tmpdir)
   set(v2ci_demo_app_root "${tmpdir}/vcproj2cmake_demo_app")
+  # CoinMP might be a more useful project than osdab?
+  #v2ci_fetch_demo_app_coinmp("${v2ci_demo_app_root}")
   v2ci_fetch_demo_app_osdab("${v2ci_demo_app_root}")
   # Ouch, sebclient is _very_ large (139MB) - thus do not offer it as a publicly visible default.
   #v2ci_fetch_demo_app_sebclient("${v2ci_demo_app_root}")
