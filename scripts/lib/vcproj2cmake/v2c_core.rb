@@ -99,7 +99,7 @@ v2c_plugin_dir = "#{$script_dir}/v2c_plugins"
 
 PLUGIN_FILE_REGEX_OBJ = %r{v2c_(parser|generator)_.*\.rb$}
 Find.find(v2c_plugin_dir) { |f_plugin|
-  if f_plugin =~ PLUGIN_FILE_REGEX_OBJ
+  if PLUGIN_FILE_REGEX_OBJ.match(f_plugin)
     puts "loading plugin #{f_plugin}!"
     load f_plugin
   end
@@ -235,7 +235,7 @@ def read_mappings(filename_mappings, mappings)
   if File.exists?(filename_mappings)
     #Hash[*File.read(filename_mappings).scan(/^(.*)=(.*)$/).flatten]
     File.open(filename_mappings, 'r').each do |line|
-      next if line =~ COMMENT_LINE_REGEX_OBJ
+      next if COMMENT_LINE_REGEX_OBJ.match(line)
       b, c = line.chomp.split(':')
       if not b.nil?
         mappings[b] = c
@@ -1257,10 +1257,10 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     # And an empty string needs quoting, too!!
     # (this empty content might be a counted parameter of a function invocation,
     # in which case unquoted syntax would implicitly throw away that empty parameter!
-    if elem.match(CMAKE_STRING_NEEDS_QUOTING_REGEX_OBJ)
+    if CMAKE_STRING_NEEDS_QUOTING_REGEX_OBJ.match(elem)
       content_needs_quoting = true
     end
-    if elem.match(CMAKE_STRING_HAS_QUOTES_REGEX_OBJ)
+    if CMAKE_STRING_HAS_QUOTES_REGEX_OBJ.match(elem)
       has_quotes = true
     end
     needs_quoting = (content_needs_quoting and not has_quotes)
@@ -1288,7 +1288,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     # And using index() etc. for checking of start/end '"' and ';'
     # is not very useful either, thus use a combined match().
     #return (not (str_elem.match(CMAKE_IS_LIST_VAR_CONTENT_REGEX_OBJ) == nil))
-    return (not str_elem.match(CMAKE_IS_LIST_VAR_CONTENT_REGEX_OBJ).nil?)
+    return CMAKE_IS_LIST_VAR_CONTENT_REGEX_OBJ.match(str_elem)
   end
   def get_config_name_upcase(config_name)
     # need to also convert config names with spaces into underscore variants, right?
@@ -1306,7 +1306,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def cmake_escape_compile_definitions(arr_compile_defn)
     arr_compile_defn.collect do |compile_defn|
       # Need to escape the value part of the key=value definition:
-      if compile_defn =~ COMPILE_DEF_NEEDS_CMAKE_ESCAPING_REGEX_OBJ
+      if COMPILE_DEF_NEEDS_CMAKE_ESCAPING_REGEX_OBJ.match(compile_defn)
         escape_char(compile_defn, '\\(')
         escape_char(compile_defn, '\\)')
       end
@@ -1818,10 +1818,10 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
         #return if f =~ /\.(h|H|lex|y|ico|bmp|txt)$/
         # No we should NOT ignore header files: if they aren't added to the target,
         # then VS won't display them in the file tree.
-        next if f =~ VS7_UNWANTED_FILE_TYPES_REGEX_OBJ
+        next if VS7_UNWANTED_FILE_TYPES_REGEX_OBJ.match(f)
 
         # Verbosely ignore .lib "sources"
-        if f =~ VS7_LIB_FILE_TYPES_REGEX_OBJ
+        if VS7_LIB_FILE_TYPES_REGEX_OBJ.match(f)
           # probably these entries are supposed to serve as dependencies
           # (i.e., non-link header-only include dependency, to ensure
           # rebuilds in case of foreign-library header file changes).
@@ -3705,7 +3705,7 @@ class V2C_VS7FileParser < V2C_VSXmlParserBase
     when 'RelativePath'
       @info_file.path_relative = get_filesystem_location(setting_value)
       # Verbosely catch IDL generated files
-      if @info_file.path_relative =~ VS7_IDL_FILE_TYPES_REGEX_OBJ
+      if VS7_IDL_FILE_TYPES_REGEX_OBJ.match(@info_file.path_relative)
         # see file_mappings.txt comment above
         log_info_class "#{@info_file.path_relative} is an IDL file! FIXME: handling should be platform-dependent."
         @info_file.enable_attribute(V2C_Info_File::ATTR_GENERATED)
@@ -3727,7 +3727,7 @@ BUILD_UNIT_FILE_TYPES_REGEX_OBJ = %r{\.(c|C)}
 def check_have_build_units_in_file_list(arr_file_infos)
   have_build_units = false
   arr_file_infos.each { |file|
-    if file.path_relative =~ BUILD_UNIT_FILE_TYPES_REGEX_OBJ
+    if BUILD_UNIT_FILE_TYPES_REGEX_OBJ.match(file.path_relative)
       have_build_units = true
       break
     end
@@ -4107,7 +4107,7 @@ def skip_vs10_percent_sign_var(str_var)
   # shortcut :)
   return false if not str_var.include?('%')
 
-  return false if not str_var.match(VS10_ITEM_METADATA_MACRO_MATCH_REGEX_OBJ)
+  return false if not VS10_ITEM_METADATA_MACRO_MATCH_REGEX_OBJ.match(str_var)
   log_fixme_class("skipping unhandled VS10 variable (#{str_var})")
   return true
 end
