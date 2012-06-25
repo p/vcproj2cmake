@@ -119,10 +119,10 @@ end
 # Now change into project dir, create build subdir, run ccmake -DCMAKE_BUILD_TYPE=Debug ../
 # , try to build it.
 
-SOURCE_ROOT_VAR = 'v2c_vcproj_proj_source_root'
+SOURCE_ROOT_VAR = 'v2ci_vcproj_proj_source_root'
 def get_proj_source_root(build_install_dir)
   proj_source_dir = nil
-  open("#{build_install_dir}/CMakeCache.txt").grep(/#{SOURCE_ROOT_VAR}:STRING=/).each { |line|
+  open("#{build_install_dir}/CMakeCache.txt").grep(/#{SOURCE_ROOT_VAR}:(STRING|PATH)=/).each { |line|
     proj_source_dir = line.chomp.split('=')[1]
   }
   return proj_source_dir
@@ -130,7 +130,7 @@ end
 
 proj_source_dir = get_proj_source_root(build_install_dir)
 if not proj_source_dir
-  log_fatal 'failed to figure out source dir of project'
+  log_fatal "failed to figure out source dir of project (build dir is: #{build_install_dir})"
 end
 
 log_info "changing into source directory #{proj_source_dir} of converted project"
