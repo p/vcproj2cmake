@@ -453,6 +453,8 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
     @pdb_filename = nil
     @warnings_are_errors_enable = false # TODO: translate into MSVC /WX flag
     @show_includes_enable = false # Whether to show the filenames of included header files. TODO: translate into MSVC /showIncludes flag
+    @function_level_linking_enable = false
+    @intrinsic_functions_enable = false
     @static_code_analysis_enable = false # TODO: translate into MSVC7/10 /analyze flag
     @string_pooling_enable = false
     @treat_wchar_t_as_builtin_type_enable = false
@@ -470,6 +472,8 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
   attr_accessor :pdb_filename
   attr_accessor :warnings_are_errors_enable
   attr_accessor :show_includes_enable
+  attr_accessor :function_level_linking_enable
+  attr_accessor :intrinsic_functions_enable
   attr_accessor :static_code_analysis_enable
   attr_accessor :string_pooling_enable
   attr_accessor :treat_wchar_t_as_builtin_type_enable
@@ -3131,6 +3135,8 @@ module V2C_VSToolCompilerDefines
   TEXT_ADDITIONALINCLUDEDIRECTORIES = 'AdditionalIncludeDirectories'
   TEXT_ASSEMBLERLISTINGLOCATION = 'AssemblerListingLocation'
   TEXT_DISABLESPECIFICWARNINGS = 'DisableSpecificWarnings'
+  TEXT_ENABLEFUNCTIONLEVELLINKING = 'EnableFunctionLevelLinking'
+  TEXT_ENABLEINTRINSICFUNCTIONS = 'EnableIntrinsicFunctions'
   TEXT_ENABLEPREFAST = 'EnablePREfast'
   TEXT_EXCEPTIONHANDLING = 'ExceptionHandling'
   TEXT_MINIMALREBUILD = 'MinimalRebuild'
@@ -3166,6 +3172,10 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
       get_compiler_info().asm_listing_location = get_filesystem_location(setting_value)
     when TEXT_DISABLESPECIFICWARNINGS
       parse_disable_specific_warnings(get_compiler_info().arr_tool_variant_specific_info[0].arr_disable_warnings, setting_value)
+    when TEXT_ENABLEFUNCTIONLEVELLINKING
+      get_compiler_info().function_level_linking_enable = get_boolean_value(setting_value)
+    when TEXT_ENABLEINTRINSICFUNCTIONS
+      get_compiler_info().intrinsic_functions_enable = get_boolean_value(setting_value)
     when TEXT_ENABLEPREFAST
       get_compiler_info().static_code_analysis_enable = get_boolean_value(setting_value)
     when TEXT_EXCEPTIONHANDLING
