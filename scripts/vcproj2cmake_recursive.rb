@@ -268,6 +268,11 @@ end
 # (I hate all those dirty thread implementations anyway,
 # real separate-process handling with clean IPC is a much better idea
 # in several cases).
+
+def handle_thread_work(script_location, source_root, myWork)
+  v2c_convert_project_outer(script_location, myWork.str_proj_file_location, myWork.str_cmakelists_file_location, source_root)
+end
+
 if ($v2c_enable_threads)
   puts 'Recursively converting projects, multi-threaded.'
 
@@ -278,7 +283,7 @@ if ($v2c_enable_threads)
 
   for thread_work in arr_thread_work
     threads << Thread.new(thread_work) { |myWork|
-      v2c_convert_project_outer(script_location, myWork.str_proj_file_location, myWork.str_cmakelists_file_location, source_root)
+      handle_thread_work(script_location, source_root, myWork)
     }
   end
 
@@ -286,7 +291,7 @@ if ($v2c_enable_threads)
 else # non-threaded
   puts 'Recursively converting projects, NON-threaded.'
   arr_thread_work.each { |myWork|
-    v2c_convert_project_outer(script_location, myWork.str_proj_file_location, myWork.str_cmakelists_file_location, source_root)
+    handle_thread_work(script_location, source_root, myWork)
   }
 end
 
