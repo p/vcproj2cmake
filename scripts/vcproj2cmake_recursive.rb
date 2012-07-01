@@ -28,9 +28,8 @@ require 'vcproj2cmake/util_file' # V2C_Util_File.mkdir_p()
 #     MAIN     #
 ################
 
-# FIXME: currently this code below is too unstructured / dirty
-# (many parts open-coded rather than clean helpers).
-# But for now, I just don't care ;)
+# FIXME: currently this code below still is a bit unstructured / dirty
+# (some parts open-coded rather than clean helpers).
 
 
 script_fqpn = File.expand_path $0
@@ -65,12 +64,12 @@ if File.exist?(excluded_projects)
 end
 
 class Thread_Work
-  def initialize(str_proj_file_location, str_cmakelists_file_location)
-    @str_proj_file_location = str_proj_file_location
-    @str_cmakelists_file_location = str_cmakelists_file_location
+  def initialize(arr_proj_files, str_destination_dir)
+    @arr_proj_files = arr_proj_files
+    @str_destination_dir = str_destination_dir
   end
-  attr_accessor :str_proj_file_location
-  attr_accessor :str_cmakelists_file_location
+  attr_accessor :arr_proj_files
+  attr_accessor :str_destination_dir
 end
 
 arr_thread_work = Array.new
@@ -107,6 +106,62 @@ excl_regex_single = generate_multi_regex('^\.', arr_excl_proj_expr)
 
 # The regex to exclude a match (and all children!) within the hierarchy:
 excl_regex_recursive = generate_multi_regex('', arr_excl_dir_expr_skip_recursive_static)
+
+# Filters suitable project files in a directory's entry list.
+def search_project_files_in_dir_entries(dir_entries, proj_extension)
+  vcproj_files = dir_entries.grep(/\.#{proj_extension}$/i)
+  log_debug vcproj_files
+
+  # No project file type at all? Immediately skip directory.
+  return nil if vcproj_files.nil?
+
+  # in each directory, find the .vcproj file to use.
+  # Prefer xxx_vc8.vcproj, but in cases of directories where this is
+  # not available, use a non-_vc8 file.
+  projfile = nil
+  vcproj_files.each do |vcproj_file|
+    if vcproj_file =~ /_vc8.#{proj_extension}$/i
+      # ok, we found a _vc8 version, quit searching since this is what we prefer
+      projfile = vcproj_file
+      break
+    end
+    if vcproj_file =~ /.#{proj_extension}$/i
+      projfile = vcproj_file
+	# do NOT break here (another _vc8 file might come along!)
+    end
+  end
+  log_debug "projfile is #{projfile}"
+  # FIXME: should search for *all* (*different*) projects within this dir,
+  # then return all results in this array.
+  if projfile.nil?
+    return nil
+  else
+    return [ projfile ]
+  end
+end
+
+# FIXME: completely broken - should stat command_output_file against the file dependencies
+# in the array, to determine whether to rebuild.
+def command_file_dependencies_changed(command_output_file, arr_file_deps)
+  time_proj = File.stat(str_proj_file).mtime.to_i
+  time_cmake_folder = 0
+  config_dir_local = "#{f}/#{$v2c_config_dir_local}"
+  if File.exist?(config_dir_local)
+    time_cmake_folder = File.stat(config_dir_local).mtime.to_i
+  end
+  time_CMakeLists = File.stat(str_cmakelists_file).mtime.to_i
+  log_debug "TIME: CMakeLists #{time_CMakeLists} proj #{time_proj} cmake_folder #{time_cmake_folder} cmake_root_folder #{time_cmake_root_folder}"
+  if time_proj > time_CMakeLists
+    log_debug "modified: project!"
+    rebuild = 1
+  elsif time_cmake_folder > time_CMakeLists
+    log_debug "modified: cmake/!"
+    rebuild = 1
+  elsif time_cmake_root_folder > time_CMakeLists
+    log_debug "modified: cmake/ root!"
+    rebuild = 1
+  end
+end
 
 Find.find('./') do
   |f|
@@ -146,37 +201,17 @@ Find.find('./') do
     next
   end
 
+  log_info "processing #{f}!"
+  dir_entries = Dir.entries(f)
+  log_debug "entries: #{dir_entries}"
+
   # HACK: temporary helper to quickly switch between .vcproj/.vcxproj
   want_proj = 'vcproj'
 
-  puts "processing #{f}!"
-  dir_entries = Dir.entries(f)
-  #puts "entries: #{dir_entries}"
-  vcproj_files = dir_entries.grep(/\.#{want_proj}$/i)
-  #puts vcproj_files
-
-  # No project file type at all? Immediately skip directory.
-  next if vcproj_files.nil?
-
-  # in each directory, find the .vcproj file to use.
-  # Prefer xxx_vc8.vcproj, but in cases of directories where this is
-  # not available, use a non-_vc8 file.
-  projfile = nil
-  vcproj_files.each do |vcproj_file|
-    if vcproj_file =~ /_vc8.#{want_proj}$/i
-      # ok, we found a _vc8 version, quit searching since this is what we prefer
-      projfile = vcproj_file
-      break
-    end
-    if vcproj_file =~ /.#{want_proj}$/i
-      projfile = vcproj_file
-	# do NOT break here (another _vc8 file might come along!)
-    end
-  end
-  #puts "projfile is #{projfile}"
+  arr_dir_proj_files = search_project_files_in_dir_entries(dir_entries, want_proj)
 
   # No project file at all? Skip directory.
-  next if projfile.nil?
+  next if arr_dir_proj_files.nil?
 
   str_cmakelists_file = "#{f}/CMakeLists.txt"
 
@@ -191,19 +226,21 @@ Find.find('./') do
     next if false == want_new_cmakelists_file
   end
 
-  # Now proceed with conversion of .vcproj file:
-  str_proj_file = "#{f}/#{projfile}"
+  arr_proj_files = arr_dir_proj_files.collect { |projfile|
+    if projfile =~ /_vc8.#{want_proj}$/i
+    else
+      log_info "Darn, no _vc8.vcproj in #{f}! Should have offered one..."
+    end
+    str_proj_file = "#{f}/#{projfile}"
+    if true == v2c_is_project_file_generated_by_cmake(str_proj_file)
+      log_info "Skipping CMake-generated MSVS file #{str_proj_file}"
+      next
+    end
+    str_proj_file
+  }
 
-  if true == v2c_is_project_file_generated_by_cmake(str_proj_file)
-    log_info "Skipping CMake-generated MSVS file #{str_proj_file}"
-    next
-  end
+  next if arr_proj_files.nil?
 
-  if projfile =~ /_vc8.#{want_proj}$/i
-  else
-    puts "Darn, no _vc8.vcproj in #{f}! Should have offered one..."
-  end
-  # verify age of .vcproj file... (NOT activated: experimental feature!)
   rebuild = 0
   if File.exist?(str_cmakelists_file)
     # is .vcproj newer (or equal: let's rebuild copies with flat timestamps!)
@@ -212,37 +249,26 @@ Find.find('./') do
     # might be a good idea to do this stuff properly and use a CMake-based re-build
     # infrastructure instead...
     # FIXME: doesn't really seem to work... yet?
-    time_proj = File.stat(str_proj_file).mtime.to_i
-    time_cmake_folder = 0
-    config_dir_local = "#{f}/#{$v2c_config_dir_local}"
-    if File.exist?(config_dir_local)
-      time_cmake_folder = File.stat(config_dir_local).mtime.to_i
-    end
-    time_CMakeLists = File.stat(str_cmakelists_file).mtime.to_i
-    #puts "TIME: CMakeLists #{time_CMakeLists} proj #{time_proj} cmake_folder #{time_cmake_folder} cmake_root_folder #{time_cmake_root_folder}"
-    if time_proj > time_CMakeLists
-      #puts "modified: project!"
-      rebuild = 1
-    elsif time_cmake_folder > time_CMakeLists
-      #puts "modified: cmake/!"
-      rebuild = 1
-    elsif time_cmake_root_folder > time_CMakeLists
-      #puts "modified: cmake/ root!"
-      rebuild = 1
-    end
+
+    # verify age of .vcproj file... (NOT activated: experimental feature!)
+    # arr_file_deps = [ str_proj_file ]
+    # rebuild = command_file_dependencies_changed(str_cmakelists_file, arr_file_deps)
   else
     # no CMakeLists.txt at all, definitely process this project
     rebuild = 2
   end
   if rebuild > 0
-    #puts "REBUILD #{f}!! #{rebuild}"
+    log_debug "REBUILD #{f}!! #{rebuild}"
   end
-  #puts str_proj_file
 
-  # the root directory is special: it might contain another project (it shouldn't!!),
-  # thus we need to skip it if so (then include the root directory
-  # project by placing a CMakeLists_native.txt there and have it include the
-  # auto-generated CMakeLists.txt)
+  # The root directory is special: in case of the V2C part being included within
+  # a larger CMake tree, it's already being accounted for
+  # (add_subdirectory() of it by other files), otherwise it should have a custom CMakeLists.txt
+  # which includes our "all projects list" CMake file.
+  # Note that the V2C root dir might contain another project
+  # (in the case of it being the CMake source root it better shouldn't!!) -
+  # then include the root directory project by placing a CMakeLists_native.txt there
+  # and have it include the auto-generated CMakeLists.txt.
   arr_project_subdirs.push(f) unless f == './'
 
   # For recursive invocation we used to have _external spawning_
@@ -250,8 +276,11 @@ Find.find('./') do
   # since Ruby startup latency is extremely high
   # (3 seconds startup vs. 0.3 seconds payload compute time with our script!)
 
-  # Collect the list of projects to convert, then call v2c_convert_project_outer() multi-threaded! (although threading is said to be VERY slow in Ruby - but still it should provide some sizeable benefit).
-  thread_work = Thread_Work.new(str_proj_file, str_cmakelists_file)
+  # Collect the list of projects to convert,
+  # then call v2c_convert_project_outer() multi-threaded!
+  # (although threading is said to be VERY slow in Ruby -
+  # but still it should provide some sizeable benefit).
+  thread_work = Thread_Work.new(arr_proj_files, f)
   arr_thread_work.push(thread_work)
 
   #output.split("\n").each do |line|
@@ -264,17 +293,35 @@ end
 # implementing _cooperative_ (non-parallel) threading.
 # Perhaps there's a flag to query whether a particular Ruby Thread
 # implementation has cooperative or real (multi-core) threading.
-# Otherwise we should probably just use Process.fork()
+# Otherwise we should probably just use Process.fork() (TODO)
 # (I hate all those dirty thread implementations anyway,
 # real separate-process handling with clean IPC is a much better idea
 # in several cases).
 
-def handle_thread_work(script_location, source_root, myWork)
-  v2c_convert_project_outer(script_location, myWork.str_proj_file_location, myWork.str_cmakelists_file_location, source_root)
+# Small helper to hold all settings which are common to all threads.
+class Thread_Global
+  def initialize(script_location, source_root)
+    @script_location = script_location
+    @source_root = source_root
+  end
+  attr_accessor :script_location
+  attr_accessor :source_root
 end
 
+def handle_thread_work(threadGlobal, myWork)
+  # FIXME: for now, assume one project file only since subsequent processing
+  # cannot deal with multiple yet:
+  str_proj_file_location = myWork.arr_proj_files[0]
+  # FIXME: str_cmakelists_file_location (that CMakeLists.txt naming)
+  # should be an implementation detail of inner handling.
+  str_cmakelists_file_location = "#{myWork.str_destination_dir}/CMakeLists.txt"
+  v2c_convert_project_outer(threadGlobal.script_location, str_proj_file_location, str_cmakelists_file_location, threadGlobal.source_root)
+end
+
+threadGlobal = Thread_Global.new(script_location, source_root)
+
 if ($v2c_enable_threads)
-  puts 'Recursively converting projects, multi-threaded.'
+  log_info 'Recursively converting projects, multi-threaded.'
 
   # "Ruby-Threads erzeugen"
   #    http://home.vr-web.de/juergen.katins/ruby/buch/tut_threads.html
@@ -283,20 +330,25 @@ if ($v2c_enable_threads)
 
   for thread_work in arr_thread_work
     threads << Thread.new(thread_work) { |myWork|
-      handle_thread_work(script_location, source_root, myWork)
+      handle_thread_work(threadGlobal, myWork)
     }
   end
 
   threads.each { |aThread| aThread.join }
 else # non-threaded
-  puts 'Recursively converting projects, NON-threaded.'
+  log_info 'Recursively converting projects, NON-threaded.'
   arr_thread_work.each { |myWork|
-    handle_thread_work(script_location, source_root, myWork)
+    handle_thread_work(threadGlobal, myWork)
   }
 end
 
 # Now, write out the file for the projects list (separate from any
 # multi-threaded implementation).
+# FIXME: since the conversion above may end up threaded yet arr_project_subdirs cannot
+# be updated on thread side (and in some cases .vcproj conversion *will* be skipped,
+# e.g. in case of CMake-converted .vcproj:s),
+# we should include only those entries where each directory
+# now actually does contain a CMakeLists.txt file.
 projects_list_file = "#{v2c_config_dir_source_root}/all_sub_projects.txt"
 log_info "Writing out the projects list file (#{projects_list_file})"
 v2c_source_root_write_projects_list_file(projects_list_file, $v2c_generator_file_create_permissions, arr_project_subdirs)
