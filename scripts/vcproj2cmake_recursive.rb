@@ -107,37 +107,96 @@ excl_regex_single = generate_multi_regex('^\.', arr_excl_proj_expr)
 # The regex to exclude a match (and all children!) within the hierarchy:
 excl_regex_recursive = generate_multi_regex('', arr_excl_dir_expr_skip_recursive_static)
 
-# Filters suitable project files in a directory's entry list.
-def search_project_files_in_dir_entries(dir_entries, proj_extension)
-  vcproj_files = dir_entries.grep(/\.#{proj_extension}$/i)
-  log_debug vcproj_files
+def smart_match(dir_entry, proj_file, arr_proj_file_regex, match_prefix, match_suffix, stop_regex)
+  found = false
+  # Obviously need to skip adding it if exactly that very entry
+  # was added by a previous more specific regex...
+  if proj_file.eql?(dir_entry)
+    return true
+  end
+  arr_proj_file_regex.each { |proj_file_regex|
+    break if proj_file_regex.eql?(stop_regex)
 
-  # No project file type at all? Immediately skip directory.
-  return nil if vcproj_files.nil?
-
-  # in each directory, find the .vcproj file to use.
-  # Prefer xxx_vc8.vcproj, but in cases of directories where this is
-  # not available, use a non-_vc8 file.
-  projfile = nil
-  vcproj_files.each do |vcproj_file|
-    if vcproj_file =~ /_vc8.#{proj_extension}$/i
-      # ok, we found a _vc8 version, quit searching since this is what we prefer
-      projfile = vcproj_file
+    proj_file_specific_match_regex = "^#{match_prefix}#{proj_file_regex}#{match_suffix}"
+    log_debug "#{proj_file} | #{proj_file_specific_match_regex}"
+    matchdata = proj_file.match(proj_file_specific_match_regex)
+    if not matchdata.nil?
+      log_debug "ALREADY EXISTING! MATCHES: #{matchdata.inspect}"
+      found = true
       break
     end
-    if vcproj_file =~ /.#{proj_extension}$/i
-      projfile = vcproj_file
-	# do NOT break here (another _vc8 file might come along!)
+  }
+  return found
+end
+
+# Filters suitable project files in a directory's entry list.
+# arr_proj_file_regex should contain regexes for project file matches
+# in most (very specific check) to least preferred (generic, catch-all check) order.
+def search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex)
+  # Check pre-conditions.
+  arr_proj_file_regex.each { |proj_file_regex|
+    if proj_file_regex.include?('(')
+      raise V2C_GeneratorError, "regex #{proj_file_regex} is expected to NOT be a match-type (containing brackets) regex!"
     end
-  end
-  log_debug "projfile is #{projfile}"
-  # FIXME: should search for *all* (*different*) projects within this dir,
-  # then return all results in this array.
-  if projfile.nil?
-    return nil
-  else
-    return [ projfile ]
-  end
+  }
+
+  # Somehow implement preference order filtering
+  # of possibly multi-matched project file types
+  # (to properly prefer e.g. <name>_vc8.vcproj rather than <name>.vcproj
+  # and thus ONLY return the most strongly preferred variant).
+  # This appears to be a non-trivial task.
+  # Indeed, the current implementation *is* quite complex.
+  # Maybe there's actually a much easier way to do it - I don't know...
+
+  # Try hard to have an implementation with at most O(n) complexity.
+  # Well, our easiest implementation doesn't have that... (more like O(n^2)?).
+
+  # As pre-processing (to get rid of all completely irrelevant entries),
+  # figure out the few initially matching files within the directory
+  # which actually match and thus are candidates:
+  dir_entries_match_subset = Array.new
+  arr_proj_file_regex.each { |proj_file_regex|
+    dir_entries_match_subset_new = dir_entries.grep(/#{proj_file_regex}/)
+    dir_entries_match_subset.concat(dir_entries_match_subset_new)
+  }
+
+  # Shortcut: return immediately if pre-list ended up empty already:
+  return nil if dir_entries_match_subset.empty?
+
+  dir_entries_match_subset.uniq!
+  log_debug "Initially grepped candidates within directory: #{dir_entries_match_subset.inspect}"
+
+  dir_entries_match_subset_filtered = Array.new
+  # Regexes going from most specific to least specific.
+  arr_proj_file_regex.each { |proj_file_regex|
+    proj_file_generic_match_regex = "(.*)(#{proj_file_regex})(.*)"
+    log_debug "Apply regex #{proj_file_generic_match_regex} on dir_entries_match_subset"
+    dir_entries_match_subset.each { |dir_entry|
+      matchdata = dir_entry.match(proj_file_generic_match_regex)
+      if not matchdata.nil?
+        match_prefix = matchdata[1]
+        match_suffix = matchdata[3]
+        log_debug "Applying #{proj_file_generic_match_regex}: found #{dir_entry}"
+        is_more_precise_match_already_existing = false
+        add_this_match = true
+        dir_entries_match_subset_filtered.each { |proj_file|
+          found = smart_match(dir_entry, proj_file, arr_proj_file_regex, match_prefix, match_suffix, proj_file_regex)
+          if true == found
+            add_this_match = false
+            break
+          end
+        }
+        if true == add_this_match
+          log_debug "accepting match #{dir_entry}"
+          dir_entries_match_subset_filtered.push(dir_entry)
+        end
+      end
+    }
+  }
+  log_debug "Filtered fileset #{dir_entries_match_subset_filtered.inspect} from #{dir_entries_match_subset.inspect} via regexes #{arr_proj_file_regex.inspect}"
+  # No project file type at all? Immediately skip directory.
+  return nil if dir_entries_match_subset_filtered.empty?
+  return dir_entries_match_subset_filtered
 end
 
 # FIXME: completely broken - should stat command_output_file against the file dependencies
@@ -178,8 +237,8 @@ Find.find('./') do
   end
   # Also, skip CMake build directories! (containing CMake-generated .vcproj files!)
   # FIXME: more precise checking: check file _content_ against CMake generation!
-  if not is_excluded_recursive == true
-    if f =~ /^build/i
+  if not true == is_excluded_recursive
+    if f =~ /\/build[^\/]*$/i
       is_excluded_recursive = true
     end
   end
@@ -205,10 +264,21 @@ Find.find('./') do
   dir_entries = Dir.entries(f)
   log_debug "entries: #{dir_entries}"
 
-  # HACK: temporary helper to quickly switch between .vcproj/.vcxproj
-  want_proj = 'vcproj'
+  vcproj_extension = 'vcproj'
+  vcxproj_extension = 'vcxproj'
 
-  arr_dir_proj_files = search_project_files_in_dir_entries(dir_entries, want_proj)
+  # In each directory, find the .vc[x]proj files to use.
+  # In case of .vcproj type files, prefer xxx_vc8.vcproj,
+  # but in cases of directories where this is not available, use a non-_vc8 file.
+  # WARNING: ensure comma separation between entries!
+  arr_proj_file_regex = [ \
+    "_vc10\.#{vcxproj_extension}$",
+    "\.#{vcxproj_extension}$",
+    "_vc8\.#{vcproj_extension}$",
+    "\.#{vcproj_extension}$" \
+  ]
+
+  arr_dir_proj_files = search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex)
 
   # No project file at all? Skip directory.
   next if arr_dir_proj_files.nil?
@@ -227,9 +297,11 @@ Find.find('./') do
   end
 
   arr_proj_files = arr_dir_proj_files.collect { |projfile|
-    if projfile =~ /_vc8.#{want_proj}$/i
-    else
-      log_info "Darn, no _vc8.vcproj in #{f}! Should have offered one..."
+    if projfile =~ /.#{vcproj_extension}$/i
+      if projfile =~ /_vc8.#{vcproj_extension}$/i
+      else
+        log_info "Darn, no _vc8.vcproj in #{f}! Should have offered one..."
+      end
     end
     str_proj_file = "#{f}/#{projfile}"
     if true == v2c_is_project_file_generated_by_cmake(str_proj_file)
@@ -309,13 +381,10 @@ class Thread_Global
 end
 
 def handle_thread_work(threadGlobal, myWork)
-  # FIXME: for now, assume one project file only since subsequent processing
-  # cannot deal with multiple yet:
-  str_proj_file_location = myWork.arr_proj_files[0]
   # FIXME: str_cmakelists_file_location (that CMakeLists.txt naming)
   # should be an implementation detail of inner handling.
   str_cmakelists_file_location = "#{myWork.str_destination_dir}/CMakeLists.txt"
-  v2c_convert_project_outer(threadGlobal.script_location, str_proj_file_location, str_cmakelists_file_location, threadGlobal.source_root)
+  v2c_convert_project_outer(threadGlobal.script_location, threadGlobal.source_root, myWork.arr_proj_files, str_cmakelists_file_location)
 end
 
 threadGlobal = Thread_Global.new(script_location, source_root)

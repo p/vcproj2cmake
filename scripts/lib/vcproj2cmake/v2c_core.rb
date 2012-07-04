@@ -1621,6 +1621,8 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
   end
 end
 
+# This class generates the output of multiple input projects to a text output
+# (usually CMakeLists.txt within a local directory).
 class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
   def initialize(textOut, arr_local_project_targets, script_location_relative_to_master)
     super(textOut)
@@ -1632,15 +1634,9 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
   end
 
   # FIXME: all these function arguments are temporary crap! - they're supposed to be per-ProjectTarget mostly.
-  def generate_it(local_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines, orig_proj_file_basename)
+  def generate_it(local_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines, arr_p_parser_proj_files)
     put_file_header()
 
-    # FIXME: reconversion currently would _not_ be able to support
-    # _multiple_ project()s (i.e. VS project files)
-    # per _single_ CMakeLists.txt file (i.e. directory), since it only converts a single project file.
-    # Should generate a list var in each CMakeLists.txt (e.g. a per-DIRECTORY property)
-    # mentioning the projects that this file contains,
-    # to be passed to the vcproj2cmake.rb converter rebuilder invocation.
     put_converter_script_location(@script_location_relative_to_master)
 
     @arr_local_project_targets.each { |project_info|
@@ -1648,7 +1644,18 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
 
       target_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
 
-      write_func_v2c_project_post_setup(project_info.name, orig_proj_file_basename)
+      # FIXME: reconversion currently would _not_ be able to support
+      # _multiple_ project()s (i.e. VS project files)
+      # per _single_ CMakeLists.txt file (i.e. directory), since it only converts a single project file.
+      # Should generate a list var in each CMakeLists.txt (e.g. a per-DIRECTORY property)
+      # mentioning the projects that this file contains,
+      # to be passed to the vcproj2cmake.rb converter rebuilder invocation.
+      # FIXME: for now, assume one project file only since subsequent processing
+      # cannot deal with multiple yet:
+      p_parser_proj_file = arr_p_parser_proj_files[0]
+
+      proj_file_relative_to_current_dir = p_parser_proj_file.relative_path_from(local_dir)
+      write_func_v2c_project_post_setup(project_info.name, proj_file_relative_to_current_dir)
     }
   end
   def put_file_header
@@ -1744,7 +1751,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
       write_invoke_v2c_function_quoted('v2c_converter_script_set_location', [ v2c_converter_script_location ])
     end
   end
-  def write_func_v2c_project_post_setup(project_name, orig_project_file_basename)
+  def write_func_v2c_project_post_setup(project_name, proj_file_relative_to_current_dir)
     # This function invokes CMakeLists.txt rebuilder only
     # (TODO: should be changed into specific naming!),
     # thus skip on one-time generation.
@@ -1755,7 +1762,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     # of the current generated CMakeLists.txt file - all boilerplate handling functionality
     # that's identical for each project should be implemented by the v2c_project_post_setup() function
     # _internally_.
-    arr_args_func = [ "${CMAKE_CURRENT_SOURCE_DIR}/#{orig_project_file_basename}", dereference_variable_name('CMAKE_CURRENT_LIST_FILE') ]
+    arr_args_func = [ "${CMAKE_CURRENT_SOURCE_DIR}/#{proj_file_relative_to_current_dir}", dereference_variable_name('CMAKE_CURRENT_LIST_FILE') ]
     write_invoke_config_object_v2c_function_quoted('v2c_project_post_setup', project_name, arr_args_func)
   end
 
@@ -5054,9 +5061,11 @@ class V2C_GeneratorBase < V2C_LoggerBase
 end
 
 class V2C_CMakeGenerator < V2C_GeneratorBase
-  def initialize(p_v2c_script, p_master_project, p_parser_proj_file, p_generator_proj_file, arr_projects)
+  def initialize(p_v2c_script, p_master_project, arr_p_parser_proj_files, p_generator_proj_file, arr_projects)
     @p_master_project = p_master_project
-    @orig_proj_file_basename = p_parser_proj_file.basename
+
+    @arr_p_parser_proj_files = arr_p_parser_proj_files
+
     # figure out a project_dir variable from the generated project file location
     @project_dir = p_generator_proj_file.dirname
     @cmakelists_output_file = p_generator_proj_file.to_s
@@ -5065,62 +5074,60 @@ class V2C_CMakeGenerator < V2C_GeneratorBase
     #log_debug_class "p_v2c_script #{p_v2c_script} | p_master_project #{p_master_project} | @script_location_relative_to_master #{@script_location_relative_to_master}"
   end
   def generate
-    @arr_projects.each { |project_info|
-      # write into temporary file, to avoid corrupting previous CMakeLists.txt due to syntax error abort, disk space or failure issues
-      Tempfile.open('vcproj2cmake') { |tmpfile|
-        begin
-          project_generate_cmake(@p_master_project, @orig_proj_file_basename, tmpfile, project_info)
-        rescue
-          # Close file, since Fileutils.mv on an open file will barf on XP
-          tmpfile.close
-          raise
-        end
-        tmpfile_ok = true
-        # This can happen in case of ignored exceptions...
-        if tmpfile.size() == 0
-          log_error_class 'zero-size tempfile!?!? Skipping replace of output file...'
-          #tmpfile_ok = false
-          # FIXME: should probably improve things to have the main
-          # script file exit with failure exit code...
-        end
+    # write into temporary file, to avoid corrupting previous CMakeLists.txt due to syntax error abort, disk space or failure issues
+    Tempfile.open('vcproj2cmake') { |tmpfile|
+      begin
+        projects_generate_cmake(@p_master_project, @arr_p_parser_proj_files, tmpfile, @arr_projects)
+      rescue
+        # Close file, since Fileutils.mv on an open file will barf on XP
+        tmpfile.close
+        raise
+      end
+      tmpfile_ok = true
+      # This can happen in case of ignored exceptions...
+      if tmpfile.size() == 0
+        log_error_class 'zero-size tempfile!?!? Skipping replace of output file...'
+        #tmpfile_ok = false
+        # FIXME: should probably improve things to have the main
+        # script file exit with failure exit code...
+      end
 
-        if tmpfile_ok == true
-          # Since we're forced to fumble our source tree (a definite no-no in all other cases!)
-          # by writing our CMakeLists.txt there, use a write-back-when-updated approach
-          # to make sure we only write back the live CMakeLists.txt in case anything did change.
-          # This is especially important in case of multiple concurrent builds on a shared
-          # source on NFS mount.
+      if tmpfile_ok == true
+        # Since we're forced to fumble our source tree (a definite no-no in all other cases!)
+        # by writing our CMakeLists.txt there, use a write-back-when-updated approach
+        # to make sure we only write back the live CMakeLists.txt in case anything did change.
+        # This is especially important in case of multiple concurrent builds on a shared
+        # source on NFS mount.
 
-          configuration_changed = false
-          output_file = @cmakelists_output_file
-          if File.exists?(output_file)
-            if not V2C_Util_File.cmp(tmpfile.path, output_file)
-              configuration_changed = true
-            end
-          else
+        configuration_changed = false
+        output_file = @cmakelists_output_file
+        if File.exists?(output_file)
+          if not V2C_Util_File.cmp(tmpfile.path, output_file)
             configuration_changed = true
           end
+        else
+          configuration_changed = true
+        end
 
-          if configuration_changed
-            util_permanentize_temp_file(tmpfile, output_file, $v2c_generator_file_create_permissions)
-            log_info_class %{\
+        if configuration_changed
+          util_permanentize_temp_file(tmpfile, output_file, $v2c_generator_file_create_permissions)
+          log_info_class %{\
 Wrote #{output_file}
 Finished. You should make sure to have all important v2c settings includes such as vcproj2cmake_defs.cmake somewhere in your CMAKE_MODULE_PATH
 }
-          else
-            log_info_class "No settings changed, #{output_file} not updated."
-            # tmpfile will auto-delete when finalized...
+        else
+          log_info_class "No settings changed, #{output_file} not updated."
+          # tmpfile will auto-delete when finalized...
 
-            # Some make dependency mechanisms might require touching (timestamping) the unchanged(!) file
-            # to indicate that it's up-to-date,
-            # however we won't do this here since it's not such a good idea.
-            # Any user who needs that should do a manual touch subsequently.
-          end
+	  # Some make dependency mechanisms might require touching (timestamping)
+	  # the unchanged(!) file to indicate that it's up-to-date,
+	  # however we won't do this here since it's not such a good idea.
+	  # Any user who needs that should do a manual touch subsequently.
         end
-      }
+      end
     }
   end
-  def project_generate_cmake(p_master_project, orig_proj_file_basename, out, project_info)
+  def projects_generate_cmake(p_master_project, arr_p_parser_proj_files, out, arr_projects)
     master_project_dir = p_master_project.to_s
     generator_base = V2C_BaseGlobalGenerator.new(master_project_dir)
     map_lib_dirs = Hash.new
@@ -5143,14 +5150,14 @@ Finished. You should make sure to have all important v2c settings includes such 
     #syntax_generator.next_paragraph()
     #global_generator.put_configuration_types(configuration_types)
 
-    local_generator = V2C_CMakeLocalGenerator.new(textOut, [ project_info ], @script_location_relative_to_master)
+    local_generator = V2C_CMakeLocalGenerator.new(textOut, arr_projects, @script_location_relative_to_master)
 
-    local_generator.generate_it(@project_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines, orig_proj_file_basename)
+    local_generator.generate_it(@project_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines, arr_p_parser_proj_files)
   end
 end
 
 
-def v2c_convert_project_inner(p_script, p_parser_proj_file, p_generator_proj_file, p_master_project)
+def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_files, p_generator_proj_file)
   #p_project_dir = Pathname.new(project_dir)
   #p_cmakelists = Pathname.new(output_file)
   #cmakelists_dir = p_cmakelists.dirname
@@ -5159,24 +5166,26 @@ def v2c_convert_project_inner(p_script, p_parser_proj_file, p_generator_proj_fil
 
   arr_projects = Array.new
 
-  parser_project_extension = p_parser_proj_file.extname
-  # Q&D parser switch...
-  parser = nil # IMPORTANT: reset it!
-  case parser_project_extension
-  when '.vcproj'
-    parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
-  when '.vfproj'
-    log_warn 'Detected Fortran .vfproj - parsing is VERY experimental, needs much more work!'
-    parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
-  when '.vcxproj'
-    parser = V2C_VS10ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
-  end
+  arr_p_parser_proj_files.each { |p_parser_proj_file|
+    parser_project_extension = p_parser_proj_file.extname
+    # Q&D parser switch...
+    parser = nil # IMPORTANT: reset it!
+    case parser_project_extension
+    when '.vcproj'
+      parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
+    when '.vfproj'
+      log_warn 'Detected Fortran .vfproj - parsing is VERY experimental, needs much more work!'
+      parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
+    when '.vcxproj'
+      parser = V2C_VS10ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
+    end
 
-  if not parser.nil?
-    parser.parse
-  else
-    log_implementation_bug "No project parser found for project file #{p_parser_proj_file.to_s}!?"
-  end
+    if not parser.nil?
+      parser.parse
+    else
+      log_implementation_bug "No project parser found for project file #{p_parser_proj_file.to_s}!?"
+    end
+  }
 
   # FIXME VERY DIRTY interim handling:
   arr_projects.each { |project_info|
@@ -5228,7 +5237,7 @@ def v2c_convert_project_inner(p_script, p_parser_proj_file, p_generator_proj_fil
     # should be distinctly provided for each generator, too.
     generator = nil
     if true
-      generator = V2C_CMakeGenerator.new(p_script, p_master_project, p_parser_proj_file, p_generator_proj_file, arr_projects)
+      generator = V2C_CMakeGenerator.new(p_script, p_master_project, arr_p_parser_proj_files, p_generator_proj_file, arr_projects)
     end
 
     if not generator.nil?
@@ -5239,8 +5248,10 @@ end
 
 # Treat non-normalized ("raw") input arguments as needed,
 # then pass on to inner function.
-def v2c_convert_project_outer(project_converter_script_filename, parser_proj_file, generator_proj_file, master_project_dir)
-  p_parser_proj_file = Pathname.new(parser_proj_file)
+def v2c_convert_project_outer(project_converter_script_filename, master_project_dir, arr_parser_proj_files, generator_proj_file)
+  arr_p_parser_proj_files = arr_parser_proj_files.collect { |parser_proj_file|
+    Pathname.new(parser_proj_file)
+  }
   p_generator_proj_file = Pathname.new(generator_proj_file)
   master_project_location = File.expand_path(master_project_dir)
   p_master_project = Pathname.new(master_project_location)
@@ -5248,7 +5259,7 @@ def v2c_convert_project_outer(project_converter_script_filename, parser_proj_fil
   script_location = File.expand_path(project_converter_script_filename)
   p_script = Pathname.new(script_location)
 
-  v2c_convert_project_inner(p_script, p_parser_proj_file, p_generator_proj_file, p_master_project)
+  v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_files, p_generator_proj_file)
 end
 
 

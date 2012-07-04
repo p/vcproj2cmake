@@ -171,4 +171,5 @@ if not master_project_dir
   master_project_dir = '.'
 end
 
-v2c_convert_project_outer(script_name, vcproj_filename, output_file, master_project_dir)
+arr_parser_proj_files = [ vcproj_filename ]
+v2c_convert_project_outer(script_name, master_project_dir, arr_parser_proj_files, output_file)
