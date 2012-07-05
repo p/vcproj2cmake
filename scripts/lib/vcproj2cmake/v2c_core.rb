@@ -864,6 +864,7 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
     # _Short_ name - may NOT contain whitespace.
     # Perhaps we should also be supplying a long name, too? ('Microsoft Visual Studio 7')
     @orig_environment_shortname = nil
+    @arr_p_original_project_files = nil # (optional) a list of native project files that this project info has been parsed from
     @creator = nil # VS7 "ProjectCreator" setting
     @guid = nil
     @root_namespace = nil
@@ -896,6 +897,7 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
   attr_accessor :type
   attr_accessor :name
   attr_accessor :orig_environment_shortname
+  attr_accessor :arr_p_original_project_files 
   attr_accessor :creator
   attr_accessor :guid
   attr_accessor :root_namespace
@@ -1634,29 +1636,17 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
   end
 
   # FIXME: all these function arguments are temporary crap! - they're supposed to be per-ProjectTarget mostly.
-  def generate_it(local_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines, arr_p_parser_proj_files)
+  def generate_it(local_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
     put_file_header()
 
     put_converter_script_location(@script_location_relative_to_master)
 
     @arr_local_project_targets.each { |project_info|
-      target_generator = V2C_CMakeProjectTargetGenerator.new(project_info, local_dir, self, @textOut)
+      project_generator = V2C_CMakeProjectTargetGenerator.new(project_info, local_dir, self, @textOut)
 
-      target_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
-
-      # FIXME: reconversion currently would _not_ be able to support
-      # _multiple_ project()s (i.e. VS project files)
-      # per _single_ CMakeLists.txt file (i.e. directory), since it only converts a single project file.
-      # Should generate a list var in each CMakeLists.txt (e.g. a per-DIRECTORY property)
-      # mentioning the projects that this file contains,
-      # to be passed to the vcproj2cmake.rb converter rebuilder invocation.
-      # FIXME: for now, assume one project file only since subsequent processing
-      # cannot deal with multiple yet:
-      p_parser_proj_file = arr_p_parser_proj_files[0]
-
-      proj_file_relative_to_current_dir = p_parser_proj_file.relative_path_from(local_dir)
-      write_func_v2c_project_post_setup(project_info.name, proj_file_relative_to_current_dir)
+      project_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
     }
+    write_func_v2c_directory_post_setup
   end
   def put_file_header
     @textOut.put_file_header_temporary_marker()
@@ -1751,19 +1741,9 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
       write_invoke_v2c_function_quoted('v2c_converter_script_set_location', [ v2c_converter_script_location ])
     end
   end
-  def write_func_v2c_project_post_setup(project_name, proj_file_relative_to_current_dir)
-    # This function invokes CMakeLists.txt rebuilder only
-    # (TODO: should be changed into specific naming!),
-    # thus skip on one-time generation.
-    return if $v2c_generator_one_time_conversion_only
-
-    # Rationale: keep count of generated lines of CMakeLists.txt to a bare minimum -
-    # call v2c_project_post_setup(), by simply passing all parameters that are _custom_ data
-    # of the current generated CMakeLists.txt file - all boilerplate handling functionality
-    # that's identical for each project should be implemented by the v2c_project_post_setup() function
-    # _internally_.
-    arr_args_func = [ "${CMAKE_CURRENT_SOURCE_DIR}/#{proj_file_relative_to_current_dir}", dereference_variable_name('CMAKE_CURRENT_LIST_FILE') ]
-    write_invoke_config_object_v2c_function_quoted('v2c_project_post_setup', project_name, arr_args_func)
+  def write_func_v2c_directory_post_setup
+    arr_args_func = [ dereference_variable_name('CMAKE_CURRENT_LIST_FILE') ]
+    write_invoke_v2c_function_quoted('v2c_directory_post_setup', arr_args_func)
   end
 
   private
@@ -2647,6 +2627,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
       # TODO: perhaps there are useful Xcode (XCODE_ATTRIBUTE_*) properties to convert?
     end # target_is_valid
+
+    arr_orig_proj_files = project_info.arr_p_original_project_files.collect { |orig_proj_file|
+      orig_proj_file.relative_path_from(@project_dir)
+    }
+    write_func_v2c_project_post_setup(project_info.name, arr_orig_proj_files)
   end
 
   private
@@ -2762,6 +2747,23 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def set_property(target_name, property, value)
     arr_args_func = [ 'TARGET', target_name, 'PROPERTY', property, value ]
     write_command_list_quoted('set_property', nil, arr_args_func)
+  end
+  def write_func_v2c_project_post_setup(project_name, arr_proj_files)
+    # This function invokes CMakeLists.txt rebuilder only
+    # (TODO: should be changed into specific naming!),
+    # thus skip on one-time generation.
+    return if $v2c_generator_one_time_conversion_only
+
+    # Rationale: keep count of generated lines of CMakeLists.txt to a bare minimum -
+    # call v2c_project_post_setup(), by simply passing all parameters that are _custom_ data
+    # of the current generated CMakeLists.txt file - all boilerplate handling functionality
+    # that's identical for each project should be implemented by the v2c_project_post_setup() function
+    # _internally_.
+    arr_proj_files_w_source_dir = arr_proj_files.collect { |proj_file|
+      "${CMAKE_CURRENT_SOURCE_DIR}/#{proj_file}"
+    }
+    arr_args_func = [ array_to_cmake_list(arr_proj_files_w_source_dir) ]
+    write_invoke_config_object_v2c_function_quoted('v2c_project_post_setup', project_name, arr_args_func)
   end
 end
 
@@ -4063,12 +4065,14 @@ class V2C_VSProjectFilesBundleParserBase
     @p_parser_proj_file = p_parser_proj_file
     @proj_filename = p_parser_proj_file.to_s # FIXME: do we want to keep the string-based filename? We should probably change several sub classes to be Pathname-based...
     @str_orig_environment_shortname = str_orig_environment_shortname
-    @arr_projects_out = arr_projects_out # We'll keep a project _array_ as member since it's conceivable that both VS7 and VS10 might have several project elements in their XML files.
+    @arr_projects_out_all = arr_projects_out # We'll keep a project _array_ as member since it's conceivable that both VS7 and VS10 might have several project elements in their XML files.
+    @arr_projects_out = Array.new # the specific projects parsed within this run
   end
   def parse
     parse_project_files
     check_unhandled_file_types
     mark_projects_postprocessing
+    @arr_projects_out_all.concat(@arr_projects_out)
   end
 
   # Hrmm, that function does not really belong
@@ -4089,6 +4093,11 @@ class V2C_VSProjectFilesBundleParserBase
     mark_projects_orig_environment_shortname(@str_orig_environment_shortname)
     project_name_default = get_default_project_name
     mark_projects_default_project_name(project_name_default)
+    @arr_projects_out.each { |project_new|
+      # FIXME: lists main project file only - should probably also
+      # add some peripheral original project files (.filters, .user, ...).
+      project_new.arr_p_original_project_files = [ @p_parser_proj_file ]
+    }
   end
   def mark_projects_orig_environment_shortname(str_orig_environment_shortname)
     @arr_projects_out.each { |project_new|
@@ -5061,10 +5070,8 @@ class V2C_GeneratorBase < V2C_LoggerBase
 end
 
 class V2C_CMakeGenerator < V2C_GeneratorBase
-  def initialize(p_v2c_script, p_master_project, arr_p_parser_proj_files, p_generator_proj_file, arr_projects)
+  def initialize(p_v2c_script, p_master_project, p_generator_proj_file, arr_projects)
     @p_master_project = p_master_project
-
-    @arr_p_parser_proj_files = arr_p_parser_proj_files
 
     # figure out a project_dir variable from the generated project file location
     @project_dir = p_generator_proj_file.dirname
@@ -5077,7 +5084,7 @@ class V2C_CMakeGenerator < V2C_GeneratorBase
     # write into temporary file, to avoid corrupting previous CMakeLists.txt due to syntax error abort, disk space or failure issues
     Tempfile.open('vcproj2cmake') { |tmpfile|
       begin
-        projects_generate_cmake(@p_master_project, @arr_p_parser_proj_files, tmpfile, @arr_projects)
+        projects_generate_cmake(@p_master_project, tmpfile, @arr_projects)
       rescue
         # Close file, since Fileutils.mv on an open file will barf on XP
         tmpfile.close
@@ -5127,7 +5134,7 @@ Finished. You should make sure to have all important v2c settings includes such 
       end
     }
   end
-  def projects_generate_cmake(p_master_project, arr_p_parser_proj_files, out, arr_projects)
+  def projects_generate_cmake(p_master_project, out, arr_projects)
     master_project_dir = p_master_project.to_s
     generator_base = V2C_BaseGlobalGenerator.new(master_project_dir)
     map_lib_dirs = Hash.new
@@ -5152,7 +5159,7 @@ Finished. You should make sure to have all important v2c settings includes such 
 
     local_generator = V2C_CMakeLocalGenerator.new(textOut, arr_projects, @script_location_relative_to_master)
 
-    local_generator.generate_it(@project_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines, arr_p_parser_proj_files)
+    local_generator.generate_it(@project_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
   end
 end
 
@@ -5237,7 +5244,7 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
     # should be distinctly provided for each generator, too.
     generator = nil
     if true
-      generator = V2C_CMakeGenerator.new(p_script, p_master_project, arr_p_parser_proj_files, p_generator_proj_file, arr_projects)
+      generator = V2C_CMakeGenerator.new(p_script, p_master_project, p_generator_proj_file, arr_projects)
     end
 
     if not generator.nil?

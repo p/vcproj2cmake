@@ -22,7 +22,11 @@
 #   relatively public ones
 # - prefer _upper-case_ V2C prefix for _cache variables_ such as V2C_RUBY_BIN,
 #   to ensure that they're all sorted under The One True upper-case "V2C" prefix
-#   in "grouped view" mode of CMake GUI
+#   in "grouped view" mode of CMake GUI (dito for properties)
+# - several functions are expected to be _very_ volatile,
+#   with frequent signature and content changes
+#   (--> vcproj2cmake.rb and vcproj2cmake_func.cmake versions
+#   should always be kept in sync)
 
 # Policy descriptions:
 # *V2C_DOCS_POLICY_MACRO*:
@@ -540,13 +544,15 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
 
   # Function to automagically rebuild our converted CMakeLists.txt
   # by the original converter script in case any relevant files changed.
-  function(_v2c_project_rebuild_on_update _dependent_target _vcproj_file _cmakelists_file _script _master_proj_dir)
-    message(STATUS "${_dependent_target}: providing ${_cmakelists_file} rebuilder (watching ${_vcproj_file})")
+  function(_v2c_project_rebuild_on_update _dependent_targets_list _dir_orig_proj_files_list _cmakelists_file _script _master_proj_dir)
+    _v2c_ensure_valid_variables(_dependent_targets_list)
+    list(GET _dependent_targets_list 0 dependent_target_main_)
+    message(STATUS "${dependent_target_main_}: providing ${_cmakelists_file} rebuilder (watching ${_dir_orig_proj_files_list})")
 
     if(NOT EXISTS "${_script}")
       # Perhaps someone manually copied over a set of foreign-machine-converted CMakeLists.txt files...
       # --> make sure that this use case does not fail anyway.
-      message("WARN: ${_dependent_target}: vcproj2cmake converter script ${_script} not found, cannot activate automatic reconversion functionality!")
+      message("WARN: ${dependent_target_main_}: vcproj2cmake converter script ${_script} not found, cannot activate automatic reconversion functionality!")
       return()
     endif(NOT EXISTS "${_script}")
 
@@ -591,7 +597,7 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     _v2c_config_get(mappings_files_expr_v1 mappings_files_expr_v1_)
     file(GLOB proj_mappings_files_list_ "${mappings_files_expr_v1_}")
 
-    set(cmakelists_rebuilder_deps_list_ "${_vcproj_file}" "${_script}" ${proj_mappings_files_list_} ${cmakelists_rebuilder_deps_common_list_})
+    set(cmakelists_rebuilder_deps_list_ ${_dir_orig_proj_files_list} "${_script}" ${proj_mappings_files_list_} ${cmakelists_rebuilder_deps_common_list_})
     #message(FATAL_ERROR "cmakelists_rebuilder_deps_list_ ${cmakelists_rebuilder_deps_list_}")
 
     _v2c_config_get(cmakelists_update_check_stamp_file_v1 cmakelists_update_check_stamp_file_v1_)
@@ -600,8 +606,15 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     # our live output file (CMakeLists.txt), yet we crucially need to preserve it
     # since it hosts this very CMakeLists.txt rebuilder mechanism...
     set(cmakelists_update_this_proj_updated_stamp_file_ "${CMAKE_CURRENT_BINARY_DIR}/cmakelists_rebuilder_done.stamp")
+    list(GET _dir_orig_proj_files_list 0 orig_proj_file_main_) # HACK
+    if("${orig_proj_file_main_}" STREQUAL "${_dir_orig_proj_files_list}")
+    else("${orig_proj_file_main_}" STREQUAL "${_dir_orig_proj_files_list}")
+      # vcproj2cmake.rb currently only converts a single project file.
+      # Need to modify it to use a proper getopts() mechanism.
+      message("FIXME: reconversion currently is not able to properly handle _multiple_ project()s (i.e. VS project files) per _single_ CMakeLists.txt file (i.e. directory).")
+    endif("${orig_proj_file_main_}" STREQUAL "${_dir_orig_proj_files_list}")
     add_custom_command(OUTPUT "${cmakelists_update_this_proj_updated_stamp_file_}"
-      COMMAND "${V2C_RUBY_BIN}" "${_script}" "${_vcproj_file}" "${_cmakelists_file}" "${_master_proj_dir}"
+      COMMAND "${V2C_RUBY_BIN}" "${_script}" "${orig_proj_file_main_}" "${_cmakelists_file}" "${_master_proj_dir}"
       COMMAND "${CMAKE_COMMAND}" -E remove -f "${cmakelists_update_check_stamp_file_v1_}"
       COMMAND "${CMAKE_COMMAND}" -E touch "${cmakelists_update_this_proj_updated_stamp_file_}"
       DEPENDS ${cmakelists_rebuilder_deps_list_}
@@ -632,12 +645,21 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     # NOTE: we use update_cmakelists_[TARGET] names instead of [TARGET]_...
     # since in certain IDEs these peripheral targets will end up as user-visible folders
     # and we want to keep them darn out of sight via suitable sorting!
-    set(target_cmakelists_update_this_proj_name_ update_cmakelists_${_dependent_target})
-    #add_custom_target(${target_cmakelists_update_this_proj_name_} DEPENDS "${_cmakelists_file}")
-    add_custom_target(${target_cmakelists_update_this_proj_name_} ALL DEPENDS "${cmakelists_update_this_proj_updated_stamp_file_}")
-#    add_dependencies(${target_cmakelists_update_this_proj_name_} update_cmakelists_rebuild_happened)
+    set(target_cmakelists_update_this_projdir_name_ update_cmakelists_DIR_${dependent_target_main_})
+    #add_custom_target(${target_cmakelists_update_this_projdir_name_} DEPENDS "${_cmakelists_file}")
+    add_custom_target(${target_cmakelists_update_this_projdir_name_} ALL DEPENDS "${cmakelists_update_this_proj_updated_stamp_file_}")
+#    add_dependencies(${target_cmakelists_update_this_projdir_name_} update_cmakelists_rebuild_happened)
 
-    add_dependencies(update_cmakelists_ALL__internal_collector ${target_cmakelists_update_this_proj_name_})
+    add_dependencies(update_cmakelists_ALL__internal_collector ${target_cmakelists_update_this_projdir_name_})
+    # Now hook up all projects to the one common rebuilder
+    # of the directory-wide config:
+    foreach(tgt_ ${_dependent_targets_list})
+      set(tgt_name_ update_cmakelists_${tgt_})
+      add_custom_target(${tgt_name_})
+      add_dependencies(${tgt_name_} ${target_cmakelists_update_this_projdir_name_})
+    endforeach(tgt_ ${_dependent_targets_list})
+
+    ### IMPLEMENTATION OF ABORT HANDLING ###
 
     # We definitely need to implement aborting the build process directly
     # after any new CMakeLists.txt files have been generated
@@ -698,24 +720,24 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
         add_dependencies(update_cmakelists_abort_build_after_update_cleanup update_cmakelists_abort_build_after_update)
         add_dependencies(update_cmakelists_abort_build_after_update update_cmakelists_ALL__internal_collector)
       endif(need_init_main_targets_this_time_)
-      add_dependencies(update_cmakelists_abort_build_after_update ${target_cmakelists_update_this_proj_name_})
+      add_dependencies(update_cmakelists_abort_build_after_update ${target_cmakelists_update_this_projdir_name_})
       set(target_cmakelists_ensure_rebuilt_name_ update_cmakelists_ALL)
     else(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD)
       if(need_init_main_targets_this_time_)
         add_dependencies(update_cmakelists_ALL update_cmakelists_ALL__internal_collector)
       endif(need_init_main_targets_this_time_)
-      set(target_cmakelists_ensure_rebuilt_name_ ${target_cmakelists_update_this_proj_name_})
+      set(target_cmakelists_ensure_rebuilt_name_ ${target_cmakelists_update_this_projdir_name_})
     endif(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD)
 
-    if(TARGET ${_dependent_target}) # in some projects an actual target might not exist (i.e. we simply got passed the project name)
+    if(TARGET ${_dependent_target_main}) # in some projects an actual target might not exist (i.e. we simply got passed the project name)
       # Make sure the CMakeLists.txt rebuild happens _before_ trying to build the actual target.
-      add_dependencies(${_dependent_target} ${target_cmakelists_ensure_rebuilt_name_})
-    endif(TARGET ${_dependent_target})
-  endfunction(_v2c_project_rebuild_on_update _dependent_target _vcproj_file _cmakelists_file _script _master_proj_dir)
+      add_dependencies(${_dependent_target_main} ${target_cmakelists_ensure_rebuilt_name_})
+    endif(TARGET ${_dependent_target_main})
+  endfunction(_v2c_project_rebuild_on_update _dependent_targets_list _dir_orig_proj_files_list _cmakelists_file _script _master_proj_dir)
 else(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
-  function(_v2c_project_rebuild_on_update _dependent_target _vcproj_file _cmakelists_file _script _master_proj_dir)
+  function(_v2c_project_rebuild_on_update _dependent_targets_list _dir_orig_proj_files_list _cmakelists_file _script _master_proj_dir)
     # dummy!
-  endfunction(_v2c_project_rebuild_on_update _dependent_target _vcproj_file _cmakelists_file _script _master_proj_dir)
+  endfunction(_v2c_project_rebuild_on_update _dependent_targets_list _dir_orig_proj_files_list _cmakelists_file _script _master_proj_dir)
 endif(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
 if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
   # *V2C_DOCS_POLICY_MACRO*
@@ -1040,6 +1062,8 @@ function(v2c_target_install _target)
   install(${install_params_values_list_})
 endfunction(v2c_target_install _target)
 
+# The all-in-one helper method for post setup steps
+# (install handling, VS properties, CMakeLists.txt rebuilder, ...).
 function(v2c_target_post_setup _target _project_label _vs_keyword)
   if(TARGET ${_target})
     v2c_target_install(${_target})
@@ -1053,18 +1077,50 @@ function(v2c_target_post_setup _target _project_label _vs_keyword)
   endif(TARGET ${_target})
   # DEBUG/LOG helper - enable to verify correct transfer of target properties etc.:
   #_v2c_target_log_configuration(${_target})
-
 endfunction(v2c_target_post_setup _target _project_label _vs_keyword)
 
-# The all-in-one helper method for post setup steps
-# (install handling, VS properties, CMakeLists.txt rebuilder, ...).
-# This function is expected to be _very_ volatile, with frequent signature and content changes
-# (--> vcproj2cmake.rb and vcproj2cmake_func.cmake versions should always be kept in sync)
-function(v2c_project_post_setup _target _vcproj_file _cmake_current_list_file)
+# Unfortunately there's no CMake DIRECTORY property to list all
+# project()s defined within a dir, thus we have to keep track of
+# this information on our own. OTOH we wouldn't be able to discern
+# V2C-side project()s from non-V2C ones anyway...
+function(_v2c_directory_get_projects_list _projects_list_out)
+  get_property(directory_projects_list_ DIRECTORY PROPERTY V2C_PROJECTS_LIST)
+  set(${_projects_list_out} "${directory_projects_list_}" PARENT_SCOPE)
+endfunction(_v2c_directory_get_projects_list _projects_list_out)
+
+function(_v2c_directory_register_project _target)
+  _v2c_directory_get_projects_list(projects_list_)
+  list(APPEND projects_list_ ${_target})
+  set_property(DIRECTORY PROPERTY V2C_PROJECTS_LIST "${projects_list_}")
+  #_v2c_directory_get_projects_list(projects_list_)
+  #message("projects list now: ${projects_list_}")
+endfunction(_v2c_directory_register_project _target)
+
+# This function enhances a list var in each CMakeLists.txt (e.g. a per-DIRECTORY property)
+# mentioning the projects that this file contains,
+# to be passed to the final directory-global
+# vcproj2cmake.rb converter rebuilder invocation.
+function(v2c_project_post_setup _target _orig_proj_files_list)
+  _v2c_directory_register_project(${_target})
+  set_property(TARGET ${_target} PROPERTY V2C_ORIG_PROJ_FILES_LIST "${_orig_proj_files_list}")
+  # Better make sure to include a hook _after_ all other local preparations
+  # are already available.
+  include("${V2C_HOOK_POST}" OPTIONAL)
+endfunction(v2c_project_post_setup _target _orig_proj_files_list)
+
+function(v2c_directory_post_setup _cmake_current_list_file)
+  _v2c_directory_get_projects_list(directory_projects_list_)
+  _v2c_ensure_valid_variables(directory_projects_list_)
+  foreach(proj_ ${directory_projects_list_})
+    # Implement this to be a _list_ variable of possibly multiple
+    # original converted-from files (.vcproj or .vcxproj or some such).
+    get_property(orig_proj_files_list_ TARGET ${proj_} PROPERTY V2C_ORIG_PROJ_FILES_LIST)
+    list(APPEND dir_orig_proj_files_list_ ${orig_proj_files_list_})
+  endforeach(proj_ ${directory_projects_list_})
   # Implementation note: the last argument to
   # _v2c_project_rebuild_on_update() should be as much of a 1:1 passthrough of
   # the input argument to the CMakeLists.txt converter ruby script execution as possible/suitable,
   # since invocation arguments of this script on rebuild should be (roughly) identical.
-  _v2c_project_rebuild_on_update(${_target} "${_vcproj_file}" "${_cmake_current_list_file}" "${V2C_SCRIPT_LOCATION}" "${V2C_MASTER_PROJECT_DIR}")
-  include("${V2C_HOOK_POST}" OPTIONAL)
-endfunction(v2c_project_post_setup _target _vcproj_file _cmake_current_list_file)
+  _v2c_project_rebuild_on_update("${directory_projects_list_}" "${dir_orig_proj_files_list_}" "${_cmake_current_list_file}" "${V2C_SCRIPT_LOCATION}" "${V2C_MASTER_PROJECT_DIR}")
+  include("${V2C_HOOK_DIRECTORY_POST}" OPTIONAL)
+endfunction(v2c_directory_post_setup _cmake_current_list_file)

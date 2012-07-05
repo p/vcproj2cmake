@@ -109,6 +109,13 @@ vcproj2cmake_defs.cmake module.
 Example hook scripts to be used by every sub project in your project hierarchy that needs
 such customizations are provided in our repository's sample/ directory.
 
+For the case of a single CMakeLists.txt converted from several project files
+within a single directory, each hook file will be invoked for all projects.
+Since it's not obvious which project() code is the one that's
+currently calling the hook, it's advisable to add
+if(${PROJECT_NAME} STREQUAL foobar_project)
+checks to such hook scripts.
+
 
 == Hook scripts Best Practice ==
 
