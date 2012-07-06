@@ -4,8 +4,6 @@
 #   http://www.cmake.org/Bug/view.php?id=1260
 #
 # TODO (sorted in order of importance):
-# - make sure to store important settings in global scopes
-#   (global properties or cache vars) - see "WARNING:" below
 # - COMPILE_FLAGS of a target are being _reset_: http://www.cmake.org/Bug/view.php?id=1260#c23633
 # - lots of whitespace escaping missing: http://www.cmake.org/Bug/view.php?id=1260#c27263
 # - catch build-type-dependent things like -DQT_DEBUG: http://www.cmake.org/Bug/view.php?id=1260#c12563
@@ -27,12 +25,6 @@
 #   ADD_NATIVE_PRECOMPILED_HEADER _targetName _input _dowarn
 #   GET_NATIVE_PRECOMPILED_HEADER _targetName _input
 
-# WARNING: this module needs to be _re-include()d_ on each use!
-# Otherwise macros in this file would break
-# since _PCH_include_prefix variable below currently is not a cache var
-# and thus would not be available on foreign scope (unrelated
-# directories etc.)
-
 IF(CMAKE_COMPILER_IS_GNUCXX)
 
     EXEC_PROGRAM(
@@ -41,23 +33,36 @@ IF(CMAKE_COMPILER_IS_GNUCXX)
         OUTPUT_VARIABLE gcc_compiler_version)
     #MESSAGE("GCC Version: ${gcc_compiler_version}")
     IF(gcc_compiler_version MATCHES "4\\.[0-9]\\.[0-9]")
-        SET(PCHSupport_FOUND TRUE)
+        SET(PCHSupport_FOUND_setting TRUE)
     ELSE(gcc_compiler_version MATCHES "4\\.[0-9]\\.[0-9]")
         IF(gcc_compiler_version MATCHES "3\\.4\\.[0-9]")
-            SET(PCHSupport_FOUND TRUE)
+            SET(PCHSupport_FOUND_setting TRUE)
         ENDIF(gcc_compiler_version MATCHES "3\\.4\\.[0-9]")
     ENDIF(gcc_compiler_version MATCHES "4\\.[0-9]\\.[0-9]")
 
-	SET(_PCH_include_prefix "-I")
+	SET(_PCH_include_prefix_setting "-I")
 
 ELSE(CMAKE_COMPILER_IS_GNUCXX)
 	IF(WIN32)
-		SET(PCHSupport_FOUND TRUE) # for experimental msvc support
-		SET(_PCH_include_prefix "/I")
+		SET(PCHSupport_FOUND_setting TRUE) # for experimental msvc support
+		SET(_PCH_include_prefix_setting "/I")
 	ELSE(WIN32)
-		SET(PCHSupport_FOUND FALSE)
+		SET(PCHSupport_FOUND_setting FALSE)
 	ENDIF(WIN32)
 ENDIF(CMAKE_COMPILER_IS_GNUCXX)
+
+# We configure these as cache variables -
+# otherwise macros in this file would break since non-cache variables
+# (e.g. _PCH_include_prefix in our case)
+# would not be available on foreign scope (unrelated directories etc.).
+# Rationale: CMake functions provided by a CMake module
+# will be accessible everywhere,
+# thus any variables referenced by these functions **should** be as well!!
+# Rationale #2: compiler settings will _also_ be stored as cache variables,
+# thus it's only consistent to have pre-determined compiler flags in cache, too.
+set(_PCH_include_prefix "${_PCH_include_prefix_setting}" CACHE STRING "Compiler-specific flag used to include a PCH [precompiled header]. Internal setting, should not need modification")
+set(PCHSupport_FOUND ${PCHSupport_FOUND_setting} CACHE BOOL "Indicates whether a compiler supports PCH [precompiled headers]")
+mark_as_advanced(_PCH_include_prefix PCHSupport_FOUND)
 
 
 MACRO(_PCH_GET_COMPILE_FLAGS _out_compile_flags)
