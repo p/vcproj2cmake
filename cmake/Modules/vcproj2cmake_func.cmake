@@ -542,11 +542,32 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     #add_dependencies(update_cmakelists_rebuild_recursive_ALL_observer ${cmakelists_target_rebuild_all_name_})
   endfunction(_v2c_cmakelists_rebuild_recursively _v2c_scripts_base_path _v2c_cmakelists_rebuilder_deps_common_list)
 
+  function(_v2c_projects_find_valid_target _projects_list _target_out)
+    set(target_ )
+    # Loop until we find an actually existing target
+    # within the list of project names
+    # (some projects may be header-only, thus no lib/exe targets).
+    foreach(proj_ ${_projects_list})
+      if(TARGET ${proj_})
+        set(target_ ${proj_})
+        break()
+      endif(TARGET ${proj_})
+    endforeach(proj_ ${_projects_list})
+    set(${_target_out} ${target_} PARENT_SCOPE)
+  endfunction(_v2c_projects_find_valid_target _projects_list _target_out)
+
   # Function to automagically rebuild our converted CMakeLists.txt
   # by the original converter script in case any relevant files changed.
-  function(_v2c_project_rebuild_on_update _dependent_targets_list _dir_orig_proj_files_list _cmakelists_file _script _master_proj_dir)
-    _v2c_ensure_valid_variables(_dependent_targets_list)
-    list(GET _dependent_targets_list 0 dependent_target_main_)
+  function(_v2c_project_rebuild_on_update _directory_projects_list _dir_orig_proj_files_list _cmakelists_file _script _master_proj_dir)
+    _v2c_ensure_valid_variables(_directory_projects_list)
+    _v2c_projects_find_valid_target("${_directory_projects_list}" dependent_target_main_)
+    if(NOT dependent_target_main_)
+      # Oh well... we didn't manage to find a valid target,
+      # but at least resort to choosing the first entry in the list.
+      list(GET _directory_projects_list 0 dependent_target_main_)
+    endif(NOT dependent_target_main_)
+    _v2c_ensure_valid_variables(dependent_target_main_)
+
     message(STATUS "${dependent_target_main_}: providing ${_cmakelists_file} rebuilder (watching ${_dir_orig_proj_files_list})")
 
     if(NOT EXISTS "${_script}")
@@ -653,11 +674,11 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     add_dependencies(update_cmakelists_ALL__internal_collector ${target_cmakelists_update_this_projdir_name_})
     # Now hook up all projects to the one common rebuilder
     # of the directory-wide config:
-    foreach(tgt_ ${_dependent_targets_list})
-      set(tgt_name_ update_cmakelists_${tgt_})
+    foreach(proj_ ${_directory_projects_list})
+      set(tgt_name_ update_cmakelists_${proj_})
       add_custom_target(${tgt_name_})
       add_dependencies(${tgt_name_} ${target_cmakelists_update_this_projdir_name_})
-    endforeach(tgt_ ${_dependent_targets_list})
+    endforeach(proj_ ${_directory_projects_list})
 
     ### IMPLEMENTATION OF ABORT HANDLING ###
 
@@ -729,15 +750,17 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
       set(target_cmakelists_ensure_rebuilt_name_ ${target_cmakelists_update_this_projdir_name_})
     endif(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD)
 
-    if(TARGET ${_dependent_target_main}) # in some projects an actual target might not exist (i.e. we simply got passed the project name)
+    # in the list of project(s) of a directory an actual project target
+    # might not be available (i.e. all are header-only project(s)).
+    if(TARGET ${dependent_target_main_})
       # Make sure the CMakeLists.txt rebuild happens _before_ trying to build the actual target.
-      add_dependencies(${_dependent_target_main} ${target_cmakelists_ensure_rebuilt_name_})
-    endif(TARGET ${_dependent_target_main})
-  endfunction(_v2c_project_rebuild_on_update _dependent_targets_list _dir_orig_proj_files_list _cmakelists_file _script _master_proj_dir)
+      add_dependencies(${dependent_target_main_} ${target_cmakelists_ensure_rebuilt_name_})
+    endif(TARGET ${dependent_target_main_})
+  endfunction(_v2c_project_rebuild_on_update _directory_projects_list _dir_orig_proj_files_list _cmakelists_file _script _master_proj_dir)
 else(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
-  function(_v2c_project_rebuild_on_update _dependent_targets_list _dir_orig_proj_files_list _cmakelists_file _script _master_proj_dir)
+  function(_v2c_project_rebuild_on_update _directory_projects_list _dir_orig_proj_files_list _cmakelists_file _script _master_proj_dir)
     # dummy!
-  endfunction(_v2c_project_rebuild_on_update _dependent_targets_list _dir_orig_proj_files_list _cmakelists_file _script _master_proj_dir)
+  endfunction(_v2c_project_rebuild_on_update _directory_projects_list _dir_orig_proj_files_list _cmakelists_file _script _master_proj_dir)
 endif(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
 if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
   # *V2C_DOCS_POLICY_MACRO*
@@ -1100,13 +1123,17 @@ endfunction(_v2c_directory_register_project _target)
 # mentioning the projects that this file contains,
 # to be passed to the final directory-global
 # vcproj2cmake.rb converter rebuilder invocation.
-function(v2c_project_post_setup _target _orig_proj_files_list)
-  _v2c_directory_register_project(${_target})
-  set_property(TARGET ${_target} PROPERTY V2C_ORIG_PROJ_FILES_LIST "${_orig_proj_files_list}")
+function(v2c_project_post_setup _project _orig_proj_files_list)
+  _v2c_directory_register_project(${_project})
+  # Some projects are header-only and thus don't add an actual target
+  # where our target-related properties could be set at,
+  # thus we unfortunately need to resort to hooking these things
+  # to a DIRECTORY property instead...
+  set_property(DIRECTORY PROPERTY V2C_PROJECT_${_project}_ORIG_PROJ_FILES_LIST "${_orig_proj_files_list}")
   # Better make sure to include a hook _after_ all other local preparations
   # are already available.
   include("${V2C_HOOK_POST}" OPTIONAL)
-endfunction(v2c_project_post_setup _target _orig_proj_files_list)
+endfunction(v2c_project_post_setup _project _orig_proj_files_list)
 
 function(v2c_directory_post_setup _cmake_current_list_file)
   _v2c_directory_get_projects_list(directory_projects_list_)
@@ -1114,7 +1141,7 @@ function(v2c_directory_post_setup _cmake_current_list_file)
   foreach(proj_ ${directory_projects_list_})
     # Implement this to be a _list_ variable of possibly multiple
     # original converted-from files (.vcproj or .vcxproj or some such).
-    get_property(orig_proj_files_list_ TARGET ${proj_} PROPERTY V2C_ORIG_PROJ_FILES_LIST)
+    get_property(orig_proj_files_list_ DIRECTORY PROPERTY V2C_PROJECT_${proj_}_ORIG_PROJ_FILES_LIST)
     list(APPEND dir_orig_proj_files_list_ ${orig_proj_files_list_})
   endforeach(proj_ ${directory_projects_list_})
   # Implementation note: the last argument to
