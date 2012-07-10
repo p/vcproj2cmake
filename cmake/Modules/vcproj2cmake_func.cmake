@@ -778,7 +778,11 @@ endif(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
 
 # *V2C_DOCS_POLICY_MACRO*
 macro(v2c_hook_invoke _hook_file_name)
-  include("${_hook_file_name}" OPTIONAL)
+  # Prevent problematic outcome of calls with empty variable
+  # (see our CMake bug #13388).
+  if(_hook_file_name)
+    include("${_hook_file_name}" OPTIONAL)
+  endif(_hook_file_name)
 endmacro(v2c_hook_invoke _hook_file_name)
 
 # Configure CMAKE_MFC_FLAG etc.
@@ -1132,7 +1136,7 @@ function(v2c_project_post_setup _project _orig_proj_files_list)
   set_property(DIRECTORY PROPERTY V2C_PROJECT_${_project}_ORIG_PROJ_FILES_LIST "${_orig_proj_files_list}")
   # Better make sure to include a hook _after_ all other local preparations
   # are already available.
-  include("${V2C_HOOK_POST}" OPTIONAL)
+  v2c_hook_invoke("${V2C_HOOK_POST}")
 endfunction(v2c_project_post_setup _project _orig_proj_files_list)
 
 function(v2c_directory_post_setup _cmake_current_list_file)
@@ -1149,5 +1153,5 @@ function(v2c_directory_post_setup _cmake_current_list_file)
   # the input argument to the CMakeLists.txt converter ruby script execution as possible/suitable,
   # since invocation arguments of this script on rebuild should be (roughly) identical.
   _v2c_project_rebuild_on_update("${directory_projects_list_}" "${dir_orig_proj_files_list_}" "${_cmake_current_list_file}" "${V2C_SCRIPT_LOCATION}" "${V2C_MASTER_PROJECT_DIR}")
-  include("${V2C_HOOK_DIRECTORY_POST}" OPTIONAL)
+  v2c_hook_invoke("${V2C_HOOK_DIRECTORY_POST}")
 endfunction(v2c_directory_post_setup _cmake_current_list_file)
