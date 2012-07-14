@@ -2821,7 +2821,15 @@ def vs7_create_config_variable_translation(str, arr_config_var_handling)
     # at least in cases where a hard-coded (i.e., non-flexible)
     # result handling is sufficient.
     case config_var_upcase
-      when 'CONFIGURATIONNAME'
+      # Hmm, $(Configuration) / $(ConfigurationName) seem to be
+      # very similar but not fully, and it's not obvious what the difference is.
+      # See http://msdn.microsoft.com/en-us/library/community/history/c02as0cs.aspx?id=3
+      # (or better locate the original "$(Configuration) vs $(ConfigurationName)"
+      # discussion page content since - ONCE AGAIN! Like with CodePlex, TFS Web etc. -
+      # Microsoft is unable to provide an even barely suitable interface </rant>)
+      #
+      # Thus both should map to the special ${CMAKE_CFG_INTDIR} mechanism.
+      when 'CONFIGURATION', 'CONFIGURATIONNAME'
       	config_var_replacement = '${CMAKE_CFG_INTDIR}'
       when 'PLATFORMNAME'
         config_var_emulation_code = <<EOF
