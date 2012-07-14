@@ -311,6 +311,9 @@ Find.find('./') do
     str_proj_file
   }
 
+  # Filter out nil entries (caused by "next" above)
+  arr_proj_files.compact!
+
   next if arr_proj_files.nil?
 
   rebuild = 0
