@@ -1070,7 +1070,7 @@ class V2C_LoggerBase
   def log_info_class(str); log_info "#{self.class.name}: #{str}" end
   def log_debug_class(str); log_debug "#{self.class.name}: #{str}" end
   # "Ruby Exceptions", http://rubylearning.com/satishtalim/ruby_exceptions.html
-  def unhandled_exception(e); log_error_unhandled_exception(e) end
+  def unhandled_exception(e); log_error_unhandled_exception(e, 'logger base class') end
   def unhandled_functionality(str_description); log_error("unhandled functionality: #{str_description}") end
 end
 
@@ -2245,7 +2245,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     else
     #when 10    # typeGeneric (Makefile) [and possibly other things...]
       # TODO: we _should_ somehow support these project types...
-      log_fatal "Project type #{target_config_info_curr.cfg_type} not supported."
+      log_debug "#{@target.inspect}"
+      log_fatal "#{@target.name}: project type #{target_config_info_curr.cfg_type} not supported."
     end
     write_conditional_end(str_condition_no_target)
 
@@ -2899,8 +2900,8 @@ EOF
 end
 
 # NOTE: should probably re-raise() the exception in most cases...
-def log_error_unhandled_exception(e)
-  log_error "unhandled exception occurred! #{e.message}, #{e.backtrace.inspect}"
+def log_error_unhandled_exception(e, action)
+  log_error "unhandled exception occurred during #{action}! #{e.message}, #{e.backtrace.inspect}"
 end
 
 class V2C_ParserBase < V2C_LoggerBase
@@ -4891,7 +4892,7 @@ class V2C_VS10ProjectFileParser < V2C_VSProjectFileParserBase
       }
     rescue Exception => e
       # File probably does not exiѕt...
-      log_error_unhandled_exception(e)
+      log_error_unhandled_exception(e, 'project file parsing')
       raise
     end
     return success
@@ -4981,7 +4982,7 @@ class V2C_VS10ProjectFiltersFileParser < V2C_ParserBase
       }
     rescue Exception => e
       # File probably does not exiѕt...
-      log_error_unhandled_exception(e)
+      log_error_unhandled_exception(e, 'project file parsing')
       raise
     end
     return success
@@ -5084,8 +5085,11 @@ class V2C_CMakeGenerator < V2C_GeneratorBase
     # write into temporary file, to avoid corrupting previous CMakeLists.txt due to syntax error abort, disk space or failure issues
     Tempfile.open('vcproj2cmake') { |tmpfile|
       begin
+        log_debug "generating project(s) in #{@project_dir} into #{@cmakelists_output_file}."
         projects_generate_cmake(@p_master_project, tmpfile, @arr_projects)
-      rescue
+        log_debug "generated project(s) in #{@project_dir}."
+      rescue Exception => e
+        log_error_unhandled_exception(e, 'while generating projects')
         # Close file, since Fileutils.mv on an open file will barf on XP
         tmpfile.close
         raise
@@ -5174,6 +5178,7 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
   arr_projects = Array.new
 
   arr_p_parser_proj_files.each { |p_parser_proj_file|
+    log_debug "About to parse #{p_parser_proj_file}"
     parser_project_extension = p_parser_proj_file.extname
     # Q&D parser switch...
     parser = nil # IMPORTANT: reset it!
@@ -5192,6 +5197,10 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
     else
       log_implementation_bug "No project parser found for project file #{p_parser_proj_file.to_s}!?"
     end
+  }
+
+  arr_projects.each { |proj|
+    log_debug "Parsed project #{proj.name}."
   }
 
   # FIXME VERY DIRTY interim handling:
@@ -5231,7 +5240,7 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
       log_error error_msg
     end
   rescue Exception => e
-    log_error_unhandled_exception(e)
+    log_error_unhandled_exception(e, 'project validation')
     raise
   end
 

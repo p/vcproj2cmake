@@ -355,6 +355,7 @@ Find.find('./') do
   # then call v2c_convert_project_outer() multi-threaded!
   # (although threading is said to be VERY slow in Ruby -
   # but still it should provide some sizeable benefit).
+  log_debug "Submitting #{arr_proj_files.inspect} to be converted in #{f}."
   thread_work = Thread_Work.new(arr_proj_files, f)
   arr_thread_work.push(thread_work)
 
