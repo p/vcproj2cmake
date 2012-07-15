@@ -5284,28 +5284,26 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
   # (they could easily forget about that).
   # Besides, parsing/generating should be concerned about fast (KISS)
   # parsing/generating only anyway.
-
-  # FIXME: should do the validator/generator processing iteration
-  # per-project...
-  projects_valid = true
-  begin
-    arr_projects.each { |project|
+  arr_projects.delete_if { |project|
+    project_valid = true
+    begin
       validator = V2C_ProjectValidator.new(project)
       validator.validate
-    }
-  rescue V2C_ValidationError => e
-    projects_valid = false
-    error_msg = "project validation failed: #{e.message}"
-    log_error error_msg
-    if ($v2c_validate_vcproj_abort_on_error > 0)
-      raise # escalate the problem
+    rescue V2C_ValidationError => e
+      project_valid = false
+      error_msg = "project validation failed: #{e.message}"
+      log_error error_msg
+      if ($v2c_validate_vcproj_abort_on_error > 0)
+        raise # escalate the problem
+      end
+    rescue Exception => e
+      log_error_unhandled_exception(e, 'project validation')
+      raise
     end
-  rescue Exception => e
-    log_error_unhandled_exception(e, 'project validation')
-    raise
-  end
+    (project_valid == false)
+  }
 
-  if projects_valid
+  begin
     # TODO: it's probably a valid use case to want to generate
     # multiple build environments from the parsed projects.
     # In such case the set of generators should be available
