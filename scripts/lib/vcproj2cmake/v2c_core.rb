@@ -851,6 +851,13 @@ end
 # seem to be pretty much synonymous...
 # FIXME: we should still do better separation between these two...
 # Formerly called V2C_Target.
+#
+# Default values of its members should be useful defaults
+# *irrespective* of defaults defined by specific build environments (e.g. VS7, VS10).
+# In most cases, this means choosing "error values" initially,
+# for the project validator to be able to yell about it
+# in case a certain parser type did then NOT handle
+# assigning useful values to them.
 class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consistently get a condition element - but the VS10-side project info actually most likely does not have/use it!
   def initialize
     @type = nil # project type
@@ -3005,6 +3012,12 @@ class V2C_VSXmlParserBase < V2C_ParserBase
     return array_discard_empty(arr_values)
   end
 
+  def parse_integer(setting_value)
+    # Integer(x) (rather than .to_i) may throw an ArgumentError,
+    # which we'll cleanly handle externally
+    # (parsing failed --> no value assigned --> default value kept).
+    return Integer(setting_value)
+  end
   def string_to_index(arr_settings, str_setting, default_val)
     val = default_val
     n = arr_settings.index(str_setting)
@@ -3149,9 +3162,21 @@ class V2C_VSProjectFileXmlParserBase < V2C_VSXmlParserBase
 end
 
 class V2C_VSProjectParserBase < V2C_VSXmlParserBase
+  def initialize(elem_xml, info_elem_out)
+    super(elem_xml, info_elem_out)
+    set_vs_specific_default_values(get_project())
+  end
   private
 
   def get_project; return @info_elem end
+
+  # TODO: perhaps this "default values" initializer
+  # should be spread throughout all parser sub classes.
+  # But since they're instantiated on-demand
+  # that's currently not possible in several cases.
+  def set_vs_specific_default_values(project_info)
+     # nothing to do yet.
+  end
 end
 
 class V2C_VS7ProjectParserBase < V2C_VSProjectParserBase
@@ -3160,6 +3185,7 @@ end
 module V2C_VSToolDefines
   TEXT_ADDITIONALOPTIONS = 'AdditionalOptions'
   TEXT_SHOWPROGRESS = 'ShowProgress' # Houston... differing VS7/10 elements don't fit into our class hierarchy all too well...
+  VS_DEFAULT_SETTING_SHOWPROGRESS = false # VS10 default: "not set"
   TEXT_SUPPRESSSTARTUPBANNER = 'SuppressStartupBanner'
 end
 
@@ -3205,17 +3231,23 @@ module V2C_VSToolCompilerDefines
   TEXT_DISABLESPECIFICWARNINGS = 'DisableSpecificWarnings'
   TEXT_ENABLEFUNCTIONLEVELLINKING = 'EnableFunctionLevelLinking'
   TEXT_ENABLEINTRINSICFUNCTIONS = 'EnableIntrinsicFunctions'
+  VS_DEFAULT_SETTING_ENABLEINTRINSICFUNCTIONS = false # VS10 default: "No"
   TEXT_ENABLEPREFAST = 'EnablePREfast'
   TEXT_EXCEPTIONHANDLING = 'ExceptionHandling'
+  VS_DEFAULT_SETTING_EXCEPTIONHANDLING = true # VS10 "Enable C++ Exceptions" default: "Yes (/EHsc)"
   TEXT_MINIMALREBUILD = 'MinimalRebuild'
+  VS_DEFAULT_SETTING_MINIMALREBUILD = false # VS10 default: "No (/Gm-)"
   TEXT_OPTIMIZATION = 'Optimization'
   TEXT_PROGRAMDATABASEFILENAME = 'ProgramDatabaseFileName'
   TEXT_PREPROCESSORDEFINITIONS = 'PreprocessorDefinitions'
   TEXT_RUNTIMETYPEINFO = 'RuntimeTypeInfo'
   TEXT_SHOWINCLUDES = 'ShowIncludes'
+  VS_DEFAULT_SETTING_SHOWINCLUDES = false # VS10 default: "No"
   TEXT_STRINGPOOLING = 'StringPooling'
   TEXT_TREAT_WCHAR_T_AS_BUILTIN_TYPE = 'TreatWChar_tAsBuiltInType'
+  VS_DEFAULT_SETTING_TREAT_WCHAR_T_AS_BUILTIN_TYPE = true # VS10 default: "Yes"
   TEXT_WARNINGLEVEL = 'WarningLevel'
+  VS_DEFAULT_SETTING_WARNINGLEVEL = 3 # VS10 default: 3 (right!?)
 end
 
 class V2C_VSToolCompilerParser < V2C_VSToolParserBase
@@ -3349,14 +3381,14 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
     end
     return found
   end
-  def parse_exception_handling(setting_value); return setting_value.to_i end
-  def parse_optimization(setting_value); return setting_value.to_i end
+  def parse_exception_handling(setting_value); return parse_integer(setting_value) end
+  def parse_optimization(setting_value); return parse_integer(setting_value) end
   def parse_use_precompiled_header(value_use_precompiled_header)
-    use_val = value_use_precompiled_header.to_i
+    use_val = parse_integer(value_use_precompiled_header)
     if use_val == 3; use_val = 2 end # VS7 --> VS8 migration change: all values of 3 have been replaced by 2, it seems...
     return use_val
   end
-  def parse_warning_level(setting_value); return setting_value.to_i end
+  def parse_warning_level(setting_value); return parse_integer(setting_value) end
 end
 
 module V2C_VSToolLinkerDefines
@@ -3468,12 +3500,12 @@ class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
     end
     return found
   end
-  def parse_link_incremental(str_link_incremental); return str_link_incremental.to_i end
-  def parse_optimize_references(setting_value); return setting_value.to_i end
-  def parse_subsystem(setting_value); return setting_value.to_i end
+  def parse_link_incremental(str_link_incremental); return parse_integer(str_link_incremental) end
+  def parse_optimize_references(setting_value); return parse_integer(setting_value) end
+  def parse_subsystem(setting_value); return parse_integer(setting_value) end
   def parse_target_machine(setting_value)
      machine = VS_DEFAULT_SETTING_TARGET_MACHINE
-     case setting_value.to_i
+     case parse_integer(setting_value)
      when 0
        machine = V2C_Linker_Defines::MACHINE_NOT_SET
      when 1
@@ -3552,13 +3584,17 @@ class V2C_VS7ToolParser < V2C_VSXmlParserBase
   def get_tools_info; return @info_elem end
 end
 
+# Default entries below indicate the setting used by VS7/10
+# when no custom setting chosen
+# (i.e. when remaining marked as non-bold in Configuration Dialog).
 module V2C_VSConfigurationDefines
   TEXT_ATLMINIMIZESCRUNTIMELIBRARYUSAGE = 'ATLMinimizesCRunTimeLibraryUsage'
   TEXT_CHARACTERSET = 'CharacterSet'
   TEXT_CONFIGURATIONTYPE = 'ConfigurationType'
   TEXT_WHOLEPROGRAMOPTIMIZATION = 'WholeProgramOptimization'
+  VS_DEFAULT_SETTING_WHOLEPROGRAMOPTIMIZATION = false # VS10 default: "No"
   VS_DEFAULT_SETTING_CHARSET = V2C_TargetConfig_Defines::CHARSET_UNICODE # FIXME proper default??
-  VS_DEFAULT_SETTING_CONFIGURATIONTYPE = V2C_TargetConfig_Defines::CFG_TYPE_UNKNOWN # FIXME proper default??
+  VS_DEFAULT_SETTING_CONFIGURATIONTYPE = V2C_TargetConfig_Defines::CFG_TYPE_APP # VS10: Application
   VS_DEFAULT_SETTING_MFC = V2C_TargetConfig_Defines::MFC_FALSE
 end
 
@@ -3594,11 +3630,11 @@ class V2C_VS7ConfigurationBaseParser < V2C_VSXmlParserBase
       condition.set_platform(arr_name[1])
       get_target_config_info().condition = condition
     when TEXT_VS7_USEOFATL
-      get_target_config_info().use_of_atl = setting_value.to_i
+      get_target_config_info().use_of_atl = parse_integer(setting_value)
     when TEXT_VS7_USEOFMFC
       # VS7 does not seem to use string values (only 0/1/2 integers), while VS10 additionally does.
       # NOTE SPELLING DIFFERENCE: MSVS7 has UseOfMFC, MSVS10 has UseOfMfc (see CMake MSVS generators)
-      get_target_config_info().use_of_mfc = setting_value.to_i
+      get_target_config_info().use_of_mfc = parse_integer(setting_value)
     when TEXT_WHOLEPROGRAMOPTIMIZATION
       get_target_config_info().whole_program_optimization = parse_wp_optimization(setting_value)
     else
@@ -3629,9 +3665,9 @@ class V2C_VS7ConfigurationBaseParser < V2C_VSXmlParserBase
   def get_target_config_info; return @info_elem end
   def get_config_info; return @config_info end
   def get_tools_info; return get_config_info().tools end
-  def parse_charset(str_charset); return str_charset.to_i end
-  def parse_configuration_type(str_configuration_type); return str_configuration_type.to_i end
-  def parse_wp_optimization(str_opt); return str_opt.to_i end
+  def parse_charset(str_charset); return parse_integer(str_charset) end
+  def parse_configuration_type(str_configuration_type); return parse_integer(str_configuration_type) end
+  def parse_wp_optimization(str_opt); return parse_integer(str_opt) end
 end
 
 class V2C_VS7ProjectConfigurationParser < V2C_VS7ConfigurationBaseParser
@@ -4581,7 +4617,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
       'Level4', # /W4
       'EnableAllWarnings' # /Wall
     ]
-    return string_to_index(arr_warn_level, str_warning_level, 3)
+    return string_to_index(arr_warn_level, str_warning_level, VS_DEFAULT_SETTING_WARNINGLEVEL)
   end
 end
 
@@ -4686,11 +4722,18 @@ module V2C_VS10ConfigurationDefines
 end
 
 class V2C_VS10PropertyGroupConfigurationParser < V2C_VS10BaseElemParser
+  def initialize(elem_xml, info_elem_out)
+    super(elem_xml, info_elem_out)
+    set_vs_specific_default_values(info_elem_out)
+  end
 private
   include V2C_VS10ConfigurationDefines
   include V2C_TargetConfig_Defines
   def get_configuration; return @info_elem end
 
+  def set_vs_specific_default_values(target_config_info)
+    target_config_info.cfg_type = CFG_TYPE_APP
+  end
   def parse_setting(setting_key, setting_value)
     found = be_optimistic()
     config_info_curr = get_configuration()
