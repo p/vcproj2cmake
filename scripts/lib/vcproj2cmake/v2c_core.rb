@@ -18,6 +18,7 @@ def load_configuration_file(str_file, str_descr, arr_descr_loaded)
     arr_descr_loaded.push("#{str_descr} #{str_file}")
     success = true
   rescue LoadError
+    # ignore it (config file is optional!)
   end
   return success
 end
@@ -3092,17 +3093,21 @@ class V2C_VSXmlParserBase < V2C_ParserBase
   def call_parse_setting(setting_key, setting_value)
     @called_base_parse_setting = false
     success = false
-    found = parse_setting(setting_key, setting_value)
-    case found
-    when FOUND_TRUE
-      success = true
-    when FOUND_FALSE
-      if not @called_base_parse_setting
-        announce_missing_base_call('parse_setting')
+    begin
+      found = parse_setting(setting_key, setting_value)
+      case found
+      when FOUND_TRUE
+        success = true
+      when FOUND_FALSE
+        if not @called_base_parse_setting
+          announce_missing_base_call('parse_setting')
+        end
+      when FOUND_SKIP
+        skipped_element_warn(setting_key)
+        success = true
       end
-    when FOUND_SKIP
-      skipped_element_warn(setting_key)
-      success = true
+    rescue ArgumentError => e
+      log_warn "encountered ArgumentError - perhaps integer parsing of #{setting_key} --> #{setting value} failed?"
     end
     return success
   end
@@ -5135,21 +5140,25 @@ class V2C_CMakeGenerator < V2C_GeneratorBase
   def generate
     # write into temporary file, to avoid corrupting previous CMakeLists.txt due to syntax error abort, disk space or failure issues
     Tempfile.open('vcproj2cmake') { |tmpfile|
+      tmpfile_size = 0
       begin
         log_debug "generating project(s) in #{@project_dir} into #{@cmakelists_output_file}."
         projects_generate_cmake(@p_master_project, tmpfile, @arr_projects)
         log_debug "generated project(s) in #{@project_dir}."
       rescue Exception => e
         log_error_unhandled_exception(e, 'while generating projects')
+        raise
+      ensure
+        # File size() check delivers valid results prior to close()ing only.
+        tmpfile_size = tmpfile.size()
         # Close file, since Fileutils.mv on an open file will barf on XP
         tmpfile.close
-        raise
       end
       tmpfile_ok = true
       # This can happen in case of ignored exceptions...
-      if tmpfile.size() == 0
+      if tmpfile_size == 0
         log_error_class 'zero-size tempfile!?!? Skipping replace of output file...'
-        #tmpfile_ok = false
+        tmpfile_ok = false
         # FIXME: should probably improve things to have the main
         # script file exit with failure exit code...
       end
@@ -5285,10 +5294,9 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
   rescue V2C_ValidationError => e
     projects_valid = false
     error_msg = "project validation failed: #{e.message}"
+    log_error error_msg
     if ($v2c_validate_vcproj_abort_on_error > 0)
-      log_fatal error_msg
-    else
-      log_error error_msg
+      raise # escalate the problem
     end
   rescue Exception => e
     log_error_unhandled_exception(e, 'project validation')
