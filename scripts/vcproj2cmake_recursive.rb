@@ -177,7 +177,6 @@ def search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex)
         match_prefix = matchdata[1]
         match_suffix = matchdata[3]
         log_debug "Applying #{proj_file_generic_match_regex}: found #{dir_entry}"
-        is_more_precise_match_already_existing = false
         add_this_match = true
         dir_entries_match_subset_filtered.each { |proj_file|
           found = smart_match(dir_entry, proj_file, arr_proj_file_regex, match_prefix, match_suffix, proj_file_regex)

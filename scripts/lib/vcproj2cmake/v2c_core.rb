@@ -1877,7 +1877,6 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
           # Not sure whether these were added by users or
           # it's actually some standard MSVS mechanism... FIXME
           log_info_class "#{@project_name}::#{f} registered as a \"source\" file!? Skipping!"
-          included_in_build = false
           next # no complex handling, just skip
         end
 
@@ -2454,7 +2453,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       hash_defines['_AFXEXT'] = ''
       hash_defines['_AFXDLL'] = ''
     end
-   case target_config_info.charset
+    case target_config_info.charset
     when V2C_TargetConfig_Defines::CHARSET_SBCS # nothing to do?
     when V2C_TargetConfig_Defines::CHARSET_UNICODE
       # http://blog.m-ri.de/index.php/2007/05/31/_unicode-versus-unicode-und-so-manches-eigentuemliche/
@@ -2829,18 +2828,18 @@ def vs7_create_config_variable_translation(str, arr_config_var_handling)
     # at least in cases where a hard-coded (i.e., non-flexible)
     # result handling is sufficient.
     case config_var_upcase
-      # Hmm, $(Configuration) / $(ConfigurationName) seem to be
-      # very similar but not fully, and it's not obvious what the difference is.
-      # See http://msdn.microsoft.com/en-us/library/community/history/c02as0cs.aspx?id=3
-      # (or better locate the original "$(Configuration) vs $(ConfigurationName)"
-      # discussion page content since - ONCE AGAIN! Like with CodePlex, TFS Web etc. -
-      # Microsoft is unable to provide an even barely suitable interface </rant>)
-      #
-      # Thus both should map to the special ${CMAKE_CFG_INTDIR} mechanism.
-      when 'CONFIGURATION', 'CONFIGURATIONNAME'
-      	config_var_replacement = '${CMAKE_CFG_INTDIR}'
-      when 'PLATFORMNAME'
-        config_var_emulation_code = <<EOF
+    # Hmm, $(Configuration) / $(ConfigurationName) seem to be
+    # very similar but not fully, and it's not obvious what the difference is.
+    # See http://msdn.microsoft.com/en-us/library/community/history/c02as0cs.aspx?id=3
+    # (or better locate the original "$(Configuration) vs $(ConfigurationName)"
+    # discussion page content since - ONCE AGAIN! Like with CodePlex, TFS Web etc. -
+    # Microsoft is unable to provide an even barely suitable interface </rant>)
+    #
+    # Thus both should map to the special ${CMAKE_CFG_INTDIR} mechanism.
+    when 'CONFIGURATION', 'CONFIGURATIONNAME'
+      config_var_replacement = '${CMAKE_CFG_INTDIR}'
+    when 'PLATFORMNAME'
+      config_var_emulation_code = <<EOF
   if(NOT v2c_VS_PlatformName)
     if(CMAKE_CL_64)
       set(v2c_VS_PlatformName "x64")
@@ -2851,64 +2850,64 @@ def vs7_create_config_variable_translation(str, arr_config_var_handling)
     endif(CMAKE_CL_64)
   endif(NOT v2c_VS_PlatformName)
 EOF
-        arr_config_var_handling.push(config_var_emulation_code)
-	config_var_replacement = '${v2c_VS_PlatformName}'
-        # InputName is said to be same as ProjectName in case input is the project.
-      when 'INPUTNAME', 'PROJECTNAME'
-      	config_var_replacement = '${PROJECT_NAME}'
-        # See ProjectPath reasoning below.
-      when 'INPUTFILENAME', 'PROJECTFILENAME'
-        # config_var_replacement = '${PROJECT_NAME}.vcproj'
-	config_var_replacement = "${v2c_VS_#{config_var}}"
-      when 'OUTDIR'
-        # FIXME: should extend code to do executable/library/... checks
-        # and assign CMAKE_LIBRARY_OUTPUT_DIRECTORY / CMAKE_RUNTIME_OUTPUT_DIRECTORY
-        # depending on this.
-        config_var_emulation_code = <<EOF
+      arr_config_var_handling.push(config_var_emulation_code)
+      config_var_replacement = '${v2c_VS_PlatformName}'
+      # InputName is said to be same as ProjectName in case input is the project.
+    when 'INPUTNAME', 'PROJECTNAME'
+      config_var_replacement = '${PROJECT_NAME}'
+      # See ProjectPath reasoning below.
+    when 'INPUTFILENAME', 'PROJECTFILENAME'
+      # config_var_replacement = '${PROJECT_NAME}.vcproj'
+      config_var_replacement = "${v2c_VS_#{config_var}}"
+    when 'OUTDIR'
+      # FIXME: should extend code to do executable/library/... checks
+      # and assign CMAKE_LIBRARY_OUTPUT_DIRECTORY / CMAKE_RUNTIME_OUTPUT_DIRECTORY
+      # depending on this.
+      config_var_emulation_code = <<EOF
   set(v2c_CS_OutDir "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
 EOF
-	config_var_replacement = '${v2c_VS_OutDir}'
-      when 'PROJECTDIR'
-	config_var_replacement = '${PROJECT_SOURCE_DIR}'
-      when 'PROJECTPATH'
-        # ProjectPath emulation probably doesn't make much sense,
-        # since it's a direct path to the MSVS-specific .vcproj file
-        # (redirecting to CMakeLists.txt file likely isn't correct/useful).
-	config_var_replacement = '${v2c_VS_ProjectPath}'
-      when 'SOLUTIONDIR'
-        # We used to replace SolutionDir with CMAKE_SOURCE_DIR,
-	# but since one global CMake build repository might possibly even
-	# end up containing multiple solution-converted V2C environments,
-	# specifying V2C_MASTER_PROJECT_DIR is much more suitable/precise
-	# (BTW, this variable can of course end up with different values -
-	# depending on which of the possibly *multiple* solution sub dir hierarchies
-	# it's being defined by).
-	config_var_replacement = '${V2C_MASTER_PROJECT_DIR}'
-      when 'TARGETPATH'
-        config_var_emulation_code = ''
-        arr_config_var_handling.push(config_var_emulation_code)
-	config_var_replacement = '${v2c_VS_TargetPath}'
-      else
-        # FIXME: for unknown variables, we need to provide CMake code which derives the
-	# value from the environment ($ENV{VAR}), since AFAIR these MSVS Config Variables will
-	# get defined via environment variable, via a certain ordering (project setting overrides
-	# env var, or some such).
-	# TODO: In fact we should probably provide support for a property_var_mappings.txt file -
-	# a variable that's relevant here would e.g. be QTDIR (an entry in that file should map
-	# it to QT_INCLUDE_DIR or some such, for ready perusal by a find_package(Qt4) done by a hook script).
-	# WARNING: note that _all_ existing variable syntax elements need to be sanitized into
-	# CMake-compatible syntax, otherwise they'll end up verbatim in generated build files,
-	# which may confuse build systems (make doesn't care, but Ninja goes kerB00M).
-        log_warn "Unknown/user-custom config variable name #{config_var} encountered in line '#{str}' --> TODO?"
+      config_var_replacement = '${v2c_VS_OutDir}'
+    when 'PROJECTDIR'
+      config_var_replacement = '${PROJECT_SOURCE_DIR}'
+    when 'PROJECTPATH'
+      # ProjectPath emulation probably doesn't make much sense,
+      # since it's a direct path to the MSVS-specific .vcproj file
+      # (redirecting to CMakeLists.txt file likely isn't correct/useful).
+      config_var_replacement = '${v2c_VS_ProjectPath}'
+    when 'SOLUTIONDIR'
+      # We used to replace SolutionDir with CMAKE_SOURCE_DIR,
+      # but since one global CMake build repository might possibly even
+      # end up containing multiple solution-converted V2C environments,
+      # specifying V2C_MASTER_PROJECT_DIR is much more suitable/precise
+      # (BTW, this variable can of course end up with different values -
+      # depending on which of the possibly *multiple* solution sub dir hierarchies
+      # it's being defined by).
+      config_var_replacement = '${V2C_MASTER_PROJECT_DIR}'
+    when 'TARGETPATH'
+      config_var_emulation_code = ''
+      arr_config_var_handling.push(config_var_emulation_code)
+      config_var_replacement = '${v2c_VS_TargetPath}'
+    else
+      # FIXME: for unknown variables, we need to provide CMake code which derives the
+      # value from the environment ($ENV{VAR}), since AFAIR these MSVS Config Variables will
+      # get defined via environment variable, via a certain ordering (project setting overrides
+      # env var, or some such).
+      # TODO: In fact we should probably provide support for a property_var_mappings.txt file -
+      # a variable that's relevant here would e.g. be QTDIR (an entry in that file should map
+      # it to QT_INCLUDE_DIR or some such, for ready perusal by a find_package(Qt4) done by a hook script).
+      # WARNING: note that _all_ existing variable syntax elements need to be sanitized into
+      # CMake-compatible syntax, otherwise they'll end up verbatim in generated build files,
+      # which may confuse build systems (make doesn't care, but Ninja goes kerB00M).
+      log_warn "Unknown/user-custom config variable name #{config_var} encountered in line '#{str}' --> TODO?"
 
-        #str.gsub!(/\$\(#{config_var}\)/, "${v2c_VS_#{config_var}}")
-	# For now, at least better directly reroute from environment variables:
-	config_var_replacement = "$ENV{#{config_var}}"
-      end
-      if config_var_replacement != ''
-        log_info "Replacing MSVS configuration variable $(#{config_var}) by #{config_var_replacement}."
-        str.gsub!(/\$\(#{config_var}\)/, config_var_replacement)
-      end
+      #str.gsub!(/\$\(#{config_var}\)/, "${v2c_VS_#{config_var}}")
+      # For now, at least better directly reroute from environment variables:
+      config_var_replacement = "$ENV{#{config_var}}"
+    end
+    if config_var_replacement != ''
+      log_info "Replacing MSVS configuration variable $(#{config_var}) by #{config_var_replacement}."
+      str.gsub!(/\$\(#{config_var}\)/, config_var_replacement)
+    end
   }
 
   #log_info "str is now #{str}, was #{str_scan_copy}"
@@ -2932,7 +2931,7 @@ end
 class V2C_VSXmlParserBase < V2C_ParserBase
   # Hmm, \n at least appears in VS10 (DisableSpecificWarnings element), but in VS7 as well?
   # WS_VALUE is for entries containing (and preserving!) whitespace (no split on whitespace!).
-  VS_VALUE_SEPARATOR_REGEX_OBJ    = %r{[;,\n\s]}
+  VS_VALUE_SEPARATOR_REGEX_OBJ    = %r{[;,\s]} # (\s char set includes \n)
   VS_WS_VALUE_SEPARATOR_REGEX_OBJ = %r{[;,\n]}
   VS_SCC_ATTR_REGEX_OBJ = %r{^Scc}
   FOUND_FALSE = 0
@@ -3116,13 +3115,15 @@ class V2C_VSXmlParserBase < V2C_ParserBase
   # recursive element structure.
   def parse_element(subelem_xml)
     @called_base_parse_element = true
-    return false
+    found = FOUND_FALSE # this base method will almost never "find" anything...
+    return found
   end
 
   # @brief parses various attributes of an XML element.
   def parse_attribute(setting_key, setting_value)
     @called_base_parse_attribute = true
     found = FOUND_FALSE # this base method will almost never "find" anything...
+    return found
   end
 
   # @brief Parses "settings", which are _either_ XML attributes (in VS7)
@@ -3131,7 +3132,8 @@ class V2C_VSXmlParserBase < V2C_ParserBase
   # content for certain attributes <-> elements.
   def parse_setting(setting_key, setting_value)
     @called_base_parse_setting = true
-    return false
+    found = FOUND_FALSE # this base method will almost never "find" anything...
+    return found
   end
   def parse_post_hook
     @called_base_parse_post_hook = true
@@ -3974,6 +3976,7 @@ class V2C_VS7FilterParser < V2C_VSXmlParserBase
     else
       unknown_attribute(setting_key)
     end
+    return found
   end
 end
 
@@ -5060,7 +5063,6 @@ class V2C_VS10ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
     super(p_parser_proj_file, 'MSVS10', arr_projects_out)
   end
   def parse_project_files
-    proj_filename = @p_parser_proj_file.to_s
     proj_file_parser = V2C_VS10ProjectFileParser.new(@p_parser_proj_file, @arr_projects_out, false)
     proj_filters_file_parser = V2C_VS10ProjectFiltersFileParser.new("#{@proj_filename}.filters", @arr_projects_out)
 
