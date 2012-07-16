@@ -386,6 +386,14 @@ class V2C_Tool_Base_Info
   attr_accessor :show_progress_enable
 end
 
+class V2C_Tool_Define_Base_Info < V2C_Tool_Base_Info
+  def initialize(tool_variant_specific_info)
+    super(tool_variant_specific_info)
+    @hash_defines = Hash.new
+  end
+  attr_accessor :hash_defines
+end
+
 class V2C_Tool_Specific_Info_Base
   def initialize
     @original = false # bool: true == gathered from parsed project, false == converted from other original tool-specific entries
@@ -439,16 +447,29 @@ class V2C_Precompiled_Header_Info
   attr_accessor :header_binary_name
 end
 
-class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
+module V2C_CompilerDefines
+  BASIC_RUNTIME_CHECKS_DEFAULT = 0
+  BASIC_RUNTIME_CHECKS_STACKFRAME = 1
+  BASIC_RUNTIME_CHECKS_UNINITIALIZED_LOCAL_USAGE = 2
+  BASIC_RUNTIME_CHECKS_FAST = 3
+  INLINE_FUNCTION_EXPANSION_DEFAULT = -1
+  INLINE_FUNCTION_EXPANSION_DISABLED = 0
+  INLINE_FUNCTION_EXPANSION_ONLYEXPLICITINLINE = 1
+  INLINE_FUNCTION_EXPANSION_ANYSUITABLE = 2
+end
+
+class V2C_Tool_Compiler_Info < V2C_Tool_Define_Base_Info
+  include V2C_CompilerDefines
   def initialize(tool_variant_specific_info = nil)
     super(tool_variant_specific_info)
     @arr_info_include_dirs = Array.new
-    @hash_defines = Hash.new
     @asm_listing_location = nil
+    @basic_runtime_checks = BASIC_RUNTIME_CHECKS_DEFAULT
     @rtti = true
     @precompiled_header_info = nil
     @detect_64bit_porting_problems_enable = true # TODO: translate into MSVC /Wp64 flag; Enabled by default is preferable, right?
     @exception_handling = 1 # we do want it enabled, right? (and as Sync?)
+    @inline_function_expansion = INLINE_FUNCTION_EXPANSION_DEFAULT
     @minimal_rebuild_enable = false
     @multi_core_compilation_enable = false # TODO: translate into MSVC10 /MP flag...; Disabled by default is preferable (some builds might not have clean target dependencies...)
     @pdb_filename = nil
@@ -462,12 +483,13 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Base_Info
     @optimization = 0 # currently supporting these values: 0 == Non Debug, 1 == Min Size, 2 == Max Speed, 3 == Max Optimization
   end
   attr_accessor :arr_info_include_dirs
-  attr_accessor :hash_defines
   attr_accessor :asm_listing_location
+  attr_accessor :basic_runtime_checks
   attr_accessor :rtti
   attr_accessor :precompiled_header_info
   attr_accessor :detect_64bit_porting_problems_enable
   attr_accessor :exception_handling
+  attr_accessor :inline_function_expansion
   attr_accessor :minimal_rebuild_enable
   attr_accessor :multi_core_compilation_enable
   attr_accessor :pdb_filename
@@ -527,6 +549,9 @@ end
 
 module V2C_Linker_Defines
   BASE_ADDRESS_NOT_SET = 0xffffffff
+  COMDAT_FOLDING_DEFAULT = 0 # VS7: optFoldingDefault
+  COMDAT_FOLDING_NOFOLDING = 1 # VS7: optNoFolding
+  COMDAT_FOLDING_FOLDING = 2 # VS7: optFolding
   # FIXME: there are some other subsystems such as Native (NT driver) and POSIX
   SUBSYSTEM_NOT_SET = 0
   SUBSYSTEM_CONSOLE = 1 # VS10 "Console"
@@ -549,6 +574,7 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
     super(tool_variant_specific_info)
     @arr_dependencies = Array.new # V2C_Dependency_Info (we need an attribute which indicates whether this dependency is a library _file_ or a target name, since we should be reliably able to decide whether we can add "debug"/"optimized" keywords to CMake variables or target_link_library() parms)
     @base_address = BASE_ADDRESS_NOT_SET
+    @comdat_folding = COMDAT_FOLDING_DEFAULT
     @generate_debug_information_enable = false
     @link_incremental = 0 # 1 means NO, thus 2 probably means YES?
     @module_definition_file = nil
@@ -560,6 +586,7 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
   end
   attr_accessor :arr_dependencies
   attr_accessor :base_address
+  attr_accessor :comdat_folding
   attr_accessor :generate_debug_information_enable
   attr_accessor :link_incremental
   attr_accessor :module_definition_file
@@ -593,7 +620,7 @@ class V2C_Tool_MIDL_Specific_Info_MSVC10 < V2C_Tool_MIDL_Specific_Info
   end
 end
 
-class V2C_Tool_MIDL_Info < V2C_Tool_Base_Info
+class V2C_Tool_MIDL_Info < V2C_Tool_Define_Base_Info
   def initialize(tool_variant_specific_info = nil)
     super(tool_variant_specific_info)
     @header_file_name = nil
@@ -2989,7 +3016,7 @@ class V2C_VSXmlParserBase < V2C_ParserBase
         value = false
       else
         # Hrmm, did we hit a totally unexpected (new) element value!?
-        parser_error("unknown value text \"#{str_value}\"")
+        parser_error("unknown boolean value text \"#{str_value}\"")
       end
     end
     return value
@@ -3116,7 +3143,7 @@ class V2C_VSXmlParserBase < V2C_ParserBase
         success = true
       end
     rescue ArgumentError => e
-      log_warn "encountered ArgumentError - perhaps integer parsing of #{setting_key} --> #{setting value} failed?"
+      log_warn "encountered ArgumentError #{e.message} - perhaps integer parsing of #{setting_key} --> #{setting value} failed?"
     end
     return success
   end
@@ -3241,10 +3268,45 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
   end
 end
 
+module V2C_VSToolDefineDefines
+  TEXT_PREPROCESSORDEFINITIONS = 'PreprocessorDefinitions'
+end
+
+class V2C_VSToolDefineParserBase < V2C_VSToolParserBase
+  private
+  include V2C_VSToolDefineDefines
+  def get_define_tool_info; return @info_elem end
+  def parse_setting(setting_key, setting_value)
+    found = be_optimistic()
+    tool_info = get_define_tool_info()
+    case setting_key
+    when TEXT_PREPROCESSORDEFINITIONS
+      parse_preprocessor_definitions(tool_info.hash_defines, setting_value)
+    else
+      found = super
+    end
+    return found
+  end
+  def parse_preprocessor_definitions(hash_defines, attr_defines)
+    split_values_list_discard_empty(attr_defines).each { |elem_define|
+      str_define_key, str_define_value = elem_define.strip.split('=')
+      next if skip_vs10_percent_sign_var(str_define_key)
+      # Since a Hash will indicate nil for any non-existing key,
+      # we do need to fill in _empty_ value for our _existing_ key.
+      if str_define_value.nil?
+        str_define_value = ''
+      end
+      hash_defines[str_define_key] = str_define_value
+    }
+  end
+end
+
 module V2C_VSToolCompilerDefines
-  include V2C_VSToolDefines
+  include V2C_CompilerDefines
+  include V2C_VSToolDefineDefines
   TEXT_ADDITIONALINCLUDEDIRECTORIES = 'AdditionalIncludeDirectories'
   TEXT_ASSEMBLERLISTINGLOCATION = 'AssemblerListingLocation'
+  TEXT_BASICRUNTIMECHECKS = 'BasicRuntimeChecks'
   TEXT_DISABLESPECIFICWARNINGS = 'DisableSpecificWarnings'
   TEXT_ENABLEFUNCTIONLEVELLINKING = 'EnableFunctionLevelLinking'
   TEXT_ENABLEINTRINSICFUNCTIONS = 'EnableIntrinsicFunctions'
@@ -3252,11 +3314,11 @@ module V2C_VSToolCompilerDefines
   TEXT_ENABLEPREFAST = 'EnablePREfast'
   TEXT_EXCEPTIONHANDLING = 'ExceptionHandling'
   VS_DEFAULT_SETTING_EXCEPTIONHANDLING = true # VS10 "Enable C++ Exceptions" default: "Yes (/EHsc)"
+  TEXT_INLINEFUNCTIONEXPANSION = 'InlineFunctionExpansion'
   TEXT_MINIMALREBUILD = 'MinimalRebuild'
   VS_DEFAULT_SETTING_MINIMALREBUILD = false # VS10 default: "No (/Gm-)"
   TEXT_OPTIMIZATION = 'Optimization'
   TEXT_PROGRAMDATABASEFILENAME = 'ProgramDatabaseFileName'
-  TEXT_PREPROCESSORDEFINITIONS = 'PreprocessorDefinitions'
   TEXT_RUNTIMETYPEINFO = 'RuntimeTypeInfo'
   TEXT_SHOWINCLUDES = 'ShowIncludes'
   VS_DEFAULT_SETTING_SHOWINCLUDES = false # VS10 default: "No"
@@ -3267,7 +3329,7 @@ module V2C_VSToolCompilerDefines
   VS_DEFAULT_SETTING_WARNINGLEVEL = 3 # VS10 default: 3 (right!?)
 end
 
-class V2C_VSToolCompilerParser < V2C_VSToolParserBase
+class V2C_VSToolCompilerParser < V2C_VSToolDefineParserBase
   private
 
   include V2C_VSToolCompilerDefines
@@ -3287,6 +3349,8 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
       parse_additional_options(get_compiler_info().arr_tool_variant_specific_info[0].arr_flags, setting_value)
     when TEXT_ASSEMBLERLISTINGLOCATION
       get_compiler_info().asm_listing_location = get_filesystem_location(setting_value)
+    when TEXT_BASICRUNTIMECHECKS
+      get_compiler_info().basic_runtime_checks = parse_basic_runtime_checks(setting_value)
     when TEXT_DISABLESPECIFICWARNINGS
       parse_disable_specific_warnings(get_compiler_info().arr_tool_variant_specific_info[0].arr_disable_warnings, setting_value)
     when TEXT_ENABLEFUNCTIONLEVELLINKING
@@ -3297,14 +3361,14 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
       get_compiler_info().static_code_analysis_enable = get_boolean_value(setting_value)
     when TEXT_EXCEPTIONHANDLING
       get_compiler_info().exception_handling = parse_exception_handling(setting_value)
+    when TEXT_INLINEFUNCTIONEXPANSION
+      get_compiler_info().inline_function_expansion = parse_inline_function_expansion(setting_value)
     when TEXT_MINIMALREBUILD
       get_compiler_info().minimal_rebuild_enable = get_boolean_value(setting_value)
     when TEXT_OPTIMIZATION
       get_compiler_info().optimization = parse_optimization(setting_value)
     when TEXT_PROGRAMDATABASEFILENAME
       get_compiler_info().pdb_filename = get_filesystem_location(setting_value)
-    when TEXT_PREPROCESSORDEFINITIONS
-      parse_preprocessor_definitions(get_compiler_info().hash_defines, setting_value)
     when TEXT_RUNTIMETYPEINFO
       get_compiler_info().rtti = get_boolean_value(setting_value)
     when TEXT_SHOWINCLUDES
@@ -3336,18 +3400,6 @@ class V2C_VSToolCompilerParser < V2C_VSToolParserBase
   end
   def parse_disable_specific_warnings(arr_disable_warnings, attr_disable_warnings)
     arr_disable_warnings.replace(split_values_list_discard_empty(attr_disable_warnings))
-  end
-  def parse_preprocessor_definitions(hash_defines, attr_defines)
-    split_values_list_discard_empty(attr_defines).each { |elem_define|
-      str_define_key, str_define_value = elem_define.strip.split('=')
-      next if skip_vs10_percent_sign_var(str_define_key)
-      # Since a Hash will indicate nil for any non-existing key,
-      # we do need to fill in _empty_ value for our _existing_ key.
-      if str_define_value.nil?
-        str_define_value = ''
-      end
-      hash_defines[str_define_key] = str_define_value
-    }
   end
 end
 
@@ -3398,7 +3450,11 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
     end
     return found
   end
+  def parse_basic_runtime_checks(str_basic_runtime_checks)
+    return parse_integer(str_basic_runtime_checks)
+  end
   def parse_exception_handling(setting_value); return parse_integer(setting_value) end
+  def parse_inline_function_expansion(setting_value); return parse_integer(setting_value) end
   def parse_optimization(setting_value); return parse_integer(setting_value) end
   def parse_use_precompiled_header(value_use_precompiled_header)
     use_val = parse_integer(value_use_precompiled_header)
@@ -3413,6 +3469,7 @@ module V2C_VSToolLinkerDefines
   TEXT_ADDITIONALDEPENDENCIES = 'AdditionalDependencies'
   TEXT_ADDITIONALLIBRARYDIRECTORIES = 'AdditionalLibraryDirectories'
   TEXT_BASEADDRESS = 'BaseAddress'
+  TEXT_ENABLECOMDATFOLDING = 'EnableCOMDATFolding'
   TEXT_GENERATEDEBUGINFORMATION = 'GenerateDebugInformation'
   TEXT_LINKINCREMENTAL = 'LinkIncremental'
   TEXT_MODULEDEFINITIONFILE = 'ModuleDefinitionFile'
@@ -3441,6 +3498,8 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
       parse_additional_options(linker_info.arr_tool_variant_specific_info[0].arr_flags, setting_value)
     when TEXT_BASEADDRESS
       linker_info.base_address = setting_value.hex
+    when TEXT_ENABLECOMDATFOLDING
+      linker_info.comdat_folding = parse_comdat_folding(setting_value)
     when TEXT_GENERATEDEBUGINFORMATION
       linker_info.generate_debug_information_enable = get_boolean_value(setting_value)
     when TEXT_MODULEDEFINITIONFILE
@@ -3517,6 +3576,7 @@ class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
     end
     return found
   end
+  def parse_comdat_folding(str_comdat_folding); return parse_integer(str_comdat_folding) end
   def parse_link_incremental(str_link_incremental); return parse_integer(str_link_incremental) end
   def parse_optimize_references(setting_value); return parse_integer(setting_value) end
   def parse_subsystem(setting_value); return parse_integer(setting_value) end
@@ -3537,13 +3597,14 @@ class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
 end
 
 module V2C_VSToolMIDLDefines
+  include V2C_VSToolDefineDefines
   TEXT_HEADERFILENAME = 'HeaderFileName'
   TEXT_INTERFACEIDENTIFIERFILENAME = 'InterfaceIdentifierFileName'
   TEXT_MKTYPLIBCOMPATIBLE = 'MkTypLibCompatible'
   TEXT_TYPELIBRARYNAME = 'TypeLibraryName'
 end
 
-class V2C_VSToolMIDLParser < V2C_VSToolParserBase
+class V2C_VSToolMIDLParser < V2C_VSToolDefineParserBase
   private
   include V2C_VSToolMIDLDefines
 
@@ -3604,6 +3665,34 @@ end
 # Default entries below indicate the setting used by VS7/10
 # when no custom setting chosen
 # (i.e. when remaining marked as non-bold in Configuration Dialog).
+# TODO: further defaults (VS10):
+#  IgnoreImportLibrary no
+#  RegisterOutput no
+#  Per-user redirection no
+#  Use Library Dependent Inputs no
+
+#  C++ Optimization:
+#    Inline Function Expansion default
+#    Enable Intrinsic Functions No
+#    Favor Size Or Speed neither
+#    Omit Frame Pointers No (/Oy-)
+#    Enable Fiber-Safe Opts No
+#    Whole Program Optimization No
+#
+#  C++ Code Generation:
+#    Enable Minimal Rebuild No (/Gm-)
+#    Smaller Type Check no
+#    struct member alignment default
+#    Buffer Security Check Yes (/GS)
+#    Enable Enhanced Instruction Set not set
+#    Floating Point Model Precise (/fp:precise)
+#
+#  Language:
+#    Disable Language Extensions no
+#    Force Conformance in for loop scope yes
+#
+#  Resources, XML Document Generator Suppress Startup Banner yes (/nologo)
+
 module V2C_VSConfigurationDefines
   TEXT_ATLMINIMIZESCRUNTIMELIBRARYUSAGE = 'ATLMinimizesCRunTimeLibraryUsage'
   TEXT_CHARACTERSET = 'CharacterSet'
@@ -4605,6 +4694,15 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
 
   private
 
+  def parse_basic_runtime_checks(str_basic_runtime_checks)
+    arr_basic_runtime_checks = [
+      'Default', # 0
+      'StackFrameRuntimeCheck', # 1, /RTCs
+      'UninitializedLocalUsageCheck', # 2, /RTCu
+      'EnableFastChecks' # 3, /RTC1
+    ]
+    return string_to_index(arr_basic_runtime_checks, str_basic_runtime_checks, 0)
+  end
   def parse_exception_handling(str_exception_handling)
     arr_except = [
       'false', # 0, false
@@ -4614,6 +4712,14 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
     ]
     return string_to_index(arr_except, str_exception_handling, 0)
   end
+  def parse_inline_function_expansion(str_inline_func_expand)
+    arr_inline_func = [
+      'Disabled', # 0, /Ob0
+      'OnlyExplicitInline', # 1, /Ob1
+      'AnySuitable' # 2, /Ob2
+    ]
+    return string_to_index(arr_inline_func, str_inline_func_expand, INLINE_FUNCTION_EXPANSION_DEFAULT)
+    return parse_integer(setting_value) end
   def parse_optimization(str_optimization)
     arr_optimization = [
       'Disabled', # 0, /Od
@@ -4659,6 +4765,7 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
   #  end
   #  return found
   #end
+  def parse_comdat_folding(str_comdat_folding); return get_boolean_value(str_comdat_folding) end
   def parse_optimize_references(setting_value); return get_boolean_value(setting_value) end
   def parse_target_machine(str_machine)
      machine = VS_DEFAULT_SETTING_TARGET_MACHINE
