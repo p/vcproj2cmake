@@ -37,7 +37,9 @@ Usage (very rough summary), with Linux/Makefile generator:
   - cd ../[PROJECT_NAME].build_toolkit1_v1.2.3_unicode_debug
   - ccmake -DCMAKE_BUILD_TYPE=Debug ../[PROJECT_NAME] (alternatively: cmake ../[PROJECT_NAME])
      -- NOTE that DCMAKE_BUILD_TYPE is a _required_ setting on many generators (things will break if unspecified)
-  - time make -j3 -k (however I would recommend using a CMake with CMAKE_GENERATOR Ninja rather than Makefiles)
+  - time make -j3 -k
+    (however I would recommend using a CMake with Ninja generator -
+     cmake -G Ninja - rather than Makefiles)
 
 ===========================================================================
 Usage, easy mode:
@@ -337,16 +339,23 @@ then it may be useful to NOT default-decide to go for the "obvious" successor
 capable SCM (or in fact, an integrated Tracker/Ticket environment [ALM]) to choose.
 While TFS is an awful lot better than VSS, it still has some painful
 shortcomings, among these:
+- non-cross-platform tool
+  --> inescapable dependency on non-performant Windows servers
+     --> filename case sensitivity issue (certain TFS 2008 API functions
+	return *other* case insensitive results for *different* case sensitive input)
 - no three-way-merges via common base version, i.e. base-less merge
   http://jamesmckay.net/2011/01/baseless-merges-in-team-foundation-server-why/
 - no disconnected SCM operation (server connection required)
 - installation is a veritable PITA (e.g. due to multi-server setup for
   perfect spreading of Microsoft infrastructure lockin)
 - interfacing towards much more strongly cross-platform SCMs such as SVN or git
-  is h*ll (SvnBridge project rates itself as "stable" - everything but
-  as of 2012... [I'm working on getting this fixed];
-  git-tfs is Windows-only, or Mono-tainted untested alternative use;
-  also, OpenTF hasn't seen a commit since 2008)
+  is h*ll:
+  - SvnBridge project rates itself as "stable" - everything but
+    as of 2012... (I'm working on getting this fixed - with my public patch applied
+    it's much improved now)
+  - git-tfs requires installation on a Windows server as well,
+    or Mono-tainted untested alternative use
+  - also, OpenTF hasn't seen a commit since 2008
 
 For a very revealing discussion with lots of experienced SCM/ALM people,
 you may look at
@@ -359,8 +368,8 @@ thus a wrong choice will cost dearly in wasted time and inefficiency).
 http://almatters.wordpress.com/2010/08/19/alm-open-source-tools-eclipse-mylyn-subclipse-trac-subversion/
 
 
-While git might be an obvious cross-platform SCM candidate, Windows integration of Mercurial
-probably is somewhat better.
+While git might be an obvious cross-platform SCM candidate,
+Windows integration of Mercurial probably is somewhat better.
 Useful URLs:
 http://mercurial.selenic.com/wiki/SourceSafeConversion
 http://code.google.com/p/vss2git/
