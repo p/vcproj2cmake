@@ -1172,7 +1172,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def write_invoke_function_quoted(str_function, arr_args_func)
     write_command_list_quoted(str_function, nil, arr_args_func)
   end
-  def dereference_variable_name(str_var); return "${#{str_var}}" end
+  def get_dereferenced_variable_name(str_var); return "${#{str_var}}" end
   def add_subdirectory(str_subdir)
     # quote strings containing spaces!!
     str_subdir_quoted = element_handle_quoting(str_subdir)
@@ -1230,7 +1230,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     write_command_list('include', nil, arr_args_include_file)
   end
   def write_include_from_cmake_var(include_file_var, optional = false)
-    write_include(dereference_variable_name(include_file_var), optional)
+    write_include(get_dereferenced_variable_name(include_file_var), optional)
   end
   def write_cmake_minimum_version(str_cmake_minimum_version)
     ensure_string_nonempty(str_cmake_minimum_version)
@@ -1257,7 +1257,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
       str_regex_list = array_to_cmake_list(arr_filters)
       arr_elems.push('REGULAR_EXPRESSION', str_regex_list)
     end
-    arr_elems.push('FILES', dereference_variable_name(source_files_variable))
+    arr_elems.push('FILES', get_dereferenced_variable_name(source_files_variable))
     # Use multi-line method since source_group() arguments can be very long.
     write_command_list_quoted('source_group', source_group_name, arr_elems)
   end
@@ -1358,10 +1358,11 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     config_name.clone.upcase.tr(' ','_')
   end
   def get_name_of_per_config_type_property(property_name, config_name)
-    res = property_name
-    if not config_name.nil?
+    if config_name.nil?
+      res = property_name
+    else
       config_name_upper = get_config_name_upcase(config_name)
-      res += "_#{config_name_upper}"
+      res = "#{property_name}_#{config_name_upper}"
     end
     return res
   end
@@ -1401,7 +1402,7 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
     # (and make sure to add it with high priority, i.e. use BEFORE).
     # For now sitting in LocalGenerator and not per-target handling since this setting is valid for the entire directory.
     next_paragraph()
-    arr_directories = [ dereference_variable_name('PROJECT_SOURCE_DIR') ]
+    arr_directories = [ get_dereferenced_variable_name('PROJECT_SOURCE_DIR') ]
     put_include_directories(arr_directories, V2C_Include_Dir_Defines::BEFORE)
   end
   def write_invoke_config_object_v2c_function_quoted(str_function, str_object, arr_args_func)
@@ -1428,7 +1429,7 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
     if $v2c_generate_self_contained_file == 1
       write_include_from_cmake_var(include_file_var, true)
     else
-      put_v2c_hook_invoke(dereference_variable_name(include_file_var))
+      put_v2c_hook_invoke(get_dereferenced_variable_name(include_file_var))
     end
   end
   def put_customization_hook_commented_from_cmake_var(include_file_var, comment_level, comment)
@@ -1687,7 +1688,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_lib_dirs_translated = arr_lib_dirs.collect { |elem_lib_dir|
       vs7_create_config_variable_translation(elem_lib_dir, @arr_config_var_handling)
     }
-    arr_lib_dirs_translated.push(dereference_variable_name('V2C_LIB_DIRS'))
+    arr_lib_dirs_translated.push(get_dereferenced_variable_name('V2C_LIB_DIRS'))
     write_comment_at_level(COMMENT_LEVEL_VERBOSE,
       "It is said to be much preferable to be able to use target_link_libraries()\n" \
       "rather than the very unspecific link_directories()."
@@ -1750,7 +1751,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     end
   end
   def write_func_v2c_directory_post_setup
-    arr_args_func = [ dereference_variable_name('CMAKE_CURRENT_LIST_FILE') ]
+    arr_args_func = [ get_dereferenced_variable_name('CMAKE_CURRENT_LIST_FILE') ]
     write_invoke_v2c_function_quoted('v2c_directory_post_setup', arr_args_func)
   end
 
@@ -1762,7 +1763,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     write_comment_at_level(COMMENT_LEVEL_MINIMUM,
       ">= #{str_cmake_minimum_version} due to crucial set_property(... COMPILE_DEFINITIONS_* ...)"
     )
-    write_cmake_minimum_version('2.6')
+    write_cmake_minimum_version(str_cmake_minimum_version)
   end
   def put_file_header_cmake_policies
     str_conditional = get_var_conditional_command('cmake_policy')
@@ -1793,10 +1794,10 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     # to reflect the fact that a project hierarchy has been created from a solution
     # that sits in a specific directory...
     next_paragraph()
-    write_set_var_quoted('V2C_MASTER_PROJECT_DIR', dereference_variable_name('CMAKE_SOURCE_DIR'))
+    write_set_var_quoted('V2C_MASTER_PROJECT_DIR', get_dereferenced_variable_name('CMAKE_SOURCE_DIR'))
     # NOTE: use set() instead of list(APPEND...) to _prepend_ path
     # (otherwise not able to provide proper _overrides_)
-    arr_args_func = [ "${V2C_MASTER_PROJECT_DIR}/#{$v2c_module_path_local}", dereference_variable_name('CMAKE_MODULE_PATH') ]
+    arr_args_func = [ "${V2C_MASTER_PROJECT_DIR}/#{$v2c_module_path_local}", get_dereferenced_variable_name('CMAKE_MODULE_PATH') ]
     write_list_quoted('CMAKE_MODULE_PATH', arr_args_func)
   end
   # "export" our internal $v2c_config_dir_local variable (to be able to reference it in CMake scripts as well)
@@ -1890,6 +1891,11 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
     write_list_quoted(source_files_variable, arr_sources)
     return source_files_variable
   end
+  # Side note: we will NOT prefix source variables within a newly
+  # generated CMakeLists.txt with V2C_[TARGET NAME],
+  # since they are re-created in each newly generated CMakeLists.txt,
+  # so it's no problem, and hook script will need to precisely know
+  # which variable to modify, which would be a problem.......
   def register_new_source_list_variable(sources_variable)
     @arr_sub_sources_for_parent.push(sources_variable)
   end
@@ -1967,11 +1973,11 @@ class V2C_CMakeFileListsGenerator_VS7 < V2C_CMakeFileListGeneratorBase
       sources_variable = "SOURCES_#{source_group_var_suffix}"
       # dump sub filters...
       arr_source_vars = arr_my_sub_sources.collect { |sources_elem|
-        dereference_variable_name(sources_elem)
+        get_dereferenced_variable_name(sources_elem)
       }
       # ...then our own files
       if not source_files_variable.nil?
-        arr_source_vars.push(dereference_variable_name(source_files_variable))
+        arr_source_vars.push(get_dereferenced_variable_name(source_files_variable))
       end
       next_paragraph()
       write_list_quoted(sources_variable, arr_source_vars)
@@ -2105,6 +2111,10 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # making use of CMAKE_RC_COMPILER.
     # Also, for resource files we should ideally be setting the
     # LANGUAGE property of the file (to RC).
+    # We currently add resource (.rc) files to the project target as well...
+    # While this doesn't lead to rogue rebuilds of the independent target,
+    # in some environments this might happen. Thus we might want to skip adding
+    # the resource files list (VS10: ResourceCompile list) to the target.
     file_lists.arr_file_lists.each { |file_list|
       filelist_generator = V2C_CMakeFileListGenerator_VS10.new(@textOut, project_name, @project_dir, file_list, parent_source_group, arr_sub_sources_for_parent)
       filelist_generator.generate
@@ -2114,7 +2124,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   end
   def put_source_vars(arr_sub_source_list_var_names)
     arr_source_vars = arr_sub_source_list_var_names.collect { |sources_elem|
-	dereference_variable_name(sources_elem)
+	get_dereferenced_variable_name(sources_elem)
     }
     next_paragraph()
     write_list_quoted('SOURCES', arr_source_vars)
@@ -2379,7 +2389,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   end
   def write_link_libraries(arr_dependencies, map_dependencies)
     arr_dependencies_augmented = arr_dependencies.clone
-    arr_dependencies_augmented.push(dereference_variable_name('V2C_LIBS'))
+    arr_dependencies_augmented.push(get_dereferenced_variable_name('V2C_LIBS'))
     @localGenerator.write_build_attributes('target_link_libraries', arr_dependencies_augmented, map_dependencies, @target.name)
   end
   def write_func_v2c_target_post_setup(project_name, project_keyword)
@@ -5128,7 +5138,7 @@ class V2C_GeneratorBase < V2C_LoggerBase
   def generator_error(str_description); log_error_class(str_description) end
 end
 
-class V2C_CMakeGenerator < V2C_GeneratorBase
+class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
   def initialize(p_v2c_script, p_master_project, p_generator_proj_file, arr_projects)
     @p_master_project = p_master_project
 
@@ -5312,7 +5322,7 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
     # should be distinctly provided for each generator, too.
     generator = nil
     if true
-      generator = V2C_CMakeGenerator.new(p_script, p_master_project, p_generator_proj_file, arr_projects)
+      generator = V2C_CMakeLocalFileGenerator.new(p_script, p_master_project, p_generator_proj_file, arr_projects)
     end
 
     if not generator.nil?

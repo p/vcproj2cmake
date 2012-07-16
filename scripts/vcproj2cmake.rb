@@ -66,7 +66,7 @@ require 'find' # Find.find()
 # HACK: have $script_dir as global variable currently
 $script_dir = File.dirname(__FILE__)
 
-def tweak_load_path
+def v2cc_load_path_extend_for_own_libs
   script_dir_lookup = $script_dir.clone
 
   script_dir_lookup += '/.'
@@ -77,7 +77,7 @@ def tweak_load_path
   #puts "LOAD_PATH: #{$LOAD_PATH.inspect}\n" # nice debugging
 end
 
-tweak_load_path()
+v2cc_load_path_extend_for_own_libs()
 
 require 'vcproj2cmake/v2c_core' # (currently) large amount of random "core" functionality
 
