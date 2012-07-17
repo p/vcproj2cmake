@@ -780,9 +780,16 @@ endif(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
 macro(v2c_hook_invoke _hook_file_name)
   # Prevent problematic outcome of calls with empty variable
   # (see our CMake bug #13388).
-  if(_hook_file_name)
-    include("${_hook_file_name}" OPTIONAL)
-  endif(_hook_file_name)
+  #
+  # For some very weird reason evaluating the macro parameter itself
+  # (i.e., the externally defined variable) via if(var) does NOT work -
+  # we need to assign to a *local* evaluation helper...
+  # (also, use very specific variable naming since we're a macro
+  # --> global pollution!)
+  set(v2c_hook_file_name_ "${_hook_file_name}")
+  if(v2c_hook_file_name_)
+    include("${v2c_hook_file_name_}" OPTIONAL)
+  endif(v2c_hook_file_name_)
 endmacro(v2c_hook_invoke _hook_file_name)
 
 # Configure CMAKE_MFC_FLAG etc.
