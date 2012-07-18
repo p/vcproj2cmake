@@ -4719,7 +4719,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
       'AnySuitable' # 2, /Ob2
     ]
     return string_to_index(arr_inline_func, str_inline_func_expand, INLINE_FUNCTION_EXPANSION_DEFAULT)
-    return parse_integer(setting_value) end
+  end
   def parse_optimization(str_optimization)
     arr_optimization = [
       'Disabled', # 0, /Od
