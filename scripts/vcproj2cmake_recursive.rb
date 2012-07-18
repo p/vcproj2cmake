@@ -107,28 +107,6 @@ excl_regex_single = generate_multi_regex('^\.', arr_excl_proj_expr)
 # The regex to exclude a match (and all children!) within the hierarchy:
 excl_regex_recursive = generate_multi_regex('', arr_excl_dir_expr_skip_recursive_static)
 
-def smart_match(dir_entry, proj_file, arr_proj_file_regex, match_prefix, match_suffix, stop_regex)
-  found = false
-  # Obviously need to skip adding it if exactly that very entry
-  # was added by a previous more specific regex...
-  if proj_file.eql?(dir_entry)
-    return true
-  end
-  arr_proj_file_regex.each { |proj_file_regex|
-    break if proj_file_regex.eql?(stop_regex)
-
-    proj_file_specific_match_regex = "^#{match_prefix}#{proj_file_regex}#{match_suffix}"
-    log_debug "#{proj_file} | #{proj_file_specific_match_regex}"
-    matchdata = proj_file.match(proj_file_specific_match_regex)
-    if not matchdata.nil?
-      log_debug "ALREADY EXISTING! MATCHES: #{matchdata.inspect}"
-      found = true
-      break
-    end
-  }
-  return found
-end
-
 # Filters suitable project files in a directory's entry list.
 # arr_proj_file_regex should contain regexes for project file matches
 # in most (very specific check) to least preferred (generic, catch-all check) order.
@@ -153,7 +131,7 @@ def search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex)
 
   # As pre-processing (to get rid of all completely irrelevant entries),
   # figure out the few initially matching files within the directory
-  # which actually match and thus are candidates:
+  # which actually match in general and thus are candidates:
   dir_entries_match_subset = Array.new
   arr_proj_file_regex.each { |proj_file_regex|
     dir_entries_match_subset_new = dir_entries.grep(/#{proj_file_regex}/)
@@ -165,37 +143,51 @@ def search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex)
 
   dir_entries_match_subset.uniq!
   log_debug "Initially grepped candidates within directory: #{dir_entries_match_subset.inspect}"
+  dir_entries_match_subset_remaining = dir_entries_match_subset.clone
 
-  dir_entries_match_subset_filtered = Array.new
   # Regexes going from most specific to least specific.
+  arr_proj_file_regex_remaining = arr_proj_file_regex.clone
   arr_proj_file_regex.each { |proj_file_regex|
+    # We're analyzing this more specific regex right now -
+    # this means in future we won't need this very regex any more :)
+    arr_proj_file_regex_remaining.delete(proj_file_regex)
     proj_file_generic_match_regex = "(.*)(#{proj_file_regex})(.*)"
-    log_debug "Apply regex #{proj_file_generic_match_regex} on dir_entries_match_subset"
-    dir_entries_match_subset.each { |dir_entry|
+    log_debug "Apply regex #{proj_file_generic_match_regex} on dir_entries_match_subset_remaining"
+    less_specific_dir_entries_to_remove = nil
+    dir_entries_match_subset_remaining.each { |dir_entry|
       matchdata = dir_entry.match(proj_file_generic_match_regex)
       if not matchdata.nil?
         match_prefix = matchdata[1]
         match_suffix = matchdata[3]
-        log_debug "Applying #{proj_file_generic_match_regex}: found #{dir_entry}"
-        add_this_match = true
-        dir_entries_match_subset_filtered.each { |proj_file|
-          found = smart_match(dir_entry, proj_file, arr_proj_file_regex, match_prefix, match_suffix, proj_file_regex)
-          if true == found
-            add_this_match = false
-            break
-          end
+        log_debug "Applied #{proj_file_generic_match_regex}: FOUND specific entry #{dir_entry} (resulting prefix #{match_prefix}, suffix #{match_suffix}), now removing all similar dir entries having related matches of less specific regexes"
+        less_specific_dir_entries_to_remove = Array.new
+        arr_proj_file_regex_remaining.each { |proj_file_deathbound_regex|
+          proj_file_generic_deathbound_regex = "#{match_prefix}#{proj_file_deathbound_regex}#{match_suffix}"
+          dir_entries_match_subset_remaining.each { |proj_file_deathbound|
+            # Obviously need to skip that very entry that we found:
+            next if dir_entry.eql?(proj_file_deathbound)
+
+            matchdata_deathbound = proj_file_deathbound.match(proj_file_generic_deathbound_regex)
+            if not matchdata_deathbound.nil?
+              log_debug "FOUND deathbound candidate #{proj_file_deathbound} (lost against #{dir_entry} due to match regex #{proj_file_deathbound_regex})"
+              less_specific_dir_entries_to_remove.push(proj_file_deathbound)
+            end
+          }
         }
-        if true == add_this_match
-          log_debug "accepting match #{dir_entry}"
-          dir_entries_match_subset_filtered.push(dir_entry)
-        end
       end
     }
+    if not less_specific_dir_entries_to_remove.nil?
+      dir_entries_match_subset_remaining -= less_specific_dir_entries_to_remove
+    end
   }
-  log_debug "Filtered fileset #{dir_entries_match_subset_filtered.inspect} from #{dir_entries_match_subset.inspect} via regexes #{arr_proj_file_regex.inspect}"
+  log_debug \
+    "Filtered:\n" \
+    "fileset #{dir_entries_match_subset_remaining.inspect}\n" \
+    "from #{dir_entries_match_subset.inspect}\n" \
+    "via regexes #{arr_proj_file_regex.inspect}"
   # No project file type at all? Immediately skip directory.
-  return nil if dir_entries_match_subset_filtered.empty?
-  return dir_entries_match_subset_filtered
+  return nil if dir_entries_match_subset_remaining.empty?
+  return dir_entries_match_subset_remaining
 end
 
 # FIXME: completely broken - should stat command_output_file against the file dependencies
