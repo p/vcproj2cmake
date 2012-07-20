@@ -468,7 +468,16 @@ function(_v2c_config_do_setup)
   # that? At least set a local variable here for now.
   set(global_config_subdir_ "cmake/vcproj2cmake")
 
-  set(project_exclude_list_file_location_ "${CMAKE_SOURCE_DIR}/${global_config_subdir_}/project_exclude_list.txt")
+  # These files are OPTIONAL elements of the source tree!
+  # (thus we shouldn't carelessly list them as target file dependencies etc.)
+  # To ensure their availability (might be useful),
+  # we could have touched any non-existing files,
+  # but this would fumble the *source* tree, thus we decide to not do it.
+
+  set(project_exclude_list_file_check_ "${CMAKE_SOURCE_DIR}/${global_config_subdir_}/project_exclude_list.txt")
+  if(EXISTS "${project_exclude_list_file_check_}")
+    set(project_exclude_list_file_location_ "${project_exclude_list_file_check_}")
+  endif(EXISTS "${project_exclude_list_file_check_}")
   _v2c_config_set(project_exclude_list_file_location_v1 "${project_exclude_list_file_location_}")
 
   set(mappings_files_expr_ "${global_config_subdir_}/*_mappings.txt")
