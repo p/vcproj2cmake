@@ -84,7 +84,11 @@ arr_project_subdirs = Array.new
 
 
 # Pre-configure a directory exclusion pattern regex:
-arr_excl_dir_expr_skip_recursive_static = [ '\.svn', '\.git' ] # TODO transform this into a config setting?
+arr_excl_dir_expr_skip_recursive_static = [ \
+  '\.svn', \
+  '\.git', \
+  '__MACOSX' \
+] # TODO transform this into a config setting? Also, each entry should have a description string
 
 # NOTE: arr_excl_expr is expected to contain entries with already
 # regex-compatible (potentially escaped) content (we will not run
@@ -213,6 +217,7 @@ def command_file_dependencies_changed(command_output_file, arr_file_deps)
   end
 end
 
+DETECT_MAC_OS_RESOURCE_FORK_FILES_REGEX_OBJ = %r{^\._.*}
 Find.find('./') do
   |f|
   next if not test(?d, f)
@@ -253,6 +258,7 @@ Find.find('./') do
 
   log_info "processing #{f}!"
   dir_entries = Dir.entries(f)
+
   log_debug "entries: #{dir_entries}"
 
   vcproj_extension = 'vcproj'
@@ -271,6 +277,17 @@ Find.find('./') do
 
   arr_dir_proj_files = search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex)
 
+  if not arr_dir_proj_files.nil?
+    arr_dir_proj_files.delete_if { |proj_file_candidate|
+      delete_element = false
+      if DETECT_MAC_OS_RESOURCE_FORK_FILES_REGEX_OBJ.match(proj_file_candidate)
+        log_info "Deleting unrelated Mac OS resource fork file #{f}/#{proj_file_candidate}"
+        delete_element = true
+      end
+      delete_element
+    }
+  end
+
   # No project file at all? Skip directory.
   next if arr_dir_proj_files.nil?
 
@@ -288,13 +305,17 @@ Find.find('./') do
   end
 
   arr_proj_files = arr_dir_proj_files.collect { |projfile|
-    if projfile =~ /.#{vcproj_extension}$/i
-      if projfile =~ /_vc8.#{vcproj_extension}$/i
-      else
-        log_info "Darn, no _vc8.vcproj in #{f}! Should have offered one..."
+    suggest_specific_naming = false
+    if true == suggest_specific_naming
+      if projfile =~ /.#{vcproj_extension}$/i
+        if projfile =~ /_vc8.#{vcproj_extension}$/i
+        else
+          log_info "Darn, no _vc8.vcproj in #{f}! Should have offered one..."
+        end
       end
     end
     str_proj_file = "#{f}/#{projfile}"
+    log_debug "Checking CMake-side generation possibility of #{str_proj_file}"
     if true == v2c_is_project_file_generated_by_cmake(str_proj_file)
       log_info "Skipping CMake-generated MSVS file #{str_proj_file}"
       next

@@ -640,6 +640,7 @@ module V2C_TargetConfig_Defines
   CFG_TYPE_APP = 1 # VS7/10 typeApplication (.exe), 1
   CFG_TYPE_DLL = 2 # VS7/10 typeDynamicLibrary (.dll), 2
   CFG_TYPE_STATIC_LIB = 4 # VS7/10 typeStaticLibrary, 4
+  CFG_TYPE_GENERIC = 10 # VS7/10 typeGeneric (Makefile?), 10
   CHARSET_SBCS = 0
   CHARSET_UNICODE = 1
   CHARSET_MBCS = 2
@@ -889,6 +890,10 @@ end
 class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consistently get a condition element - but the VS10-side project info actually most likely does not have/use it!
   def initialize
     @type = nil # project type
+    # Interesting discussion about VS ProjectType:
+    # "C vs C++ or any C varient"
+    #   http://hardforum.com/archive/index.php/t-1574698.html
+
     # VS10: in case the main project file is lacking a ProjectName element,
     # the project will adopt the _exact name part_ of the filename,
     # thus enforce this ctor taking a project name to use as a default if no ProjectName element is available:
@@ -1636,6 +1641,9 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
           # line only (i.e. the .props file).
           # Or is it this line?:
           # <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+          #
+          # .vcproj can have FileConfiguration element with VCCLCompilerTool
+          # CompileAs attribute to indicate specific language of a file.
           @arr_languages.push('C', 'CXX')
         else
           log_fixme_class("unknown project type #{@project_info.type}, cannot determine programming language!")
@@ -1646,14 +1654,26 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
           @arr_languages.push('Fortran')
         end
       end
+      # For further language string possibilities, see also
+      # CMake cmGlobalXCodeGenerator.cxx GetSourcecodeValueFromFileExtension().
+      # Known values so far:
+      # ASM C CXX Fortran Java RC
+      # There seem to be *NO* ObjectiveC specifics here...
+      # (simply implicitly compiler-detected via file extension?)
       if @arr_languages.empty?
         log_error_class 'Could not figure out any pre-set programming language types (FIXME?) - will let auto-detection do its thing...'
         # We'll explicitly keep the array _empty_ (rather than specifying 'NONE'),
         # to give it another chance via CMake's language auto-detection mechanism.
       end
     else
-      log_info_class 'project has no build units --> language set to NONE'
-      @arr_languages.push('NONE')
+      # This *can* be problematic - if our list fails to contain other yet-unknown language file extensions, then we'd need CMake-side auto-detection,
+      # which is disabled when explicitly specifying NONE.
+      # OK, this is important enough - we'll better NEVER specify NONE,
+      # since our language setup currently is way too weak to be pretending
+      # that we know what we're doing...
+      log_info_class 'project seems to have no build units. Still keeping CMake-side auto-detection active anyway.'
+      #log_info_class 'project seems to have no build units --> language set to NONE'
+      #@arr_languages.push('NONE')
     end
     return @arr_languages
   end
@@ -1680,7 +1700,16 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     @arr_local_project_targets.each { |project_info|
       project_generator = V2C_CMakeProjectTargetGenerator.new(project_info, local_dir, self, @textOut)
 
-      project_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
+      begin
+        project_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
+      rescue V2C_GeneratorError => e
+        error_msg = "project #{project_info.name} generation failed: #{e.message}"
+        log_error error_msg
+        # Hohumm, this variable is not really what we should be having here...
+        if ($v2c_validate_vcproj_abort_on_error > 0)
+          raise # escalate the problem
+        end
+      end
     }
     write_func_v2c_directory_post_setup
   end
@@ -2286,11 +2315,16 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       write_target_library_static()
     when V2C_TargetConfig_Defines::CFG_TYPE_UNKNOWN
       log_warn "Project type 0 (typeUnknown - utility, configured for target #{target.name}) is a _custom command_ type and thus probably cannot be supported easily. We will not abort and thus do write out a file, but it probably needs fixup (hook scripts?) to work properly. If this project type happens to use VCNMakeTool tool, then I would suggest to examine BuildCommandLine/ReBuildCommandLine/CleanCommandLine attributes for clues on how to proceed."
+    when V2C_TargetConfig_Defines::CFG_TYPE_GENERIC
+      log_error "#{@target.name}: project type #{target_config_info_curr.cfg_type} almost non-supported."
+      # Certain .vcproj:s do contain a list of source/header files,
+      # thus do try to establish a normal library/executable target - maybe we're in luck.
+      write_target_library_dynamic()
     else
     #when 10    # typeGeneric (Makefile) [and possibly other things...]
       # TODO: we _should_ somehow support these project types...
       log_debug "#{@target.inspect}"
-      log_fatal "#{@target.name}: project type #{target_config_info_curr.cfg_type} not supported."
+      raise V2C_GeneratorError, "#{@target.name}: project type #{target_config_info_curr.cfg_type} not supported."
     end
     write_conditional_end(str_condition_no_target)
 
@@ -2840,6 +2874,25 @@ end
 
 Files_str = Struct.new(:filter_info, :arr_sub_filters, :arr_file_infos)
 
+def is_known_environment_variable_convention(config_var, config_var_type_descr)
+  # Side note: need to use String.replace() to properly export the output param's new value.
+  is_wellknown = false
+  case config_var
+  # Hrmm... SRCROOT seems to be used to indicate the main source root,
+  # thus perhaps it should actually be replaced
+  # by CMAKE_SOURCE_DIR or V2C_MASTER_PROJECT_DIR.
+  # One thing is for certain though: we should actually export our own
+  # replacement string from this function, too...
+  when 'SRCROOT'
+    config_var_type_descr.replace "well-known Apple environment variable"
+    is_wellknown = true
+  when 'DSTROOT'
+    config_var_type_descr.replace "well-known Apple environment variable"
+    is_wellknown = true
+  end
+  return is_wellknown
+end
+
 # See also
 # "How to: Use Environment Variables in a Build"
 #   http://msdn.microsoft.com/en-us/library/ms171459.aspx
@@ -2856,6 +2909,7 @@ def vs7_create_config_variable_translation(str, arr_config_var_handling)
   str_scan_copy = str.dup # create a deep copy of string, to avoid "`scan': string modified (RuntimeError)"
   str_scan_copy.scan(VS7_PROP_VAR_SCAN_REGEX_OBJ) {
     config_var = $1
+    config_var_type_descr = "MSVS configuration variable"
     # MSVS Property / Environment variables are documented to be case-insensitive,
     # thus implement insensitive match:
     config_var_upcase = config_var.upcase
@@ -2935,14 +2989,22 @@ EOF
       # WARNING: note that _all_ existing variable syntax elements need to be sanitized into
       # CMake-compatible syntax, otherwise they'll end up verbatim in generated build files,
       # which may confuse build systems (make doesn't care, but Ninja goes kerB00M).
-      log_warn "Unknown/user-custom config variable name #{config_var} encountered in line '#{str}' --> TODO?"
-
-      #str.gsub!(/\$\(#{config_var}\)/, "${v2c_VS_#{config_var}}")
-      # For now, at least better directly reroute from environment variables:
-      config_var_replacement = "$ENV{#{config_var}}"
+      is_env_var = false
+      if is_known_environment_variable_convention(config_var, config_var_type_descr)
+        is_env_var = true
+      else
+        log_warn "Unknown/user-custom config variable name #{config_var} encountered in line '#{str}' --> TODO?"
+        config_var_type_descr = "unknown configuration variable"
+        #str.gsub!(/\$\(#{config_var}\)/, "${v2c_VS_#{config_var}}")
+        # For now, at least better directly reroute from environment variables as well:
+        is_env_var = true
+      end
+      if true == is_env_var
+        config_var_replacement = "$ENV{#{config_var}}"
+      end
     end
     if config_var_replacement != ''
-      log_info "Replacing MSVS configuration variable $(#{config_var}) by #{config_var_replacement}."
+      log_info "Replacing #{config_var_type_descr} $(#{config_var}) by #{config_var_replacement}."
       str.gsub!(/\$\(#{config_var}\)/, config_var_replacement)
     end
   }
@@ -3942,7 +4004,9 @@ class V2C_VS7FileParser < V2C_VSXmlParserBase
   end
 end
 
-BUILD_UNIT_FILE_TYPES_REGEX_OBJ = %r{\.(c|C)}
+# Tries to list all relevant source file language extensions
+# (C/C++/ObjectiveC etc.):
+BUILD_UNIT_FILE_TYPES_REGEX_OBJ = %r{\.(c|C|m|M)}
 # VERY DIRTY interim helper, not sure at all where it will finally end up at
 def check_have_build_units_in_file_list(arr_file_infos)
   have_build_units = false
@@ -4127,6 +4191,17 @@ class V2C_VS7PlatformsParser < V2C_VSXmlParserBase
   end
 end
 
+class V2C_VS7ToolFilesParser < V2C_VSXmlParserBase
+  def initialize(elem_xml, info_elem_out)
+    super(elem_xml, info_elem_out)
+  end
+  def parse_element(subelem_xml)
+    found = be_optimistic()
+    log_debug "TOOLFILES: #{subelem_xml.name}, #{subelem_xml.value}"
+    return found
+  end
+end
+
 module V2C_VSProjectDefines
   TEXT_KEYWORD = 'Keyword'
   TEXT_ROOTNAMESPACE = 'RootNamespace'
@@ -4152,6 +4227,8 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
       elem_parser = V2C_VS7FilterParser.new(subelem_xml, get_project(), get_project().main_files)
     when 'Platforms'
       elem_parser = V2C_VS7PlatformsParser.new(subelem_xml, get_project().build_platform_configs)
+    when 'ToolFiles'
+      elem_parser = V2C_VS7ToolFilesParser.new(subelem_xml, nil)
     end
     if not elem_parser.nil?
       elem_parser.parse
