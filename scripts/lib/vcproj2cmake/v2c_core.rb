@@ -5334,13 +5334,14 @@ class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
     #log_debug_class "p_v2c_script #{p_v2c_script} | p_master_project #{p_master_project} | @script_location_relative_to_master #{@script_location_relative_to_master}"
   end
   def generate
+    output_file = @cmakelists_output_file
+    log_info_class "Generating project(s) in #{@project_dir} into #{output_file}"
+
     # write into temporary file, to avoid corrupting previous CMakeLists.txt due to syntax error abort, disk space or failure issues
     Tempfile.open('vcproj2cmake') { |tmpfile|
       tmpfile_size = 0
       begin
-        log_debug "generating project(s) in #{@project_dir} into #{@cmakelists_output_file}."
         projects_generate_cmake(@p_master_project, tmpfile, @arr_projects)
-        log_debug "generated project(s) in #{@project_dir}."
       rescue Exception => e
         log_error_unhandled_exception(e, 'while generating projects')
         raise
@@ -5367,7 +5368,6 @@ class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
         # source on NFS mount.
 
         configuration_changed = false
-        output_file = @cmakelists_output_file
         if File.exists?(output_file)
           if not V2C_Util_File.cmp(tmpfile.path, output_file)
             configuration_changed = true
