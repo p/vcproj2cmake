@@ -262,9 +262,14 @@ followed by doing a full build.
 
 === Troubleshooting ===
 
+== CMake configure run ==
+
 - use CMake's message(FATAL_ERROR "DBG: xxx") command
 - add_custom_command(... COMMENT="DBG: we are doing ${THIS} and failing ${THAT}")
 - cmake --debug-output --trace
+
+
+== Build run ==
 
 If there's compile failure due to missing includes, then this probably means that
 a newly converted CMakeLists.txt still contains an include_directories() command
@@ -276,6 +281,15 @@ Then CMake will consult the setting at ${toolkit_INCLUDE_DIR}
 (which should have been gathered during a CMake configure run,
 probably via a find_package() within one of the vcproj2cmake hook scripts
 that are explained above).
+
+gcc compiler errors such as:
+
+  c++: error trying to exec 'cc1obj': execvp: No such file or directory
+
+mean that cc1obj, the compiler backend for ObjectiveC, isn't installed,
+thus you should install the corresponding additional gcc packages
+on your system.
+
 
 If things appear to be failing left and right,
 the reason might be a lack of CMake proficiency, thus it's perhaps best
