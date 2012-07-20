@@ -1099,18 +1099,56 @@ def check_cmakelists_txt_type(str_cmakelists_file_fqpn)
   end
 end
 
+# NOTE: should probably re-raise() the exception in most cases...
+def log_error_unhandled_exception(e, action)
+  log_error "unhandled exception occurred during #{action}! #{e.message}, #{e.backtrace.inspect}"
+end
+
 # FIXME: currently our classes _derive_ from V2C_LoggerBase in most cases,
 # however it's common practice to have log channel provided as a class member
 # or even a global variable. Should thus rework things to have a class member each
 # (best supplied as ctor param, to have flexible output channel configuration
 # by external elements).
+# See http://stackoverflow.com/questions/917566/ruby-share-logger-instance-among-module-classes
+
+module Logging
+  # This is the magical bit that gets mixed into your classes
+  def logger
+    # HACK: logger method currently disabled:
+    #Logging.logger
+    logger_member
+  end
+
+  # Global, memoized, lazy initialized instance of a logger
+  def self.logger
+    @logger ||= Logger.new(STDOUT)
+  end
+
+  def logger_member
+    self # HACK - we're currently the base class of certain classes, but ultimately the logger target should be a ctor param (i.e., member) of all classes). This trick allows us to do a gradual migration :)
+  end
+
+  def todo(str)
+    log_todo str
+  end
+end
+
 class V2C_LoggerBase
+  include Logging
+
+  # DEPRECATED:
   def log_error_class(str); log_error "#{self.class.name}: #{str}" end
   def log_fixme_class(str); log_error "#{self.class.name}: FIXME: #{str}" end
   def log_info_class(str); log_info "#{self.class.name}: #{str}" end
   def log_debug_class(str); log_debug "#{self.class.name}: #{str}" end
+  # NEW:
+  def error(str); log_error_class(str) end
+  def fixme(str); log_fixme_class(str) end
+  def info(str); log_info_class(str) end
+  def debug(str); log_debug_class(str) end
   # "Ruby Exceptions", http://rubylearning.com/satishtalim/ruby_exceptions.html
-  def unhandled_exception(e); log_error_unhandled_exception(e, 'logger base class') end
+  def unhandled_exception_msg(e, msg); log_error_unhandled_exception(e, msg) end
+  def unhandled_exception(e); unhandled_exception_msg(e, 'logger base class') end
   def unhandled_functionality(str_description); log_error("unhandled functionality: #{str_description}") end
 end
 
@@ -1541,7 +1579,7 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
     platform_defs_raw = Hash.new
     parse_platform_conversions_internal(platform_defs_raw, arr_defs, map_defs, skip_failed_lookups)
     platform_defs_raw.each do |key, arr_platdefs|
-      #log_info_class "arr_platdefs: #{arr_platdefs}"
+      #logger.info "arr_platdefs: #{arr_platdefs}"
       next if arr_platdefs.empty?
       arr_platdefs.uniq!
       platform_defs[key] = arr_platdefs
@@ -1558,7 +1596,7 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
     when V2C_COMPILER_MSVC_REGEX_OBJ
       str_conditional_compiler_platform = 'MSVC'
     else
-      log_error "unknown (unsupported) compiler name #{compiler_name}!"
+      logger.unhandled_functionality "unknown (unsupported) compiler name #{compiler_name}!"
     end
     return str_conditional_compiler_platform
   end
@@ -1646,7 +1684,7 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
           # CompileAs attribute to indicate specific language of a file.
           @arr_languages.push('C', 'CXX')
         else
-          log_fixme_class("unknown project type #{@project_info.type}, cannot determine programming language!")
+          logger.fixme("unknown project type #{@project_info.type}, cannot determine programming language!")
         end
       end
       if not @project_info.creator.nil?
@@ -1661,7 +1699,7 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
       # There seem to be *NO* ObjectiveC specifics here...
       # (simply implicitly compiler-detected via file extension?)
       if @arr_languages.empty?
-        log_error_class 'Could not figure out any pre-set programming language types (FIXME?) - will let auto-detection do its thing...'
+        logger.error 'Could not figure out any pre-set programming language types (FIXME?) - will let auto-detection do its thing...'
         # We'll explicitly keep the array _empty_ (rather than specifying 'NONE'),
         # to give it another chance via CMake's language auto-detection mechanism.
       end
@@ -1671,8 +1709,8 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
       # OK, this is important enough - we'll better NEVER specify NONE,
       # since our language setup currently is way too weak to be pretending
       # that we know what we're doing...
-      log_info_class 'project seems to have no build units. Still keeping CMake-side auto-detection active anyway.'
-      #log_info_class 'project seems to have no build units --> language set to NONE'
+      logger.info 'project seems to have no build units. Still keeping CMake-side auto-detection active anyway.'
+      #logger.info 'project seems to have no build units --> language set to NONE'
       #@arr_languages.push('NONE')
     end
     return @arr_languages
@@ -1704,7 +1742,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
         project_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
       rescue V2C_GeneratorError => e
         error_msg = "project #{project_info.name} generation failed: #{e.message}"
-        log_error error_msg
+        logger.error error_msg
         # Hohumm, this variable is not really what we should be having here...
         if ($v2c_validate_vcproj_abort_on_error > 0)
           raise # escalate the problem
@@ -1772,7 +1810,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     parse_platform_conversions(all_platform_defs, arr_defs, map_defs, skip_failed_lookups)
     # HACK: yes, we do need to re-sort this Hash _right before_ using it...
     hash_ensure_sorted_each(all_platform_defs).each { |key, arr_platdefs|
-      #log_info_class "arr_platdefs: #{arr_platdefs}"
+      #logger.info "arr_platdefs: #{arr_platdefs}"
       next_paragraph()
       str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
       write_conditional_if(str_platform)
@@ -1916,7 +1954,7 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
 
         # Ignore all generated files, for now.
         if file.is_generated == true
-          log_fixme_class "#{@info_file.path_relative} is a generated file - skipping!"
+          logger.fixme "#{@info_file.path_relative} is a generated file - skipping!"
           next # no complex handling, just skip
         end
 
@@ -1933,7 +1971,7 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
           # rebuilds in case of foreign-library header file changes).
           # Not sure whether these were added by users or
           # it's actually some standard MSVS mechanism... FIXME
-          log_info_class "#{@project_name}::#{f} registered as a \"source\" file!? Skipping!"
+          logger.info "#{@project_name}::#{f} registered as a \"source\" file!? Skipping!"
           next # no complex handling, just skip
         end
 
@@ -2004,7 +2042,7 @@ class V2C_CMakeFileListsGenerator_VS7 < V2C_CMakeFileListGeneratorBase
     if not arr_sub_filters.nil?
       @textOut.indent_more()
         arr_sub_filters.each { |subfilter|
-          #log_info_class "writing: #{subfilter}"
+          #logger.info "writing: #{subfilter}"
           put_file_list_recursive(subfilter, this_source_group, arr_my_sub_sources)
         }
       @textOut.indent_less()
@@ -2145,7 +2183,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # - and not earlier since earlier .vcproj-defined variables should be clean (not be made to contain V2C_SOURCES contents yet)
       arr_sub_source_list_var_names.push('V2C_SOURCES')
     else
-      log_warn "#{project_info.name}: no source files at all!? (header-based project?)"
+      logger.log_warn_class "#{project_info.name}: no source files at all!? (header-based project?)"
     end
   end
   def put_file_list_source_group_recursive(project_name, files_str, parent_source_group, arr_sub_sources_for_parent)
@@ -2314,9 +2352,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       target_is_valid = true
       write_target_library_static()
     when V2C_TargetConfig_Defines::CFG_TYPE_UNKNOWN
-      log_warn "Project type 0 (typeUnknown - utility, configured for target #{target.name}) is a _custom command_ type and thus probably cannot be supported easily. We will not abort and thus do write out a file, but it probably needs fixup (hook scripts?) to work properly. If this project type happens to use VCNMakeTool tool, then I would suggest to examine BuildCommandLine/ReBuildCommandLine/CleanCommandLine attributes for clues on how to proceed."
+      logger.log_warn_class "Project type 0 (typeUnknown - utility, configured for target #{target.name}) is a _custom command_ type and thus probably cannot be supported easily. We will not abort and thus do write out a file, but it probably needs fixup (hook scripts?) to work properly. If this project type happens to use VCNMakeTool tool, then I would suggest to examine BuildCommandLine/ReBuildCommandLine/CleanCommandLine attributes for clues on how to proceed."
     when V2C_TargetConfig_Defines::CFG_TYPE_GENERIC
-      log_error "#{@target.name}: project type #{target_config_info_curr.cfg_type} almost non-supported."
+      logger.unhandled_functionality "#{@target.name}: project type #{target_config_info_curr.cfg_type} almost non-supported."
       # Certain .vcproj:s do contain a list of source/header files,
       # thus do try to establish a normal library/executable target - maybe we're in luck.
       write_target_library_dynamic()
@@ -2409,7 +2447,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     write_conditional_if(var_v2c_want_buildcfg_curr)
       build_type = condition.get_build_type()
       hash_ensure_sorted_each(all_platform_defs).each { |key, arr_platdefs|
-        #log_info_class "arr_platdefs: #{arr_platdefs}"
+        #logger.info "arr_platdefs: #{arr_platdefs}"
         next_paragraph()
         str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
         generate_property_compile_definitions_per_platform(build_type, arr_platdefs, str_platform)
@@ -3013,18 +3051,13 @@ EOF
   return str
 end
 
-# NOTE: should probably re-raise() the exception in most cases...
-def log_error_unhandled_exception(e, action)
-  log_error "unhandled exception occurred during #{action}! #{e.message}, #{e.backtrace.inspect}"
-end
-
 class V2C_ParserBase < V2C_LoggerBase
   def initialize(info_elem_out)
     @info_elem = info_elem_out
   end
   attr_accessor :info_elem
 
-  def parser_error(str_description); log_error_class(str_description) end
+  def parser_error(str_description); logger.error(str_description) end
 end
 
 class V2C_VSXmlParserBase < V2C_ParserBase
@@ -3036,7 +3069,7 @@ class V2C_VSXmlParserBase < V2C_ParserBase
   FOUND_FALSE = 0
   FOUND_TRUE = 1
   FOUND_SKIP = 2
-  def log_call; log_error_class 'CALLED' end
+  def log_call; logger.error 'CALLED' end
   def initialize(elem_xml, info_elem_out)
     super(info_elem_out)
     @elem_xml = elem_xml
@@ -3048,7 +3081,7 @@ class V2C_VSXmlParserBase < V2C_ParserBase
   # THE MAIN PARSER ENTRY POINT.
   # Will invoke all methods of derived parser classes, whenever available.
   def parse
-    log_debug_class('parse')
+    logger.debug('parse')
     # Do strict traversal over _all_ elements, parse what's supported by us,
     # and yell loudly for any element which we don't know about!
     parse_attributes
@@ -3057,16 +3090,16 @@ class V2C_VSXmlParserBase < V2C_ParserBase
     verify_calls
     return FOUND_TRUE # FIXME don't assume success - add some missing checks...
   end
-  def log_found(found, label); log_debug_class "FOUND: #{found} #{label}" end
+  def log_found(found, label); logger.debug "FOUND: #{found} #{label}" end
   def unknown_attribute(name); unknown_something('attribute', name) end
   def unknown_element(name); unknown_something('element', name) end
   def unknown_element_text(name); unknown_something('element text', name) end
   def unknown_setting(name); unknown_something('VS7/10 setting', name) end
   def skipped_attribute_warn(elem_name)
-    log_todo "#{self.class.name}: unhandled less important XML attribute (#{elem_name})!"
+    logger.todo "#{self.class.name}: unhandled less important XML attribute (#{elem_name})!"
   end
   def skipped_element_warn(elem_name)
-    log_todo "#{self.class.name}: unhandled less important XML element (#{elem_name})!"
+    logger.todo "#{self.class.name}: unhandled less important XML element (#{elem_name})!"
   end
   def get_boolean_value(str_value)
     value = false
@@ -3091,23 +3124,23 @@ class V2C_VSXmlParserBase < V2C_ParserBase
   end
   def split_values_list(str_value)
     arr_str = str_value.split(VS_VALUE_SEPARATOR_REGEX_OBJ)
-    #arr_str.each { |str| log_debug_class "SPLIT #{str}" }
+    #arr_str.each { |str| logger.debug "SPLIT #{str}" }
     return arr_str
   end
   def split_values_list_preserve_ws(str_value)
     arr_str = str_value.split(VS_WS_VALUE_SEPARATOR_REGEX_OBJ)
-    #arr_str.each { |str| log_debug_class "SPLIT #{str}" }
+    #arr_str.each { |str| logger.debug "SPLIT #{str}" }
     return arr_str
   end
   def array_discard_empty(arr_values); arr_values.delete_if { |elem| elem.empty? } end
   def split_values_list_discard_empty(str_value)
     arr_values = split_values_list(str_value)
-    #log_debug_class "arr_values #{arr_values.class.name}"
+    #logger.debug "arr_values #{arr_values.class.name}"
     return array_discard_empty(arr_values)
   end
   def split_values_list_preserve_ws_discard_empty(str_value)
     arr_values = split_values_list_preserve_ws(str_value)
-    #log_debug_class "arr_values #{arr_values.class.name}"
+    #logger.debug "arr_values #{arr_values.class.name}"
     return array_discard_empty(arr_values)
   end
 
@@ -3135,7 +3168,7 @@ class V2C_VSXmlParserBase < V2C_ParserBase
 
   def parse_attributes
     @elem_xml.attributes.each_attribute { |attr_xml|
-      log_debug_class "ATTR: #{attr_xml.name}"
+      logger.debug "ATTR: #{attr_xml.name}"
       if not call_parse_attribute(attr_xml)
         if not call_parse_setting(attr_xml.name, attr_xml.value)
           unknown_setting(attr_xml.name)
@@ -3145,9 +3178,9 @@ class V2C_VSXmlParserBase < V2C_ParserBase
   end
   def parse_elements
     @elem_xml.elements.each { |subelem_xml|
-      log_debug_class "ELEM: #{subelem_xml.name}"
+      logger.debug "ELEM: #{subelem_xml.name}"
       if not call_parse_element(subelem_xml)
-        log_debug_class "call_parse_element #{subelem_xml.name} failed"
+        logger.debug "call_parse_element #{subelem_xml.name} failed"
         if not call_parse_setting(subelem_xml.name, subelem_xml.text)
           unknown_element(subelem_xml.name)
         end
@@ -3205,7 +3238,7 @@ class V2C_VSXmlParserBase < V2C_ParserBase
         success = true
       end
     rescue ArgumentError => e
-      log_warn "encountered ArgumentError #{e.message} - perhaps integer parsing of #{setting_key} --> #{setting value} failed?"
+      logger.log_warn_class "encountered ArgumentError #{e.message} - perhaps integer parsing of #{setting_key} --> #{setting value} failed?"
     end
     return success
   end
@@ -3259,7 +3292,7 @@ class V2C_VSXmlParserBase < V2C_ParserBase
     end
   end
   def unknown_something(something_name, name)
-    log_todo "#{self.class.name}: unknown/incorrect XML #{something_name} (#{name})!"
+    logger.todo "#{self.class.name}: unknown/incorrect XML #{something_name} (#{name})!"
   end
 end
 
@@ -3454,7 +3487,7 @@ class V2C_VSToolCompilerParser < V2C_VSToolDefineParserBase
       next if skip_vs10_percent_sign_var(elem_inc_dir)
       elem_inc_dir = get_filesystem_location(elem_inc_dir)
       next if elem_inc_dir.nil?
-      #log_info_class "include is '#{elem_inc_dir}'"
+      #logger.info "include is '#{elem_inc_dir}'"
       info_inc_dir = V2C_Info_Include_Dir.new
       info_inc_dir.dir = elem_inc_dir
       arr_include_dirs_out.push(info_inc_dir)
@@ -3583,7 +3616,7 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
   def parse_additional_dependencies(attr_deps, arr_dependencies)
     return if attr_deps.empty?
     split_values_list_discard_empty(attr_deps).each { |elem_lib_dep|
-      log_debug_class "!!!!! elem_lib_dep #{elem_lib_dep}"
+      logger.debug "!!!!! elem_lib_dep #{elem_lib_dep}"
       next if skip_vs10_percent_sign_var(elem_lib_dep)
       elem_lib_dep = get_filesystem_location(elem_lib_dep)
       next if elem_lib_dep.nil?
@@ -3597,7 +3630,7 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
       next if skip_vs10_percent_sign_var(elem_lib_dir)
       elem_lib_dir = get_filesystem_location(elem_lib_dir)
       next if elem_lib_dir.nil?
-      #log_info_class "lib dir is '#{elem_lib_dir}'"
+      #logger.info "lib dir is '#{elem_lib_dir}'"
       arr_lib_dirs.push(elem_lib_dir)
     }
   end
@@ -3927,7 +3960,7 @@ class V2C_VS7FileParser < V2C_VSXmlParserBase
   end
   def get_arr_file_infos; return @info_elem end
   def parse
-    log_debug_class('parse')
+    logger.debug('parse')
 
     @elem_xml.attributes.each_attribute { |attr_xml|
       parse_attribute(attr_xml.name, attr_xml.value)
@@ -3989,7 +4022,7 @@ class V2C_VS7FileParser < V2C_VSXmlParserBase
       # Verbosely catch IDL generated files
       if VS7_IDL_FILE_TYPES_REGEX_OBJ.match(@info_file.path_relative)
         # see file_mappings.txt comment above
-        log_info_class "#{@info_file.path_relative} is an IDL file! FIXME: handling should be platform-dependent."
+        logger.info "#{@info_file.path_relative} is an IDL file! FIXME: handling should be platform-dependent."
         @info_file.enable_attribute(V2C_Info_File::ATTR_GENERATED)
       end
     else
@@ -4048,7 +4081,7 @@ class V2C_VS7FilterParser < V2C_VSXmlParserBase
       # after all. We should probably do a platform check in such
       # cases, i.e. add support for a file_mappings.txt
       if filter_info.val_scmfiles == false
-        log_info_class "#{filter_info.name}: SourceControlFiles set to false, listing generated files? --> skipping!"
+        logger.info "#{filter_info.name}: SourceControlFiles set to false, listing generated files? --> skipping!"
         return false
       end
       if not filter_info.name.nil?
@@ -4057,7 +4090,7 @@ class V2C_VS7FilterParser < V2C_VSXmlParserBase
           # Hmm, how are we supposed to handle Generated Files?
           # Most likely we _are_ supposed to add such files
           # and set_property(SOURCE ... GENERATED) on it.
-          log_info_class "#{filter_info.name}: encountered a filter named Generated Files --> skipping! (FIXME)"
+          logger.info "#{filter_info.name}: encountered a filter named Generated Files --> skipping! (FIXME)"
           return false
         end
       end
@@ -4068,11 +4101,11 @@ class V2C_VS7FilterParser < V2C_VSXmlParserBase
       elem_parser = nil # IMPORTANT: reset it!
       case subelem_xml.name
       when 'File'
-        log_debug_class('FOUND File')
+        logger.debug('FOUND File')
         elem_parser = V2C_VS7FileParser.new(subelem_xml, arr_file_infos)
 	elem_parser.parse
       when 'Filter'
-        log_debug_class('FOUND Filter')
+        logger.debug('FOUND Filter')
         subfiles_str = Files_str.new
         elem_parser = V2C_VS7FilterParser.new(subelem_xml, get_project(), subfiles_str)
         if elem_parser.parse
@@ -4109,7 +4142,7 @@ class V2C_VS7FilterParser < V2C_VSXmlParserBase
     if filter_info.name.nil?
       filter_info.name = 'COMMON'
     end
-    #log_debug_class("parsed files group #{filter_info.name}, type #{filter_info.get_group_type()}")
+    #logger.debug("parsed files group #{filter_info.name}, type #{filter_info.get_group_type()}")
     files_str[:filter_info] = filter_info
   end
   def parse_file_list_attribute(filter_info, setting_key, setting_value)
@@ -4309,7 +4342,7 @@ class V2C_VSProjectFilesBundleParserBase
   def check_unhandled_file_type(str_ext)
     str_file = "#{@proj_filename}.#{str_ext}"
     if File.exists?(str_file)
-      unhandled_functionality("parser does not handle type of file #{str_file} yet!")
+      logger.unhandled_functionality("parser does not handle type of file #{str_file} yet!")
     end
   end
 
@@ -4413,7 +4446,7 @@ def skip_vs10_percent_sign_var(str_var)
   return false if not str_var.include?('%')
 
   return false if not VS10_ITEM_METADATA_MACRO_MATCH_REGEX_OBJ.match(str_var)
-  log_fixme_class("skipping unhandled VS10 variable (#{str_var})")
+  logger.fixme("skipping unhandled VS10 variable (#{str_var})")
   return true
 end
 
@@ -4513,7 +4546,7 @@ class V2C_VS10ItemGroupProjectConfigurationDescriptionParser < V2C_VS10ParserBas
   end
   def parse_post_hook
     super
-    log_debug_class("build type #{get_config_entry().build_type}, platform #{get_config_entry().platform}")
+    logger.debug("build type #{get_config_entry().build_type}, platform #{get_config_entry().platform}")
   end
 end
 
@@ -4575,7 +4608,7 @@ end
 
 class V2C_VS10ItemGroupFiltersParser
   def parse
-    log_fixme_class "FIXME!!!"
+    logger.fixme "FIXME!!!"
   end
 end
 
@@ -4689,7 +4722,7 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
     when 'Midl'
       type = V2C_File_List_Types::TYPE_MIDL
     else
-      unhandled_functionality("file list name #{file_list_name}")
+      logger.unhandled_functionality("file list name #{file_list_name}")
       type = V2C_File_List_Types::TYPE_NONE
     end
     return type
@@ -4703,7 +4736,7 @@ class V2C_VS10ItemGroupParser < V2C_VS10ParserBase
   def parse
     found = be_optimistic()
     itemgroup_label = @elem_xml.attributes['Label']
-    log_debug_class("Label #{itemgroup_label}!")
+    logger.debug("Label #{itemgroup_label}!")
     item_group_parser = nil
     case itemgroup_label
     when 'ProjectConfigurations'
@@ -5049,7 +5082,7 @@ class V2C_VS10PropertyGroupParser < V2C_VS10BaseElemParser
   def parse
     found = be_optimistic()
     propgroup_label = @elem_xml.attributes['Label']
-    log_debug_class("Label #{propgroup_label}!")
+    logger.debug("Label #{propgroup_label}!")
     case propgroup_label
     when 'Configuration'
       target_config_info = V2C_Target_Config_Build_Info.new
@@ -5145,7 +5178,7 @@ class V2C_VS10ProjectFileParser < V2C_VSProjectFileParserBase
       }
     rescue Exception => e
       # File probably does not exiѕt...
-      log_error_unhandled_exception(e, 'project file parsing')
+      logger.unhandled_exception(e, 'project file parsing')
       raise
     end
     return success
@@ -5190,7 +5223,7 @@ class V2C_VS10ProjectFiltersXmlParser < V2C_VSXmlParserBase
   def initialize(doc_proj_filters, arr_projects)
     super(doc_proj_filters, arr_projects)
     @idx_target = 0 # to count the number of <project> elems in the XML stream
-    log_fixme_class 'filters file exists, needs parsing!'
+    logger.fixme 'filters file exists, needs parsing!'
   end
   def parse_element(subelem_xml)
     found = be_optimistic()
@@ -5235,7 +5268,7 @@ class V2C_VS10ProjectFiltersFileParser < V2C_ParserBase
       }
     rescue Exception => e
       # File probably does not exiѕt...
-      log_error_unhandled_exception(e, 'project file parsing')
+      logger.unhandled_exception(e, 'project file parsing')
       raise
     end
     return success
@@ -5319,7 +5352,7 @@ def util_permanentize_temp_file(tmpfile, output_file_fqpn, create_permissions)
 end
 
 class V2C_GeneratorBase < V2C_LoggerBase
-  def generator_error(str_description); log_error_class(str_description) end
+  def generator_error(str_description); logger.error(str_description) end
 end
 
 class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
@@ -5331,11 +5364,11 @@ class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
     @cmakelists_output_file = p_generator_proj_file.to_s
     @arr_projects = arr_projects
     @script_location_relative_to_master = p_v2c_script.relative_path_from(p_master_project)
-    #log_debug_class "p_v2c_script #{p_v2c_script} | p_master_project #{p_master_project} | @script_location_relative_to_master #{@script_location_relative_to_master}"
+    #logger.debug "p_v2c_script #{p_v2c_script} | p_master_project #{p_master_project} | @script_location_relative_to_master #{@script_location_relative_to_master}"
   end
   def generate
     output_file = @cmakelists_output_file
-    log_info_class "Generating project(s) in #{@project_dir} into #{output_file}"
+    logger.info "Generating project(s) in #{@project_dir} into #{output_file}"
 
     # write into temporary file, to avoid corrupting previous CMakeLists.txt due to syntax error abort, disk space or failure issues
     Tempfile.open('vcproj2cmake') { |tmpfile|
@@ -5343,7 +5376,7 @@ class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
       begin
         projects_generate_cmake(@p_master_project, tmpfile, @arr_projects)
       rescue Exception => e
-        log_error_unhandled_exception(e, 'while generating projects')
+        logger.unhandled_exception(e, 'while generating projects')
         raise
       ensure
         # File size() check delivers valid results prior to close()ing only.
@@ -5354,7 +5387,7 @@ class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
       tmpfile_ok = true
       # This can happen in case of ignored exceptions...
       if tmpfile_size == 0
-        log_error_class 'zero-size tempfile!?!? Skipping replace of output file...'
+        logger.error 'zero-size tempfile!?!? Skipping replace of output file...'
         tmpfile_ok = false
         # FIXME: should probably improve things to have the main
         # script file exit with failure exit code...
@@ -5378,12 +5411,12 @@ class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
 
         if configuration_changed
           util_permanentize_temp_file(tmpfile, output_file, $v2c_generator_file_create_permissions)
-          log_info_class %{\
+          logger.info %{\
 Wrote #{output_file}
 Finished. You should make sure to have all important v2c settings includes such as vcproj2cmake_defs.cmake somewhere in your CMAKE_MODULE_PATH
 }
         else
-          log_info_class "No settings changed, #{output_file} not updated."
+          logger.info "No settings changed, #{output_file} not updated."
           # tmpfile will auto-delete when finalized...
 
 	  # Some make dependency mechanisms might require touching (timestamping)
@@ -5491,7 +5524,7 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
         raise # escalate the problem
       end
     rescue Exception => e
-      log_error_unhandled_exception(e, 'project validation')
+      logger.unhandled_exception(e, 'project validation')
       raise
     end
     (project_valid == false)
