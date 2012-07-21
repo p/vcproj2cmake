@@ -1566,9 +1566,7 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
             # --> unconditionally use it!
             platform = V2C_ALL_PLATFORMS_MARKER
           else
-            if replacement_defn.nil?
-              replacement_defn = curr_defn
-            end
+            replacement_defn ||= curr_defn
           end
           push_platform_defn(platform_defs, platform, replacement_defn)
         end
@@ -3388,9 +3386,7 @@ class V2C_VSToolDefineParserBase < V2C_VSToolParserBase
       next if skip_vs10_percent_sign_var(str_define_key)
       # Since a Hash will indicate nil for any non-existing key,
       # we do need to fill in _empty_ value for our _existing_ key.
-      if str_define_value.nil?
-        str_define_value = ''
-      end
+      str_define_value ||= ''
       hash_defines[str_define_key] = str_define_value
     }
   end
@@ -4109,9 +4105,7 @@ class V2C_VS7FilterParser < V2C_VSXmlParserBase
         subfiles_str = Files_str.new
         elem_parser = V2C_VS7FilterParser.new(subelem_xml, get_project(), subfiles_str)
         if elem_parser.parse
-          if files_str[:arr_sub_filters].nil?
-            files_str[:arr_sub_filters] = Array.new
-          end
+          files_str[:arr_sub_filters] ||= Array.new
           files_str[:arr_sub_filters].push(subfiles_str)
         end
       else
@@ -4139,9 +4133,7 @@ class V2C_VS7FilterParser < V2C_VSXmlParserBase
     vcproj_filter_xml.attributes.each_attribute { |attr_xml|
       parse_file_list_attribute(filter_info, attr_xml.name, attr_xml.value)
     }
-    if filter_info.name.nil?
-      filter_info.name = 'COMMON'
-    end
+    filter_info.name ||= 'COMMON'
     #logger.debug("parsed files group #{filter_info.name}, type #{filter_info.get_group_type()}")
     files_str[:filter_info] = filter_info
   end
@@ -4368,9 +4360,7 @@ class V2C_VSProjectFilesBundleParserBase
   end
   def mark_projects_default_project_name(project_name_default)
     @arr_projects_out.each { |project_new|
-      if project_new.name.nil?
-        project_new.name = project_name_default
-      end
+      project_new.name ||= project_name_default
     }
   end
 end
