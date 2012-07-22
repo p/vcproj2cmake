@@ -2920,6 +2920,9 @@ def is_known_environment_variable_convention(config_var, config_var_type_descr)
   # Side note: need to use String.replace() to properly export the output param's new value.
   is_wellknown = false
   case config_var
+  when 'BOOSTROOT'
+    config_var_type_descr.replace "well-known Boost installation's root dir environment variable"
+    is_wellknown = true
   # Hrmm... SRCROOT seems to be used to indicate the main source root,
   # thus perhaps it should actually be replaced
   # by CMAKE_SOURCE_DIR or V2C_MASTER_PROJECT_DIR.
