@@ -1751,6 +1751,12 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
   end
   def put_file_header
     @textOut.put_file_header_temporary_marker()
+    write_comment_at_level(COMMENT_LEVEL_STANDARD,
+      "This part of *global* V2C setup steps (policies, include function module, ...)\n" \
+      "*has* to be repeated within each *local* file,\n" \
+      "to be able to support the use case of creating a build environment\n" \
+      "from single local project directories, too."
+    )
     put_file_header_cmake_minimum_version()
     put_file_header_cmake_policies()
 
