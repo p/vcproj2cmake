@@ -36,6 +36,14 @@ $v2c_validate_vcproj_ensure_files_ok = 1
 # after having fixed all problematic .vcproj settings.
 $v2c_validate_vcproj_abort_on_error = 1
 
+# Whether to have a case insensitive match for the smart project file
+# candidate selection algorithm. Enabling recommended in case there are
+# rogue different-case project files of the same project
+# (e.g. proj_vc10.vcxproj and proj.vcproj and Proj_vc8.vcproj)
+# which need to be recognized as being the same project.
+$v2c_parser_proj_files_case_insensitive_match = false
+
+
 # Configures amount of useful comments left in generated CMakeLists.txt
 # files
 # 0 == completely disabled (not recommended)

@@ -114,7 +114,7 @@ excl_regex_recursive = generate_multi_regex('', arr_excl_dir_expr_skip_recursive
 # Filters suitable project files in a directory's entry list.
 # arr_proj_file_regex should contain regexes for project file matches
 # in most (very specific check) to least preferred (generic, catch-all check) order.
-def search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex)
+def search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex, case_insensitive_regex_match_option_flag)
   # Check pre-conditions.
   arr_proj_file_regex.each { |proj_file_regex|
     if proj_file_regex.include?('(')
@@ -138,7 +138,8 @@ def search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex)
   # which actually match in general and thus are candidates:
   dir_entries_match_subset = Array.new
   arr_proj_file_regex.each { |proj_file_regex|
-    dir_entries_match_subset_new = dir_entries.grep(/#{proj_file_regex}/)
+    proj_file_regex_tweaked = Regexp.new(proj_file_regex.to_s, case_insensitive_regex_match_option_flag)
+    dir_entries_match_subset_new = dir_entries.grep(/#{proj_file_regex_tweaked}/)
     dir_entries_match_subset.concat(dir_entries_match_subset_new)
   }
 
@@ -155,7 +156,7 @@ def search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex)
     # We're analyzing this more specific regex right now -
     # this means in future we won't need this very regex any more :)
     arr_proj_file_regex_remaining.delete(proj_file_regex)
-    proj_file_generic_match_regex = "(.*)(#{proj_file_regex})(.*)"
+    proj_file_generic_match_regex = Regexp.new("(.*)(#{proj_file_regex})(.*)", case_insensitive_regex_match_option_flag)
     log_debug "Apply regex #{proj_file_generic_match_regex} on dir_entries_match_subset_remaining"
     less_specific_dir_entries_to_remove = nil
     dir_entries_match_subset_remaining.each { |dir_entry|
@@ -163,10 +164,10 @@ def search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex)
       if not matchdata.nil?
         match_prefix = matchdata[1]
         match_suffix = matchdata[3]
-        log_debug "Applied #{proj_file_generic_match_regex}: FOUND specific entry #{dir_entry} (resulting prefix #{match_prefix}, suffix #{match_suffix}), now removing all similar dir entries having related matches of less specific regexes"
+        log_debug "Applied #{proj_file_generic_match_regex}: FOUND specific entry #{dir_entry} (resulting prefix \"#{match_prefix}\", suffix \"#{match_suffix}\"), now removing all similar dir entries having related matches of less specific regexes"
         less_specific_dir_entries_to_remove = Array.new
         arr_proj_file_regex_remaining.each { |proj_file_deathbound_regex|
-          proj_file_generic_deathbound_regex = "#{match_prefix}#{proj_file_deathbound_regex}#{match_suffix}"
+          proj_file_generic_deathbound_regex = Regexp.new("#{match_prefix}#{proj_file_deathbound_regex}#{match_suffix}", case_insensitive_regex_match_option_flag)
           dir_entries_match_subset_remaining.each { |proj_file_deathbound|
             # Obviously need to skip that very entry that we found:
             next if dir_entry.eql?(proj_file_deathbound)
@@ -261,6 +262,11 @@ Find.find('./') do
 
   log_debug "entries: #{dir_entries}"
 
+  case_insensitive_regex_match_option_flag = nil
+  if true == $v2c_parser_proj_files_case_insensitive_match
+    case_insensitive_regex_match_option_flag = Regexp::IGNORECASE
+  end
+
   vcproj_extension = 'vcproj'
   vcxproj_extension = 'vcxproj'
 
@@ -275,7 +281,7 @@ Find.find('./') do
     "\.#{vcproj_extension}$" \
   ]
 
-  arr_dir_proj_files = search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex)
+  arr_dir_proj_files = search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex, case_insensitive_regex_match_option_flag)
 
   if not arr_dir_proj_files.nil?
     arr_dir_proj_files.delete_if { |proj_file_candidate|
