@@ -1144,11 +1144,11 @@ class V2C_LoggerBase
   # NEW:
   def error(str); log_error_class(str) end
   def fixme(str); log_fixme_class(str) end
+  def warn(str); log_warn "#{self.class.name}: #{str}" end
   def info(str); log_info_class(str) end
   def debug(str); log_debug_class(str) end
   # "Ruby Exceptions", http://rubylearning.com/satishtalim/ruby_exceptions.html
-  def unhandled_exception_msg(e, msg); log_error_unhandled_exception(e, msg) end
-  def unhandled_exception(e); unhandled_exception_msg(e, 'logger base class') end
+  def unhandled_exception(e, msg); log_error_unhandled_exception(e, msg) end
   def unhandled_functionality(str_description); log_error("unhandled functionality: #{str_description}") end
 end
 
@@ -2187,7 +2187,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # - and not earlier since earlier .vcproj-defined variables should be clean (not be made to contain V2C_SOURCES contents yet)
       arr_sub_source_list_var_names.push('V2C_SOURCES')
     else
-      logger.log_warn_class "#{project_info.name}: no source files at all!? (header-based project?)"
+      logger.warn "#{project_info.name}: no source files at all!? (header-based project?)"
     end
   end
   def put_file_list_source_group_recursive(project_name, files_str, parent_source_group, arr_sub_sources_for_parent)
@@ -2356,7 +2356,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       target_is_valid = true
       write_target_library_static()
     when V2C_TargetConfig_Defines::CFG_TYPE_UNKNOWN
-      logger.log_warn_class "Project type 0 (typeUnknown - utility, configured for target #{target.name}) is a _custom command_ type and thus probably cannot be supported easily. We will not abort and thus do write out a file, but it probably needs fixup (hook scripts?) to work properly. If this project type happens to use VCNMakeTool tool, then I would suggest to examine BuildCommandLine/ReBuildCommandLine/CleanCommandLine attributes for clues on how to proceed."
+      logger.warn "Project type 0 (typeUnknown - utility, configured for target #{target.name}) is a _custom command_ type and thus probably cannot be supported easily. We will not abort and thus do write out a file, but it probably needs fixup (hook scripts?) to work properly. If this project type happens to use VCNMakeTool tool, then I would suggest to examine BuildCommandLine/ReBuildCommandLine/CleanCommandLine attributes for clues on how to proceed."
     when V2C_TargetConfig_Defines::CFG_TYPE_GENERIC
       logger.unhandled_functionality "#{@target.name}: project type #{target_config_info_curr.cfg_type} almost non-supported."
       # Certain .vcproj:s do contain a list of source/header files,
@@ -3245,7 +3245,7 @@ class V2C_VSXmlParserBase < V2C_ParserBase
         success = true
       end
     rescue ArgumentError => e
-      logger.log_warn_class "encountered ArgumentError #{e.message} - perhaps integer parsing of #{setting_key} --> #{setting value} failed?"
+      logger.warn "encountered ArgumentError #{e.message} - perhaps integer parsing of #{setting_key} --> #{setting value} failed?"
     end
     return success
   end
