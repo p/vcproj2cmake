@@ -158,15 +158,16 @@ if not $?.success?
   log_fatal "implementation not finished - please change into the project source directory at #{proj_source_dir} and create a proper infrastructure there (e.g. a main CMakeLists.txt containing add_subdirectory() commands etc.) to properly include the CMakeLists.txt files of the converted sub projects"
 end
 
-log_info "Successfully(?) created a build environment at #{proj_build_dir} for converted source project #{proj_source_dir}, you can now change into #{proj_build_dir} and start building the project with your CMake configuration."
+log_info "Successfully(?) created a build environment at #{proj_build_dir} for converted source project #{proj_source_dir} - you can now change into #{proj_build_dir} and start building the project with your CMake configuration."
 log_info ''
 
 $stdout.puts 'INFO: done.'
 $stdout.puts 'Given a successfully newly converted/configured build tree, you can now attempt to run various build targets within this tree'
 $stdout.puts '(which references the files within your .vcproj-based source tree).'
-$stdout.puts 'If building fails with various includes not found/missing,'
-$stdout.puts 'then you should add find_package() commands to hook scripts'
-$stdout.puts 'and make sure that raw include directories as originally specified in .vcproj'
+$stdout.puts 'If building fails due to various include files not found/missing,'
+$stdout.puts 'then you should add find_package() commands to V2C hook scripts'
+$stdout.puts 'and make sure that raw include directories'
+$stdout.puts '(those originally specified in .vcproj)'
 $stdout.puts 'map to the corresponding xxx_INCLUDE_DIR variable'
 $stdout.puts 'as figured out by find_package(), by adding this mapping'
 $stdout.puts 'to include_mappings.txt.'
