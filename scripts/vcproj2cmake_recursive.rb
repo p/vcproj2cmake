@@ -143,11 +143,12 @@ def search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex, case_i
     dir_entries_match_subset.concat(dir_entries_match_subset_new)
   }
 
+  dir_entries_match_subset.uniq!
+  log_debug "Initially grepped candidates within directory: #{dir_entries_match_subset.inspect}"
+
   # Shortcut: return immediately if pre-list ended up empty already:
   return nil if dir_entries_match_subset.empty?
 
-  dir_entries_match_subset.uniq!
-  log_debug "Initially grepped candidates within directory: #{dir_entries_match_subset.inspect}"
   dir_entries_match_subset_remaining = dir_entries_match_subset.clone
 
   # Regexes going from most specific to least specific.
@@ -173,6 +174,7 @@ def search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex, case_i
             next if dir_entry.eql?(proj_file_deathbound)
 
             matchdata_deathbound = proj_file_deathbound.match(proj_file_generic_deathbound_regex)
+            log_debug "matched #{proj_file_deathbound} against #{proj_file_generic_deathbound_regex} (options #{proj_file_generic_deathbound_regex.options}) --> matchdata #{matchdata_deathbound}"
             if not matchdata_deathbound.nil?
               log_debug "FOUND deathbound candidate #{proj_file_deathbound} (lost against #{dir_entry} due to match regex #{proj_file_deathbound_regex})"
               less_specific_dir_entries_to_remove.push(proj_file_deathbound)
@@ -263,9 +265,12 @@ Find.find('./') do
   log_debug "entries: #{dir_entries}"
 
   case_insensitive_regex_match_option_flag = nil
+  str_case_match_type = ''
   if true == $v2c_parser_proj_files_case_insensitive_match
+    str_case_match_type = 'IN'
     case_insensitive_regex_match_option_flag = Regexp::IGNORECASE
   end
+  log_info "Doing case-#{str_case_match_type}SENSITIVE matching on project file candidates!"
 
   vcproj_extension = 'vcproj'
   vcxproj_extension = 'vcxproj'
