@@ -11,16 +11,25 @@ if things break, then you certainly get to keep both parts.
 
 === Environment dependencies / installation requirements  ===
 
-- working CMake installation
+- working CMake installation ( http://www.cmake.org )
   CMake 2.6.x to 2.8.x recommended (vcproj2cmake has been tested
-  with CMake versions in the ranges of 2.6.x to 2.8.7 only)
-- Ruby
+  with CMake versions in the ranges of 2.6.x to 2.8.8 only)
+- Ruby ( http://www.ruby-lang.org )
   Ruby 1.8.x to 1.9.x recommended (while some efforts have been done
-  to ensure compatibility with older Ruby versions [e.g. those found on RHEL3],
-  such support may be spotty)
+  to frantically retain compatibility with older Ruby versions
+  [e.g. those found on RHEL3], such support may easily be spotty)
 
 
-Usage (very rough summary), with Linux/Makefile generator:
+===========================================================================
+Usage, easy mode:
+- run install_me_fully_guided.rb or (on UNIX) install_me_fully_guided.sh
+- this will interactively prompt you for everything
+- ideally you will end up with a completely built CMake-enabled build tree
+  of your .vc[x]proj-based source tree if everything goes fine
+  (famous last words...)
+===========================================================================
+
+Details for manual usage (very rough summary), with Linux/Makefile generator:
 - use existing Visual Studio project source tree which contains a .vcproj file
 - install vcproj2cmake environment to this source tree
 - [OPTIONAL] choose suitable vcproj2cmake converter configuration:
@@ -38,16 +47,8 @@ Usage (very rough summary), with Linux/Makefile generator:
   - ccmake -DCMAKE_BUILD_TYPE=Debug ../[PROJECT_NAME] (alternatively: cmake ../[PROJECT_NAME])
      -- NOTE that DCMAKE_BUILD_TYPE is a _required_ setting on many generators (things will break if unspecified)
   - time make -j3 -k
-    (however I would recommend using a CMake with Ninja generator -
-     cmake -G Ninja - rather than Makefiles)
-
-===========================================================================
-Usage, easy mode:
-- run install_me_fully_guided.rb or (on UNIX) install_me_fully_guided.sh
-- this will interactively prompt you for everything
-- ideally you will end up with a completely built CMake-enabled build tree
-  of your .vc[x]proj-based source tree if everything goes fine
-===========================================================================
+    (however I would recommend making use of CMake's Ninja generator -
+     cmake -G Ninja - rather than generating Makefiles)
 
 
 NOTE: first thing to state is:
@@ -60,7 +61,8 @@ on the output of our script, too, of course).
 That way you can avoid having to deal with the hook script includes as
 required by our online conversion concept, and instead modify your
 CMakeLists.txt files directly wherever needed (since _they_ will be your
-authoritative project information in future on all platforms, instead of the static .vcproj files).
+authoritative project information in future on all platforms,
+instead of the static .vcproj files).
 
 OTOH by using our scripts for one-time-conversion only, you will lose out
 on any of the hopefully substantial further improvements done to our
@@ -76,7 +78,7 @@ run _all_ related developers on a CMake-based setup.
 For more volatile vcproj2cmake parts (those which get updated frequently
 by the vcproj2cmake project, such as vcproj2cmake_func.cmake
 and generated CMakeLists.txt),
-it is recommended to not add them to Source Control Management (SCM).
+it is recommended to *not* add them to Source Control Management (SCM).
 Reasons:
 - version of vcproj2cmake_func.cmake etc. should remain synchronized
   with the main conversion scripts, which can only be guaranteed
@@ -94,9 +96,9 @@ Explanation of core concepts:
 
 In the generated CMakeLists.txt file(s), you may notice lines like
 include(${V2C_HOOK_PROJECT} OPTIONAL)
-These are meant to provide interception points ("hooks") to enhance online-converted
-CMakeLists.txt with specific static content (e.g. to call required CMake Find scripts
-via "find_package(Foobar REQUIRED)",
+These are meant to provide interception points ("hooks")
+to enhance online-converted CMakeLists.txt with specific static content
+(e.g. to call required CMake Find scripts via "find_package(Foobar REQUIRED)",
 or to override some undesireable .vc[x]proj choices, to provide some user-facing
 CMake setup cache variables, etc.).
 One could just as easily have written this line like
@@ -108,15 +110,17 @@ Note that these required variables like V2C_HOOK_PROJECT are pre-defined by our
 vcproj2cmake_defs.cmake module.
 
 
-Example hook scripts to be used by every sub project in your project hierarchy that needs
-such customizations are provided in our repository's sample/ directory.
+Example hook scripts to be used by every sub project in your project hierarchy
+which happens to need such customizations
+are provided in our repository's sample/ directory.
 
-For the case of a single CMakeLists.txt converted from several project files
-within a single directory, each hook file will be invoked for all projects.
+For the rather exotic case of a single CMakeLists.txt
+converted from *several* project files within a *single* directory,
+each hook file will be invoked for all projects.
 Since it's not obvious which project() code is the one that's
-currently calling the hook, it's advisable to add
+currently calling the hook, it's advisable to implement
 if(${PROJECT_NAME} STREQUAL foobar_project)
-checks to such hook scripts.
+checks in such hook scripts.
 
 
 == Hook scripts Best Practice ==
@@ -219,7 +223,8 @@ dependency to the AdditionalDependencies (library dependency) elements in your V
 projects, mentioning the _full_, _versioned_ library name.
 This specific semi-redundant information, of course,
 is something that Windows-side VS projects possibly don't want to have to maintain
-(or, as happened in my case, are happy to remove on a whim during an upgrade).
+(or, as happened in my case, are happy to unknowingly remove on a whim
+during an upgrade).
 
 
 
@@ -236,7 +241,7 @@ in the file $v2c_config_dir_local/project_exclude_list.txt
 
 vcproj2cmake now contains a mechanism (added as targets to the build environment)
 for _automatically_ triggered re-conversion of files
-whenever the backing .vcproj file received some updates.
+whenever the backing .vc[x]proj file received some updates.
 This is implemented in function
 cmake/Modules/vcproj2cmake_func.cmake/v2c_rebuild_on_update()
 This internal mechanism is enabled by default - you may modify the CMake cache variable
@@ -245,13 +250,16 @@ NOTE: in order to have the automatic re-conversion mechanism work properly,
 this currently needs the initial (manual) converter invocation
 to be done from root project, _not_ any other directory (FIXME get rid of this limitation).
 
-Since the converter will be re-executed from within the generated files (Makefile etc.),
-it will convert the CMakeLists.txt that these are based on _within_ this same process.
-However, it has no means to abort subsequent target execution once it notices that there
-were .vc[x]proj changes which render the current CMake generator build files obsolete.
-Thus, the current build instance will run to its end, and it's important to then launch
-it a second time to have CMake start a new configure run with the CMakeLists.txt and
-then re-build all newly modified targets.
+Since the converter will be re-executed from within the generated files
+(Makefile etc.), it will convert the CMakeLists.txt that these are based on
+_within_ this same process.
+However, it has no means to abort subsequent target execution
+once it notices that there were .vc[x]proj changes
+which render the current CMake generator build files obsolete.
+Thus, the current build instance will run to its end,
+and it's important to then launch it a second time to have CMake start
+a new configure run with the CMakeLists.txt and then re-build
+all newly modified targets.
 There's no appreciable way to immediately re-build the updated configuration -
 see CMake list "User-accessible hook on internal cmake_check_build_system target?".
 
@@ -293,7 +301,7 @@ on your system.
 
 If things appear to be failing left and right,
 the reason might be a lack of CMake proficiency, thus it's perhaps best
-to start with a new small CMake sample project
+to start with a new small, clean CMake sample project
 (perhaps use one of the samples on the internet) before using this converter,
 to gain some CMake experience (CMake itself has a rather steep learning curve,
 thus it might be even worse trying to start with a somewhat complex
@@ -334,8 +342,9 @@ A completely alternative way of gaining cross-platform builds
 other than making use of CMake via vcproj2cmake
 may be to stay within proprietary .vcproj / Visual Studio realms
 and to implement a cross-compiler setup
-- this is said to be doable, and perhaps it can even be preferrable (would be nice
-  to receive input in case anyone has particular experience in this area).
+- this is said to be doable, and perhaps it can even be preferrable
+  (would be nice to receive input in case anyone has particular experience
+   in this area).
 
 
 Possibly useful project to normalize file content
@@ -365,8 +374,8 @@ shortcomings, among these:
 - interfacing towards much more strongly cross-platform SCMs such as SVN or git
   is h*ll:
   - SvnBridge project rates itself as "stable" - everything but
-    as of 2012... (I'm working on getting this fixed - with my public patch applied
-    it's much improved now)
+    as of 2012... (I'm working on getting this fixed -
+    with my public patch applied it's much improved now)
   - git-tfs requires installation on a Windows server as well,
     or Mono-tainted untested alternative use
   - also, OpenTF hasn't seen a commit since 2008
@@ -398,7 +407,7 @@ Dito if you think that some mechanism is poorly implemented (we're still at pre-
 
 Despite being at a semi-finished stage, the converter is now more than usable enough
 to successfully build and install/package a very large project consisting of
-several dozen sub projects.
+many dozen sub projects.
 
 Happy hacking,
 
