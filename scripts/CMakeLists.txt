@@ -65,6 +65,9 @@ function(v2ci_scripts_determine_minimum_cmake_version)
     message(FATAL_ERROR "cmake_compat_req_ ${cmake_compat_req_} seems to be broken, please report!")
   endif(version_result_suspect_)
   set(v2ci_scripts_cmake_minimum_version "${cmake_compat_req_}" CACHE STRING INTERNAL)
+  # Hrmm, INTERNAL still kept the cache variable visible in the config GUI.
+  # Seems mark_as_advanced() is a different mechanism and we're supposed to use it...
+  mark_as_advanced(v2ci_scripts_cmake_minimum_version)
 endfunction(v2ci_scripts_determine_minimum_cmake_version)
 
 v2ci_scripts_determine_minimum_cmake_version()
