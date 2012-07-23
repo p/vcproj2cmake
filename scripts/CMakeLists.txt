@@ -45,14 +45,25 @@ set(v2ci_script_converter_module_v2c_core
 )
 
 function(v2ci_scripts_determine_minimum_cmake_version)
-  set(cmake_compat_req_regex_prefix_ "cmake_minimum_required.*VERSION")
+  set(cmake_compat_req_regex_prefix_ "str_cmake_minimum_version[ \\t]*=")
   file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/${v2ci_script_converter_module_v2c_core}"
     cmake_compat_req_line_ REGEX "${cmake_compat_req_regex_prefix_}"
   )
+  #message("cmake_compat_req_line_ ${cmake_compat_req_line_}")
   string(REGEX REPLACE
-    ".*${cmake_compat_req_regex_prefix_} ([1-9]+.[0-9]+)'.*" "\\1"
+    ".*${cmake_compat_req_regex_prefix_} '([1-9]+.[0-9]+)'.*" "\\1"
     cmake_compat_req_ "${cmake_compat_req_line_}"
   )
+  if(NOT cmake_compat_req_)
+    set(version_result_suspect_ true)
+  endif(NOT cmake_compat_req_)
+  set(expected_regex_ "[1-9]+.[0-9]+")
+  if(NOT cmake_compat_req_ MATCHES "${expected_regex_}")
+    set(version_result_suspect_ true)
+  endif(NOT cmake_compat_req_ MATCHES "${expected_regex_}")
+  if(version_result_suspect_)
+    message(FATAL_ERROR "cmake_compat_req_ ${cmake_compat_req_} seems to be broken, please report!")
+  endif(version_result_suspect_)
   set(v2ci_scripts_cmake_minimum_version "${cmake_compat_req_}" CACHE STRING INTERNAL)
 endfunction(v2ci_scripts_determine_minimum_cmake_version)
 
