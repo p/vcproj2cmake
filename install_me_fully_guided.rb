@@ -72,7 +72,7 @@ if not $?.success?
   log_fatal 'could not run ccmake - perhaps it is not installed. On Debian-based Linux, installing the cmake-curses-gui package might help.'
 end
 
-log_info 'About to prepare the build tree (CMake configure run) which is required for installation of vcproj2cmake components. Please setup configuration as needed there, then proceed.'
+log_info 'About to prepare the build tree (CMake configure run) which is required for installation of vcproj2cmake components. Please setup configuration as needed there, then proceed (do CMake Configure run multiple times, and finally press Generate).'
 do_delay(10)
 system 'ccmake ../'
 if not $?.success?
@@ -89,13 +89,30 @@ if not $?.success?
 end
 
 log_info ''
-log_info 'Will now attempt to install vcproj2cmake components into the .vcproj-based source tree you configured.'
+log_info 'Will now attempt to install vcproj2cmake components into the .vc[x]proj-based source tree you configured.'
 log_info ''
 
-# TODO: should check whether CMAKE_GENERATOR is Unix Makefiles,
-# else do non-make handling below.
+# Figure out which CMAKE_MAKE_PROGRAM is configured (ninja? make?),
+# then use it for install.
 
-system 'make all'
+def grep_cmakecache_variable_value(cmakecache_location, cmake_var)
+  var_value = nil
+  File.open(cmakecache_location) { |cmakecache_file|
+    cmakecache_file.grep(/#{cmake_var}:(STRING|.*PATH)=/).each { |line|
+      var_value = line.chomp.split('=')[1]
+    }
+  }
+  return var_value
+end
+
+build_cmd = 'make' # assume a suitable fallback
+cmakecache_location = "#{build_install_dir}/CMakeCache.txt"
+
+build_cmd = grep_cmakecache_variable_value(cmakecache_location, 'CMAKE_MAKE_PROGRAM')
+
+log_info "Detected build command #{build_cmd}."
+
+system "#{build_cmd} all"
 if not $?.success?
   log_fatal 'execution of all target failed'
 end
@@ -106,12 +123,12 @@ if not $?.success?
   log_fatal 'second CMake configure run failed'
 end
 
-system 'make install'
+system "#{build_cmd} install"
 if not $?.success?
-  log_fatal 'installation of vcproj2cmake components into a .vcproj source tree failed'
+  log_fatal 'installation of vcproj2cmake components into a .vc[x]proj source tree failed'
 end
 
-system 'make convert_source_root_recursive'
+system "#{build_cmd} convert_source_root_recursive"
 if not $?.success?
   log_fatal 'hmm'
 end
@@ -120,15 +137,11 @@ end
 # , try to build it.
 
 SOURCE_ROOT_VAR = 'v2ci_vcproj_proj_source_root'
-def get_proj_source_root(build_install_dir)
-  proj_source_dir = nil
-  open("#{build_install_dir}/CMakeCache.txt").grep(/#{SOURCE_ROOT_VAR}:(STRING|PATH)=/).each { |line|
-    proj_source_dir = line.chomp.split('=')[1]
-  }
-  return proj_source_dir
+def get_proj_source_root(cmakecache_location)
+  return grep_cmakecache_variable_value(cmakecache_location, SOURCE_ROOT_VAR)
 end
 
-proj_source_dir = get_proj_source_root(build_install_dir)
+proj_source_dir = get_proj_source_root(cmakecache_location)
 if not proj_source_dir
   log_fatal "failed to figure out source dir of project (build dir is: #{build_install_dir})"
 end
@@ -163,11 +176,11 @@ log_info ''
 
 $stdout.puts 'INFO: done.'
 $stdout.puts 'Given a successfully newly converted/configured build tree, you can now attempt to run various build targets within this tree'
-$stdout.puts '(which references the files within your .vcproj-based source tree).'
+$stdout.puts '(which references the files within your .vc[x]proj-based source tree).'
 $stdout.puts 'If building fails due to various include files not found/missing,'
 $stdout.puts 'then you should add find_package() commands to V2C hook scripts'
 $stdout.puts 'and make sure that raw include directories'
-$stdout.puts '(those originally specified in .vcproj)'
+$stdout.puts '(those originally specified in .vc[x]proj)'
 $stdout.puts 'map to the corresponding xxx_INCLUDE_DIR variable'
 $stdout.puts 'as figured out by find_package(), by adding this mapping'
 $stdout.puts 'to include_mappings.txt.'
