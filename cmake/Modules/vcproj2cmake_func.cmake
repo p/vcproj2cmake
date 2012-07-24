@@ -2,9 +2,11 @@
 
 # Some helper functions to be used by all converted projects in the tree
 
-# This vcproj2cmake-specific CMake module should be installed
-# at least to your root project (i.e., PROJECT/cmake/Modules/,
-# an additionally configured local CMake module path).
+# This vcproj2cmake-specific CMake module
+# should be installed at least to your V2C-side source root
+# (i.e., V2C_SOURCE_ROOT, likely identical with CMAKE_SOURCE_ROOT...),
+# to subdir cmake/Modules/, which will end up as an additionally configured
+# local (V2C-specific) part of CMAKE_MODULE_PATH.
 #
 # Content rationale:
 # - provide powerful infrastructure to draw as many configuration
@@ -74,20 +76,22 @@ set(V2C_FUNC_DEFINED true)
 
 # Sanitize CMAKE_BUILD_TYPE setting:
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
-  # Hohumm - need to actively preserve the cache variable documentation string
-  # when doing CACHE FORCE... :-\
-  # DOES NOT WORK - docs will only be available for _defined_ variables,
-  # thus neither FULL_DOCS nor BRIEF_DOCS return anything other than
-  # NOTFOUND. Hrmm.
-  #get_property(cmake_build_type_full_docs CACHE PROPERTY CMAKE_BUILD_TYPE FULL_DOCS)
-  # Oh well... try to adopt a sufficiently original string:
-  set(cmake_build_type_full_docs "Choose the type of build, options are: None(CMAKE_CXX_FLAGS or CMAKE_C_FLAGS used) Debug Release RelWithDebInfo MinSizeRel Maintainer.")
-  set(CMAKE_BUILD_TYPE Debug CACHE STRING "${cmake_build_type_full_docs}" FORCE)
-  # Side note: this message may appear during _initial_ configuration run
-  # (MSVS 2005 generator). I suppose that this is perfectly ok,
-  # since CMake probably still needs to make up its mind as to which
-  # configuration types (MinSizeRel, Debug etc.) are available.
-  message("WARNING: CMAKE_BUILD_TYPE was not specified - defaulting to ${CMAKE_BUILD_TYPE} setting!")
+  if(NOT V2C_WANT_SKIP_CMAKE_BUILD_TYPE_SANITIZE) # user-side disabling option - user might not want this to happen...
+    # Hohumm - need to actively preserve the cache variable documentation string
+    # when doing CACHE FORCE... :-\
+    # DOES NOT WORK - docs will only be available for _defined_ variables,
+    # thus neither FULL_DOCS nor BRIEF_DOCS return anything other than
+    # NOTFOUND. Hrmm.
+    #get_property(cmake_build_type_full_docs CACHE PROPERTY CMAKE_BUILD_TYPE FULL_DOCS)
+    # Oh well... try to adopt a sufficiently original string:
+    set(cmake_build_type_full_docs "Choose the type of build, options are: None(CMAKE_CXX_FLAGS or CMAKE_C_FLAGS used) Debug Release RelWithDebInfo MinSizeRel Maintainer.")
+    set(CMAKE_BUILD_TYPE Debug CACHE STRING "${cmake_build_type_full_docs}" FORCE)
+    # Side note: this message may appear during _initial_ configuration run
+    # (MSVS 2005 generator). I suppose that this is perfectly ok,
+    # since CMake probably still needs to make up its mind as to which
+    # configuration types (MinSizeRel, Debug etc.) are available.
+    message("WARNING: CMAKE_BUILD_TYPE was not specified - defaulting to ${CMAKE_BUILD_TYPE} setting!")
+  endif(NOT V2C_WANT_SKIP_CMAKE_BUILD_TYPE_SANITIZE) # user might not want this to happen...
 endif(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 
 
@@ -508,6 +512,30 @@ function(_v2c_target_log_configuration _target)
   endif(TARGET ${_target})
 endfunction(_v2c_target_log_configuration _target)
 
+macro(_v2c_touch_file _file)
+  # Let's hope file(APPEND "") successfully updates the timestamp only,
+  # otherwise resort to cmake -E touch_nocreate.
+  file(APPEND "${_file}" "")
+endmacro(_v2c_touch_file _file)
+
+function(_v2c_pre_touch_output_file _target_pseudo_output_file _actual_output_file _file_dependencies_list)
+  # Don't inhibit a rebuild if the output file does not even exist yet:
+  if(NOT EXISTS "${_actual_output_file}")
+    return()
+  endif(NOT EXISTS "${_actual_output_file}")
+  set(needs_remake_ false)
+  foreach(dep_ ${_file_dependencies_list})
+    if("${dep_}" IS_NEWER_THAN "${_actual_output_file}")
+      set(needs_remake_ true)
+      break()
+    endif("${dep_}" IS_NEWER_THAN "${_actual_output_file}")
+  endforeach(dep_ ${_file_dependencies_list})
+  if(NOT needs_remake_)
+    # We don't need a remake, thus update the pseudo output stamp file:
+    message(STATUS "INFO: ${_actual_output_file} is current (no remake needed).")
+    _v2c_touch_file("${_target_pseudo_output_file}")
+  endif(NOT needs_remake_)
+endfunction(_v2c_pre_touch_output_file _target_pseudo_output_file _actual_output_file _file_dependencies_list)
 
 if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
   function(_v2c_cmakelists_rebuild_recursively _v2c_scripts_base_path _v2c_cmakelists_rebuilder_deps_common_list)
@@ -633,9 +661,17 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     _v2c_config_get(cmakelists_update_check_stamp_file_v1 cmakelists_update_check_stamp_file_v1_)
 
     # Need an intermediate stamp file, otherwise "make clean" will clean
-    # our live output file (CMakeLists.txt), yet we crucially need to preserve it
+    # our live output file (CMakeLists.txt) [and there's no suitable mechanism
+    # to tell CMake to skip cleaning a target, other than a drastic per-dir
+    # CLEAN_NO_CUSTOM], yet we crucially need to preserve it
     # since it hosts this very CMakeLists.txt rebuilder mechanism...
-    set(cmakelists_update_this_proj_updated_stamp_file_ "${CMAKE_CURRENT_BINARY_DIR}/cmakelists_rebuilder_done.stamp")
+    set(cmakelists_update_this_cmakelists_updated_stamp_file_ "${CMAKE_CURRENT_BINARY_DIR}/cmakelists_rebuilder_done.stamp")
+    # To avoid an annoying needless rebuild of the conversion
+    # after an external script conversion run,
+    # update timestamp of output file if possible.
+    # Wellll... on certain environments this does NOT happen in the first place.
+    # Needs more investigation.
+    #_v2c_pre_touch_output_file("${cmakelists_update_this_cmakelists_updated_stamp_file_}" "${_cmakelists_file}" "${_dir_orig_proj_files_list}")
     list(GET _dir_orig_proj_files_list 0 orig_proj_file_main_) # HACK
     if("${orig_proj_file_main_}" STREQUAL "${_dir_orig_proj_files_list}")
     else("${orig_proj_file_main_}" STREQUAL "${_dir_orig_proj_files_list}")
@@ -643,10 +679,15 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
       # Need to modify it to use a proper getopts() mechanism.
       message("FIXME: reconversion currently is not able to properly handle _multiple_ project()s (i.e. VS project files) per _single_ CMakeLists.txt file (i.e. directory).")
     endif("${orig_proj_file_main_}" STREQUAL "${_dir_orig_proj_files_list}")
-    add_custom_command(OUTPUT "${cmakelists_update_this_proj_updated_stamp_file_}"
+    # TODO: it might be useful to provide one subsequent target which exists
+    # for the sole purpose of providing a log message
+    # that *all* CMakeLists.txt re-conversion activity ended successfully.
+    # That subsequent target would have to be chained in such a way to ensure
+    # that it gets executed after *all* conversion targets are done.
+    add_custom_command(OUTPUT "${cmakelists_update_this_cmakelists_updated_stamp_file_}"
       COMMAND "${V2C_RUBY_BIN}" "${_script}" "${orig_proj_file_main_}" "${_cmakelists_file}" "${_master_proj_dir}"
       COMMAND "${CMAKE_COMMAND}" -E remove -f "${cmakelists_update_check_stamp_file_v1_}"
-      COMMAND "${CMAKE_COMMAND}" -E touch "${cmakelists_update_this_proj_updated_stamp_file_}"
+      COMMAND "${CMAKE_COMMAND}" -E touch "${cmakelists_update_this_cmakelists_updated_stamp_file_}"
       DEPENDS ${cmakelists_rebuilder_deps_list_}
       COMMENT "vcproj settings changed, rebuilding ${_cmakelists_file}"
     )
@@ -677,12 +718,13 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     # and we want to keep them darn out of sight via suitable sorting!
     set(target_cmakelists_update_this_projdir_name_ update_cmakelists_DIR_${dependent_target_main_})
     #add_custom_target(${target_cmakelists_update_this_projdir_name_} DEPENDS "${_cmakelists_file}")
-    add_custom_target(${target_cmakelists_update_this_projdir_name_} ALL DEPENDS "${cmakelists_update_this_proj_updated_stamp_file_}")
+    add_custom_target(${target_cmakelists_update_this_projdir_name_} ALL DEPENDS "${cmakelists_update_this_cmakelists_updated_stamp_file_}")
 #    add_dependencies(${target_cmakelists_update_this_projdir_name_} update_cmakelists_rebuild_happened)
 
     add_dependencies(update_cmakelists_ALL__internal_collector ${target_cmakelists_update_this_projdir_name_})
-    # Now hook up all projects to the one common rebuilder
-    # of the directory-wide config:
+    # Now establish new rebuild targets for all *projects*,
+    # to the *one common* rebuilder of the directory-wide config
+    # which encompasses those projects:
     foreach(proj_ ${_directory_projects_list})
       set(tgt_name_ update_cmakelists_${proj_})
       add_custom_target(${tgt_name_})
@@ -980,6 +1022,12 @@ if(NOT V2C_INSTALL_ENABLE)
     # since that would cause some target-specific CMake install handling
     # to get lost (e.g. CMAKE_INSTALL_RPATH tweaking will be done in case of
     # proper target-specific install() only!)
+    #
+    # V2C_INSTALL_ENABLE ideally is a variable that's being set *outside*
+    # of all inner (V2C-side) scope layers, i.e. you've got a CMake-enabled
+    # source tree which has a root which defines the configuration basis
+    # (basic environment checks, user-side cache variables, V2C settings, ...)
+    # and *then* includes the entire V2C-converted hierarchy as a sub part.
     message("WARNING: ${CMAKE_CURRENT_LIST_FILE}: vcproj2cmake-supplied install handling not activated - targets _need_ to be installed properly one way or another!")
   endif(NOT V2C_INSTALL_ENABLE_SILENCE_WARNING)
 endif(NOT V2C_INSTALL_ENABLE)
