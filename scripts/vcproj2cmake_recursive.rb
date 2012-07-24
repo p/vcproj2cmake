@@ -451,3 +451,4 @@ v2c_source_root_write_projects_list_file(projects_list_file, $v2c_generator_file
 
 # Finally, create a skeleton fallback file if needed.
 v2c_source_root_ensure_usable_cmakelists_skeleton_file(source_root, projects_list_file)
+v2c_convert_finished()
