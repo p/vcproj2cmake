@@ -222,6 +222,17 @@ function(_v2c_config_append_list_var_entry _cfg_key _cfg_value_append)
 endfunction(_v2c_config_append_list_var_entry _cfg_key _cfg_value_append)
 
 
+# # # # #   FEATURE CHECKS   # # # # #
+
+# Add helper variable [non-readonly (i.e., configurable) INCLUDE_DIRECTORIES target property supported by >= 2.8.8 only]
+set(_v2c_cmake_version_this "${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}.${CMAKE_PATCH_VERSION}")
+
+set(cmake_version_include_dirs_prop_insufficient "2.8.7")
+if("${_v2c_cmake_version_this}" VERSION_GREATER "${cmake_version_include_dirs_prop_insufficient}")
+  set(_v2c_feat_cmake_include_dirs_prop true)
+endif("${_v2c_cmake_version_this}" VERSION_GREATER "${cmake_version_include_dirs_prop_insufficient}")
+
+
 # # # # #   BUILD PLATFORM SETUP   # # # # #
 
 function(_v2c_project_platform_append _target _build_platform)
@@ -857,6 +868,29 @@ macro(v2c_local_set_cmake_atl_mfc_flags _target _build_type _build_platform _atl
     set(CMAKE_MFC_FLAG ${_mfc_flag})
   endif(is_active_)
 endmacro(v2c_local_set_cmake_atl_mfc_flags _target _build_type _build_platform _atl_flag _mfc_flag)
+
+
+# *static* conditional switch between
+# old-style include_directories() and new INCLUDE_DIRECTORIES property support.
+if(_v2c_feat_cmake_include_dirs_prop)
+  function(v2c_target_include_directories _target)
+    # FIXME: INCLUDE_DIRECTORIES property has a *default*
+    # value which consists of parent directories' configuration.
+    # We should get rid of that somehow, since we *are* a new project() scope...
+    # Possibly we should:
+    # 1. clear any pre-existing value
+    # 2. remember all added settings in a *new* property variable
+    # 3. assign the final combined value in the post-setup function
+    set(include_dirs_cfg_ ${ARGN})
+    set_property(TARGET ${_target} APPEND PROPERTY INCLUDE_DIRECTORIES ${include_dirs_cfg_})
+  endfunction(v2c_target_include_directories _target)
+else(_v2c_feat_cmake_include_dirs_prop)
+  function(v2c_target_include_directories _target)
+    set(include_dirs_cfg_ ${ARGN})
+    include_directories(${include_dirs_})
+  endfunction(v2c_target_include_directories _target)
+endif(_v2c_feat_cmake_include_dirs_prop)
+
 
 # Helper to hook up a precompiled header that might be enabled
 # by a project configuration.

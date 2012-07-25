@@ -1342,12 +1342,12 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     # Use multi-line method since source_group() arguments can be very long.
     write_command_list_quoted('source_group', source_group_name, arr_elems)
   end
-  def put_include_directories(arr_directories, flags)
+  def put_include_directories(target_name, arr_directories, flags)
     arr_args = Array.new
     arr_args.push('SYSTEM') if (flags & V2C_Include_Dir_Defines::SYSTEM > 0)
     arr_args.push('BEFORE') if (flags & V2C_Include_Dir_Defines::BEFORE > 0)
     arr_args.concat(arr_directories)
-    write_command_list_quoted('include_directories', nil, arr_args)
+    gen_put_include_directories(target_name, arr_args)
   end
   # analogous to CMake separate_arguments() command
   def separate_arguments(array_in); array_in.join(';') end
@@ -1470,21 +1470,21 @@ end
 # This class derived from base contains extended functions
 # that aren't strictly about CMake syntax generation any more
 # (i.e., some build-specific configuration content).
-class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
+class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
   VCPROJ2CMAKE_FUNC_CMAKE = 'vcproj2cmake_func.cmake'
   V2C_ATTRIBUTE_NOT_PROVIDED_MARKER = 'V2C_NOT_PROVIDED' # WARNING KEEP IN SYNC: that exact string literal is being checked by vcproj2cmake_func.cmake!
   V2C_ALL_PLATFORMS_MARKER = 'ALL'
   def write_vcproj2cmake_func_comment()
     write_comment_at_level(COMMENT_LEVEL_STANDARD, "See function implementation/docs in #{$v2c_module_path_root}/#{VCPROJ2CMAKE_FUNC_CMAKE}")
   end
-  def put_include_dir_project_source_dir
+  def put_include_dir_project_source_dir(target_name)
     # AFAIK .vcproj implicitly adds the project root to standard include path
     # (for automatic stdafx.h resolution etc.), thus add this
     # (and make sure to add it with high priority, i.e. use BEFORE).
     # For now sitting in LocalGenerator and not per-target handling since this setting is valid for the entire directory.
     next_paragraph()
     arr_directories = [ get_dereferenced_variable_name('PROJECT_SOURCE_DIR') ]
-    put_include_directories(arr_directories, V2C_Include_Dir_Defines::BEFORE)
+    put_include_directories(target_name, arr_directories, V2C_Include_Dir_Defines::BEFORE)
   end
   def write_invoke_config_object_v2c_function_quoted(str_function, str_object, arr_args_func)
     write_vcproj2cmake_func_comment()
@@ -1499,19 +1499,11 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
   end
   def put_customization_hook(include_file)
     return if $v2c_generator_one_time_conversion_only
-    if $v2c_generate_self_contained_file == 1
-      write_include(include_file, true)
-    else
-      put_v2c_hook_invoke(include_file)
-    end
+    gen_put_customization_hook(include_file)
   end
   def put_customization_hook_from_cmake_var(include_file_var)
     return if $v2c_generator_one_time_conversion_only
-    if $v2c_generate_self_contained_file == 1
-      write_include_from_cmake_var(include_file_var, true)
-    else
-      put_v2c_hook_invoke(get_dereferenced_variable_name(include_file_var))
-    end
+    gen_put_customization_hook_from_cmake_var(include_file_var)
   end
   def put_customization_hook_commented_from_cmake_var(include_file_var, comment_level, comment)
     return if $v2c_generator_one_time_conversion_only
@@ -1628,7 +1620,7 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
     # See also "Re: [CMake] CMAKE_MFC_FLAG not working in functions"
     #   http://www.mail-archive.com/cmake@cmake.org/msg38677.html
 
-    if $v2c_generate_self_contained_file == 1
+    if 1 == $v2c_generate_self_contained_file
       var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
       write_conditional_if(var_v2c_want_buildcfg_curr)
         #if use_of_mfc > V2C_TargetConfig_Defines::MFC_FALSE
@@ -1657,6 +1649,53 @@ class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeSyntaxGenerator
   end
 end
 
+class V2C_CMakeV2CSyntaxGeneratorV2CFunc < V2C_CMakeV2CSyntaxGeneratorBase
+  private
+  def gen_put_customization_hook(include_file)
+    put_v2c_hook_invoke(include_file)
+  end
+  def gen_put_customization_hook_from_cmake_var(include_file_var)
+    put_v2c_hook_invoke(get_dereferenced_variable_name(include_file_var))
+  end
+  def gen_put_include_directories(target_name, arr_args)
+    write_command_list_quoted('v2c_target_include_directories', target_name, arr_args)
+  end
+  def gen_put_converter_script_location(script_location)
+    write_invoke_v2c_function_quoted('v2c_converter_script_set_location', [ script_location ])
+  end
+end
+
+class V2C_CMakeV2CSyntaxGeneratorSelfContained < V2C_CMakeV2CSyntaxGeneratorBase
+  private
+  def gen_put_customization_hook(include_file)
+    write_include(include_file, true)
+  end
+  def gen_put_customization_hook_from_cmake_var(include_file_var)
+    write_include_from_cmake_var(include_file_var, true)
+  end
+  def gen_put_include_directories(target_name, arr_args)
+    write_command_list_quoted('include_directories', nil, arr_args)
+  end
+  def gen_put_converter_script_location(script_location)
+    write_comment_at_level(COMMENT_LEVEL_MINIMUM,
+      "user override mechanism (don't prevent specifying a custom location of this script)"
+    )
+    write_set_var_if_unset('V2C_SCRIPT_LOCATION', element_manual_quoting(script_location))
+  end
+end
+
+if 1 == $v2c_generate_self_contained_file
+  class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeV2CSyntaxGeneratorSelfContained
+  end
+else
+  class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeV2CSyntaxGeneratorV2CFunc
+  end
+end
+
+# Supposed to generate the globally configured parts
+# within an entire "solution" hierarchy.
+# Currently, these end up (repeated) in each local CMakeLists.txt file.
+# Should be generating into a common include() file instead.
 class V2C_CMakeGlobalGenerator < V2C_CMakeV2CSyntaxGenerator
   def put_configuration_types(configuration_types)
     configuration_types_list = separate_arguments(configuration_types)
@@ -1850,14 +1889,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     # (this provision should even enable people to manually relocate
     # an entire sub project within the source tree).
     v2c_converter_script_location = "${V2C_MASTER_PROJECT_DIR}/#{script_location_relative_to_master}"
-    if $v2c_generate_self_contained_file == 1
-      write_comment_at_level(COMMENT_LEVEL_MINIMUM,
-        "user override mechanism (don't prevent specifying a custom location of this script)"
-      )
-      write_set_var_if_unset('V2C_SCRIPT_LOCATION', element_manual_quoting(v2c_converter_script_location))
-    else
-      write_invoke_v2c_function_quoted('v2c_converter_script_set_location', [ v2c_converter_script_location ])
-    end
+    gen_put_converter_script_location(v2c_converter_script_location)
   end
   def write_func_v2c_directory_post_setup
     arr_args_func = [ get_dereferenced_variable_name('CMAKE_CURRENT_LIST_FILE') ]
@@ -2127,7 +2159,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   # These configuration types (Debug, Release) may be _different_
   # in each .vc[x]proj file, thus it's a target generator functionality
   # and _not_ a functionality of the local generator (which may generate
-  # more than one project target!!).
+  # *multiple* project targets!).
   def generate_assignments_of_build_type_variables(arr_config_info)
     # ARGH, we have an issue with CMake not being fully up to speed with
     # multi-configuration generators (e.g. .vcproj/.vcxproj):
@@ -2164,7 +2196,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       config_multi_authoritative = arr_config_info[0].condition.get_build_type()
     end
 
-    if $v2c_generate_self_contained_file == 1
+    if 1 == $v2c_generate_self_contained_file
       arr_config_info.each { |config_info_curr|
         condition = config_info_curr.condition
         build_type = condition.get_build_type()
@@ -2604,7 +2636,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
     put_file_list(project_info, arr_sub_source_list_var_names)
 
-    put_include_dir_project_source_dir()
+    put_include_dir_project_source_dir(project_info.name)
 
     put_hook_post_sources()
 
@@ -5473,6 +5505,10 @@ class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
     # generators CMAKE_CONFIGURATION_TYPES shouldn't be set
     # Also, the configuration_types array should be inferred from arr_config_info.
     ## configuration types need to be stated _before_ declaring the project()!
+    # TODO: a VS solution (.sln) lists all configuration type names that
+    # are created by any project anywhere within the solution.
+    # So probably we're supposed to list all projects' configuration types
+    # as well...
     #syntax_generator.next_paragraph()
     #global_generator.put_configuration_types(configuration_types)
 
