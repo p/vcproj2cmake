@@ -22,7 +22,19 @@ option(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER "Automatically rebuild converted C
 # should we also have an additional mechanism to abort running builds
 # after re-conversion of any CMakeLists.txt files has been finished?
 if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
-  option(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD "Add a force-abort target to force abort of a build run in case any CMakeLists.txt files have been automatically rebuilt?" ON)
+  set(ninja_generator_name "Ninja")
+  if(CMAKE_GENERATOR STREQUAL "${ninja_generator_name}")
+    # Cannot use abort mechanism on Ninja currently since there's a
+    # grave problem there: Ninja (at least my current git build)
+    # does not care to execute subsequent targets
+    # which got dirtied (i.e. to be remade) by predecessors
+    # _within the same build session_ - only the following session will
+    # execute it, which is not what one wants.
+    # And this still seems to be the case... (should try another update soon)
+  else(CMAKE_GENERATOR STREQUAL "${ninja_generator_name}")
+    set(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD_default_setting ON)
+  endif(CMAKE_GENERATOR STREQUAL "${ninja_generator_name}")
+  option(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD "Add a force-abort target to force abort of a build run in case any CMakeLists.txt files have been automatically rebuilt?" ${V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD_default_setting})
 endif(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
 
 # Global Install Enable flag, to indicate whether one wants
