@@ -1,6 +1,6 @@
 # This file is part of the vcproj2cmake build converter (vcproj2cmake.sf.net)
 
-# Some helper functions to be used by all converted projects in the tree
+# Some helper functions to be used by all converted V2C projects in the tree
 
 # This vcproj2cmake-specific CMake module
 # should be installed at least to your V2C-side source root
@@ -1062,6 +1062,7 @@ if(NOT V2C_INSTALL_ENABLE)
     # source tree which has a root which defines the configuration basis
     # (basic environment checks, user-side cache variables, V2C settings, ...)
     # and *then* includes the entire V2C-converted hierarchy as a sub part.
+    # http://stackoverflow.com/questions/3766740/overriding-a-default-option-value-in-cmake-from-a-parent-cmakelists-txt might be helpful.
     message("WARNING: ${CMAKE_CURRENT_LIST_FILE}: vcproj2cmake-supplied install handling not activated - targets _need_ to be installed properly one way or another!")
   endif(NOT V2C_INSTALL_ENABLE_SILENCE_WARNING)
 endif(NOT V2C_INSTALL_ENABLE)
