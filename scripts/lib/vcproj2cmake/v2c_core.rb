@@ -1799,19 +1799,29 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     }
     write_func_v2c_directory_post_setup
   end
-  def put_file_header
-    @textOut.put_file_header_temporary_marker()
+  def put_local_per_scope_setup
     write_comment_at_level(COMMENT_LEVEL_STANDARD,
       "This part of *global* V2C setup steps (policies, include function module, ...)\n" \
       "*has* to be repeated within each *local* file,\n" \
       "to be able to support the use case of creating a build environment\n" \
-      "from single local project directories, too."
+      "from single local project directories, too.\n" \
+      "But there's a nice trick: if a guard variable is already defined,\n" \
+      "then some other (parent?) scope already did all that work for us." \
     )
-    put_file_header_cmake_minimum_version()
-    put_file_header_cmake_policies()
+    str_per_scope_definition_guard = '_v2c_global_defs_per_scope_defined'
+    str_condition_inverse = get_conditional_inverted(str_per_scope_definition_guard)
+    write_conditional_if(str_condition_inverse)
+      put_file_header_cmake_minimum_version()
+      put_file_header_cmake_policies()
 
-    put_cmake_module_path()
-    put_var_config_dir_local()
+      put_cmake_module_path()
+      put_var_config_dir_local()
+      write_set_var_bool(str_per_scope_definition_guard, true)
+    write_conditional_end(str_condition_inverse)
+  end
+  def put_file_header
+    @textOut.put_file_header_temporary_marker()
+    put_local_per_scope_setup()
     put_include_vcproj2cmake_func()
     put_hook_pre()
   end
@@ -1935,6 +1945,10 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     # to reflect the fact that a project hierarchy has been created from a solution
     # that sits in a specific directory...
     next_paragraph()
+    write_comment_at_level(COMMENT_LEVEL_STANDARD,
+      "Denotes the root directory where the V2C conversion run was carried out.\n" \
+      "This directory also contains certain vcproj2cmake support subdirs."
+    )
     write_set_var_quoted('V2C_MASTER_PROJECT_DIR', get_dereferenced_variable_name('CMAKE_SOURCE_DIR'))
     # NOTE: use set() instead of list(APPEND...) to _prepend_ path
     # (otherwise not able to provide proper _overrides_)
