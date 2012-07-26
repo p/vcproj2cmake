@@ -872,6 +872,12 @@ endmacro(v2c_local_set_cmake_atl_mfc_flags _target _build_type _build_platform _
 
 # *static* conditional switch between
 # old-style include_directories() and new INCLUDE_DIRECTORIES property support.
+# FIXME: INCLUDE_DIRECTORIES property does NOT seem to work as expected
+# (for a "BEFORE .." expression we'll end up with a nice gcc
+# -IBEFORE). This might be due to list var handing issues,
+# but possibly INCLUDE_DIRECTORIES prop simply does not support it.
+# Should analyze it soon.
+set(_v2c_feat_cmake_include_dirs_prop )
 if(_v2c_feat_cmake_include_dirs_prop)
   function(v2c_target_include_directories _target)
     # FIXME: INCLUDE_DIRECTORIES property has a *default*
@@ -887,7 +893,9 @@ if(_v2c_feat_cmake_include_dirs_prop)
 else(_v2c_feat_cmake_include_dirs_prop)
   function(v2c_target_include_directories _target)
     set(include_dirs_cfg_ ${ARGN})
-    include_directories(${include_dirs_})
+    include_directories(${include_dirs_cfg_})
+    #get_property(inc_dirs DIRECTORY PROPERTY INCLUDE_DIRECTORIES)
+    #message(FATAL_ERROR "inc_dirs ${inc_dirs}")
   endfunction(v2c_target_include_directories _target)
 endif(_v2c_feat_cmake_include_dirs_prop)
 
