@@ -40,11 +40,14 @@ log_info 'Welcome to the guided install of vcproj2cmake!'
 # (I wanted to commit my files now, but it's not finished)
 # Those who feel daring enough might decide to disable this check.
 user_abort_delay = 15
-log_info "Unfortunately this script is not ready for public consumption yet!\nThus please press Ctrl-C within #{user_abort_delay} seconds to abort, otherwise experimental installation will continue"
+log_info "Unfortunately this script is not quite ready for public consumption yet!\nThus please press Ctrl-C within #{user_abort_delay} seconds to abort, otherwise experimental installation will continue"
 do_delay(user_abort_delay)
 
+cmake_bin='cmake'
+ccmake_bin='ccmake'
+
 log_info 'Verifying cmake binary availability.'
-output = `cmake --version`
+output = `#{cmake_bin} --version`
 if not $?.success?
   log_fatal 'cmake binary not found - you probably need to install a CMake package'
 end
@@ -67,19 +70,19 @@ end
 # time.
 
 # Hmm, we probably should also support the Qt-based GUI.
-output = `ccmake --help`
+output = `#{ccmake_bin} --help`
 if not $?.success?
   log_fatal 'could not run ccmake - perhaps it is not installed. On Debian-based Linux, installing the cmake-curses-gui package might help.'
 end
 
 log_info 'About to prepare the build tree (CMake configure run) which is required for installation of vcproj2cmake components. Please setup configuration as needed there, then proceed (do CMake Configure run multiple times, and finally press Generate).'
 do_delay(10)
-system 'ccmake ../'
+system "#{ccmake_bin} ../"
 if not $?.success?
   log_fatal 'invocation of ccmake failed'
 end
 
-system 'cmake .'
+system "#{cmake_bin} ."
 if not $?.success?
   log_error ''
   log_fatal \
@@ -117,7 +120,7 @@ if not $?.success?
   log_fatal 'execution of all target failed'
 end
 
-system 'cmake .'
+system "#{cmake_bin} ."
 if not $?.success?
   log_error ''
   log_fatal 'second CMake configure run failed'
@@ -162,7 +165,7 @@ if not Dir.chdir(proj_build_dir)
   log_fatal "could not change into build directory #{proj_build_dir} of converted project"
 end
 
-cmake_invocation_proj = "ccmake -DCMAKE_BUILD_TYPE=Debug #{proj_source_dir}"
+cmake_invocation_proj = "#{ccmake_bin} -DCMAKE_BUILD_TYPE=Debug #{proj_source_dir}"
 log_info "Running #{cmake_invocation_proj} to configure the converted project"
 do_delay(5)
 system(cmake_invocation_proj)
@@ -184,3 +187,4 @@ $stdout.puts '(those originally specified in .vc[x]proj)'
 $stdout.puts 'map to the corresponding xxx_INCLUDE_DIR variable'
 $stdout.puts 'as figured out by find_package(), by adding this mapping'
 $stdout.puts 'to include_mappings.txt.'
+$stdout.puts 'Also, it's probably a good idea to review the steps that this script executed in order to get a grasp of how to setup such a build.'
