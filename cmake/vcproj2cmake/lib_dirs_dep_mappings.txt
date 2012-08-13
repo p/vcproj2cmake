@@ -1,1 +1,2 @@
 .*/Boost/1_.*/lib.*:UNIX=${Boost_LIBRARIES}
+.*/zlib/lib.*:UNIX=${ZLIB_LIBRARIES}

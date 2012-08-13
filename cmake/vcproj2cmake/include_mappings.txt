@@ -4,3 +4,4 @@
 .*/Extern/iconv/include:WIN32|UNIX=${ICONV_INCLUDE_DIRS}
 .*/Extern/libxml2/include/libxml2:WIN32|UNIX=${LIBXML2_INCLUDE_DIR}
 .*/Extern/Microsoft.*:WIN32
+.*/Extern/zlib/include:=${ZLIB_INCLUDE_DIRS}
