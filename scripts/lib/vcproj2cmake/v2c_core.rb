@@ -1768,10 +1768,11 @@ end
 # This class generates the output of multiple input projects to a text output
 # (usually CMakeLists.txt within a local directory).
 class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
-  def initialize(textOut, arr_local_project_targets, script_location_relative_to_master)
+  def initialize(textOut, arr_local_project_targets, master_project_dir, script_location_relative_to_master)
     super(textOut)
     @arr_local_project_targets = arr_local_project_targets
     @script_location_relative_to_master = script_location_relative_to_master
+    @master_project_dir = master_project_dir
     # FIXME: handle arr_config_var_handling appropriately
     # (place the translated CMake commands somewhere suitable)
     @arr_config_var_handling = Array.new
@@ -1779,7 +1780,11 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
 
   # FIXME: all these function arguments are temporary crap! - they're supposed to be per-ProjectTarget mostly.
   def generate_it(local_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
-    put_file_header()
+    local_dir_fqpn = File.expand_path(local_dir)
+    p_local_dir_fqpn = Pathname.new(local_dir_fqpn)
+    p_root = Pathname.new(@master_project_dir)
+    relative_path_to_root = p_root.relative_path_from(p_local_dir_fqpn)
+    put_file_header(relative_path_to_root)
 
     put_converter_script_location(@script_location_relative_to_master)
 
@@ -1799,7 +1804,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     }
     write_func_v2c_directory_post_setup
   end
-  def put_local_per_scope_setup
+  def put_local_per_scope_setup(str_conversion_root_rel)
     write_comment_at_level(COMMENT_LEVEL_STANDARD,
       "This part of *global* V2C setup steps (policies, include function module, ...)\n" \
       "*has* to be repeated within each *local* file,\n" \
@@ -1814,14 +1819,14 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
       put_file_header_cmake_minimum_version()
       put_file_header_cmake_policies()
 
-      put_cmake_module_path()
+      put_cmake_module_path(str_conversion_root_rel)
       put_var_config_dir_local()
       write_set_var_bool(str_per_scope_definition_guard, true)
     write_conditional_end(str_condition_inverse)
   end
-  def put_file_header
+  def put_file_header(str_conversion_root_rel)
     @textOut.put_file_header_temporary_marker()
-    put_local_per_scope_setup()
+    put_local_per_scope_setup(str_conversion_root_rel)
     put_include_vcproj2cmake_func()
     put_hook_pre()
   end
@@ -1932,7 +1937,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
       )
     write_conditional_end(str_conditional)
   end
-  def put_cmake_module_path
+  def put_cmake_module_path(str_conversion_root_rel)
     # try to point to cmake/Modules of the topmost directory of the vcproj2cmake conversion tree.
     # This also contains vcproj2cmake helper modules (these should - just like the CMakeLists.txt -
     # be within the project tree as well, since someone might want to copy the entire project tree
@@ -1949,10 +1954,17 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
       "Denotes the root directory where the V2C conversion run was carried out.\n" \
       "This directory also contains certain vcproj2cmake support subdirs."
     )
-    write_set_var_quoted('V2C_MASTER_PROJECT_DIR', get_dereferenced_variable_name('CMAKE_SOURCE_DIR'))
+    str_master_proj_dir = "#{get_dereferenced_variable_name('CMAKE_CURRENT_SOURCE_DIR')}/#{str_conversion_root_rel}"
+    write_set_var_quoted('V2C_MASTER_PROJECT_DIR', str_master_proj_dir)
     # NOTE: use set() instead of list(APPEND...) to _prepend_ path
     # (otherwise not able to provide proper _overrides_)
-    arr_args_func = [ "${V2C_MASTER_PROJECT_DIR}/#{$v2c_module_path_local}", get_dereferenced_variable_name('CMAKE_MODULE_PATH') ]
+    write_comment_at_level(COMMENT_LEVEL_STANDARD,
+      "Extend module path with both a precise relative hint to source root\n" \
+      "and a flexible link via CMAKE_SOURCE_DIR expression,\n" \
+      "since in certain situations both may end up used\n" \
+      "(think build tree created from standalone project)."
+    )
+    arr_args_func = [ "${V2C_MASTER_PROJECT_DIR}/#{$v2c_module_path_local}", "${CMAKE_SOURCE_DIR}/#{$v2c_module_path_local}", get_dereferenced_variable_name('CMAKE_MODULE_PATH') ]
     write_list_quoted('CMAKE_MODULE_PATH', arr_args_func)
   end
   # "export" our internal $v2c_config_dir_local variable (to be able to reference it in CMake scripts as well)
@@ -5469,15 +5481,14 @@ class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
     @p_master_project = p_master_project
 
     # figure out a project_dir variable from the generated project file location
-    @project_dir = p_generator_proj_file.dirname
-    @cmakelists_output_file = p_generator_proj_file.to_s
+    @p_generator_proj_file = p_generator_proj_file
     @arr_projects = arr_projects
     @script_location_relative_to_master = p_v2c_script.relative_path_from(p_master_project)
     #logger.debug "p_v2c_script #{p_v2c_script} | p_master_project #{p_master_project} | @script_location_relative_to_master #{@script_location_relative_to_master}"
   end
   def generate
-    output_file_location = @cmakelists_output_file
-    logger.info "Generating project(s) in #{@project_dir} into #{output_file_location}"
+    output_file_location = @p_generator_proj_file.to_s
+    logger.info "Generating project(s) in #{@p_generator_proj_file.dirname} into #{output_file_location}"
 
     # write into temporary file, to avoid corrupting previous CMakeLists.txt due to syntax error abort, disk space or failure issues
     Tempfile.open('vcproj2cmake') { |tmpfile|
@@ -5526,9 +5537,9 @@ class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
     #syntax_generator.next_paragraph()
     #global_generator.put_configuration_types(configuration_types)
 
-    local_generator = V2C_CMakeLocalGenerator.new(textOut, arr_projects, @script_location_relative_to_master)
+    local_generator = V2C_CMakeLocalGenerator.new(textOut, arr_projects, master_project_dir, @script_location_relative_to_master)
 
-    local_generator.generate_it(@project_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
+    local_generator.generate_it(@p_generator_proj_file.dirname, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
   end
 end
 
