@@ -74,6 +74,33 @@ endif(V2C_FUNC_DEFINED)
 set(V2C_FUNC_DEFINED true)
 
 
+
+# # # # #   MOST IMPORTANT HELPER FUNCTIONS   # # # # #
+# (those used by all other parts)
+
+set(V2C_CMAKE_CONFIGURE_PROMPT "[V2C] " CACHE STRING "The prompt prefix to show for any vcproj2cmake messages occurring during CMake configure time." FORCE)
+mark_as_advanced(V2C_CMAKE_CONFIGURE_PROMPT)
+
+macro(_v2c_msg_info _msg)
+  message(STATUS "${V2C_CMAKE_CONFIGURE_PROMPT}${_msg}")
+endmacro(_v2c_msg_info _msg)
+macro(_v2c_msg_important _msg)
+  message("${V2C_CMAKE_CONFIGURE_PROMPT}${_msg}")
+endmacro(_v2c_msg_important _msg)
+macro(_v2c_msg_warning _msg)
+  message("${V2C_CMAKE_CONFIGURE_PROMPT}WARNING: ${_msg}")
+endmacro(_v2c_msg_warning _msg)
+macro(_v2c_msg_fixme _msg)
+  message("${V2C_CMAKE_CONFIGURE_PROMPT}FIXME: ${_msg}")
+endmacro(_v2c_msg_fixme _msg)
+macro(_v2c_msg_fatal_error _msg)
+  message(FATAL_ERROR "${V2C_CMAKE_CONFIGURE_PROMPT}${_msg}")
+endmacro(_v2c_msg_fatal_error _msg)
+macro(_v2c_msg_fatal_error_please_report _msg)
+  _v2c_msg_fatal_error("${_msg} - please report!")
+endmacro(_v2c_msg_fatal_error_please_report _msg)
+
+
 # Sanitize CMAKE_BUILD_TYPE setting:
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
   if(NOT V2C_WANT_SKIP_CMAKE_BUILD_TYPE_SANITIZE) # user-side disabling option - user might not want this to happen...
@@ -90,7 +117,7 @@ if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
     # (MSVS 2005 generator). I suppose that this is perfectly ok,
     # since CMake probably still needs to make up its mind as to which
     # configuration types (MinSizeRel, Debug etc.) are available.
-    message("WARNING: CMAKE_BUILD_TYPE was not specified - defaulting to ${CMAKE_BUILD_TYPE} setting!")
+    _v2c_msg_warning("CMAKE_BUILD_TYPE was not specified - defaulting to ${CMAKE_BUILD_TYPE} setting!")
   endif(NOT V2C_WANT_SKIP_CMAKE_BUILD_TYPE_SANITIZE) # user might not want this to happen...
 endif(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 
@@ -125,17 +152,13 @@ file(MAKE_DIRECTORY "${V2C_STAMP_FILES_DIR}")
 
 # # # # #   COMMON HELPER FUNCTIONS   # # # # #
 
-function(_v2c_fatal_error_please_report _msg)
-  message(FATAL_ERROR "${_msg} - please report!")
-endfunction(_v2c_fatal_error_please_report _msg)
-
 # Helper to yell loudly in case of unset variables.
 # The input string should _not_ be the dereferenced form,
 # but rather list simple _names_ of the variables.
 function(_v2c_ensure_valid_variables)
   foreach(var_name_ ${ARGV})
     if(NOT ${var_name_})
-      message(FATAL_ERROR "important vcproj2cmake variable ${var_name_} not valid/available!?")
+      _v2c_msg_fatal_error("important vcproj2cmake variable ${var_name_} not valid/available!?")
     endif(NOT ${var_name_})
   endforeach(var_name_ ${ARGV})
 endfunction(_v2c_ensure_valid_variables)
@@ -206,7 +229,7 @@ function(_v2c_config_get _cfg_key _cfg_value_out)
   set(cfg_key_full_ _v2c_${_cfg_key})
   get_property(cfg_value_is_set_ GLOBAL PROPERTY ${cfg_key_full_} SET)
   if(NOT cfg_value_is_set_)
-    message(FATAL_ERROR "_v2c_config_get: config var ${_cfg_key} not set!?")
+    _v2c_msg_fatal_error("_v2c_config_get: config var ${_cfg_key} not set!?")
   endif(NOT cfg_value_is_set_)
   _v2c_config_get_unchecked(${_cfg_key} cfg_value_)
   set(${_cfg_value_out} "${cfg_value_}" PARENT_SCOPE)
@@ -271,7 +294,7 @@ endfunction(_v2c_project_platform_get_build_types _target _build_platform _build
 function(_v2c_buildcfg_get_magic_conditional_name _target _build_platform _build_type _var_name_out)
   if(_build_platform AND _build_type)
   else(_build_platform AND _build_type)
-    message("WARNING: v2c_buildcfg_check_if_platform_buildtype_active: empty platform [${_build_platform}] or build type [${_build_type}]!?")
+    _v2c_msg_warning("v2c_buildcfg_check_if_platform_buildtype_active: empty platform [${_build_platform}] or build type [${_build_type}]!?")
   endif(_build_platform AND _build_type)
   _v2c_flatten_name("${_build_platform}" build_platform_flattened_)
   _v2c_flatten_name("${_build_type}" build_type_flattened_)
@@ -359,7 +382,7 @@ else(_v2c_generator_has_dynamic_platform_switching)
       # In such pathological cases, it might be a good idea to fall back
       # to some other kind of system introspection
       # (perhaps try_compile(), execute_process()).
-      message("FIXME: CMAKE_SIZEOF_VOID_P not available - currently assuming 32bit!")
+      _v2c_msg_fixme("CMAKE_SIZEOF_VOID_P not available - currently assuming 32bit!")
       set(platform_key_ "32")
       set(platform_reason_ "unknown platform bitwidth - fallback to 32bit")
     endif(CMAKE_SIZEOF_VOID_P)
@@ -377,10 +400,10 @@ else(_v2c_generator_has_dynamic_platform_switching)
       endif(_platform_names_list)
     endif(NOT platform_default_)
     if(NOT platform_default_)
-      _v2c_fatal_error_please_report("detected final failure to figure out a build platform setting (choices: [${_platform_names_list}])")
+      _v2c_msg_fatal_error_please_report("detected final failure to figure out a build platform setting (choices: [${_platform_names_list}])")
     endif(NOT platform_default_)
     if(NOT platform_reason_)
-      _v2c_fatal_error_please_report("No reason for platform selection given")
+      _v2c_msg_fatal_error_please_report("No reason for platform selection given")
     endif(NOT platform_reason_)
     set(${_platform_default_out} "${platform_default_}" PARENT_SCOPE)
     set(${_platform_reason_out} "${platform_reason_}" PARENT_SCOPE)
@@ -405,9 +428,9 @@ else(_v2c_generator_has_dynamic_platform_switching)
       # FIXME: should provide a variable to do first-time-only printing of
       # this setting. Possibly could even devise a common reusable mechanism for
       # all kinds of first-time-only printings...
-      message("vcproj2cmake chose to adopt the following project-defined build platform setting: ${V2C_BUILD_PLATFORM} (reason: ${platform_reason_}).")
+      _v2c_msg_important("vcproj2cmake chose to adopt the following project-defined build platform setting: ${V2C_BUILD_PLATFORM} (reason: ${platform_reason_}).")
     else(platform_ok_)
-      message(FATAL_ERROR "V2C_BUILD_PLATFORM contains invalid build platform setting (${V2C_BUILD_PLATFORM}), please correct!")
+      _v2c_msg_fatal_error("V2C_BUILD_PLATFORM contains invalid build platform setting (${V2C_BUILD_PLATFORM}), please correct!")
     endif(platform_ok_)
   endfunction(_v2c_buildcfg_determine_platform_var _target)
 
@@ -435,7 +458,7 @@ function(_v2c_config_do_setup_rebuilder)
   if(NOT V2C_RUBY_BIN) # avoid repeated checks (see cmake --trace)
     find_program(V2C_RUBY_BIN NAMES ruby)
     if(NOT V2C_RUBY_BIN)
-      message("could not detect your ruby installation (perhaps forgot to set CMAKE_PREFIX_PATH?), aborting: won't automagically rebuild CMakeLists.txt on changes...")
+      _v2c_msg_warning("could not detect your ruby installation (perhaps forgot to set CMAKE_PREFIX_PATH?), aborting: won't automagically rebuild CMakeLists.txt on changes...")
       return()
     endif(NOT V2C_RUBY_BIN)
   endif(NOT V2C_RUBY_BIN)
@@ -536,7 +559,7 @@ function(_v2c_target_log_configuration _target)
     get_property(vs_scc_localpath_ TARGET ${_target} PROPERTY VS_SCC_LOCALPATH)
     get_property(vs_scc_provider_ TARGET ${_target} PROPERTY VS_SCC_PROVIDER)
     get_property(vs_scc_auxpath_ TARGET ${_target} PROPERTY VS_SCC_AUXPATH)
-    message(FATAL_ERROR "Properties/settings target ${_target}:\n\tvs_scc_projectname_ ${vs_scc_projectname_}\n\tvs_scc_localpath_ ${vs_scc_localpath_}\n\tvs_scc_provider_ ${vs_scc_provider_}\n\tvs_scc_auxpath_ ${vs_scc_auxpath_}")
+    _v2c_msg_fatal_error("Properties/settings target ${_target}:\n\tvs_scc_projectname_ ${vs_scc_projectname_}\n\tvs_scc_localpath_ ${vs_scc_localpath_}\n\tvs_scc_provider_ ${vs_scc_provider_}\n\tvs_scc_auxpath_ ${vs_scc_auxpath_}")
   endif(TARGET ${_target})
 endfunction(_v2c_target_log_configuration _target)
 
@@ -560,7 +583,7 @@ function(_v2c_pre_touch_output_file _target_pseudo_output_file _actual_output_fi
   endforeach(dep_ ${_file_dependencies_list})
   if(NOT needs_remake_)
     # We don't need a remake, thus update the pseudo output stamp file:
-    message(STATUS "INFO: ${_actual_output_file} is current (no remake needed).")
+    _v2c_msg_info("${_actual_output_file} is current (no remake needed).")
     _v2c_touch_file("${_target_pseudo_output_file}")
   endif(NOT needs_remake_)
 endfunction(_v2c_pre_touch_output_file _target_pseudo_output_file _actual_output_file _file_dependencies_list)
@@ -590,7 +613,7 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     if(NOT EXISTS "${script_recursive_}")
       return()
     endif(NOT EXISTS "${script_recursive_}")
-    message(STATUS "Providing fully recursive CMakeLists.txt rebuilder target ${cmakelists_target_rebuild_all_name_}, to forcibly enact a recursive .vcproj --> CMake reconversion of all source tree sub directories.")
+    _v2c_msg_info("Providing fully recursive CMakeLists.txt rebuilder target ${cmakelists_target_rebuild_all_name_}, to forcibly enact a recursive .vc[x]proj --> CMake reconversion of all source tree sub directories.")
     set(cmakelists_update_recursively_updated_stamp_file_ "${CMAKE_CURRENT_BINARY_DIR}/cmakelists_recursive_converter_done.stamp")
     set(cmakelists_rebuilder_deps_recursive_list_
       ${_v2c_cmakelists_rebuilder_deps_common_list}
@@ -633,12 +656,12 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     endif(NOT dependent_target_main_)
     _v2c_ensure_valid_variables(dependent_target_main_)
 
-    message(STATUS "${dependent_target_main_}: providing ${_cmakelists_file} rebuilder (watching ${_dir_orig_proj_files_list})")
+    _v2c_msg_info("${dependent_target_main_}: providing ${_cmakelists_file} rebuilder (watching ${_dir_orig_proj_files_list})")
 
     if(NOT EXISTS "${_script}")
       # Perhaps someone manually copied over a set of foreign-machine-converted CMakeLists.txt files...
       # --> make sure that this use case does not fail anyway.
-      message("WARN: ${dependent_target_main_}: vcproj2cmake converter script ${_script} not found, cannot activate automatic reconversion functionality!")
+      _v2c_msg_warning("${dependent_target_main_}: vcproj2cmake converter script ${_script} not found, cannot activate automatic reconversion functionality!")
       return()
     endif(NOT EXISTS "${_script}")
 
@@ -705,7 +728,7 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     else("${orig_proj_file_main_}" STREQUAL "${_dir_orig_proj_files_list}")
       # vcproj2cmake.rb currently only converts a single project file.
       # Need to modify it to use a proper getopts() mechanism.
-      message("FIXME: reconversion currently is not able to properly handle _multiple_ project()s (i.e. VS project files) per _single_ CMakeLists.txt file (i.e. directory).")
+      _v2c_msg_fixme("reconversion currently is not able to properly handle _multiple_ project()s (i.e. VS project files) per _single_ CMakeLists.txt file (i.e. directory).")
     endif("${orig_proj_file_main_}" STREQUAL "${_dir_orig_proj_files_list}")
     # TODO: it might be useful to provide one subsequent target which exists
     # for the sole purpose of providing a log message
@@ -950,13 +973,13 @@ function(v2c_target_add_precompiled_header _target _build_platform _build_type _
   include(V2C_PCHSupport OPTIONAL)
   if(COMMAND add_precompiled_header)
     if(NOT TARGET ${_target})
-      message("v2c_target_add_precompiled_header: no target ${_target}!? Exit...")
+      _v2c_msg_warning("v2c_target_add_precompiled_header: no target ${_target}!? Exit...")
       return()
     endif(NOT TARGET ${_target})
     set(header_file_location_ "${PROJECT_SOURCE_DIR}/${_header_file}")
     # Complicated check! [empty file (--> dir-only) _does_ check as ok]
     if(NOT _header_file OR NOT EXISTS "${header_file_location_}")
-      message("v2c_target_add_precompiled_header: header file ${_header_file} at project ${PROJECT_SOURCE_DIR} does not exist!? Exit...")
+      _v2c_msg_warning("v2c_target_add_precompiled_header: header file ${_header_file} at project ${PROJECT_SOURCE_DIR} does not exist!? Exit...")
       return()
     endif(NOT _header_file OR NOT EXISTS "${header_file_location_}")
     # FIXME: should add a target-specific precomp header
@@ -975,10 +998,10 @@ function(v2c_target_add_precompiled_header _target _build_platform _build_type _
     set(pch_use_ 2)
     if(_use EQUAL ${pch_create_} OR _use EQUAL ${pch_use_})
       add_precompiled_header(${_target} "${header_file_location_}")
-      message(STATUS "v2c_target_add_precompiled_header: added header ${_header_file} to target ${_target}")
+      _v2c_msg_info("v2c_target_add_precompiled_header: added header ${_header_file} to target ${_target}")
     endif(_use EQUAL ${pch_create_} OR _use EQUAL ${pch_use_})
   else(COMMAND add_precompiled_header)
-    message("could not figure out add_precompiled_header() function (missing module file?) - precompiled header support disabled.")
+    _v2c_msg_important("could not figure out add_precompiled_header() function (missing module file?) - precompiled header support disabled.")
   endif(COMMAND add_precompiled_header)
 endfunction(v2c_target_add_precompiled_header _target _build_platform _build_type _use _header_file)
 
@@ -1030,9 +1053,9 @@ function(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_lo
   # since a .sln usually contains Scc* tags, which the CMake generator does not provide.
   # Or perhaps VS_SCC_LOCALPATH does not reference the source directory properly (in case of original "." statement this should probably be corrected to point to the project source and not to the possibly referenced project _binary_ dir).
   # The way to go about it is to use generated solutions and try to fix _that_ up within VS until it's actually properly registered. But when trying to do so I had problems with project import always referencing the source root dir (TODO investigate more).
-  message("project ${_target} found to contain VS SCC configuration properties, but VS integration does not seem to work yet - disabled! (FIXME)")
+  _v2c_msg_fixme("project ${_target} found to contain VS SCC configuration properties, but VS integration does not seem to work yet - disabled!")
   return()
-  #message(STATUS
+  #_v2c_msg_info(
   #  "v2c_target_set_properties_vs_scc: target ${_target}"
   #  "VS_SCC_PROJECTNAME ${_vs_scc_projectname} VS_SCC_LOCALPATH ${_vs_scc_localpath}\n"
   #  "VS_SCC_PROVIDER ${_vs_scc_provider}"
@@ -1084,7 +1107,7 @@ if(NOT V2C_INSTALL_ENABLE)
     # (basic environment checks, user-side cache variables, V2C settings, ...)
     # and *then* includes the entire V2C-converted hierarchy as a sub part.
     # http://stackoverflow.com/questions/3766740/overriding-a-default-option-value-in-cmake-from-a-parent-cmakelists-txt might be helpful.
-    message("WARNING: ${CMAKE_CURRENT_LIST_FILE}: vcproj2cmake-supplied install handling not activated - targets _need_ to be installed properly one way or another!")
+    _v2c_msg_warning("${CMAKE_CURRENT_LIST_FILE}: vcproj2cmake-supplied install handling not activated - targets _need_ to be installed properly one way or another!")
   endif(NOT V2C_INSTALL_ENABLE_SILENCE_WARNING)
 endif(NOT V2C_INSTALL_ENABLE)
 
@@ -1123,7 +1146,7 @@ function(_v2c_target_install_is_enabled__helper _target _install_enabled_out)
       endif(v2c_install_skip_)
     endif(install_enabled_)
     if(NOT install_enabled_)
-      message("v2c_target_install: asked to skip install of target ${_target}")
+      _v2c_msg_important("v2c_target_install: asked to skip install of target ${_target}")
     endif(NOT install_enabled_)
   endif(V2C_INSTALL_ENABLE)
   set(${_install_enabled_out} ${install_enabled_} PARENT_SCOPE)
@@ -1147,7 +1170,7 @@ endfunction(_v2c_target_install_is_enabled__helper _target _install_enabled_out)
 # then passing down these custom settings into V2C_INSTALL_DESTINATION_* variables.
 function(v2c_target_install _target)
   if(NOT TARGET ${_target})
-    message("${_target} not a valid target!?")
+    _v2c_msg_important("${_target} not a valid target!?")
     return()
   endif(NOT TARGET ${_target})
 
@@ -1200,12 +1223,12 @@ function(v2c_target_install _target)
     else(install_param_value_)
       # install_param_value_ unset? bail out in case of mandatory parameters (DESTINATION)
       if(install_param_ STREQUAL DESTINATION)
-        message(FATAL_ERROR "Variable V2C_INSTALL_${install_param_}_${_target} or V2C_INSTALL_${install_param_} not specified!")
+        _v2c_msg_fatal_error("Variable V2C_INSTALL_${install_param_}_${_target} or V2C_INSTALL_${install_param_} not specified!")
       endif(install_param_ STREQUAL DESTINATION)
     endif(install_param_value_)
   endforeach(install_param_ ${install_param_list_})
 
-  message(STATUS "v2c_target_install: install(${install_params_values_list_})")
+  _v2c_msg_info("v2c_target_install: install(${install_params_values_list_})")
   install(${install_params_values_list_})
 endfunction(v2c_target_install _target)
 
