@@ -424,8 +424,8 @@ endif(_v2c_generator_has_dynamic_platform_switching)
 function(_v2c_config_do_setup_rebuilder)
   # Some one-time setup steps:
 
-  # Have an update_cmakelists_ALL convenience target
-  # to be able to update _all_ outdated CMakeLists.txt files within a project hierarchy
+  # Have a user-side update_cmakelists_ALL convenience target:
+  # enables updating _all_ outdated CMakeLists.txt files within a project hierarchy.
   # Providing _this_ particular target (as a dummy) is _always_ needed,
   # even if the rebuild mechanism cannot be provided (missing script, etc.).
   if(NOT TARGET update_cmakelists_ALL)
@@ -457,14 +457,14 @@ function(_v2c_config_do_setup_rebuilder)
     # "Re: Makefile: 'abort' command? / 'elseif' to go with ifeq/else/endif?
     #   (Make newbie)" http://www.mail-archive.com/help-gnu-utils@gnu.org/msg00736.html
     if(UNIX)
-      # WARNING: make sure to fetch a full path, since otherwise we'd
-      # end up with a simple "false" which is highly conflict-prone
-      # with CMake's "false" boolean value!!
+      # WARNING: make sure to fetch and always use the binary's full path,
+      # since otherwise we'd end up with a simple "false" string
+      # which is highly conflict-prone with CMake's "false" boolean evaluation!!
       find_program(V2C_ABORT_BIN false)
       _v2c_ensure_valid_variables(V2C_ABORT_BIN)
-      _v2c_config_set(abort_BIN_v1 "${V2C_ABORT_BIN}")
+      _v2c_config_set(ABORT_BIN_v1 "${V2C_ABORT_BIN}")
     else(UNIX)
-      _v2c_config_set(abort_BIN_v1 v2c_invoked_non_existing_command_simply_to_force_build_abort)
+      _v2c_config_set(ABORT_BIN_v1 v2c_invoked_non_existing_command_simply_to_force_build_abort)
     endif(UNIX)
     # Provide a marker file, to enable external build invokers
     # to determine whether a (supposedly entire) build
@@ -511,6 +511,23 @@ endfunction(_v2c_config_do_setup)
 
 _v2c_config_do_setup()
 
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
+function(_v2c_target_file_under _target _category)
+  if(TARGET ${_target})
+    set(folder_name_ "vcproj2cmake")
+    if(_category)
+      set(folder_name_full_ "${folder_name_}/${_category}")
+    else(_category)
+      set(folder_name_full_ "${folder_name_}")
+    endif(_category)
+    set_property(TARGET ${_target} PROPERTY FOLDER "${folder_name_full_}")
+  endif(TARGET ${_target})
+endfunction(_v2c_target_file_under _target _category)
+
+function(_v2c_target_mark_as_internal _target)
+  _v2c_target_file_under("${_target}" "INTERNAL")
+endfunction(_v2c_target_mark_as_internal _target)
 
 # Debug-only helper!
 function(_v2c_target_log_configuration _target)
@@ -547,6 +564,20 @@ function(_v2c_pre_touch_output_file _target_pseudo_output_file _actual_output_fi
     _v2c_touch_file("${_target_pseudo_output_file}")
   endif(NOT needs_remake_)
 endfunction(_v2c_pre_touch_output_file _target_pseudo_output_file _actual_output_file _file_dependencies_list)
+
+function(_v2c_projects_find_valid_target _projects_list _target_out)
+  set(target_ )
+  # Loop until we find an actually existing target
+  # within the list of project names
+  # (some projects may be header-only, thus no lib/exe targets).
+  foreach(proj_ ${_projects_list})
+    if(TARGET ${proj_})
+      set(target_ ${proj_})
+      break()
+    endif(TARGET ${proj_})
+  endforeach(proj_ ${_projects_list})
+  set(${_target_out} ${target_} PARENT_SCOPE)
+endfunction(_v2c_projects_find_valid_target _projects_list _target_out)
 
 if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
   function(_v2c_cmakelists_rebuild_recursively _v2c_scripts_base_path _v2c_cmakelists_rebuilder_deps_common_list)
@@ -589,20 +620,6 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     #add_custom_target(update_cmakelists_rebuild_recursive_ALL_observer ALL DEPENDS "${cmakelists_update_recursively_updated_observer_stamp_file_}")
     #add_dependencies(update_cmakelists_rebuild_recursive_ALL_observer ${cmakelists_target_rebuild_all_name_})
   endfunction(_v2c_cmakelists_rebuild_recursively _v2c_scripts_base_path _v2c_cmakelists_rebuilder_deps_common_list)
-
-  function(_v2c_projects_find_valid_target _projects_list _target_out)
-    set(target_ )
-    # Loop until we find an actually existing target
-    # within the list of project names
-    # (some projects may be header-only, thus no lib/exe targets).
-    foreach(proj_ ${_projects_list})
-      if(TARGET ${proj_})
-        set(target_ ${proj_})
-        break()
-      endif(TARGET ${proj_})
-    endforeach(proj_ ${_projects_list})
-    set(${_target_out} ${target_} PARENT_SCOPE)
-  endfunction(_v2c_projects_find_valid_target _projects_list _target_out)
 
   # Function to automagically rebuild our converted CMakeLists.txt
   # by the original converter script in case any relevant files changed.
@@ -695,12 +712,13 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     # that *all* CMakeLists.txt re-conversion activity ended successfully.
     # That subsequent target would have to be chained in such a way to ensure
     # that it gets executed after *all* conversion targets are done.
+    # THE ACTUAL CONVERSION COMMAND:
     add_custom_command(OUTPUT "${cmakelists_update_this_cmakelists_updated_stamp_file_}"
       COMMAND "${V2C_RUBY_BIN}" "${_script}" "${orig_proj_file_main_}" "${_cmakelists_file}" "${_master_proj_dir}"
       COMMAND "${CMAKE_COMMAND}" -E remove -f "${cmakelists_update_check_stamp_file_v1_}"
       COMMAND "${CMAKE_COMMAND}" -E touch "${cmakelists_update_this_cmakelists_updated_stamp_file_}"
       DEPENDS ${cmakelists_rebuilder_deps_list_}
-      COMMENT "vcproj settings changed, rebuilding ${_cmakelists_file}"
+      COMMENT "VS project settings changed, rebuilding ${_cmakelists_file}"
     )
     # TODO: do we have to set_source_files_properties(GENERATED) on ${_cmakelists_file}?
 
@@ -711,31 +729,23 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
       # sub projects (always separate this from external higher-level
       # target, to be able to implement additional mechanisms):
       add_custom_target(update_cmakelists_ALL__internal_collector)
+      _v2c_target_mark_as_internal(update_cmakelists_ALL__internal_collector)
     endif(NOT TARGET update_cmakelists_ALL__internal_collector)
-
-#    if(need_init_main_targets_this_time_)
-#      # Define a "rebuild of any CMakeLists.txt file occurred" marker
-#      # file. This will be used to trigger subsequent targets which will
-#      # abort the build.
-#      set(rebuild_occurred_marker_file "${V2C_STAMP_FILES_DIR}/v2c_cmakelists_rebuild_occurred.marker")
-#      add_custom_command(OUTPUT "${rebuild_occurred_marker_file}"
-#        COMMAND "${CMAKE_COMMAND}" -E touch "${rebuild_occurred_marker_file}"
-#      )
-#      add_custom_target(update_cmakelists_rebuild_happened DEPENDS "${rebuild_occurred_marker_file}")
-#    endif(need_init_main_targets_this_time_)
 
     # NOTE: we use update_cmakelists_[TARGET] names instead of [TARGET]_...
     # since in certain IDEs these peripheral targets will end up as user-visible folders
     # and we want to keep them darn out of sight via suitable sorting!
+    # (but see also TARGET property "FOLDER"). TODO: add a clever fully compatible
+    # add_custom_target() wrapper which already does the required FOLDER sorting, too.
     set(target_cmakelists_update_this_projdir_name_ update_cmakelists_DIR_${dependent_target_main_})
     #add_custom_target(${target_cmakelists_update_this_projdir_name_} DEPENDS "${_cmakelists_file}")
     add_custom_target(${target_cmakelists_update_this_projdir_name_} ALL DEPENDS "${cmakelists_update_this_cmakelists_updated_stamp_file_}")
 #    add_dependencies(${target_cmakelists_update_this_projdir_name_} update_cmakelists_rebuild_happened)
 
     add_dependencies(update_cmakelists_ALL__internal_collector ${target_cmakelists_update_this_projdir_name_})
-    # Now establish new rebuild targets for all *projects*,
-    # to the *one common* rebuilder of the directory-wide config
-    # which encompasses those projects:
+    # Now establish new rebuild targets for all *project* build targets,
+    # to the *one common* *directory-wide* rebuilder (aborting version!!) of the config
+    # which encompasses those within-dir projects:
     foreach(proj_ ${_directory_projects_list})
       set(tgt_name_ update_cmakelists_${proj_})
       add_custom_target(${tgt_name_})
@@ -745,6 +755,7 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     ### IMPLEMENTATION OF ABORT HANDLING ###
 
     # We definitely need to implement aborting the build process directly
+    # whenever build activity wants to continue directly
     # after any new CMakeLists.txt files have been generated
     # (we don't want to go full steam ahead with _old_ CMakeLists.txt content).
     # Ideally processing should be aborted after _all_ sub projects
@@ -768,24 +779,26 @@ if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
       if(need_init_main_targets_this_time_)
         _v2c_config_get(cmakelists_update_check_did_abort_public_marker_file_v1 cmakelists_update_check_did_abort_public_marker_file_v1_)
         _v2c_config_get(update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1 update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1_)
-        _v2c_config_get(abort_BIN_v1 abort_BIN_v1_)
-        _v2c_ensure_valid_variables(abort_BIN_v1_)
+        _v2c_config_get(ABORT_BIN_v1 ABORT_BIN_v1_)
+        # THE BUILD ABORT COMMAND:
         add_custom_command(OUTPUT "${cmakelists_update_check_stamp_file_v1_}"
           # Obviously we need to touch the output file (success indicator) _before_ aborting by invoking false.
-          # Also, we need to touch the public marker file as well.
+          # But before doing that, we also need to touch (create!)
+          # the public marker file as well.
           COMMAND "${CMAKE_COMMAND}" -E touch "${cmakelists_update_check_stamp_file_v1_}" "${cmakelists_update_check_did_abort_public_marker_file_v1_}"
           COMMAND "${CMAKE_COMMAND}" -E remove -f "${update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1_}"
-          COMMAND "${abort_BIN_v1_}"
+          COMMAND "${ABORT_BIN_v1_}"
           # ...and of course add another clever message command
           # right _after_ the abort processing,
           # to alert people whenever aborting happened to fail:
-          COMMAND "${CMAKE_COMMAND}" -E echo "Huh, attempting to abort the build [via ${abort_BIN_v1_}] failed?? Probably this simply is an ignore-errors build run, otherwise PLEASE REPORT..."
+          COMMAND "${CMAKE_COMMAND}" -E echo "Huh, attempting to abort the build [via ${ABORT_BIN_v1_}] failed?? Probably this simply is an ignore-errors build run, otherwise PLEASE REPORT..."
           # Hrmm, I thought that we _need_ this dependency, otherwise at least on Ninja the
           # command will not get triggered _within_ the same build run (by the preceding target
           # removing the output file). But apparently that does not help
           # either.
 #          DEPENDS "${rebuild_occurred_marker_file}"
-          COMMENT ">>> === Detected a rebuild of CMakeLists.txt files - forcefully aborting the current outdated build run [force new updated-settings configure run]! <<< ==="
+	  # Mention that this is about V2C targets only (we obviously cannot exert influence on any targets created in non-V2C areas).
+          COMMENT ">>> === Detected a rebuild of CMakeLists.txt files - forcefully aborting the current outdated build run of V2C targets [force new updated-settings configure run]! <<< ==="
         )
         add_custom_target(update_cmakelists_abort_build_after_update DEPENDS "${cmakelists_update_check_stamp_file_v1_}")
 
@@ -1208,9 +1221,9 @@ function(v2c_target_post_setup _target _project_label _vs_keyword)
     if(NOT _vs_keyword STREQUAL V2C_NOT_PROVIDED)
       set_property(TARGET ${_target} PROPERTY VS_KEYWORD "${_vs_keyword}")
     endif(NOT _vs_keyword STREQUAL V2C_NOT_PROVIDED)
+    # DEBUG/LOG helper - enable to verify correct transfer of target properties etc.:
+    #_v2c_target_log_configuration(${_target})
   endif(TARGET ${_target})
-  # DEBUG/LOG helper - enable to verify correct transfer of target properties etc.:
-  #_v2c_target_log_configuration(${_target})
 endfunction(v2c_target_post_setup _target _project_label _vs_keyword)
 
 # Unfortunately there's no CMake DIRECTORY property to list all
