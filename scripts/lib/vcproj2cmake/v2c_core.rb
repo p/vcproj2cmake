@@ -3,6 +3,8 @@
 
 require 'vcproj2cmake/util_file' # V2C_Util_File.cmp()
 
+$VERBOSE=true
+
 V2C_LOG_LEVEL_OFF = 0
 V2C_LOG_LEVEL_FATAL = 1
 V2C_LOG_LEVEL_ERROR = 2
@@ -142,6 +144,11 @@ FILENAME_MAP_DEP = "#{$v2c_config_dir_local}/dependency_mappings.txt"
 FILENAME_MAP_LIB_DIRS = "#{$v2c_config_dir_local}/lib_dirs_mappings.txt"
 FILENAME_MAP_LIB_DIRS_DEP = "#{$v2c_config_dir_local}/lib_dirs_dep_mappings.txt"
 
+
+# Additionally enable Ruby's $DEBUG in case we want at least debug level.
+if $v2c_log_level >= V2C_LOG_LEVEL_DEBUG
+  $DEBUG=true
+end
 
 def log_debug(str)
   return if $v2c_log_level < V2C_LOG_LEVEL_DEBUG
