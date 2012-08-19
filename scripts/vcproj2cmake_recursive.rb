@@ -220,6 +220,14 @@ def command_file_dependencies_changed(command_output_file, arr_file_deps)
   end
 end
 
+case_insensitive_regex_match_option_flag = nil
+str_case_match_type = ''
+if true == $v2c_parser_proj_files_case_insensitive_match
+  str_case_match_type = 'IN'
+  case_insensitive_regex_match_option_flag = Regexp::IGNORECASE
+end
+log_info "Doing case-#{str_case_match_type}SENSITIVE matching on project file candidates!"
+
 DETECT_MAC_OS_RESOURCE_FORK_FILES_REGEX_OBJ = %r{^\._.*}
 Find.find('./') do
   |f|
@@ -263,14 +271,6 @@ Find.find('./') do
   dir_entries = Dir.entries(f)
 
   log_debug "entries: #{dir_entries}"
-
-  case_insensitive_regex_match_option_flag = nil
-  str_case_match_type = ''
-  if true == $v2c_parser_proj_files_case_insensitive_match
-    str_case_match_type = 'IN'
-    case_insensitive_regex_match_option_flag = Regexp::IGNORECASE
-  end
-  log_info "Doing case-#{str_case_match_type}SENSITIVE matching on project file candidates!"
 
   vcproj_extension = 'vcproj'
   vcxproj_extension = 'vcxproj'
