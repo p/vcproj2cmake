@@ -176,6 +176,7 @@ endfunction(_v2c_flatten_name _in _out)
 
 
 function(_v2c_list_check_item_contained_exact _item _list _found_out)
+  set(found_ FALSE)
   if(_list) # not empty/unset?
     if("${_list}" MATCHES ${_item}) # shortcut :)
       foreach(list_item_ ${_list})
@@ -303,6 +304,7 @@ endfunction(_v2c_buildcfg_get_magic_conditional_name _target _build_platform _bu
 
 if(CMAKE_CONFIGURATION_TYPES)
   function(_v2c_buildcfg_define_magic_conditional _target _build_platform _build_type _var_out)
+    set(val_ FALSE)
     if(V2C_BUILD_PLATFORM STREQUAL "${_build_platform}")
       set(val_ TRUE)
     endif(V2C_BUILD_PLATFORM STREQUAL "${_build_platform}")
@@ -310,6 +312,7 @@ if(CMAKE_CONFIGURATION_TYPES)
   endfunction(_v2c_buildcfg_define_magic_conditional _target _build_platform _build_type _var_out)
 else(CMAKE_CONFIGURATION_TYPES)
   function(_v2c_buildcfg_define_magic_conditional _target _build_platform _build_type _var_out)
+    set(val_ FALSE)
     if(V2C_BUILD_PLATFORM STREQUAL "${_build_platform}")
       if(CMAKE_BUILD_TYPE STREQUAL "${_build_type}")
         set(val_ TRUE)
