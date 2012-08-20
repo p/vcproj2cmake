@@ -3201,6 +3201,14 @@ class V2C_VSXmlParserBase < V2C_ParserBase
     end
     return value
   end
+  def skip_vs10_percent_sign_var(str_var)
+    # shortcut :)
+    return false if not str_var.include?('%')
+  
+    return false if not VS10_ITEM_METADATA_MACRO_MATCH_REGEX_OBJ.match(str_var)
+    logger.fixme("skipping unhandled VS10 variable (#{str_var})")
+    return true
+  end
   def get_filesystem_location(path)
     # TODO: should think of a way to do central verification
     # of existence of the file system paths found here near this helper.
@@ -4401,7 +4409,7 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
   end
 end
 
-class V2C_VSProjectFilesBundleParserBase
+class V2C_VSProjectFilesBundleParserBase < V2C_LoggerBase
   def initialize(p_parser_proj_file, str_orig_environment_shortname, arr_projects_out)
     @p_parser_proj_file = p_parser_proj_file
     @proj_filename = p_parser_proj_file.to_s # FIXME: do we want to keep the string-based filename? We should probably change several sub classes to be Pathname-based...
@@ -4510,21 +4518,6 @@ class V2C_VS7ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
     ## Not sure whether we want to evaluate the settings in .user files...
     #check_unhandled_file_type('user')
   end
-end
-
-# OK, this helper for VS10-specific content
-# really doesn't belong into a _generator-side_ class
-# (these variables should be handled via translation into a common V2C
-# variable convention on the parser side already),
-# but as long as we don't quite know how to best handle it,
-# at least make sure to keep it as a central workaround helper here.
-def skip_vs10_percent_sign_var(str_var)
-  # shortcut :)
-  return false if not str_var.include?('%')
-
-  return false if not VS10_ITEM_METADATA_MACRO_MATCH_REGEX_OBJ.match(str_var)
-  logger.fixme("skipping unhandled VS10 variable (#{str_var})")
-  return true
 end
 
 module V2C_VS10Defines
