@@ -2443,6 +2443,13 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     else
     #when 10    # typeGeneric (Makefile) [and possibly other things...]
       # TODO: we _should_ somehow support these project types...
+      # In fact this is likely to be equivalent to cmTarget::UTILITY,
+      # which is a direct translation of an add_custom_command().
+      # Thus such things should most likely end up generated as an
+      # add_custom_command() / add_custom_target() combo.
+      # The most challenging part will be achieving
+      # flexible cross-platform translation of any system-specific commands
+      # that are executed by the command.
       log_debug "#{@target.inspect}"
       raise V2C_GeneratorError, "#{@target.name}: project type #{target_config_info_curr.cfg_type} not supported."
     end
