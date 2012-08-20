@@ -1245,7 +1245,14 @@ function(v2c_target_post_setup _target _project_label _vs_keyword)
     # Hrmm, both project() _and_ PROJECT_LABEL reference the same project_name?? WEIRD.
     set_property(TARGET ${_target} PROPERTY PROJECT_LABEL "${_project_label}")
     if(NOT _vs_keyword STREQUAL V2C_NOT_PROVIDED)
+      # I don't know WTH the difference between VS_KEYWORD and VS_GLOBAL_KEYWORD
+      # would be - neither any public patch mail nor their docs is meaningful
+      # (git blame seems to suggest that it was pure duplication - ouch).
+      # http://public.kitware.com/Bug/view.php?id=12586
+      # Thus let's just set both to the very same thing, to not miss out
+      # on the Keyword element in the VS10 (vs. VS7) case.
       set_property(TARGET ${_target} PROPERTY VS_KEYWORD "${_vs_keyword}")
+      set_property(TARGET ${_target} PROPERTY VS_GLOBAL_KEYWORD "${_vs_keyword}")
     endif(NOT _vs_keyword STREQUAL V2C_NOT_PROVIDED)
     # DEBUG/LOG helper - enable to verify correct transfer of target properties etc.:
     #_v2c_target_log_configuration(${_target})
