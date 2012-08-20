@@ -1906,11 +1906,11 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     # to override the script location if needed.
     next_paragraph()
     # NOTE: we'll make V2C_SCRIPT_LOCATION express its path via
-    # relative argument to global V2C_MASTER_PROJECT_DIR (i.e. CMAKE_SOURCE_DIR)
+    # relative argument to global V2C_MASTER_PROJECT_SOURCE_DIR (i.e. CMAKE_SOURCE_DIR)
     # and _not_ CMAKE_CURRENT_SOURCE_DIR,
     # (this provision should even enable people to manually relocate
     # an entire sub project within the source tree).
-    v2c_converter_script_location = "${V2C_MASTER_PROJECT_DIR}/#{script_location_relative_to_master}"
+    v2c_converter_script_location = "${V2C_MASTER_PROJECT_SOURCE_DIR}/#{script_location_relative_to_master}"
     gen_put_converter_script_location(v2c_converter_script_location)
   end
   def write_func_v2c_directory_post_setup
@@ -1949,20 +1949,22 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     # This also contains vcproj2cmake helper modules (these should - just like the CMakeLists.txt -
     # be within the project tree as well, since someone might want to copy the entire project tree
     # including .vcproj conversions to a different machine, thus all v2c components should be available)
-    # NOTE that V2C_MASTER_PROJECT_DIR is a very important variable
+    # NOTE that V2C_MASTER_PROJECT_SOURCE_DIR is a very important variable
     # which may eventually be supported to end up _different_ from CMAKE_SOURCE_DIR
     # (e.g. in the case of integrating _multiple_ different solution (.sln) files
     # - and their project hierarchy each! - into a _higher-level_ natively CMake-based tree!!).
-    # We might possibly eventually want to rename V2C_MASTER_PROJECT_DIR into V2C_SOLUTION_ROOT_DIR
+    # We might possibly eventually want to rename V2C_MASTER_PROJECT_SOURCE_DIR into V2C_SOLUTION_ROOT_SOURCE_DIR
     # to reflect the fact that a project hierarchy has been created from a solution
     # that sits in a specific directory...
     next_paragraph()
     write_comment_at_level(COMMENT_LEVEL_STANDARD,
-      "Denotes the root directory where the V2C conversion run was carried out.\n" \
-      "This directory also contains certain vcproj2cmake support subdirs."
+      "Denotes the source root directory where the V2C conversion run was carried out.\n" \
+      "This directory also contains certain global vcproj2cmake support subdirs."
     )
-    str_master_proj_dir = "#{get_dereferenced_variable_name('CMAKE_CURRENT_SOURCE_DIR')}/#{str_conversion_root_rel}"
-    write_set_var_quoted('V2C_MASTER_PROJECT_DIR', str_master_proj_dir)
+    str_master_proj_source_dir = "#{get_dereferenced_variable_name('CMAKE_CURRENT_SOURCE_DIR')}/#{str_conversion_root_rel}"
+    write_set_var_quoted('V2C_MASTER_PROJECT_SOURCE_DIR', str_master_proj_source_dir)
+    str_master_proj_binary_dir = "#{get_dereferenced_variable_name('CMAKE_CURRENT_BINARY_DIR')}/#{str_conversion_root_rel}"
+    write_set_var_quoted('V2C_MASTER_PROJECT_BINARY_DIR', str_master_proj_binary_dir)
     # NOTE: use set() instead of list(APPEND...) to _prepend_ path
     # (otherwise not able to provide proper _overrides_)
     write_comment_at_level(COMMENT_LEVEL_STANDARD,
@@ -1971,7 +1973,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
       "since in certain situations both may end up used\n" \
       "(think build tree created from standalone project)."
     )
-    arr_args_func = [ "${V2C_MASTER_PROJECT_DIR}/#{$v2c_module_path_local}", "${CMAKE_SOURCE_DIR}/#{$v2c_module_path_local}", get_dereferenced_variable_name('CMAKE_MODULE_PATH') ]
+    arr_args_func = [ "${V2C_MASTER_PROJECT_SOURCE_DIR}/#{$v2c_module_path_local}", "${CMAKE_SOURCE_DIR}/#{$v2c_module_path_local}", get_dereferenced_variable_name('CMAKE_MODULE_PATH') ]
     write_list_quoted('CMAKE_MODULE_PATH', arr_args_func)
   end
   # "export" our internal $v2c_config_dir_local variable (to be able to reference it in CMake scripts as well)
@@ -3001,7 +3003,7 @@ def is_known_environment_variable_convention(config_var, config_var_type_descr)
     is_wellknown = true
   # Hrmm... SRCROOT seems to be used to indicate the main source root,
   # thus perhaps it should actually be replaced
-  # by CMAKE_SOURCE_DIR or V2C_MASTER_PROJECT_DIR.
+  # by CMAKE_SOURCE_DIR or V2C_MASTER_PROJECT_SOURCE_DIR.
   # One thing is for certain though: we should actually export our own
   # replacement string from this function, too...
   when 'SRCROOT'
@@ -3090,11 +3092,11 @@ EOF
       # We used to replace SolutionDir with CMAKE_SOURCE_DIR,
       # but since one global CMake build repository might possibly even
       # end up containing multiple solution-converted V2C environments,
-      # specifying V2C_MASTER_PROJECT_DIR is much more suitable/precise
+      # specifying V2C_MASTER_PROJECT_SOURCE_DIR is much more suitable/precise
       # (BTW, this variable can of course end up with different values -
       # depending on which of the possibly *multiple* solution sub dir hierarchies
       # it's being defined by).
-      config_var_replacement = '${V2C_MASTER_PROJECT_DIR}'
+      config_var_replacement = '${V2C_MASTER_PROJECT_SOURCE_DIR}'
     when 'TARGETPATH'
       config_var_emulation_code = ''
       arr_config_var_handling.push(config_var_emulation_code)

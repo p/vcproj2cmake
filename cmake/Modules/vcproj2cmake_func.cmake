@@ -145,7 +145,7 @@ if(NOT V2C_STAMP_FILES_SUBDIR)
   set(V2C_STAMP_FILES_SUBDIR "stamps")
 endif(NOT V2C_STAMP_FILES_SUBDIR)
 # Enable customization (via cache entry), someone might need it.
-set(V2C_STAMP_FILES_DIR "${CMAKE_BINARY_DIR}/${v2c_global_config_subdir_my}/${V2C_STAMP_FILES_SUBDIR}" CACHE PATH "The directory to place any stamp files used by vcproj2cmake in.")
+set(V2C_STAMP_FILES_DIR "${CMAKE_BINARY_DIR}/${V2C_GLOBAL_CONFIG_RELPATH}/${V2C_STAMP_FILES_SUBDIR}" CACHE PATH "The directory to place any stamp files used by vcproj2cmake in.")
 mark_as_advanced(V2C_STAMP_FILES_DIR)
 file(MAKE_DIRECTORY "${V2C_STAMP_FILES_DIR}")
 
@@ -504,10 +504,9 @@ function(_v2c_config_do_setup_rebuilder)
 endfunction(_v2c_config_do_setup_rebuilder)
 
 function(_v2c_config_do_setup)
-  # FIXME: should obey V2C_LOCAL_CONFIG_DIR setting!! Nope, this is a
-  # reference to the _global_ one here... Hmm, is there a config variable for
-  # that? At least set a local variable here for now.
-  set(global_config_subdir_ "cmake/vcproj2cmake")
+  # FIXME: should obey V2C_LOCAL_CONFIG_RELPATH setting!! Nope, this is a
+  # reference to the _global_ one here...
+  set(global_config_subdir_ "${V2C_GLOBAL_CONFIG_RELPATH}")
 
   # These files are OPTIONAL elements of the source tree!
   # (thus we shouldn't carelessly list them as target file dependencies etc.)
@@ -516,6 +515,7 @@ function(_v2c_config_do_setup)
   # but this would fumble the *source* tree, thus we decide to not do it.
 
   set(project_exclude_list_file_check_ "${CMAKE_SOURCE_DIR}/${global_config_subdir_}/project_exclude_list.txt")
+  set(project_exclude_list_file_location_ ) # default "unset" value
   if(EXISTS "${project_exclude_list_file_check_}")
     set(project_exclude_list_file_location_ "${project_exclude_list_file_check_}")
   endif(EXISTS "${project_exclude_list_file_check_}")
@@ -1298,6 +1298,6 @@ function(v2c_directory_post_setup _cmake_current_list_file)
   # _v2c_project_rebuild_on_update() should be as much of a 1:1 passthrough of
   # the input argument to the CMakeLists.txt converter ruby script execution as possible/suitable,
   # since invocation arguments of this script on rebuild should be (roughly) identical.
-  _v2c_project_rebuild_on_update("${directory_projects_list_}" "${dir_orig_proj_files_list_}" "${_cmake_current_list_file}" "${V2C_SCRIPT_LOCATION}" "${V2C_MASTER_PROJECT_DIR}")
+  _v2c_project_rebuild_on_update("${directory_projects_list_}" "${dir_orig_proj_files_list_}" "${_cmake_current_list_file}" "${V2C_SCRIPT_LOCATION}" "${V2C_MASTER_PROJECT_SOURCE_DIR}")
   v2c_hook_invoke("${V2C_HOOK_DIRECTORY_POST}")
 endfunction(v2c_directory_post_setup _cmake_current_list_file)
