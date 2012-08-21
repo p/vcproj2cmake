@@ -333,6 +333,11 @@ or whether there was some additional breakage there.
 An interesting side note is that this issue also haunts "regular", "boring"
 users of VS (e.g. CI builds being done outside of a source root
 will fail to get their SCM bindings).
+Possibly helpful SCC integration links:
+"Working folder fiasco"
+  http://social.msdn.microsoft.com/Forums/sa/tfsversioncontrol/thread/a9a34296-cae2-4c34-949a-5b40c7f74c7e
+"[CMake] Source control bindings feature in CMake needs better documentation"
+  http://www.cmake.org/pipermail/cmake/2011-November/047113.html
 
 
 === Installation/packaging ===
@@ -379,6 +384,31 @@ of the rather volatile .vcproj file format ("herding cats"):
 http://www.codeproject.com/Articles/133604/Visual-C-version-7-9-vcproj-project-file-formatter
 
 
+=== Cross-platform development hints ===
+
+== Toolkit dependency management/reduction ==
+
+
+In order to achieve eventually getting a large heavily Win32/MFC-based solution
+into a sufficiently cross-platform-compatible state,
+it is advisable to configure all Visual Studio projects to use
+the most strict platform settings that are currently possible,
+to avoid having other people let unwanted dependencies (MFC, ATL) creep in.
+I.e. for (almost?) Win32-only projects, do configure a Win32 setting,
+for Non-Win32 projects (possibly some toolkits have a strictly
+POSIX-only interface, thus a corresponding user-side project
+is able to consist of POSIX-only parts, too),
+try to setup a POSIX-only setting (this is not openly documented,
+but I believe it's possible; see e.g. .vcxproj SubSystem element or some such).
+You really don't want to have an unbelievably bloated windows.h to be
+reachable by default within a project...
+
+In addition to this, it might be useful to do checks for certain defines
+(e.g. include guard defines) in header files which are strongly indicative
+of certain unwanted toolkit dependencies, and in case of encountering
+such a define to bail out of compilation, hard.
+
+
 === Off-Topic parts ===
 
 If someone is still making use of the SCM (Source Control Management)
@@ -405,7 +435,23 @@ shortcomings, among these:
     with my public patch applied it's much improved now)
   - git-tfs requires installation on a Windows server as well,
     or Mono-tainted untested alternative use
+  - the "new" second git-tfs project (Java-based) that was just released
+    probably hasn't seen much use yet (TODO: determine actual status)
   - also, OpenTF hasn't seen a commit since 2008
+- astonishing stability issues
+  a work item tracking exception occurring in server layers
+  that was caused by one client will cause (TFS2008):
+    a) the server to not handle the NullPtrException in a benign way
+       (no client input whatsoever should ever cause a server to croak, ideally ["INPUT VALIDATION"])
+    b) several *other*, *unrelated* VS clients which happen to have ongoing TFS transmissions to be affected by this single-client server session failure (WTH?)
+    c) those other clients to *not* handle this failure in a benign way
+       (final failure due to simply locking up as an entirely inadequate
+        "handling" of this problem that originated on the side of the server)
+    --> whoa, triple FAIL!! This behaviour is surely being acerbated
+        by the fact that TFS is a centralized lock-in type infrastructure
+        (server is managing client state on server side,
+        no disconnected operation [and BTW working disconnected is
+        annoyingly cumbersome at both disconnecting *and* reconnecting ops], ...)
 
 For a very revealing discussion with lots of experienced SCM/ALM people,
 you may look at
