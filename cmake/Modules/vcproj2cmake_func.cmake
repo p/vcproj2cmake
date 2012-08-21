@@ -150,6 +150,39 @@ mark_as_advanced(V2C_STAMP_FILES_DIR)
 file(MAKE_DIRECTORY "${V2C_STAMP_FILES_DIR}")
 
 
+# A current SCC (Source Control Management) integration test on VS2010
+# finally worked as expected, thus it can be enabled now;
+# for gory details, see main doc (README).
+function(_v2c_scc_do_setup)
+  set(v2c_want_scc_default_setting_ ON)
+  # Have a check for TUI-only (most uses of Ninja, Makefile) builds.
+  set(generator_no_scc_wanted_list_ "Ninja" "Unix Makefiles")
+  foreach(gen_ ${generator_no_scc_wanted_list_})
+    if("${CMAKE_GENERATOR}" STREQUAL "${gen_}")
+      set(v2c_want_scc_default_setting_ OFF)
+      break()
+    endif("${CMAKE_GENERATOR}" STREQUAL "${gen_}")
+  endforeach(gen_ ${generator_no_scc_wanted_list_})
+  set(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION ${v2c_want_scc_default_setting_} CACHE BOOL "Enable re-use of any existing SCC (source control management) integration/binding info for projects (e.g. on Visual Studio)")
+  if(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION)
+    string(LENGTH "${CMAKE_SOURCE_DIR}/" src_len_)
+    string(SUBSTRING "${CMAKE_BINARY_DIR}/" 0 ${src_len_} bin_test_)
+    set(bin_tree_somewhere_within_source_ false)
+    if("${bin_test_}" STREQUAL "${CMAKE_SOURCE_DIR}/")
+      set(bin_tree_somewhere_within_source_ true)
+    endif("${bin_test_}" STREQUAL "${CMAKE_SOURCE_DIR}/")
+    if(bin_tree_somewhere_within_source_)
+      if(CMAKE_BINARY_DIR STREQUAL CMAKE_SOURCE_DIR)
+        _v2c_msg_warning("CMAKE_BINARY_DIR *equal to* CMAKE_SOURCE_DIR! This is definitely *not* recommended!! (the build tree should always be in a separate directory, ideally out-of-tree)")
+      endif(CMAKE_BINARY_DIR STREQUAL CMAKE_SOURCE_DIR)
+    else(bin_tree_somewhere_within_source_)
+      _v2c_msg_warning("CMAKE_BINARY_DIR (${CMAKE_BINARY_DIR}) is not a sub directory that's within (below) CMAKE_SOURCE_DIR (${CMAKE_SOURCE_DIR}). Normally a fully out-of-tree build is a very good idea, but Visual Studio SCC integration (TFS workspace mappings) seems to require the build tree to be somewhere below the source root. Expect source control management integration to fail!")
+    endif(bin_tree_somewhere_within_source_)
+  endif(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION)
+endfunction(_v2c_scc_do_setup)
+
+_v2c_scc_do_setup()
+
 # # # # #   COMMON HELPER FUNCTIONS   # # # # #
 
 # Helper to yell loudly in case of unset variables.
@@ -1048,48 +1081,44 @@ endif(WIN32)
 
 # This function will set up target properties gathered from
 # Visual Studio Source Control Management (SCM) elements.
-function(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_localpath _vs_scc_provider _vs_scc_auxpath)
-  # Since I was unable to make it work with some more experimentation
-  # (on VS2005), we better disable it cleanly for now, since otherwise VS
-  # will resort to awfully annoying nagging.
-  # I slightly suspect that even CMake itself is not up to the task,
-  # since a .sln usually contains Scc* tags, which the CMake generator does not provide.
-  # Or perhaps VS_SCC_LOCALPATH does not reference the source directory properly (in case of original "." statement this should probably be corrected to point to the project source and not to the possibly referenced project _binary_ dir).
-  # The way to go about it is to use generated solutions and try to fix _that_ up within VS until it's actually properly registered. But when trying to do so I had problems with project import always referencing the source root dir (TODO investigate more).
-  _v2c_msg_fixme("project ${_target} found to contain VS SCC configuration properties, but VS integration does not seem to work yet - disabled!")
-  return()
-  #_v2c_msg_info(
-  #  "v2c_target_set_properties_vs_scc: target ${_target}"
-  #  "VS_SCC_PROJECTNAME ${_vs_scc_projectname} VS_SCC_LOCALPATH ${_vs_scc_localpath}\n"
-  #  "VS_SCC_PROVIDER ${_vs_scc_provider}"
-  #)
-  # WARNING NOTE: the previous implementation called set_target_properties()
-  # with a strung-together list of properties, as an optimization.
-  # However since certain input property string payload consisted of semicolons
-  # (e.g. in the case of "&quot;"), this went completely haywire
-  # with contents partially split off at semicolon borders.
-  # IOW, definitely make sure to set each property precisely separately.
-  # Well, that's not sufficient! The remaining problem was that the property
-  # variables SHOULD NOT BE QUOTED, to enable passing of the content as a list,
-  # thereby implicitly properly passing the original ';' content right to
-  # the generated .vcproj, in fully correct form!
-  # Perhaps the previous set_target_properties() code was actually doable after all... (TODO test?)
-  if(_vs_scc_projectname)
-    set_property(TARGET ${_target} PROPERTY VS_SCC_PROJECTNAME ${_vs_scc_projectname})
-    if(_vs_scc_localpath)
-      #if("${_vs_scc_localpath}" STREQUAL ".")
-      #      set(_vs_scc_localpath "SAK")
-      #endif("${_vs_scc_localpath}" STREQUAL ".")
-      set_property(TARGET ${_target} PROPERTY VS_SCC_LOCALPATH ${_vs_scc_localpath})
-    endif(_vs_scc_localpath)
-    if(_vs_scc_provider)
-      set_property(TARGET ${_target} PROPERTY VS_SCC_PROVIDER ${_vs_scc_provider})
-    endif(_vs_scc_provider)
-    if(_vs_scc_auxpath)
-      set_property(TARGET ${_target} PROPERTY VS_SCC_AUXPATH ${_vs_scc_auxpath})
-    endif(_vs_scc_auxpath)
-  endif(_vs_scc_projectname)
-endfunction(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_localpath _vs_scc_provider _vs_scc_auxpath)
+if(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION)
+  function(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_localpath _vs_scc_provider _vs_scc_auxpath)
+    #_v2c_msg_info(
+    #  "v2c_target_set_properties_vs_scc: target ${_target}"
+    #  "VS_SCC_PROJECTNAME ${_vs_scc_projectname} VS_SCC_LOCALPATH ${_vs_scc_localpath}\n"
+    #  "VS_SCC_PROVIDER ${_vs_scc_provider}"
+    #)
+    # WARNING NOTE: the previous implementation called set_target_properties()
+    # with a strung-together list of properties, as an optimization.
+    # However since certain input property string payload consisted of semicolons
+    # (e.g. in the case of "&quot;"), this went completely haywire
+    # with contents partially split off at semicolon borders.
+    # IOW, definitely make sure to set each property precisely separately.
+    # Well, that's not sufficient! The remaining problem was that the property
+    # variables SHOULD NOT BE QUOTED, to enable passing of the content as a list,
+    # thereby implicitly properly passing the original ';' content right to
+    # the generated .vcproj, in fully correct form!
+    # Perhaps the previous set_target_properties() code was actually doable after all... (TODO test?)
+    if(_vs_scc_projectname)
+      set_property(TARGET ${_target} PROPERTY VS_SCC_PROJECTNAME ${_vs_scc_projectname})
+      if(_vs_scc_localpath)
+        #if("${_vs_scc_localpath}" STREQUAL ".")
+        #      set(_vs_scc_localpath "SAK")
+        #endif("${_vs_scc_localpath}" STREQUAL ".")
+        set_property(TARGET ${_target} PROPERTY VS_SCC_LOCALPATH ${_vs_scc_localpath})
+      endif(_vs_scc_localpath)
+      if(_vs_scc_provider)
+        set_property(TARGET ${_target} PROPERTY VS_SCC_PROVIDER ${_vs_scc_provider})
+      endif(_vs_scc_provider)
+      if(_vs_scc_auxpath)
+        set_property(TARGET ${_target} PROPERTY VS_SCC_AUXPATH ${_vs_scc_auxpath})
+      endif(_vs_scc_auxpath)
+    endif(_vs_scc_projectname)
+  endfunction(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_localpath _vs_scc_provider _vs_scc_auxpath)
+  function(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_localpath _vs_scc_provider _vs_scc_auxpath)
+    # DUMMY
+  endfunction(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_localpath _vs_scc_provider _vs_scc_auxpath)
+endif(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION)
 
 
 if(NOT V2C_INSTALL_ENABLE)

@@ -308,6 +308,33 @@ thus it might be even worse trying to start with a somewhat complex
 and semi-mature .vc[x]proj to CMake converter).
 
 
+== IDE issues ==
+
+Visual Studio handling can be quite a bitch at times.
+This is especially true for e.g. project reloading prompts
+and SCC (Source Control Management) integration.
+While I was unable to make SCC integration work on a VS2005 <=> VSS combo
+(resulting in awfully annoying nagging by VS)
+despite a sizeable amount of attempts, on a VS2010 <=> TFS combo I finally
+managed to figure out what broke it there:
+when creating a proper out-of-tree CMake build tree as a nearby *sibling*
+to the source root, it seems that the TFS workspace mapping as existing
+for the source root (see e.g. tf.exe cmdline tool for details)
+does *NOT* get picked up, resulting in nice SCC binding
+errors on solution loading and No-Workey No-Go. This all despite our
+project files containing file lists with nothing but references to files below
+the source (solution) root (thus VS should have been able to figure out
+that we would want to grab this mapping).
+Now if we create the CMake out-of-tree build *within* (below) the source root,
+then VS does finally manage to associate the workspace mapping,
+resulting in a SCC integration that does appear to work correctly.
+I don't know whether this was the same cause on VS2005 as well, though,
+or whether there was some additional breakage there.
+An interesting side note is that this issue also haunts "regular", "boring"
+users of VS (e.g. CI builds being done outside of a source root
+will fail to get their SCM bindings).
+
+
 === Installation/packaging ===
 
 To supply sufficient installation information for the foreign-converted
