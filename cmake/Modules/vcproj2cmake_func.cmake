@@ -1115,6 +1115,7 @@ if(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION)
       endif(_vs_scc_auxpath)
     endif(_vs_scc_projectname)
   endfunction(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_localpath _vs_scc_provider _vs_scc_auxpath)
+else(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION)
   function(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_localpath _vs_scc_provider _vs_scc_auxpath)
     # DUMMY
   endfunction(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_localpath _vs_scc_provider _vs_scc_auxpath)
