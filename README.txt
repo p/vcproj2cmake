@@ -355,6 +355,42 @@ For specific information on how to enable its use and configuration fine-tuning,
 see the function comments within that file.
 
 
+=== Precompiled header (PCH) support ===
+
+V2C now includes some initial support for existing precompiled header
+configurations (MSVC, gcc, etc.).
+This PCH functionality has been taken from "Support for precompiled headers"
+  http://www.cmake.org/Bug/view.php?id=1260
+(vcproj2cmake can now be considered inofficial "upstream"
+of this functionality, since there probably is nobody else
+who's actively improving the module file)
+Please note that IMHO precompiled headers are not always a good idea.
+See "Precompiled Headers? Do we really need them" reply at
+  http://stackoverflow.com/a/1138356
+for a good explanation.
+PCH may become a SPOF (Single Point Of Failure) for some of the more chaotic
+projects (libraries), namely those which fail to have a clear mission
+and try to implement / reference the entire universe
+(throwing together spaghetti code which handles file handling / serialization,
+threading, GUI layout, string handling, algorithms, communication, ...).
+Consequently such a project ends up including many different large toolkits
+in its main header, causing all source files to include that monster header
+despite only needing a tiny subset of that functionality each.
+Admittedly this is the worst case (which should be avoidable),
+but it does happen and it's not pretty.
+
+Note that on VS2010, for /MP (multi-processor) builds in combination with
+using #import directives, using PCH appears to be necessary
+since using #import in standalone header files instead
+may cause a race condition between multiple build units
+building the interface parts.
+Chalk that up to an insufficient target dependency chain configured in their
+build infrastructure.
+The possibly best workaround against that race is to move all use of #import
+into PCHs, thereby (ab)using the standard PCH build order guards
+to ensure that nobody else will process the #import parts in parallel.
+
+
 === Related projects, alternative setups ===
 
 sln2mak (.sln to Makefile converter), http://www.codeproject.com/KB/cross-platform/sln2mak.aspx

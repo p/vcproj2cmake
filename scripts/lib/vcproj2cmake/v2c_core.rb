@@ -1998,20 +1998,27 @@ end
 # Hrmm, I'm not quite sure yet where to aggregate this function...
 # (missing some proper generator base class or so...)
 def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name, throw_error)
-  file_accessible = true
+  file_accessible = false
   if $v2c_validate_vcproj_ensure_files_ok
-    # TODO: perhaps we need to add a permissions check, too?
-    file_location = "#{project_dir}/#{file_relative}"
-    if not File.exist?(file_location)
-      log_error "File #{file_relative} (#{file_item_description}) as listed by project #{project_name} does not exist!? (perhaps filename with wrong case, or wrong path, ...)"
-      if throw_error
-	# FIXME: should be throwing an exception, to not exit out
-	# on entire possibly recursive (global) operation
-        # when a single project is in error...
-        log_fatal "Improper original file - will abort and NOT generate a broken converted project file. Please fix content of the original project file!"
+    if file_relative.nil? or file_relative.empty?
+      log_warn "#{project_name}: empty file argument! (#{file_item_description})"
+    else
+      # TODO: perhaps we need to add a permissions check, too?
+      file_location = "#{project_dir}/#{file_relative}"
+      if File.exist?(file_location)
+        file_accessible = true
+      else
+        log_error "File #{file_relative} (#{file_item_description}) as listed by project #{project_name} does not exist!? (perhaps filename with wrong case, or wrong path, ...)"
+        if throw_error
+  	# FIXME: should be throwing an exception, to not exit out
+  	# on entire possibly recursive (global) operation
+          # when a single project is in error...
+          log_fatal "Improper original file - will abort and NOT generate a broken converted project file. Please fix content of the original project file!"
+        end
       end
-      file_accessible = false
     end
+  else
+    file_accessible = true
   end
   return file_accessible
 end
@@ -2497,7 +2504,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       put_property_compile_definitions(config_name, arr_platdefs)
     write_conditional_end(str_platform)
   end
-  def put_precompiled_header(target_name, condition, pch_use_mode, pch_source_name)
+  def put_precompiled_header(target_name, condition, pch_use_mode, pch_source_name, pch_binary_name)
     # FIXME: empty filename may happen in case of precompiled file
     # indicated via VS7 FileConfiguration UsePrecompiledHeader
     # (however this is an entry of the .cpp file: not sure whether we can
@@ -2507,24 +2514,22 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     str_build_type = prepare_string_literal(condition.get_build_type())
     str_platform_name = prepare_string_literal(condition.platform)
     str_pch_use_mode = "#{pch_use_mode}"
-    arr_args_precomp_header = [ str_platform_name, str_build_type, str_pch_use_mode, pch_source_name ]
+    arr_args_precomp_header = [ str_platform_name, str_build_type, str_pch_use_mode, pch_source_name, pch_binary_name ]
     write_invoke_config_object_v2c_function_quoted('v2c_target_add_precompiled_header', target_name, arr_args_precomp_header)
   end
   def write_precompiled_header(condition, precompiled_header_info)
     return if not $v2c_target_precompiled_header_enable
     return if precompiled_header_info.nil?
     return if precompiled_header_info.header_source_name.nil?
-    # FIXME: this filesystem validation should be carried out by a non-parser/non-generator validator class...
-    pch_ok = v2c_generator_check_file_accessible(@project_dir, precompiled_header_info.header_source_name, 'header file to be precompiled', @target.name, false)
-    # Implement non-hard failure
-    # (reasoning: the project is compilable anyway, even without pch)
-    # in case the file is not valid:
-    return if not pch_ok
+    ## FIXME: this filesystem validation should be carried out by a non-parser/non-generator validator class...
+    #header_file_is_existing = v2c_generator_check_file_accessible(@project_dir, precompiled_header_info.header_source_name, 'header file to be precompiled', @target.name, false)
+    logger.info "#{@target.name}: generating PCH functionality (use mode #{precompiled_header_info.use_mode}, header file #{precompiled_header_info.header_source_name}, PCH output binary #{precompiled_header_info.header_binary_name})"
     put_precompiled_header(
       @target.name,
       condition,
       precompiled_header_info.use_mode,
-      precompiled_header_info.header_source_name
+      precompiled_header_info.header_source_name,
+      precompiled_header_info.header_binary_name
     )
   end
   def write_property_compile_definitions(condition, arr_defs_assignments, map_defs)

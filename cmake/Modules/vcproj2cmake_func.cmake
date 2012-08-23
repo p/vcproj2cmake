@@ -183,6 +183,13 @@ endfunction(_v2c_scc_do_setup)
 
 _v2c_scc_do_setup()
 
+function(_v2c_pch_do_setup)
+  set(v2c_want_pch_default_setting_ ON)
+  set(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT ${v2c_want_pch_default_setting_} CACHE BOOL "Enable re-use of any existing PCH (precompiled header file) info for projects (e.g. on MSVC, gcc)")
+endfunction(_v2c_pch_do_setup)
+
+_v2c_pch_do_setup()
+
 # # # # #   COMMON HELPER FUNCTIONS   # # # # #
 
 # Helper to yell loudly in case of unset variables.
@@ -972,52 +979,54 @@ else(_v2c_feat_cmake_include_dirs_prop)
 endif(_v2c_feat_cmake_include_dirs_prop)
 
 
-# Helper to hook up a precompiled header that might be enabled
-# by a project configuration.
-# Functionality taken from "Support for precompiled headers"
-#   http://www.cmake.org/Bug/view.php?id=1260
-# (vcproj2cmake can now be considered inofficial "upstream"
-# of this functionality, since there probably is nobody else
-# who's actively improving the module file)
-# Please note that IMHO precompiled headers are not always a good idea.
-# See "Precompiled Headers? Do we really need them" reply at
-#   http://stackoverflow.com/a/1138356
-# for a good explanation.
-# PCH may become a SPOF (Single Point Of Failure) for some of the more chaotic
-# projects (libraries), namely those which fail to have a clear mission
-# and try to implement / reference the entire universe
-# (throwing together spaghetti code which handles file handling / serialization,
-# threading, GUI layout, string handling, algorithms, communication, ...).
-# Consequently such a project ends up including many different toolkits
-# in its main header, causing all source files to include that monster header
-# despite only needing a tiny subset of that functionality each.
-# Admittedly this is the worst case (which should be avoidable),
-# but it does happen and it's not pretty.
-function(v2c_target_add_precompiled_header _target _build_platform _build_type _use _header_file)
-  v2c_buildcfg_check_if_platform_buildtype_active(${_target} "${_build_platform}" "${_build_type}" is_active_)
-  if(NOT is_active_)
-    return()
-  endif(NOT is_active_)
-  if(NOT _use)
-    return()
-  endif(NOT _use)
-  # Need to always re-include() this module,
-  # since it currently defines some non-cache variables in outer non-macro scope
-  # (FIXME robustify it!),
-  # thus invoking pre-defined macros from foreign scope would be missing
-  # these vars.
-  include(V2C_PCHSupport OPTIONAL)
-  if(COMMAND add_precompiled_header)
+if(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
+endif(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
+
+if(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
+  # Helper to hook up a precompiled header that might be enabled
+  # by a project configuration.
+  # See main docs for further details.
+  function(v2c_target_add_precompiled_header _target _build_platform _build_type _use _header_file _pch_file)
+    v2c_buildcfg_check_if_platform_buildtype_active(${_target} "${_build_platform}" "${_build_type}" is_active_)
+    if(NOT is_active_)
+      return()
+    endif(NOT is_active_)
+    if(NOT _use)
+      return()
+    endif(NOT _use)
     if(NOT TARGET ${_target})
       _v2c_msg_warning("v2c_target_add_precompiled_header: no target ${_target}!? Exit...")
       return()
     endif(NOT TARGET ${_target})
+    # Implement non-hard failure
+    # (reasoning: the project is compilable anyway, even without pch)
+    # in case the file is not valid.
     set(header_file_location_ "${PROJECT_SOURCE_DIR}/${_header_file}")
     # Complicated check! [empty file (--> dir-only) _does_ check as ok]
     if(NOT _header_file OR NOT EXISTS "${header_file_location_}")
-      _v2c_msg_warning("v2c_target_add_precompiled_header: header file ${_header_file} at project ${PROJECT_SOURCE_DIR} does not exist!? Exit...")
+      _v2c_msg_warning("v2c_target_add_precompiled_header: header file ${_header_file} at project ${PROJECT_SOURCE_DIR} does not exist!? Skipping PCH...")
       return()
     endif(NOT _header_file OR NOT EXISTS "${header_file_location_}")
+
+    set(_v2c_have_pch_support_ FALSE)
+
+    # This module defines PCH functions such as add_precompiled_header().
+    # It _needs_ to be included *after* a project() declaration,
+    # which is why it needs to be within this project-target-referencing function.
+    if(NOT PCHSupport_FOUND)
+      include(V2C_PCHSupport OPTIONAL)
+    endif(NOT PCHSupport_FOUND)
+
+    if(PCHSupport_FOUND)
+      if(COMMAND add_precompiled_header)
+        set(_v2c_have_pch_support_ TRUE)
+      endif(COMMAND add_precompiled_header)
+    endif(PCHSupport_FOUND)
+    if(NOT _v2c_have_pch_support_)
+      _v2c_msg_important("could not figure out precompiled header support - precompiled header support disabled.")
+      return()
+    endif(NOT _v2c_have_pch_support_)
+
     # FIXME: should add a target-specific precomp header
     # enable / disable / force-enable flags mechanism,
     # equivalent to what our install() helper does.
@@ -1027,7 +1036,7 @@ function(v2c_target_add_precompiled_header _target _build_platform _build_type _
     # when adding a precompiled header configuration.
     include_directories(${CMAKE_CURRENT_BINARY_DIR})
     # FIXME: needs investigation whether use/create distinction
-    # is being serviced properly by the function that the module file offers.
+    # is being serviced properly by the function that the PCH module file offers.
     # Same values as used by VS7:
     set(pch_not_using_ 0)
     set(pch_create_ 1)
@@ -1036,10 +1045,13 @@ function(v2c_target_add_precompiled_header _target _build_platform _build_type _
       add_precompiled_header(${_target} "${header_file_location_}")
       _v2c_msg_info("v2c_target_add_precompiled_header: added header ${_header_file} to target ${_target}")
     endif(_use EQUAL ${pch_create_} OR _use EQUAL ${pch_use_})
-  else(COMMAND add_precompiled_header)
-    _v2c_msg_important("could not figure out add_precompiled_header() function (missing module file?) - precompiled header support disabled.")
-  endif(COMMAND add_precompiled_header)
-endfunction(v2c_target_add_precompiled_header _target _build_platform _build_type _use _header_file)
+  endfunction(v2c_target_add_precompiled_header _target _build_platform _build_type _use _header_file _pch_file)
+else(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
+  function(v2c_target_add_precompiled_header _target _build_platform _build_type _use _header_file _pch_file)
+    # DUMMY
+    _v2c_msg_important("${_target}: not configuring PCH support for header file ${_header_file} (disabled/missing support/...).")
+  endfunction(v2c_target_add_precompiled_header _target _build_platform _build_type _use _header_file _pch_file)
+endif(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
 
 
 if(WIN32)

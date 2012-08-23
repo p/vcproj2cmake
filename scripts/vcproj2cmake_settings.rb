@@ -93,7 +93,12 @@ $v2c_generator_file_create_permissions = 0644
 $v2c_generator_one_time_conversion_only = false
 
 # Whether to parse and generate configuration info about precompiled headers.
-# Currently disabled by default (not verified yet, and module file not checked in yet).
+# Enabled by default, and it's probably a good idea to keep it enabled
+# (rationale: generation overhead shouldn't be too high, and this retains
+# users' capability to dynamically choose at a later CMake configure time
+# whether they want this feature or not).
+# TODO: well, no, we'll keep it disabled by default some more time,
+# since it needs a bit more testing.
 $v2c_target_precompiled_header_enable = false
 
 # Whether we would like to have multi-threaded operation
