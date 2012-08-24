@@ -413,6 +413,22 @@ and to implement a cross-compiler setup
 - this is said to be doable, and perhaps it can even be preferrable
   (would be nice to receive input in case anyone has particular experience
    in this area).
+Jam is said to possibly be a helpful tool in such case,
+since it can be deployed as a custom build command in a Visual Studio project config (and in several other IDEs, too).
+However, some people say that Jam has the appearance of being very easy,
+yet once you start doing more elaborate things it can get very hard
+rather quickly. Who knows... (any feedback?).
+
+
+http://sourceforge.net/projects/folders4cmake/
+This one seems rather interesting since it does things the other way around
+as compared to vcproj2cmake:
+it seems to be a Visual-Studio-side plugin which then generates a CMake
+file list gathered from VS file filters setup.
+Given an existing CMake framework where one then simply plugs in the
+custom-generated file lists, this might be much more workable than expected,
+and possibly superiour to the vcproj2cmake configuration effort in certain ways.
+Untested, however (any feedback?).
 
 
 Possibly useful project to normalize file content
