@@ -2294,6 +2294,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # making use of CMAKE_RC_COMPILER.
     # Also, for resource files we should ideally be setting the
     # LANGUAGE property of the file (to RC).
+    # See also CMAKE_RC_SOURCE_FILE_EXTENSIONS, CMAKE_RC_OUTPUT_EXTENSION,
+    # CMAKE_RC_COMPILER, CMAKE_RC_COMPILE_OBJECT and CMake modules
+    # CMakeDetermineRCCompiler.cmake, CMakeRCInformation.cmake
     # We currently add resource (.rc) files to the project target as well...
     # While this doesn't lead to rogue rebuilds of the independent target,
     # in some environments this might happen. Thus we might want to skip adding
