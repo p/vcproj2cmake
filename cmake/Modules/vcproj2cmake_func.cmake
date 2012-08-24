@@ -286,6 +286,16 @@ function(_v2c_config_append_list_var_entry _cfg_key _cfg_value_append)
 endfunction(_v2c_config_append_list_var_entry _cfg_key _cfg_value_append)
 
 
+# Now add a one-time log helper (makes use of config helpers
+# which have just been defined above).
+function(_v2c_msg_important_once _magic _msg)
+  _v2c_config_get_unchecked("${_magic}" _already_logged)
+  if(NOT _already_logged)
+    _v2c_msg_important("${_msg}")
+    _v2c_config_set("${_magic}" "KO")
+  endif(NOT _already_logged)
+endfunction(_v2c_msg_important_once _magic _msg)
+
 # # # # #   FEATURE CHECKS   # # # # #
 
 # Add helper variable [non-readonly (i.e., configurable) INCLUDE_DIRECTORIES target property supported by >= 2.8.8 only]
@@ -468,10 +478,7 @@ else(_v2c_generator_has_dynamic_platform_switching)
     endif(NOT V2C_BUILD_PLATFORM)
     _v2c_list_check_item_contained_exact("${V2C_BUILD_PLATFORM}" "${platform_names_list_}" platform_ok_)
     if(platform_ok_)
-      # FIXME: should provide a variable to do first-time-only printing of
-      # this setting. Possibly could even devise a common reusable mechanism for
-      # all kinds of first-time-only printings...
-      _v2c_msg_important("vcproj2cmake chose to adopt the following project-defined build platform setting: ${V2C_BUILD_PLATFORM} (reason: ${platform_reason_}).")
+      _v2c_msg_important_once("build_platform" "vcproj2cmake chose to adopt the following project-defined build platform setting: ${V2C_BUILD_PLATFORM} (reason: ${platform_reason_}).")
     else(platform_ok_)
       _v2c_msg_fatal_error("V2C_BUILD_PLATFORM contains invalid build platform setting (${V2C_BUILD_PLATFORM}), please correct!")
     endif(platform_ok_)
@@ -1023,7 +1030,7 @@ if(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
       endif(COMMAND add_precompiled_header)
     endif(PCHSupport_FOUND)
     if(NOT _v2c_have_pch_support_)
-      _v2c_msg_important("could not figure out precompiled header support - precompiled header support disabled.")
+      _v2c_msg_important_once("PCH" "could not figure out precompiled header support - precompiled header support disabled.")
       return()
     endif(NOT _v2c_have_pch_support_)
 
