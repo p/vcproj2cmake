@@ -25,6 +25,15 @@
 #   ADD_NATIVE_PRECOMPILED_HEADER _targetName _input _dowarn
 #   GET_NATIVE_PRECOMPILED_HEADER _targetName _input
 
+
+if(NOT PCH_SKIP_CHECK_VALID_PROJECT)
+  if(NOT PROJECT_NAME)
+    # WARNING: the CMAKE_COMPILER_IS_GNUCXX variable will be properly set
+    # *after* a project() line only!
+    message(FATAL_ERROR "Precompiled header (PCH) compiler support detection only works subsequent to a project() line.")
+  endif(NOT PROJECT_NAME)
+endif(NOT PCH_SKIP_CHECK_VALID_PROJECT)
+
 IF(CMAKE_COMPILER_IS_GNUCXX)
 
     EXEC_PROGRAM(
