@@ -60,7 +60,7 @@ ELSE(CMAKE_COMPILER_IS_GNUCXX)
 	ENDIF(WIN32)
 ENDIF(CMAKE_COMPILER_IS_GNUCXX)
 
-# We configure these as cache variables -
+# We configure some variables as CACHE -
 # otherwise macros in this file would break since non-cache variables
 # (e.g. _PCH_include_prefix in our case)
 # would not be available on foreign scope (unrelated directories etc.).
@@ -69,9 +69,17 @@ ENDIF(CMAKE_COMPILER_IS_GNUCXX)
 # thus any variables referenced by these functions **should** be as well!!
 # Rationale #2: compiler settings will _also_ be stored as cache variables,
 # thus it's only consistent to have pre-determined compiler flags in cache, too.
+# Well, that's not the whole story after all:
+# Official CMake Find modules never have their _FOUND variable as CACHE.
+# This is quite important since a module *should* always actively get parsed
+# at least once (to define its functions), no matter what the user checks for.
+# Or put differently, since function instances are not persistent between
+# CMake configure runs, such basic variables shouldn't be either.
+# HOWEVER, a compiler flag *is* a persistent setting (especially since the
+# user may choose to customize it), thus it needs to be CACHE.
 set(_PCH_include_prefix "${_PCH_include_prefix_setting}" CACHE STRING "Compiler-specific flag used to include a PCH [precompiled header]. Internal setting, should not need modification")
-set(PCHSupport_FOUND ${PCHSupport_FOUND_setting} CACHE BOOL "Indicates whether a compiler supports PCH [precompiled headers]")
-mark_as_advanced(_PCH_include_prefix PCHSupport_FOUND)
+mark_as_advanced(_PCH_include_prefix)
+set(PCHSupport_FOUND ${PCHSupport_FOUND_setting})
 
 
 MACRO(_PCH_GET_COMPILE_FLAGS _out_compile_flags)
