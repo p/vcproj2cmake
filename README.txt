@@ -263,9 +263,19 @@ all newly modified targets.
 There's no appreciable way to immediately re-build the updated configuration -
 see CMake list "User-accessible hook on internal cmake_check_build_system target?".
 
-To cleanly re-convert _all_ CMakeLists.txt in an isolated way
+To cleanly re-convert _all_ CMakeLists.txt in an isolated way (one step)
 after a source upgrade via SCM, you may invoke target update_cmakelists_ALL,
 followed by doing a full build.
+
+Unfortunately, for the case of newly deleted files of a project,
+a CMake configure run as forced by a subsequent build run will error out
+due to not finding the deleted file within its file list, thus there's no way
+to automatically and conveniently reconvert the affected CMakeLists.txt file(s)
+in this case, since the entire build environment (and especially
+important targets such as update_cmakelists_ALL), is rendered non-working
+until the next successful configure run. Thus in such cases the user
+needs to resort to manually re-running the converter script
+(e.g. vcproj2cmake_recursive.rb) again.
 
 
 === Troubleshooting ===
