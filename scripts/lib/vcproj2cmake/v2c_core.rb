@@ -3191,10 +3191,12 @@ class V2C_VSXmlParserBase < V2C_ParserBase
     return FOUND_TRUE # FIXME don't assume success - add some missing checks...
   end
   def log_found(found, label); logger.debug "FOUND: #{found} #{label}" end
-  def unknown_attribute(name); unknown_something('attribute', name) end
-  def unknown_element(name); unknown_something('element', name) end
+  def unknown_attribute(key, value); unknown_something_key_value('attribute', key, value) end
+  def unknown_element_key(name); unknown_something('element', name) end
+  def unknown_element(key, value); unknown_something_key_value('element', key, value) end
   def unknown_element_text(name); unknown_something('element text', name) end
   def unknown_setting(name); unknown_something('VS7/10 setting', name) end
+  def unknown_value(name); unknown_something('value', name) end
   def skipped_attribute_warn(elem_name)
     logger.todo "#{self.class.name}: unhandled less important XML attribute (#{elem_name})!"
   end
@@ -3264,7 +3266,7 @@ class V2C_VSXmlParserBase < V2C_ParserBase
     if not n.nil?
       val = n
     else
-      unknown_attribute(str_setting)
+      unknown_value(str_setting)
     end
     return val
   end
@@ -3279,7 +3281,7 @@ class V2C_VSXmlParserBase < V2C_ParserBase
       logger.debug "ATTR: #{attr_xml.name}"
       if not call_parse_attribute(attr_xml)
         if not call_parse_setting(attr_xml.name, attr_xml.value)
-          unknown_setting(attr_xml.name)
+          unknown_attribute(attr_xml.name, attr_xml.value)
         end
       end
     }
@@ -3290,7 +3292,7 @@ class V2C_VSXmlParserBase < V2C_ParserBase
       if not call_parse_element(subelem_xml)
         logger.debug "call_parse_element #{subelem_xml.name} failed"
         if not call_parse_setting(subelem_xml.name, subelem_xml.text)
-          unknown_element(subelem_xml.name)
+          unknown_element(subelem_xml.name, subelem_xml.text)
         end
       end
     }
@@ -3401,6 +3403,9 @@ class V2C_VSXmlParserBase < V2C_ParserBase
   end
   def unknown_something(something_name, name)
     logger.todo "#{self.class.name}: unknown/incorrect XML #{something_name} (#{name})!"
+  end
+  def unknown_something_key_value(something_name, key, value)
+    logger.todo "#{self.class.name}: unknown/incorrect XML #{something_name} (#{key}: #{value})!"
   end
 end
 
@@ -4219,7 +4224,7 @@ class V2C_VS7FilterParser < V2C_VSXmlParserBase
           files_str[:arr_sub_filters].push(subfiles_str)
         end
       else
-        unknown_element(subelem_xml.name)
+        unknown_element_key(subelem_xml.name)
       end
     } # |subelem_xml|
 
@@ -4269,10 +4274,10 @@ class V2C_VS7FilterParser < V2C_VSXmlParserBase
       when '{67DA6AB6-F800-4C08-8B7A-83BB121AAD01}'
         #filter_info.is_resources = true
       else
-        unknown_attribute("unknown/custom UniqueIdentifier #{setting_value_upper}")
+        unknown_value("unknown/custom UniqueIdentifier #{setting_value_upper}")
       end
     else
-      unknown_attribute(setting_key)
+      unknown_attribute(setting_key, setting_value)
     end
     return found
   end
