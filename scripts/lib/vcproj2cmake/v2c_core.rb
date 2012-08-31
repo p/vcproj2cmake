@@ -3027,6 +3027,9 @@ def is_known_environment_variable_convention(config_var, config_var_type_descr)
   when 'DSTROOT'
     config_var_type_descr.replace "well-known Apple environment variable"
     is_wellknown = true
+  when 'QTDIR'
+    config_var_type_descr.replace "well-known Qt environment variable"
+    is_wellknown = true
   end
   return is_wellknown
 end
