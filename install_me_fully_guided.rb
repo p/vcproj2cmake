@@ -174,12 +174,16 @@ if not $?.success?
   log_fatal "implementation not finished - please change into the project source directory at #{proj_source_dir} and create a proper infrastructure there (e.g. a main CMakeLists.txt containing add_subdirectory() commands etc.) to properly include the CMakeLists.txt files of the converted sub projects"
 end
 
-log_info "Successfully(?) created a build environment at #{proj_build_dir} for converted source project #{proj_source_dir} - you can now change into #{proj_build_dir} and start building the project with your CMake configuration."
+log_info "Successfully(?) created a build environment at #{proj_build_dir} for converted source project #{proj_source_dir}."
+log_info "You can now change into #{proj_build_dir} and start building the project with your CMake configuration."
 log_info ''
 
 $stdout.puts 'INFO: done.'
-$stdout.puts 'Given a successfully newly converted/configured build tree, you can now attempt to run various build targets within this tree'
+$stdout.puts 'Given a successfully newly converted/configured build tree,'
+$stdout.puts 'you may now attempt to run various build targets'
+$stdout.puts '(see useful "make help" when on Makefile generator) within this tree'
 $stdout.puts '(which references the files within your .vc[x]proj-based source tree).'
+$stdout.puts ''
 $stdout.puts 'If building fails due to various include files not found/missing,'
 $stdout.puts 'then you should add find_package() commands to V2C hook scripts'
 $stdout.puts 'and make sure that raw include directories'
@@ -187,4 +191,9 @@ $stdout.puts '(those originally specified in .vc[x]proj)'
 $stdout.puts 'map to the corresponding xxx_INCLUDE_DIR variable'
 $stdout.puts 'as figured out by find_package(), by adding this mapping'
 $stdout.puts 'to include_mappings.txt.'
-$stdout.puts 'Also, it's probably a good idea to review the steps that this script executed in order to get a grasp of how to setup such a build.'
+$stdout.puts 'Or perhaps it is simply a case of not having properly configured'
+$stdout.puts 'a crucial environment variable (BOOSTROOT, QTDIR, ...)'
+$stdout.puts 'that the original project happens to expect'
+$stdout.puts 'to be properly supplied by the user for a correctly working build.'
+$stdout.puts ''
+$stdout.puts 'Also, it is probably a good idea to review the steps that this script executed in order to get a grasp of how to setup such a build.'

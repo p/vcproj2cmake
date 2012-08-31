@@ -3,12 +3,25 @@ project(v2c_installer NONE)
 # Helper variables
 set(v2ci_project_file_types_string ".vc[x]proj") # centrally lists the project file types we support.
 
+# Helper functions
+
+# Helper to yell loudly in case of unset variables.
+# The input string should _not_ be the dereferenced form,
+# but rather list simple _names_ of the variables.
+function(v2ci_ensure_valid_variables)
+  foreach(var_name_ ${ARGV})
+    if(NOT ${var_name_})
+      message(FATAL_ERROR "important vcproj2cmake variable ${var_name_} not valid/available!?")
+    endif(NOT ${var_name_})
+  endforeach(var_name_ ${ARGV})
+endfunction(v2ci_ensure_valid_variables)
+
 
 message(STATUS "Welcome to the installation handler of vcproj2cmake!")
 
 # Provide a config option to let people choose to automatically
 # download and convert/compile a very nice demo .vc[x]proj app from somewhere...
-set(v2ci_vcproj_load_demo_app true CACHE BOOL "Do you want to install/process this converter on a demo tree downloaded from the Internet?")
+option(v2ci_vcproj_load_demo_app "Do you want to install/process this converter on a demo tree downloaded from the Internet?" ON)
 if(v2ci_vcproj_load_demo_app)
   set(v2ci_vcproj_proj_source_root_doc_string "Path to the root directory of the Visual Studio ${v2ci_project_file_types_string}-based source project that you would like to CMake-enable")
 
@@ -99,16 +112,17 @@ set(v2ci_vcproj2cmake_install_subdir_doc_string "Relative location of the newly 
 set(v2ci_vcproj2cmake_install_subdir_default_setting "cmake/vcproj2cmake")
 set(v2ci_vcproj2cmake_install_subdir "${v2ci_vcproj2cmake_install_subdir_default_setting}" CACHE STRING ${v2ci_vcproj2cmake_install_subdir_doc_string})
 
-set(v2ci_module_path_subdir_doc_string "Relative location of the newly created CMake module path within your project")
-set(v2ci_module_path_subdir_default_setting "cmake/Modules")
-set(v2ci_module_path_subdir "${v2ci_module_path_subdir_default_setting}" CACHE STRING ${v2ci_module_path_subdir_doc_string})
+set(v2ci_module_path_install_subdir_doc_string "Relative location of the newly created CMake module path within your project")
+set(v2ci_module_path_install_subdir_default_setting "cmake/Modules")
+set(v2ci_module_path_install_subdir "${v2ci_module_path_install_subdir_default_setting}" CACHE STRING ${v2ci_module_path_install_subdir_doc_string})
+mark_as_advanced(v2ci_module_path_install_subdir)
 
-set(v2ci_vcproj_proj_do_convert_default_setting true)
-set(v2ci_vcproj_proj_do_convert
-${v2ci_vcproj_proj_do_convert_default_setting} CACHE BOOL "Should we automatically run a recursive conversion of projects to CMakeLists.txt within the source root directory of your ${v2ci_project_file_types_string}-based project?")
+set(v2ci_vcproj_proj_do_convert_default_setting ON)
+option(v2ci_vcproj_proj_do_convert "Should we automatically run a recursive conversion of projects to CMakeLists.txt within the source root directory of your ${v2ci_project_file_types_string}-based project?" ${v2ci_vcproj_proj_do_convert_default_setting})
 
-# We don't want the user to see CMAKE_INSTALL_PREFIX - the user should be configuring our
-# specific source root dir of a .vc[x]proj project.
+# We don't want the user to see any default-supplied CMAKE_INSTALL_PREFIX -
+# the user should be configuring our specific source root dir
+# of a .vc[x]proj project.
 # We don't want the user to see CMAKE_BUILD_TYPE since we don't need it at all...
 mark_as_advanced(CMAKE_INSTALL_PREFIX CMAKE_BUILD_TYPE)
 
@@ -131,6 +145,9 @@ else(IS_DIRECTORY "${v2ci_vcproj_proj_source_root}")
   endif(v2ci_missing_source_root_is_fatal)
 endif(IS_DIRECTORY "${v2ci_vcproj_proj_source_root}")
 
+set(v2ci_minimum_cmake_version 2.6) # let's assume our installer code needs 2.6
+set(v2ci_minimum_cmake_version_combined ${v2ci_minimum_cmake_version})
+
 # If configuration appears to be valid, then we can define
 # CMAKE_INSTALL_PREFIX and include subdirs which will install some
 # v2c infrastructure.
@@ -141,30 +158,32 @@ if(v2ci_installable)
 
   set(CMAKE_INSTALL_PREFIX "${v2ci_vcproj_proj_source_root}")
 
-  set(v2ci_module_path_install_subdir "${v2ci_module_path_subdir}")
+
   set(v2ci_mappings_install_subdir "${v2ci_vcproj2cmake_install_subdir}")
-  mark_as_advanced(v2ci_module_path_install_subdir v2ci_mappings_install_subdir)
   add_subdirectory(cmake)
+
 
   set(v2ci_samples_install_subdir "${v2ci_vcproj2cmake_install_subdir}")
   add_subdirectory(samples)
 
+
   set(v2ci_scripts_install_subdir "${v2ci_vcproj2cmake_install_subdir}/scripts")
   add_subdirectory(scripts)
+
+
   # Nice trick to forward CMake requirements
   # of our v2c converter infrastructure to this installer :-)
   v2ci_scripts_fetch_minimum_cmake_version(v2ci_scripts_minimum_cmake_version)
   set(v2ci_minimum_cmake_version_combined ${v2ci_scripts_minimum_cmake_version})
-  set(v2ci_minimum_cmake_version 2.6) # let's assume our installer code needs 2.6
-  if(v2ci_minimum_cmake_version VERSION_LESS v2ci_scripts_minimum_cmake_version)
-    set(v2ci_minimum_cmake_version_combined ${v2ci_minimum_cmake_version})
-  endif(v2ci_minimum_cmake_version VERSION_LESS v2ci_scripts_minimum_cmake_version)
-
-  # FIXME: perhaps this is not customer-friendly - we should check manually
-  # and launch a FATAL_ERROR with wording specific to vcproj2cmake tools).
-  cmake_minimum_required(VERSION ${v2ci_minimum_cmake_version_combined} FATAL_ERROR)
+  if(v2ci_minimum_cmake_version_combined VERSION_LESS v2ci_scripts_minimum_cmake_version)
+    set(v2ci_minimum_cmake_version_combined ${v2ci_scripts_minimum_cmake_version})
+  endif(v2ci_minimum_cmake_version_combined VERSION_LESS v2ci_scripts_minimum_cmake_version)
 
   if(v2ci_vcproj_proj_do_convert)
     v2ci_scripts_convert_project_recursive("${v2ci_vcproj_proj_source_root}")
   endif(v2ci_vcproj_proj_do_convert)
 endif(v2ci_installable)
+
+# FIXME: perhaps this is not customer-friendly - we should check manually
+# and launch a FATAL_ERROR with wording specific to vcproj2cmake tools).
+cmake_minimum_required(VERSION ${v2ci_minimum_cmake_version_combined} FATAL_ERROR)
