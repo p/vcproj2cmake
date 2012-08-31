@@ -466,7 +466,7 @@ else(_v2c_generator_has_dynamic_platform_switching)
     _v2c_project_platform_get_list(${_target} platform_names_list_)
     if(NOT V2C_BUILD_PLATFORM) # avoid rerun
       _v2c_platform_determine_default("${platform_names_list_}" platform_default_setting_ platform_reason_)
-      set(platform_doc_string_ "The TARGET (not necessarily identical to HOST!) platform to build for [possible values: [${platform_names_list_}]]")
+      set(platform_doc_string_ "The TARGET (not necessarily identical to this build HOST!) platform to create the build for [possible values: [${platform_names_list_}]]")
       # Offer the main configuration cache variable to the user:
       set(V2C_BUILD_PLATFORM "${platform_default_setting_}" CACHE STRING ${platform_doc_string_})
     else(NOT V2C_BUILD_PLATFORM)
@@ -480,7 +480,7 @@ else(_v2c_generator_has_dynamic_platform_switching)
     if(platform_ok_)
       _v2c_msg_important_once("build_platform" "vcproj2cmake chose to adopt the following project-defined build platform setting: ${V2C_BUILD_PLATFORM} (reason: ${platform_reason_}).")
     else(platform_ok_)
-      _v2c_msg_fatal_error("V2C_BUILD_PLATFORM contains invalid build platform setting (${V2C_BUILD_PLATFORM}), please correct!")
+      _v2c_msg_fatal_error("V2C_BUILD_PLATFORM contains invalid build platform setting (${V2C_BUILD_PLATFORM}), please correct! (valid candidates: ${platform_names_list_})")
     endif(platform_ok_)
   endfunction(_v2c_buildcfg_determine_platform_var _target)
 
