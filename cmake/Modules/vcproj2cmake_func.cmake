@@ -547,7 +547,18 @@ function(_v2c_config_do_setup_rebuilder)
     # This is the stamp file for the subsequent "cleanup" target
     # (oh yay, we even need to have the marker file removed on next build launch again).
     _v2c_config_set(update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1 "${V2C_STAMP_FILES_DIR}/v2c_cmakelists_update_abort_cleanup_done.stamp")
+
+     # Provide API helper, for user-side build scripts to know how to detect
+     # that a build abort occured.
+     function(v2c_rebuilder_build_abort_get_marker_file _res_out)
+       _v2c_config_get(update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1 update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1_)
+       set(${_res_out} "${update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1_}" PARENT_SCOPE)
+     endfunction(v2c_rebuilder_build_abort_get_marker_file _res_out)
   endif(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD)
+  # Provide API helper for user-side query.
+  macro(v2c_rebuilder_build_abort_enabled _res_out)
+    set(${_res_out} ${V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD})
+  endmacro(v2c_rebuilder_build_abort_enabled _res_out)
 endfunction(_v2c_config_do_setup_rebuilder)
 
 function(_v2c_config_do_setup)
@@ -576,10 +587,16 @@ function(_v2c_config_do_setup)
 
 
   # Now do rebuilder setup within this function, too,
-  # to have direct access to important configuration variables.
+  # to have direct access to parent scope's important configuration variables.
   if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
     _v2c_config_do_setup_rebuilder()
   endif(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
+
+  # Provide API helper for user-side query of rebuilder activation status.
+  # Once active, further rebuilder APIs may be called.
+  macro(v2c_rebuilder_enabled _res_out)
+    set(${_res_out} ${V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER})
+  endmacro(v2c_rebuilder_enabled _res_out)
 endfunction(_v2c_config_do_setup)
 
 _v2c_config_do_setup()
