@@ -56,7 +56,7 @@ if you do not have any users who are hooked on keeping to use
 their static .vcproj files on Visual Studio, then it perhaps makes less sense
 to use our converter as a somewhat more cumbersome _online converter_ solution
 - instead you may choose to go for a full-scale manual conversion
-to CMakeLists.txt files (by basing your initial CMakeLists.txt layout
+to CMakeLists.txt files (probably by basing your initial CMakeLists.txt layout
 on the output of our script, too, of course).
 That way you can avoid having to deal with the hook script includes as
 required by our online conversion concept, and instead modify your
@@ -375,7 +375,8 @@ This PCH functionality has been taken from "Support for precompiled headers"
 of this functionality, since there probably is nobody else
 who's actively improving the module file)
 Please note that IMHO precompiled headers are not always a good idea.
-See "Precompiled Headers? Do we really need them" reply at
+See http://gcc.gnu.org/wiki/PCHHaters
+and "Precompiled Headers? Do we really need them" reply at
   http://stackoverflow.com/a/1138356
 for a good explanation.
 PCH may become a SPOF (Single Point Of Failure) for some of the more chaotic
@@ -441,6 +442,12 @@ and possibly superiour to the vcproj2cmake configuration effort in certain ways.
 Untested, however (any feedback?).
 
 
+https://github.com/sakra/cotire/ (compile time reducer)
+is a CMake module that speeds up the build process of CMake based build systems
+by fully automating techniques as precompiled header usage
+and single compilation unit builds for C and C++.
+
+
 Possibly useful project to normalize file content
 of the rather volatile .vcproj file format ("herding cats"):
 http://www.codeproject.com/Articles/133604/Visual-C-version-7-9-vcproj-project-file-formatter
@@ -462,8 +469,8 @@ POSIX-only interface, thus a corresponding user-side project
 is able to consist of POSIX-only parts, too),
 try to setup a POSIX-only setting (this is not openly documented,
 but I believe it's possible; see e.g. .vcxproj SubSystem element or some such).
-You really don't want to have an unbelievably bloated windows.h to be
-reachable by default within a project...
+You really don't want to have the unbelievably bloated windows.h header
+to be reachable by default within a project wherever it can be avoided...
 
 In addition to this, it might be useful to do checks for certain defines
 (e.g. include guard defines) in header files which are strongly indicative
@@ -482,12 +489,15 @@ capable SCM (or in fact, an integrated Tracker/Ticket environment [ALM]) to choo
 While TFS is an awful lot better than VSS, it still has some painful
 shortcomings, among these:
 - non-cross-platform tool
-  --> inescapable dependency on non-performant Windows servers
+  --> inescapable (hard) dependency on non-performant Windows servers
      --> filename case sensitivity issue (certain TFS 2008 API functions
 	return *other* case insensitive results for *different* case sensitive input)
 - no three-way-merges via common base version, i.e. base-less merge
   http://jamesmckay.net/2011/01/baseless-merges-in-team-foundation-server-why/
-- no disconnected SCM operation (server connection required)
+- no disconnected SCM operation (server connection required;
+  server is managing client state on server side
+  [and BTW their solution of working "disconnected" is annoyingly cumbersome
+  at both disconnecting *and* reconnecting ops])
 - installation is a veritable PITA (e.g. due to multi-server setup for
   perfect spreading of Microsoft infrastructure lockin)
 - interfacing towards much more strongly cross-platform SCMs such as SVN or git
@@ -510,10 +520,8 @@ shortcomings, among these:
        (final failure due to simply locking up as an entirely inadequate
         "handling" of this problem that originated on the side of the server)
     --> whoa, triple FAIL!! This behaviour is surely being acerbated
-        by the fact that TFS is a centralized lock-in type infrastructure
-        (server is managing client state on server side,
-        no disconnected operation [and BTW working disconnected is
-        annoyingly cumbersome at both disconnecting *and* reconnecting ops], ...)
+        by the fact that TFS is a centralized (non-disconnected operation)
+        lock-in type infrastructure
 
 For a very revealing discussion with lots of experienced SCM/ALM people,
 you may look at
