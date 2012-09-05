@@ -556,9 +556,9 @@ function(_v2c_config_do_setup_rebuilder)
      endfunction(v2c_rebuilder_build_abort_get_marker_file _res_out)
   endif(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD)
   # Provide API helper for user-side query.
-  macro(v2c_rebuilder_build_abort_enabled _res_out)
+  macro(v2c_rebuilder_build_abort_is_enabled _res_out)
     set(${_res_out} ${V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD})
-  endmacro(v2c_rebuilder_build_abort_enabled _res_out)
+  endmacro(v2c_rebuilder_build_abort_is_enabled _res_out)
 endfunction(_v2c_config_do_setup_rebuilder)
 
 function(_v2c_config_do_setup)
