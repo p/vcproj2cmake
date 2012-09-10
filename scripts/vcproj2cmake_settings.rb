@@ -92,7 +92,7 @@ $v2c_generator_file_create_permissions = 0644
 #   whenever there is an update to the originating project file
 $v2c_generator_one_time_conversion_only = false
 
-# Whether to parse and generate configuration info about precompiled headers.
+# Whether to parse and generate configuration info about precompiled headers (PCH).
 # Enabled by default, and it's probably a good idea to keep it enabled
 # (rationale: generation overhead shouldn't be too high, and this retains
 # users' capability to dynamically choose at a later CMake configure time
