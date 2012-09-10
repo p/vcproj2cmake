@@ -25,6 +25,17 @@
 #   ADD_NATIVE_PRECOMPILED_HEADER _targetName _input _dowarn
 #   GET_NATIVE_PRECOMPILED_HEADER _targetName _input
 
+# Provide PCH_WANT_DEBUG for quick debug enable by user - to be set externally or edited here.
+if(PCH_WANT_DEBUG)
+  macro(_pch_msg_debug _msg)
+    message("V2C_PCHSupport module: ${_msg}")
+  endmacro(_pch_msg_debug _msg)
+else(PCH_WANT_DEBUG)
+  macro(_pch_msg_debug _msg)
+    # DUMMY
+  endmacro(_pch_msg_debug _msg)
+endif(PCH_WANT_DEBUG)
+
 # Internal shortcut helper offering conveniently enhanced FATAL_ERROR messages.
 macro(_pch_msg_fatal_error _msg)
   message(FATAL_ERROR "V2C_PCHSupport module: ${_msg}")
@@ -38,20 +49,25 @@ if(NOT PCH_SKIP_CHECK_VALID_PROJECT)
   endif(NOT PROJECT_NAME)
 endif(NOT PCH_SKIP_CHECK_VALID_PROJECT)
 
+_pch_msg_debug("CMAKE_COMPILER_IS_GNUCXX ${CMAKE_COMPILER_IS_GNUCXX}")
+
 IF(CMAKE_COMPILER_IS_GNUCXX)
 
     EXEC_PROGRAM(
         ${CMAKE_CXX_COMPILER}
         ARGS 	${CMAKE_CXX_COMPILER_ARG1} -dumpversion
         OUTPUT_VARIABLE gcc_compiler_version)
-    #MESSAGE("GCC Version: ${gcc_compiler_version}")
-    IF(gcc_compiler_version MATCHES "4\\.[0-9]\\.[0-9]")
+    # WARNING: -dumpversion sometimes outputs a 2-digit number ("4.6") only!
+    _pch_msg_debug("GCC Version: ${gcc_compiler_version}")
+    set(gcc4_pch_regex "4\\.[0-9](\\.[0-9])?")
+    IF(gcc_compiler_version MATCHES "${gcc4_pch_regex}")
         SET(PCHSupport_FOUND_setting TRUE)
-    ELSE(gcc_compiler_version MATCHES "4\\.[0-9]\\.[0-9]")
-        IF(gcc_compiler_version MATCHES "3\\.4\\.[0-9]")
+    ELSE(gcc_compiler_version MATCHES "${gcc4_pch_regex}")
+        set(gcc3_pch_regex "3\\.4\\.[0-9]")
+        IF(gcc_compiler_version MATCHES "${gcc3_pch_regex}")
             SET(PCHSupport_FOUND_setting TRUE)
-        ENDIF(gcc_compiler_version MATCHES "3\\.4\\.[0-9]")
-    ENDIF(gcc_compiler_version MATCHES "4\\.[0-9]\\.[0-9]")
+        ENDIF(gcc_compiler_version MATCHES "${gcc3_pch_regex}")
+    ENDIF(gcc_compiler_version MATCHES "${gcc4_pch_regex}")
 
 	SET(_PCH_include_prefix_setting "-I")
 
@@ -112,7 +128,7 @@ MACRO(_PCH_GET_COMPILE_FLAGS _out_compile_flags)
   ENDFOREACH(item)
 
   GET_DIRECTORY_PROPERTY(_directory_flags DEFINITIONS)
-  #MESSAGE("_directory_flags ${_directory_flags}" )
+  _pch_msg_debug("_directory_flags ${_directory_flags}" )
   LIST(APPEND ${_out_compile_flags} ${_directory_flags})
   LIST(APPEND ${_out_compile_flags} ${CMAKE_CXX_FLAGS} )
 
@@ -184,7 +200,7 @@ MACRO(_PCH_GET_TARGET_COMPILE_FLAGS _cflags  _header_name _pch_path _dowarn )
     # PCH_ADDITIONAL_COMPILER_FLAGS to -fpch-preprocess
     # if you want warnings for invalid header files (which is very inconvenient
     # if you have different versions of the headers for different build types
-    # you may set _pch_dowarn
+    # you may set _dowarn
     IF (_dowarn)
       SET(${_cflags} "${PCH_ADDITIONAL_COMPILER_FLAGS} -include ${CMAKE_CURRENT_BINARY_DIR}/${_header_name} -Winvalid-pch " )
     ELSE (_dowarn)
@@ -219,7 +235,7 @@ MACRO(ADD_PRECOMPILED_HEADER_TO_TARGET _targetName _input _pch_output_to_use )
 
 
   _PCH_GET_TARGET_COMPILE_FLAGS(_target_cflags ${_name} ${_pch_output_to_use} ${_dowarn})
-  #   MESSAGE("Add flags ${_target_cflags} to ${_targetName} " )
+     _pch_msg_debug("Add flags ${_target_cflags} to ${_targetName} " )
   SET_TARGET_PROPERTIES(${_targetName}
     PROPERTIES
     COMPILE_FLAGS ${_target_cflags}
@@ -271,8 +287,8 @@ MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
 
   _PCH_GET_COMPILE_FLAGS(_compile_FLAGS)
 
-  #MESSAGE("_compile_FLAGS: ${_compile_FLAGS}")
-  #message("COMMAND ${CMAKE_CXX_COMPILER}	${_compile_FLAGS} -x c++-header -o ${_output} ${_input}")
+  _pch_msg_debug("_compile_FLAGS: ${_compile_FLAGS}")
+  _pch_msg_debug("COMMAND ${CMAKE_CXX_COMPILER}	${_compile_FLAGS} -x c++-header -o ${_output} ${_input}")
   SET_SOURCE_FILES_PROPERTIES(${CMAKE_CURRENT_BINARY_DIR}/${_name} PROPERTIES GENERATED 1)
   ADD_CUSTOM_COMMAND(
    OUTPUT	${CMAKE_CURRENT_BINARY_DIR}/${_name}
@@ -280,10 +296,10 @@ MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
    DEPENDS ${_input}
   )
 
-  #message("_command  ${_input} ${_output}")
+  _pch_msg_debug("_command  ${_input} ${_output}")
   _PCH_GET_COMPILE_COMMAND(_command  ${CMAKE_CURRENT_BINARY_DIR}/${_name} ${_output} )
 
-  #message("_input ${_input}\n_output ${_output}" )
+  _pch_msg_debug("_input ${_input}\n_output ${_output}" )
 
   ADD_CUSTOM_COMMAND(
     OUTPUT ${_output}
@@ -297,8 +313,8 @@ MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
 ENDMACRO(ADD_PRECOMPILED_HEADER)
 
 
-# Generates the use of precompiled in a target,
-# without using depency targets (2 extra for each target)
+# Generates the use of a precompiled header in a target,
+# without using dependency targets (2 extra for each target)
 # Using Visual, must also add ${_targetName}_pch to sources
 # Not needed by Xcode
 
