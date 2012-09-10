@@ -25,12 +25,16 @@
 #   ADD_NATIVE_PRECOMPILED_HEADER _targetName _input _dowarn
 #   GET_NATIVE_PRECOMPILED_HEADER _targetName _input
 
+# Internal shortcut helper offering conveniently enhanced FATAL_ERROR messages.
+macro(_pch_msg_fatal_error _msg)
+  message(FATAL_ERROR "V2C_PCHSupport module: ${_msg}")
+endmacro(_pch_msg_fatal_error _msg)
 
 if(NOT PCH_SKIP_CHECK_VALID_PROJECT)
   if(NOT PROJECT_NAME)
     # WARNING: the CMAKE_COMPILER_IS_GNUCXX variable will be properly set
     # *after* a project() line only!
-    message(FATAL_ERROR "Precompiled header (PCH) compiler support detection only works subsequent to a project() line.")
+    _pch_msg_fatal_error("Precompiled header (PCH) compiler support detection only works subsequent to a project() line.")
   endif(NOT PROJECT_NAME)
 endif(NOT PCH_SKIP_CHECK_VALID_PROJECT)
 
@@ -101,7 +105,7 @@ MACRO(_PCH_GET_COMPILE_FLAGS _out_compile_flags)
 
   GET_DIRECTORY_PROPERTY(DIRINC INCLUDE_DIRECTORIES )
   if(NOT _PCH_include_prefix)
-    message(FATAL_ERROR "empty _PCH_include_prefix!?")
+    _pch_msg_fatal_error("empty _PCH_include_prefix!?")
   endif(NOT _PCH_include_prefix)
   FOREACH(item ${DIRINC})
     LIST(APPEND ${_out_compile_flags} "${_PCH_include_prefix}${item}")
@@ -234,7 +238,7 @@ MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
   SET(_PCH_current_target ${_targetName})
 
   IF(NOT CMAKE_BUILD_TYPE)
-    MESSAGE(FATAL_ERROR
+    _pch_msg_fatal_error(
       "This is the ADD_PRECOMPILED_HEADER macro. "
       "You must set CMAKE_BUILD_TYPE!"
       )
