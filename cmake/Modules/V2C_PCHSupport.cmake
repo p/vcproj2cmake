@@ -25,7 +25,7 @@
 #   ADD_NATIVE_PRECOMPILED_HEADER _targetName _input _dowarn
 #   GET_NATIVE_PRECOMPILED_HEADER _targetName _input
 
-# Provide PCH_WANT_DEBUG for quick debug enable by user - to be set externally or edited here.
+# Provide PCH_WANT_DEBUG for quick debug enable by user - to be provided externally or edited here.
 if(PCH_WANT_DEBUG)
   macro(_pch_msg_debug _msg)
     message("V2C_PCHSupport module: ${_msg}")
@@ -81,7 +81,7 @@ ELSE(CMAKE_COMPILER_IS_GNUCXX)
 ENDIF(CMAKE_COMPILER_IS_GNUCXX)
 
 # We configure some variables as CACHE -
-# otherwise macros in this file would break since non-cache variables
+# otherwise macros in this file would break since non-CACHE variables
 # (e.g. _PCH_include_prefix in our case)
 # would not be available on foreign scope (unrelated directories etc.).
 # Rationale: CMake functions provided by a CMake module
@@ -195,12 +195,12 @@ MACRO(_PCH_GET_TARGET_COMPILE_FLAGS _cflags  _header_name _pch_path _dowarn )
   FILE(TO_NATIVE_PATH ${_pch_path} _native_pch_path)
 
   IF(CMAKE_COMPILER_IS_GNUCXX)
-    # for use with distcc and gcc >4.0.1 if preprocessed files are accessible
-    # on all remote machines set
-    # PCH_ADDITIONAL_COMPILER_FLAGS to -fpch-preprocess
-    # if you want warnings for invalid header files (which is very inconvenient
-    # if you have different versions of the headers for different build types
-    # you may set _dowarn
+    # For use with distcc and gcc >4.0.1.
+    # If preprocessed files are accessible on all remote machines,
+    # set PCH_ADDITIONAL_COMPILER_FLAGS to -fpch-preprocess.
+    # If you want warnings for invalid header files (which is very inconvenient
+    # if you have different versions of the headers for different build types)
+    # you may set _dowarn.
     IF (_dowarn)
       SET(${_cflags} "${PCH_ADDITIONAL_COMPILER_FLAGS} -include ${CMAKE_CURRENT_BINARY_DIR}/${_header_name} -Winvalid-pch " )
     ELSE (_dowarn)
@@ -349,8 +349,8 @@ MACRO(ADD_NATIVE_PRECOMPILED_HEADER _targetName _input)
 
 	if(CMAKE_GENERATOR MATCHES Visual*)
 		# Auto include the precompile (useful for moc processing, since the use of
-		# precompiled is specified at the target level
-		# and I don't want to specifiy /F- for each moc/res/ui generated files (using Qt)
+		# PCH is specified at the target level
+		# and I don't want to specify /F- for each moc/res/ui generated files (using Qt)
 
 		GET_TARGET_PROPERTY(oldProps ${_targetName} COMPILE_FLAGS)
 		if (${oldProps} MATCHES NOTFOUND)
@@ -360,13 +360,13 @@ MACRO(ADD_NATIVE_PRECOMPILED_HEADER _targetName _input)
 		SET(newProperties "${oldProps} /Yu\"${_input}\" /FI\"${_input}\"")
 		SET_TARGET_PROPERTIES(${_targetName} PROPERTIES COMPILE_FLAGS "${newProperties}")
 
-		#also inlude ${oldProps} to have the same compile options
+		#also include ${oldProps} to have the same compile options
 		SET_SOURCE_FILES_PROPERTIES(${${_targetName}_pch} PROPERTIES COMPILE_FLAGS "${oldProps} /Yc\"${_input}\"")
 
 	else(CMAKE_GENERATOR MATCHES Visual*)
 
 		if (CMAKE_GENERATOR MATCHES Xcode)
-			# For Xcode, cmake needs my patch to process
+			# For Xcode, CMake needs my patch to process
 			# GCC_PREFIX_HEADER and GCC_PRECOMPILE_PREFIX_HEADER as target properties
 
 			GET_TARGET_PROPERTY(oldProps ${_targetName} COMPILE_FLAGS)
@@ -374,8 +374,8 @@ MACRO(ADD_NATIVE_PRECOMPILED_HEADER _targetName _input)
 				SET(oldProps "")
 			endif(${oldProps} MATCHES NOTFOUND)
 
-			# When buiding out of the tree, precompiled may not be located
-			# Use full path instead.
+			# When building out-of-tree, PCH may not be located -
+			# use full path instead.
 			GET_FILENAME_COMPONENT(fullPath ${_input} ABSOLUTE)
 
 			SET_TARGET_PROPERTIES(${_targetName} PROPERTIES XCODE_ATTRIBUTE_GCC_PREFIX_HEADER "${fullPath}")
@@ -383,7 +383,7 @@ MACRO(ADD_NATIVE_PRECOMPILED_HEADER _targetName _input)
 
 		else (CMAKE_GENERATOR MATCHES Xcode)
 
-			#Fallback to the "old" precompiled suppport
+			#Fallback to the "old" PCH support
 			#ADD_PRECOMPILED_HEADER(${_targetName} ${_input} ${_dowarn})
 		endif(CMAKE_GENERATOR MATCHES Xcode)
 	endif(CMAKE_GENERATOR MATCHES Visual*)
