@@ -10,21 +10,21 @@ set(V2C_SOURCES )
 
 macro(_v2cd_add_deprecated_standard_variable_mapping _old_var _new_var _todo_feature_removal_time)
   # Add another dummy function param, to enforce stating feature removal time :)
-  # (TODO_FEATURE_REMOVAL_20xx).
+  # (TODO_FEATURE_REMOVAL_TIME_20xx).
   # 
   set(${_old_var} "${${_new_var}}")
 endmacro(_v2cd_add_deprecated_standard_variable_mapping _old_var _new_var _todo_feature_removal_time)
 
 macro(_v2cd_add_deprecated_cache_variable_mapping _old_var _new_var _todo_feature_removal_time)
   # Add another dummy function param, to enforce stating feature removal time :)
-  # (TODO_FEATURE_REMOVAL_20xx).
+  # (TODO_FEATURE_REMOVAL_TIME_20xx).
   # 
   set(${_old_var} "${${_new_var}}" CACHE STRING "Automated mapping to deprecated old-style variable - please always use ${_new_var} instead." FORCE)
   # We'll NOT mark deprecated CACHE vars as advanced since a user is supposed to visibly realize that there's a problem.
   #mark_as_advanced(${_old_var})
 endmacro(_v2cd_add_deprecated_cache_variable_mapping _old_var _new_var _todo_feature_removal_time)
 
-_v2cd_add_deprecated_standard_variable_mapping(V2C_MASTER_PROJECT_DIR V2C_MASTER_PROJECT_SOURCE_DIR TODO_FEATURE_REMOVAL_2014)
+_v2cd_add_deprecated_standard_variable_mapping(V2C_MASTER_PROJECT_DIR V2C_MASTER_PROJECT_SOURCE_DIR TODO_FEATURE_REMOVAL_TIME_2014)
 
 
 set(v2c_config_dirs_default_setting cmake/vcproj2cmake)
@@ -32,7 +32,7 @@ set(v2c_config_dirs_default_setting cmake/vcproj2cmake)
 # since they're a semi-virtual _relative_ path _string_.
 set(V2C_GLOBAL_CONFIG_RELPATH "${v2c_config_dirs_default_setting}" CACHE STRING "Relative path to vcproj2cmake-specific global content, located within the root project/solution.")
 set(V2C_LOCAL_CONFIG_RELPATH "${v2c_config_dirs_default_setting}" CACHE STRING "Relative path to vcproj2cmake-specific local content, located within every sub-project")
-_v2cd_add_deprecated_cache_variable_mapping(V2C_LOCAL_CONFIG_DIR V2C_LOCAL_CONFIG_RELPATH TODO_FEATURE_REMOVAL_2014)
+_v2cd_add_deprecated_cache_variable_mapping(V2C_LOCAL_CONFIG_DIR V2C_LOCAL_CONFIG_RELPATH TODO_FEATURE_REMOVAL_TIME_2014)
 
 # Add a filter variable for someone to customize in case he/she doesn't want
 # a rebuild somewhere for some reason (such as having multiple builds
