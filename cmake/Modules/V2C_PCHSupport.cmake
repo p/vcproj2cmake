@@ -3,17 +3,8 @@
 # "0001260: Support for precompiled headers"
 #   http://www.cmake.org/Bug/view.php?id=1260
 #
-# TODO (sorted in order of importance):
-# - COMPILE_FLAGS of a target are being _reset_: http://www.cmake.org/Bug/view.php?id=1260#c23633
-# - lots of whitespace escaping missing: http://www.cmake.org/Bug/view.php?id=1260#c27263
-# - catch build-type-dependent things like -DQT_DEBUG: http://www.cmake.org/Bug/view.php?id=1260#c12563
-# - support general COMPILE_DEFINITIONS property: http://www.cmake.org/Bug/view.php?id=1260#c14470
-# - merge possibly existing customizations of PCHSupport_rodlima.cmake?
-#   http://www.cmake.org/Bug/view.php?id=1260#c10865
 #
-#
-#
-# - Try to find precompiled headers support for GCC 3.4 and 4.x
+# - Try to find precompiled headers (PCH) support for GCC 3.4 and 4.x
 # Once done this will define:
 #
 # Variable:
@@ -25,7 +16,27 @@
 #   ADD_NATIVE_PRECOMPILED_HEADER _targetName _input _dowarn
 #   GET_NATIVE_PRECOMPILED_HEADER _targetName _input
 
+
+# Development rationale:
+# - try to have some mid-level functions(/macros)
+#   which are compiler-independent and implement generic handling
+#   of PCH mechanisms, with a multitude of function arguments (very flexible)
+# - have some low-level functions which are compiler-dependent
+#   and offer results to mid-level APIs
+# - have some high-level APIs which are public (user-facing), long-lived APIs
+
+
+# TODO (sorted in order of importance):
+# - COMPILE_FLAGS of a target are being _reset_: http://www.cmake.org/Bug/view.php?id=1260#c23633
+# - lots of whitespace escaping missing: http://www.cmake.org/Bug/view.php?id=1260#c27263
+# - catch build-type-dependent things like -DQT_DEBUG: http://www.cmake.org/Bug/view.php?id=1260#c12563
+# - support general COMPILE_DEFINITIONS property: http://www.cmake.org/Bug/view.php?id=1260#c14470
+# - merge possibly existing customizations of PCHSupport_rodlima.cmake?
+#   http://www.cmake.org/Bug/view.php?id=1260#c10865
+#
+#
 # Provide PCH_WANT_DEBUG for quick debug enable by user - to be provided externally or edited here.
+#set(PCH_WANT_DEBUG true)
 if(PCH_WANT_DEBUG)
   macro(_pch_msg_debug _msg)
     message("V2C_PCHSupport module: ${_msg}")
@@ -40,6 +51,17 @@ endif(PCH_WANT_DEBUG)
 macro(_pch_msg_fatal_error _msg)
   message(FATAL_ERROR "V2C_PCHSupport module: ${_msg}")
 endmacro(_pch_msg_fatal_error _msg)
+
+# Helper to yell loudly in case of unset variables.
+# The input string should _not_ be the dereferenced form,
+# but rather list simple _names_ of the variables.
+function(_pch_ensure_valid_variables)
+  foreach(var_name_ ${ARGV})
+    if(NOT ${var_name_})
+      _pch_msg_fatal_error("important variable ${var_name_} not valid/available!?")
+    endif(NOT ${var_name_})
+  endforeach(var_name_ ${ARGV})
+endfunction(_pch_ensure_valid_variables)
 
 if(NOT PCH_SKIP_CHECK_VALID_PROJECT)
   if(NOT PROJECT_NAME)
@@ -69,12 +91,12 @@ IF(CMAKE_COMPILER_IS_GNUCXX)
         ENDIF(gcc_compiler_version MATCHES "${gcc3_pch_regex}")
     ENDIF(gcc_compiler_version MATCHES "${gcc4_pch_regex}")
 
-	SET(_PCH_include_prefix_setting "-I")
+	SET(_PCH_include_flag_prefix_setting "-I")
 
 ELSE(CMAKE_COMPILER_IS_GNUCXX)
 	IF(WIN32)
-		SET(PCHSupport_FOUND_setting TRUE) # for experimental msvc support
-		SET(_PCH_include_prefix_setting "/I")
+		SET(PCHSupport_FOUND_setting TRUE) # for experimental MSVC support
+		SET(_PCH_include_flag_prefix_setting "/I")
 	ELSE(WIN32)
 		SET(PCHSupport_FOUND_setting FALSE)
 	ENDIF(WIN32)
@@ -82,12 +104,12 @@ ENDIF(CMAKE_COMPILER_IS_GNUCXX)
 
 # We configure some variables as CACHE -
 # otherwise macros in this file would break since non-CACHE variables
-# (e.g. _PCH_include_prefix in our case)
+# (e.g. _PCH_include_flag_prefix in our case)
 # would not be available on foreign scope (unrelated directories etc.).
-# Rationale: CMake functions provided by a CMake module
+# Rationale: CMake functions/macros provided by a CMake module
 # will be accessible everywhere,
 # thus any variables referenced by these functions **should** be as well!!
-# Rationale #2: compiler settings will _also_ be stored as cache variables,
+# Rationale #2: some compiler settings will _also_ be stored as CACHE variables,
 # thus it's only consistent to have pre-determined compiler flags in cache, too.
 # Well, that's not the whole story after all:
 # Official CMake Find modules never have their _FOUND variable as CACHE.
@@ -95,15 +117,16 @@ ENDIF(CMAKE_COMPILER_IS_GNUCXX)
 # at least once (to define its functions), no matter what the user checks for.
 # Or put differently, since function instances are not persistent between
 # CMake configure runs, such basic variables shouldn't be either.
-# HOWEVER, a compiler flag *is* a persistent setting (especially since the
-# user may choose to customize it), thus it needs to be CACHE.
-set(_PCH_include_prefix "${_PCH_include_prefix_setting}" CACHE STRING "Compiler-specific flag used to include a PCH [precompiled header]. Internal setting, should not need modification")
-mark_as_advanced(_PCH_include_prefix)
+# HOWEVER, a user-facing compiler flag *is* a persistent setting
+# (especially since the user may choose to customize it),
+# thus it needs to be CACHE.
+set(_PCH_include_flag_prefix "${_PCH_include_flag_prefix_setting}" CACHE STRING "Compiler-specific flag used to include a PCH [precompiled header]. Internal setting, should not need modification")
+mark_as_advanced(_PCH_include_flag_prefix)
 set(PCHSupport_FOUND ${PCHSupport_FOUND_setting})
 
 
+# Preconditions: expects _PCH_current_target to be set.
 MACRO(_PCH_GET_COMPILE_FLAGS _out_compile_flags)
-
 
   STRING(TOUPPER "CMAKE_CXX_FLAGS_${CMAKE_BUILD_TYPE}" _flags_var_name)
   SET(${_out_compile_flags} ${${_flags_var_name}} )
@@ -120,11 +143,9 @@ MACRO(_PCH_GET_COMPILE_FLAGS _out_compile_flags)
   ENDIF(CMAKE_COMPILER_IS_GNUCXX)
 
   GET_DIRECTORY_PROPERTY(DIRINC INCLUDE_DIRECTORIES )
-  if(NOT _PCH_include_prefix)
-    _pch_msg_fatal_error("empty _PCH_include_prefix!?")
-  endif(NOT _PCH_include_prefix)
+  _pch_ensure_valid_variables(_PCH_include_flag_prefix)
   FOREACH(item ${DIRINC})
-    LIST(APPEND ${_out_compile_flags} "${_PCH_include_prefix}${item}")
+    LIST(APPEND ${_out_compile_flags} "${_PCH_include_flag_prefix}${item}")
   ENDFOREACH(item)
 
   GET_DIRECTORY_PROPERTY(_directory_flags DEFINITIONS)
@@ -164,10 +185,16 @@ MACRO(_PCH_GET_COMPILE_COMMAND _out_command _input _output)
 	IF(CMAKE_COMPILER_IS_GNUCXX)
           IF(CMAKE_CXX_COMPILER_ARG1)
 	    # remove leading space in compiler argument
-            STRING(REGEX REPLACE "^ +" "" pchsupport_compiler_cxx_arg1 ${CMAKE_CXX_COMPILER_ARG1})
+            STRING(REGEX REPLACE "^ +" "" pchsupport_compiler_cxx_arg1_ ${CMAKE_CXX_COMPILER_ARG1})
 
+       # FIXME: why the ******[CENSORED] do we feel the need
+       # to fumble together a manual compiler invocation here,
+       # rather than generating a standard compiler-abstracted *target*
+       # for creating the PCH!?
+       # I could accept this being externally required to be done this way,
+       # but then at the very least a detailed comment is sorely missing here...
 	    SET(${_out_command}
-	      ${CMAKE_CXX_COMPILER} ${pchsupport_compiler_cxx_arg1} ${_compile_FLAGS}	-x c++-header -o ${_output} ${_input}
+	      ${CMAKE_CXX_COMPILER} ${pchsupport_compiler_cxx_arg1_} ${_compile_FLAGS}	-x c++-header -o ${_output} ${_input}
 	      )
 	  ELSE(CMAKE_CXX_COMPILER_ARG1)
 	    SET(${_out_command}
@@ -195,6 +222,8 @@ MACRO(_PCH_GET_TARGET_COMPILE_FLAGS _out_cflags _header_name _pch_path _dowarn )
   FILE(TO_NATIVE_PATH ${_pch_path} _native_pch_path)
 
   IF(CMAKE_COMPILER_IS_GNUCXX)
+    # gcc does not seem to need/use _pch_path arg.
+
     # For use with distcc and gcc >4.0.1.
     # If preprocessed files are accessible on all remote machines,
     # set PCH_ADDITIONAL_COMPILER_FLAGS to -fpch-preprocess.
@@ -253,6 +282,17 @@ MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
 
   SET(_PCH_current_target ${_targetName})
 
+  # This check is VERY debatable.
+  # This function here is used for multi-config setups as well
+  # yet CMAKE_BUILD_TYPE should NOT be set there.
+  # Also, what I think is the case is that our PCH stuff
+  # queries CMAKE_BUILD_TYPE for file naming purposes and stuff,
+  # and does not tolerate it not being set.
+  # Obviously the problem is in our own handling,
+  # since we should be having our own CACHE variable
+  # to mimick a CMAKE_BUILD_TYPE whenever it's not set(table).
+  # Again, setting a specific (and automatically wrong) CMAKE_BUILD_TYPE
+  # on multi-config (CMAKE_CONFIGURATION_TYPES available) is not a good thing to do.
   IF(NOT CMAKE_BUILD_TYPE)
     _pch_msg_fatal_error(
       "This is the ADD_PRECOMPILED_HEADER macro. "
@@ -289,22 +329,28 @@ MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
 
   _pch_msg_debug("_compile_FLAGS: ${_compile_FLAGS}")
   _pch_msg_debug("COMMAND ${CMAKE_CXX_COMPILER}	${_compile_FLAGS} -x c++-header -o ${_output} ${_input}")
-  SET_SOURCE_FILES_PROPERTIES(${CMAKE_CURRENT_BINARY_DIR}/${_name} PROPERTIES GENERATED 1)
+  # NOTE: for older CMake:s, we might need to append a ${CMAKE_CFG_INTDIR}
+  # to CMAKE_CURRENT_BINARY_DIR (now implicitly included).
+  # [provide a helper macro to do such things]
+  # For details see CMake issue 0009219
+  # "CMAKE_CFG_INTDIR docs says it expands to IntDir, but it expands to OutDir".
+  set(header_file_copy_in_binary_dir_ ${CMAKE_CURRENT_BINARY_DIR}/${_name})
+  SET_SOURCE_FILES_PROPERTIES(${header_file_copy_in_binary_dir_} PROPERTIES GENERATED 1)
   ADD_CUSTOM_COMMAND(
-   OUTPUT	${CMAKE_CURRENT_BINARY_DIR}/${_name}
-   COMMAND ${CMAKE_COMMAND} -E copy  ${_input} ${CMAKE_CURRENT_BINARY_DIR}/${_name} # ensure same directory! Required by gcc
+   OUTPUT	${header_file_copy_in_binary_dir_}
+   COMMAND ${CMAKE_COMMAND} -E copy  ${_input} ${header_file_copy_in_binary_dir_} # ensure same directory! Required by gcc
    DEPENDS ${_input}
   )
 
   _pch_msg_debug("_command  ${_input} ${_output}")
-  _PCH_GET_COMPILE_COMMAND(_command  ${CMAKE_CURRENT_BINARY_DIR}/${_name} ${_output} )
+  _PCH_GET_COMPILE_COMMAND(_compile_command_pch_create  ${header_file_copy_in_binary_dir_} ${_output} )
 
   _pch_msg_debug("_input ${_input}\n_output ${_output}" )
 
   ADD_CUSTOM_COMMAND(
     OUTPUT ${_output}
-    COMMAND ${_command}
-    DEPENDS ${_input}   ${CMAKE_CURRENT_BINARY_DIR}/${_name} ${_targetName}_pch_dephelp
+    COMMAND ${_compile_command_pch_create}
+    DEPENDS ${_input}   ${header_file_copy_in_binary_dir_} ${_targetName}_pch_dephelp
     VERBATIM
    )
 
@@ -313,7 +359,7 @@ MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
 ENDMACRO(ADD_PRECOMPILED_HEADER)
 
 
-# Generates the use of a precompiled header in a target,
+# Generates the use of a precompiled header (PCH) in a target,
 # without using dependency targets (2 extra for each target)
 # Using Visual, must also add ${_targetName}_pch to sources
 # Not needed by Xcode
@@ -348,9 +394,10 @@ MACRO(ADD_NATIVE_PRECOMPILED_HEADER _targetName _input)
 	ENDIF("${ARGN}" STREQUAL "0")
 
 	if(CMAKE_GENERATOR MATCHES Visual*)
-		# Auto include the precompile (useful for moc processing, since the use of
-		# PCH is specified at the target level
-		# and I don't want to specify /F- for each moc/res/ui generated files (using Qt)
+		# Auto include the precompile (useful for moc processing,
+		# since the use of PCH is specified at the target level
+		# and I don't want to specify /F-
+		# for each moc/res/ui generated file (using Qt))
 
 		GET_TARGET_PROPERTY(oldFlags ${_targetName} COMPILE_FLAGS)
 		if (${oldFlags} MATCHES NOTFOUND)
@@ -369,10 +416,11 @@ MACRO(ADD_NATIVE_PRECOMPILED_HEADER _targetName _input)
 			# For Xcode, CMake needs my patch to process
 			# GCC_PREFIX_HEADER and GCC_PRECOMPILE_PREFIX_HEADER as target properties
 
-			GET_TARGET_PROPERTY(oldFlags ${_targetName} COMPILE_FLAGS)
-			if (${oldFlags} MATCHES NOTFOUND)
-				SET(oldFlags "")
-			endif(${oldFlags} MATCHES NOTFOUND)
+			# Ermm, we didn't use any flags here!? --> disabled!
+			#GET_TARGET_PROPERTY(oldFlags ${_targetName} COMPILE_FLAGS)
+			#if (${oldFlags} MATCHES NOTFOUND)
+			#	SET(oldFlags "")
+			#endif(${oldFlags} MATCHES NOTFOUND)
 
 			# When building out-of-tree, PCH may not be located -
 			# use full path instead.
