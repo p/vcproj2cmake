@@ -146,12 +146,21 @@ set(_PCH_include_flag_prefix "${_PCH_include_flag_prefix_setting}" CACHE STRING 
 mark_as_advanced(_PCH_definitions_flag_prefix _PCH_include_flag_prefix)
 set(PCHSupport_FOUND ${PCHSupport_FOUND_setting})
 
+# Appends a string containing various space-separated items
+# to an existing otherwise *non-manipulated* list,
+# thereby preserving payload specifics of existing items in that list.
+macro(_pch_append_string_items_to_list _list_var_name _string_var_name)
+  set(pch_list_conversion_var_ "${${_string_var_name}}")
+  separate_arguments(pch_list_conversion_var_)
+  list(APPEND ${_list_var_name} ${pch_list_conversion_var_})
+endmacro(_pch_append_string_items_to_list _list_var_name _string)
 
 # Preconditions: expects _PCH_current_target to be set.
-MACRO(_PCH_GATHER_EXISTING_COMPILE_FLAGS_FROM_SCOPE _out_compile_flags)
+MACRO(_PCH_GATHER_EXISTING_COMPILE_FLAGS_FROM_SCOPE _out_compile_flags_list)
 
+  set(pch_all_compile_flags_list_ "")
   STRING(TOUPPER "CMAKE_CXX_FLAGS_${CMAKE_BUILD_TYPE}" _flags_var_name)
-  SET(pch_all_compile_flags_list_ ${${_flags_var_name}} )
+  _pch_append_string_items_to_list(pch_all_compile_flags_list_ ${_flags_var_name})
 
   IF(CMAKE_COMPILER_IS_GNUCXX)
 
@@ -179,7 +188,7 @@ MACRO(_PCH_GATHER_EXISTING_COMPILE_FLAGS_FROM_SCOPE _out_compile_flags)
   #GET_DIRECTORY_PROPERTY(_directory_definitions DEFINITIONS)
   #_pch_msg_debug("_directory_flags '${_directory_flags}'" )
   #LIST(APPEND pch_all_compile_flags_list_ ${_directory_flags})
-  LIST(APPEND pch_all_compile_flags_list_ ${CMAKE_CXX_FLAGS} )
+  _pch_append_string_items_to_list(pch_all_compile_flags_list_ CMAKE_CXX_FLAGS)
 
   # This separate_arguments() call actively destroys embedded space
   # within arguments (e.g. include directories), thus it should NOT
@@ -187,25 +196,28 @@ MACRO(_PCH_GATHER_EXISTING_COMPILE_FLAGS_FROM_SCOPE _out_compile_flags)
   # anyway).
   #SEPARATE_ARGUMENTS(pch_all_compile_flags_list_)
 
-  SET(${_out_compile_flags} ${pch_all_compile_flags_list_})
-  _pch_msg_debug("_out_compile_flags ${${_out_compile_flags}}")
+  SET(${_out_compile_flags_list} ${pch_all_compile_flags_list_})
+  _pch_msg_debug("_out_compile_flags_list ${${_out_compile_flags_list}}")
 
 ENDMACRO(_PCH_GATHER_EXISTING_COMPILE_FLAGS_FROM_SCOPE)
 
-MACRO(_PCH_GATHER_EXISTING_COMPILE_DEFINITIONS_FROM_SCOPE _out_compile_defs)
+MACRO(_PCH_GATHER_EXISTING_COMPILE_DEFINITIONS_FROM_SCOPE _out_compile_defs_list)
   set(pch_all_compile_defs_list_ "")
   # COMPILE_DEFINITIONS prop lists definitions *without* compiler-specific
   # -D prefix (which is exactly what I expect a compiler-abstracted part to do!!).
   GET_DIRECTORY_PROPERTY(dir_defs_ COMPILE_DEFINITIONS)
+  _pch_msg_debug("CMAKE_CURRENT_LIST_DIR ${CMAKE_CURRENT_LIST_DIR}")
+  _pch_normalize_notfound_var_content(dir_defs_)
   _pch_msg_debug("dir_defs_ ${dir_defs_}")
-  LIST(APPEND pch_all_compile_defs_list_ ${dir_defs_})
+  _pch_append_string_items_to_list(pch_all_compile_defs_list_ dir_defs_)
   GET_TARGET_PROPERTY(target_defs_ ${_PCH_current_target} COMPILE_DEFINITIONS)
+  _pch_normalize_notfound_var_content(target_defs_)
   _pch_msg_debug("target_defs_ ${target_defs_}")
-  LIST(APPEND pch_all_compile_defs_list_ ${target_defs_})
+  _pch_append_string_items_to_list(pch_all_compile_defs_list_ target_defs_)
   _pch_msg_debug("pch_all_compile_defs_list_ ${pch_all_compile_defs_list_}")
-  set(${_out_compile_defs} "${pch_all_compile_defs_list_}")
-  _pch_msg_debug("_out_compile_defs ${${_out_compile_defs}}")
-ENDMACRO(_PCH_GATHER_EXISTING_COMPILE_DEFINITIONS_FROM_SCOPE _out_compile_defs)
+  set(${_out_compile_defs_list} "${pch_all_compile_defs_list_}")
+  _pch_msg_debug("_out_compile_defs_list ${${_out_compile_defs_list}}")
+ENDMACRO(_PCH_GATHER_EXISTING_COMPILE_DEFINITIONS_FROM_SCOPE _out_compile_defs_list)
 
 MACRO(_PCH_WRITE_PCHDEP_CXX _targetName _include_file _out_dephelp)
 
@@ -316,7 +328,7 @@ MACRO(_PCH_GET_COMPILE_COMMAND_PCH_CREATE _out_command _input _output _pch_creat
 	# for creating the PCH!?
 	# I could accept this being externally required to be done this way,
 	# but then at the very least a detailed comment is sorely missing here...
-	SET(${_out_command} ${CMAKE_CXX_COMPILER} ${pch_compiler_cxx_arg1_} ${_compile_FLAGS}	${_compiler_decorated_DEFS} ${_compile_FLAGS_PCH})
+	SET(${_out_command} ${CMAKE_CXX_COMPILER} ${pch_compiler_cxx_arg1_} ${_compile_FLAGS} ${_compiler_decorated_DEFS} ${_compile_FLAGS_PCH})
 ENDMACRO(_PCH_GET_COMPILE_COMMAND_PCH_CREATE )
 
 
@@ -333,11 +345,17 @@ MACRO(GET_PRECOMPILED_HEADER_OUTPUT _targetName _input _output)
   set(${_output} ${output_})
 ENDMACRO(GET_PRECOMPILED_HEADER_OUTPUT _targetName _input _output)
 
+# Detects "<var>-NOTFOUND" content, erases it.
+macro(_pch_normalize_notfound_var_content _var_name)
+  if("${${_var_name}}" MATCHES NOTFOUND)
+    _pch_msg_debug("variable ${_var_name} was NOTFOUND.")
+    SET(${_var_name} "")
+  endif("${${_var_name}}" MATCHES NOTFOUND)
+endmacro(_pch_normalize_notfound_var_content _var_name)
+
 macro(_pch_target_compile_flags_get _targetName _out_cflags_string)
   GET_TARGET_PROPERTY(cflags_ ${_targetName} COMPILE_FLAGS)
-  if(${cflags_} MATCHES NOTFOUND) # detect "<var>-NOTFOUND" content
-    SET(cflags_ "")
-  endif(${cflags_} MATCHES NOTFOUND)
+  _pch_normalize_notfound_var_content(cflags_)
   set(${_out_cflags_string} "${cflags_}")
 endmacro(_pch_target_compile_flags_get _targetName _out_cflags_string)
 
