@@ -81,6 +81,12 @@ set(V2C_FUNC_DEFINED true)
 set(V2C_CMAKE_CONFIGURE_PROMPT "[V2C] " CACHE STRING "The prompt prefix to show for any vcproj2cmake messages occurring during CMake configure time." FORCE)
 mark_as_advanced(V2C_CMAKE_CONFIGURE_PROMPT)
 
+# Zero out a variable.
+macro(_v2c_var_set_empty _var_name)
+  # A "set(var )" does NOT unset it - it needs an empty string literal!
+  set(${_var_name} "")
+endmacro(_v2c_var_set_empty _var_name)
+
 macro(_v2c_msg_info _msg)
   message(STATUS "${V2C_CMAKE_CONFIGURE_PROMPT}${_msg}")
 endmacro(_v2c_msg_info _msg)
@@ -573,7 +579,7 @@ function(_v2c_config_do_setup)
   # but this would fumble the *source* tree, thus we decide to not do it.
 
   set(project_exclude_list_file_check_ "${CMAKE_SOURCE_DIR}/${global_config_subdir_}/project_exclude_list.txt")
-  set(project_exclude_list_file_location_ ) # default "unset" value
+  _v2c_var_set_empty(project_exclude_list_file_location_)
   if(EXISTS "${project_exclude_list_file_check_}")
     set(project_exclude_list_file_location_ "${project_exclude_list_file_check_}")
   endif(EXISTS "${project_exclude_list_file_check_}")
@@ -656,7 +662,7 @@ function(_v2c_pre_touch_output_file _target_pseudo_output_file _actual_output_fi
 endfunction(_v2c_pre_touch_output_file _target_pseudo_output_file _actual_output_file _file_dependencies_list)
 
 function(_v2c_projects_find_valid_target _projects_list _target_out)
-  set(target_ )
+  _v2c_var_set_empty(target_)
   # Loop until we find an actually existing target
   # within the list of project names
   # (some projects may be header-only, thus no lib/exe targets).
@@ -983,7 +989,7 @@ endmacro(v2c_local_set_cmake_atl_mfc_flags _target _build_type _build_platform _
 # -IBEFORE). This might be due to list var handing issues,
 # but possibly INCLUDE_DIRECTORIES prop simply does not support it.
 # Should analyze it soon.
-set(_v2c_feat_cmake_include_dirs_prop )
+_v2c_var_set_empty(_v2c_feat_cmake_include_dirs_prop)
 if(_v2c_feat_cmake_include_dirs_prop)
   function(v2c_target_include_directories _target)
     # FIXME: INCLUDE_DIRECTORIES property has a *default*
@@ -1275,14 +1281,14 @@ function(v2c_target_install _target)
   # about incomplete/incorrect parameters, we actually need to conditionally
   # compile a list of parameters to actually feed into it.
   #
-  #set(install_params_values_list_ ) # no need to unset (function scope!)
+  #_v2c_var_set_empty(install_params_values_list_) # no need to unset (function scope!)
 
   list(APPEND install_params_values_list_ TARGETS ${_target})
   # Internal variable - lists the parameter types
   # which an install() command supports. Elements are upper-case!!
   set(install_param_list_ EXPORT DESTINATION PERMISSIONS CONFIGURATIONS COMPONENT)
   foreach(install_param_ ${install_param_list_})
-    set(install_param_value_ )
+    _v2c_var_set_empty(install_param_value_)
 
     # First, query availability of target-specific settings,
     # then query availability of common settings.
