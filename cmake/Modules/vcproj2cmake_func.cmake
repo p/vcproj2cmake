@@ -671,7 +671,7 @@ endfunction(_v2c_projects_find_valid_target _projects_list _target_out)
 
 # Use the stamp file as the final criteria to check
 # whether rebuilder setup was successful:
-_v2c_config_get(cmakelists_update_check_stamp_file_v1 v2c_cmakelists_rebuilder_available)
+_v2c_config_get_unchecked(cmakelists_update_check_stamp_file_v1 v2c_cmakelists_rebuilder_available)
 if(v2c_cmakelists_rebuilder_available)
   function(_v2c_cmakelists_rebuild_recursively _v2c_scripts_base_path _v2c_cmakelists_rebuilder_deps_common_list)
     set(cmakelists_target_rebuild_all_name_ update_cmakelists_rebuild_recursive_ALL)
