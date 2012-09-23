@@ -272,9 +272,10 @@ MACRO(_PCH_GET_COMPILE_FLAGS_PCH_USE _out_cflags _header_name _pch_path_arg _dow
     # if you have different versions of the headers for different build types)
     # you may set _dowarn.
     set(pch_gcc_pch_warn_flag_ "") # Provide empty default
-    IF(_dowarn)
+    IF(${_dowarn})
       set(pch_gcc_pch_warn_flag_ "-Winvalid-pch")
-    ENDIF(_dowarn)
+    ENDIF(${_dowarn})
+    _pch_msg_debug("_dowarn ${_dowarn}, flag ${pch_gcc_pch_warn_flag_}")
     set(pch_header_location_ "${CMAKE_CURRENT_BINARY_DIR}/${_header_name}")
     # Unfortunately the compile flags variable is a *string*
     # (due to COMPILE_FLAGS property string-only limitation),
@@ -382,11 +383,14 @@ MACRO(ADD_PRECOMPILED_HEADER_TO_TARGET _targetName _input _pch_output_to_use )
   # and _pch_output_to_use
   GET_FILENAME_COMPONENT(_name ${_input} NAME)
 
-  IF( "${ARGN}" STREQUAL "0")
-    SET(dowarn_ 0)
-  ELSE( "${ARGN}" STREQUAL "0")
-    SET(dowarn_ 1)
-  ENDIF("${ARGN}" STREQUAL "0")
+  # BUG FIX: a non-option invocation will cause ARGN def to be skipped!!
+  set(dowarn_ 0)
+  if(${ARGN})
+    IF( "${ARGN}" STREQUAL "0")
+    ELSE( "${ARGN}" STREQUAL "0")
+      SET(dowarn_ 1)
+    ENDIF("${ARGN}" STREQUAL "0")
+  endif(${ARGN})
 
 
   FILE(TO_NATIVE_PATH ${_pch_output_to_use} _pch_output_to_use_native)
@@ -424,12 +428,14 @@ MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
       )
   ENDIF(NOT CMAKE_BUILD_TYPE)
 
-  IF( "${ARGN}" STREQUAL "0")
-    SET(dowarn_ 0)
-  ELSE( "${ARGN}" STREQUAL "0")
-    SET(dowarn_ 1)
-  ENDIF("${ARGN}" STREQUAL "0")
-
+  # BUG FIX: a non-option invocation will cause ARGN def to be skipped!!
+  set(dowarn_ 0)
+  if(${ARGN})
+    IF( "${ARGN}" STREQUAL "0")
+    ELSE( "${ARGN}" STREQUAL "0")
+      SET(dowarn_ 1)
+    ENDIF("${ARGN}" STREQUAL "0")
+  endif(${ARGN})
 
   GET_FILENAME_COMPONENT(_name ${_input} NAME)
   GET_FILENAME_COMPONENT(_path ${_input} PATH)
@@ -545,11 +551,14 @@ ENDMACRO(GET_NATIVE_PRECOMPILED_HEADER)
 
 MACRO(ADD_NATIVE_PRECOMPILED_HEADER _targetName _input)
 
-	IF( "${ARGN}" STREQUAL "0")
-		SET(dowarn_ 0)
-	ELSE( "${ARGN}" STREQUAL "0")
-		SET(dowarn_ 1)
-	ENDIF("${ARGN}" STREQUAL "0")
+  	# BUG FIX: a non-option invocation will cause ARGN def to be skipped!!
+  	set(dowarn_ 0)
+  	if(${ARGN})
+    	  IF( "${ARGN}" STREQUAL "0")
+    	  ELSE( "${ARGN}" STREQUAL "0")
+      	    SET(dowarn_ 1)
+    	  ENDIF("${ARGN}" STREQUAL "0")
+  	endif(${ARGN})
 
 	if(CMAKE_GENERATOR MATCHES Visual*)
 		# Auto include the precompile (useful for moc processing,
