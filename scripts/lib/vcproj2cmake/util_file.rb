@@ -17,11 +17,11 @@
 #   . http://stackoverflow.com/questions/175655/how-to-find-where-a-ruby-method-is-defined-at-runtime
 
 
+have_ftools = true
 begin
   require 'ftools'
-  $have_ftools = true
 rescue LoadError
-  $have_ftools = false
+  have_ftools = false
   require 'fileutils'
   #include FileUtils::Verbose
 end
@@ -32,30 +32,61 @@ end
 # Unfortunately it seems modules cannot include a "base" module
 # (to split off common functionality into a base) -
 # see http://rubylearning.com/satishtalim/modules_mixins.html
-# Will thus simply make use of ftools/fileutils ternaries for now
+# Will thus simply make use of ftools/fileutils ternaries
+# (now updated to use different module variants) for now
 # until I actually know what to do...
-module V2C_Util_File
+
+module UtilFileCommon
   def chmod(mode, *files)
     return File.chmod(mode, *files)
   end
   module_function :chmod
+end
+
+if have_ftools
+module V2C_Util_File # ftools variant
+  def chmod(mode, *files)
+    UtilFileCommon.chmod(mode, *files)
+  end
+  module_function :chmod
   def cmp(a, b)
-    return $have_ftools ? File.cmp(a, b) : FileUtils.compare_file(a, b)
+    File.cmp(a, b)
   end
   module_function :cmp
 
   def mkdir_p(list)
-    return $have_ftools ? File.makedirs(list) : FileUtils.mkdir_p(list)
+    File.makedirs(list)
   end
   module_function :mkdir_p
+  def move(from, to, verbose = false)
+    File.move(from, to, verbose)
+  end
+  alias mv move
+  module_function :mv
+end
+else
+module V2C_Util_File # FileUtils variant
+  def chmod(mode, *files)
+    UtilFileCommon.chmod(mode, *files)
+  end
+  module_function :chmod
+  def cmp(a, b)
+    FileUtils.compare_file(a, b)
+  end
+  module_function :cmp
 
+  def mkdir_p(list)
+    FileUtils.mkdir_p(list)
+  end
+  module_function :mkdir_p
   def move(from, to, verbose = false)
     # Side note: FileUtils on ruby 1.9.1p429 mingw32 does not have
     # a move() alias, despite official Ruby 1.9.1 docs saying so.
     # Hmm, or perhaps it failed due to 3-param invocation with an
     # incompatible bool as 3rd param...
-    return $have_ftools ? File.move(from, to, verbose) : FileUtils.mv(from, to)
+    FileUtils.mv(from, to)
   end
   alias mv move
   module_function :mv
+end
 end

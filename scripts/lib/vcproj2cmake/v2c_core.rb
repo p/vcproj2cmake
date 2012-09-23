@@ -20,7 +20,8 @@ def load_configuration_file(str_file, str_descr, arr_descr_loaded)
     arr_descr_loaded.push("#{str_descr} #{str_file}")
     success = true
   rescue LoadError
-    # ignore it (config file is optional!)
+    # ignore it (config file is optional!). Need a dummy var to silence Excellent warning.
+    loaderror_dummy = 0
   end
   return success
 end
@@ -862,12 +863,12 @@ class V2C_File_Lists_Container
     @hash_file_lists = Hash.new # dito, but hashed! (serves to maintain fast lookup)
   end
   attr_reader :arr_file_lists
-  def lookupFromName(file_list_name)
+  def lookup_from_name(file_list_name)
     return @hash_file_lists[file_list_name]
   end
   def append(file_list)
     name = file_list.name
-    file_list_existing = lookupFromName(name)
+    file_list_existing = lookup_from_name(name)
     file_list_append = file_list_existing
     if file_list_append.nil?
       register(file_list)
@@ -1220,6 +1221,9 @@ class V2C_SyntaxGeneratorBase < V2C_LoggerBase
     if str_test.nil? or str_test.empty?
       raise V2C_GeneratorError, 'detected invalid string'
     end
+  end
+  def error_unknown_case_value(description, val)
+    raise V2C_GeneratorError, "unknown/unsupported/corrupt #{description} case value! (#{val})"
   end
 end
 
@@ -1827,8 +1831,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
       begin
         project_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
       rescue V2C_GeneratorError => e
-        error_msg = "project #{project_info.name} generation failed: #{e.message}"
-        logger.error error_msg
+        logger.error("project #{project_info.name} generation failed: #{e.message}")
         # Hohumm, this variable is not really what we should be having here...
         if ($v2c_validate_vcproj_abort_on_error > 0)
           raise # escalate the problem
@@ -2351,11 +2354,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       "(but _before_ target is created using the source list!)"
     )
   end
-  def put_v2c_target_midl_specify_files(target_name, condition, header_file_name, iface_id_file_name, type_library_name)
+  def put_v2c_target_midl_specify_files(target_name, condition, midl_info)
     # TODO: should use condition to alternatively open-code the conditional variable
     # here in case self-contained mode is requested.
     # ... = get_buildcfg_var_name_of_condition(condition)
-    arr_args_midl = [ condition.get_build_type(), condition.platform, header_file_name, iface_id_file_name, type_library_name ]
+    arr_args_midl = [ condition.get_build_type(), condition.platform, midl_info.header_file_name, midl_info.iface_id_file_name, midl_info.type_library_name ]
     write_invoke_config_object_v2c_function_quoted('v2c_target_midl_specify_files', target_name, arr_args_midl)
   end
   def hook_up_midl_files(file_lists, config_info)
@@ -2375,7 +2378,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # FIXME: the .idl file is currently missing (contained within the file list called "Midl")
       # - possibly we'd need it here, too (at least if we _can_ do something useful with MIDL information
       # on Non-Win32 platforms...).
-      put_v2c_target_midl_specify_files(@target.name, config_info.condition, midl_info.header_file_name, midl_info.iface_id_file_name, midl_info.type_library_name)
+      put_v2c_target_midl_specify_files(@target.name, config_info.condition, midl_info)
     end
   end
   # Currently UNUSED!
@@ -3056,6 +3059,8 @@ def is_known_environment_variable_convention(config_var, config_var_type_descr)
   when 'QTDIR'
     config_var_type_descr.replace "well-known Qt environment variable"
     is_wellknown = true
+  else
+    is_wellknown = false
   end
   return is_wellknown
 end
@@ -3187,6 +3192,9 @@ class V2C_ParserBase < V2C_LoggerBase
   attr_accessor :info_elem
 
   def parser_error(str_description); logger.error(str_description) end
+  def error_unknown_case_value(description, val)
+    raise V2C_ParserError, "unknown/unsupported/corrupt #{description} case value! (#{val})"
+  end
 end
 
 class V2C_VSXmlParserBase < V2C_ParserBase
@@ -3340,6 +3348,8 @@ class V2C_VSXmlParserBase < V2C_ParserBase
     when FOUND_SKIP
       skipped_attribute_warn(attr_xml.name)
       success = true
+    else
+      error_unknown_case_value('call_parse_attribute', found)
     end
     return success
   end
@@ -3357,6 +3367,8 @@ class V2C_VSXmlParserBase < V2C_ParserBase
     when FOUND_SKIP
       skipped_element_warn(subelem_xml.name)
       success = true
+    else
+      error_unknown_case_value(found)
     end
     return success
   end
@@ -3375,6 +3387,8 @@ class V2C_VSXmlParserBase < V2C_ParserBase
       when FOUND_SKIP
         skipped_element_warn(setting_key)
         success = true
+      else
+        error_unknown_case_value(found)
       end
     rescue ArgumentError => e
       logger.warn "encountered ArgumentError #{e.message} - perhaps integer parsing of #{setting_key} --> #{setting value} failed?"
@@ -3989,6 +4003,8 @@ class V2C_VS7ConfigurationBaseParser < V2C_VSXmlParserBase
     case subelem_xml.name
     when 'Tool'
       elem_parser = V2C_VS7ToolParser.new(subelem_xml, get_tools_info())
+    else
+      elem_parser = nil
     end
     if not elem_parser.nil?
       elem_parser.parse
@@ -4398,6 +4414,8 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
       elem_parser = V2C_VS7PlatformsParser.new(subelem_xml, get_project().build_platform_configs)
     when 'ToolFiles'
       elem_parser = V2C_VS7ToolFilesParser.new(subelem_xml, nil)
+    else
+      elem_parser = nil
     end
     if not elem_parser.nil?
       elem_parser.parse
@@ -4761,7 +4779,7 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
     file_info = V2C_Info_File.new
     file_parser = V2C_VS10ItemGroupFileElemParser.new(subelem_xml, file_info)
     found = file_parser.parse
-    if found == FOUND_TRUE
+    if FOUND_TRUE == found
       get_file_list().append_file(file_info)
     else
       found = super
@@ -4814,7 +4832,7 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
     # item group info, thus make sure to do lookup first.
     file_list_name = setting_key
     #file_list_type = get_file_list_type(file_list_name)
-    #file_list = get_project().file_lists.lookupFromName(file_list_name)
+    #file_list = get_project().file_lists.lookup_from_name(file_list_name)
     file_list_new = V2C_File_List_Info.new(file_list_name, get_file_list_type(file_list_name))
     elem_parser = V2C_VS10ItemGroupElemFileListParser.new(subelem_xml, file_list_new)
     elem_parser.parse
@@ -4863,6 +4881,8 @@ class V2C_VS10ItemGroupParser < V2C_VS10ParserBase
       V2C_VS10ItemGroupProjectConfigurationsParser.new(@elem_xml, get_project().build_platform_configs)
     when nil
       item_group_parser = V2C_VS10ItemGroupAnonymousParser.new(@elem_xml, get_project())
+    else
+      item_group_parser = nil
     end
     if not item_group_parser.nil?
       item_group_parser.parse
@@ -5152,8 +5172,10 @@ class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10BaseElemParser
       get_project().root_namespace = setting_value
     when VS_SCC_ATTR_REGEX_OBJ
       found = parse_elements_scc(setting_key, setting_value, get_project().scc_info)
+    else
+      found = FOUND_FALSE
     end
-    if found == FOUND_FALSE; found = super end
+    if FOUND_FALSE == found; found = super end
     return found
   end
   def parse_elements_scc(setting_key, setting_value, scc_info_out)
@@ -5322,6 +5344,8 @@ class V2C_VS10ProjectFiltersParser < V2C_VS10ParserBase
       elem_parser = V2C_VS10ItemGroupParser.new(subelem_xml, get_project())
     #when 'PropertyGroup'
     #  proj_filters_elem_parser = V2C_VS10PropertyGroupParser.new(subelem_xml, get_project())
+    else
+      elem_parser = nil
     end
     if not elem_parser.nil?
       elem_parser.parse
@@ -5642,6 +5666,8 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
       parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
     when '.vcxproj'
       parser = V2C_VS10ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
+    else
+      parser = nil
     end
 
     if not parser.nil?
@@ -5733,7 +5759,8 @@ end
 # is supposed to be generated (i.e. overwritten) at all.
 def v2c_want_cmakelists_rewritten(str_cmakelists_file)
   want_cmakelists_rewritten = true
-  case check_cmakelists_txt_type(str_cmakelists_file)
+  cmakelists_type = check_cmakelists_txt_type(str_cmakelists_file)
+  case cmakelists_type
   when CMAKELISTS_FILE_TYPE_ZERO_SIZE
     # zero-size files may have happened due to out-of-disk-space issues,
     # thus ensure overwriting in such cases.
@@ -5755,7 +5782,7 @@ def v2c_want_cmakelists_rewritten(str_cmakelists_file)
     # which we can overwrite.
     log_info "existing #{str_cmakelists_file} is our own auto-generated file --> replacing!"
   else
-    raise V2C_GeneratorError, 'unknown/unsupported/corrupt CMakeLists.txt type value!'
+    error_unknown_case_value('CMakeLists.txt type', cmakelists_type)
     want_cmakelists_rewritten = false # keep it safe - encode a skip instruction anyway
   end
   return want_cmakelists_rewritten

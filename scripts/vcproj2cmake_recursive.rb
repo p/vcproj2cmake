@@ -63,7 +63,7 @@ if File.exist?(excluded_projects)
   end
 end
 
-class Thread_Work
+class ThreadWorkData
   def initialize(arr_proj_files, str_destination_dir)
     @arr_proj_files = arr_proj_files
     @str_destination_dir = str_destination_dir
@@ -379,7 +379,7 @@ Find.find('./') do
   # (although threading is said to be VERY slow in Ruby -
   # but still it should provide some sizeable benefit).
   log_debug "Submitting #{arr_proj_files.inspect} to be converted in #{f}."
-  thread_work = Thread_Work.new(arr_proj_files, f)
+  thread_work = ThreadWorkData.new(arr_proj_files, f)
   arr_thread_work.push(thread_work)
 
   #output.split("\n").each do |line|
@@ -398,7 +398,7 @@ end
 # in several cases).
 
 # Small helper to hold all settings which are common to all threads.
-class Thread_Global
+class ThreadGlobalData
   def initialize(script_location, source_root)
     @script_location = script_location
     @source_root = source_root
@@ -414,7 +414,7 @@ def handle_thread_work(threadGlobal, myWork)
   v2c_convert_project_outer(threadGlobal.script_location, threadGlobal.source_root, myWork.arr_proj_files, str_cmakelists_file_location)
 end
 
-threadGlobal = Thread_Global.new(script_location, source_root)
+threadGlobal = ThreadGlobalData.new(script_location, source_root)
 
 if ($v2c_enable_threads)
   log_info 'Recursively converting projects, multi-threaded.'
