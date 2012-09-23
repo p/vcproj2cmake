@@ -17,13 +17,11 @@
 #   GET_NATIVE_PRECOMPILED_HEADER _targetName _input
 
 
-# Development rationale:
-# - try to have some mid-level functions(/macros)
-#   which are compiler-independent and implement generic handling
-#   of PCH mechanisms, with a multitude of function arguments (very flexible)
-# - have some low-level functions which are compiler-dependent
-#   and offer results to mid-level APIs
-# - have some high-level APIs which are public (user-facing), long-lived APIs
+# Note that the current implementation may currently have trouble
+# with older CMake versions (e.g. 2.4.x, or possibly even 2.6.x).
+# I have to admit that I don't really care too much,
+# since those versions were near-unusable anyway.
+# Anyway, a report about breakage would be very nice, thanks!
 
 
 # TODO (sorted in order of importance):
@@ -35,12 +33,13 @@
 # * COMPILE_FLAGS of a target are being _reset_: http://www.cmake.org/Bug/view.php?id=1260#c23633
 # * support general COMPILE_DEFINITIONS property: http://www.cmake.org/Bug/view.php?id=1260#c14470
 #
-# Note that the current implementation may currently have trouble
-# with older CMake versions (e.g. 2.4.x, or possibly even 2.6.x).
-# I have to admit that I don't really care too much,
-# since those versions were near-unusable anyway.
-# Anyway, a report about breakage would be very nice, thanks!
-
+# Development rationale:
+# - try to have some mid-level functions(/macros)
+#   which are compiler-independent and implement generic handling
+#   of PCH mechanisms, with a multitude of function arguments (very flexible)
+# - have some low-level functions which are compiler-dependent
+#   and offer results to mid-level APIs
+# - have some high-level APIs which are public (user-facing), long-lived APIs
 
 
 # Provide PCH_WANT_DEBUG for quick debug enable by user - to be provided externally or edited here.
@@ -283,6 +282,15 @@ MACRO(_PCH_GET_COMPILE_FLAGS_PCH_USE _out_cflags _header_name _pch_path_arg _dow
     # relying on CMake-side quoting mechanisms of individual list elements. 
     _pch_quote_manually_if_needed(pch_header_location_)
     SET(cflags_pch_use_ "${PCH_ADDITIONAL_COMPILER_FLAGS} -include ${pch_header_location_} ${pch_gcc_pch_warn_flag_} " )
+
+    # Currently there seems to be an annoyance on gcc side where headers
+    # without include guards lead to duplicate inclusion, whereas on MSVC
+    # stdafx.h is NOT required to have include guards or #pragma once.
+    # Maybe it's simply due to our setup not being sophisticated enough. FIXME.
+    # Possibly helpful links:
+    # http://stackoverflow.com/questions/3162510/how-to-make-gcc-search-for-headers-in-a-directory-before-the-current-source-file
+    # http://stackoverflow.com/questions/9580058/in-gcc-can-precompiled-headers-be-included-from-other-headers?rq=1
+
   ELSE(CMAKE_COMPILER_IS_GNUCXX)
 
     if(_pch_path_arg)
@@ -488,9 +496,9 @@ ENDMACRO(ADD_PRECOMPILED_HEADER)
 # not default-include-path-type brackets).
 macro(_pch_write_pch_creator_cxx _pch_creator_cxx _variant)
   if("${_variant}" EQUAL "1")
-    # TODO: this LNK4221 workaround looks like it might
-    # trigger an "unused variable" warning, in which case
-    # one could do the usual "(void) var;" trick.
+    # I suspected that this LNK4221 workaround might trigger
+    # an "unused variable" warning (should do the usual "(void) var;" trick),
+    # but that's not the case (due to compile-unit-external variable?).
     SET(dummy_file_content_ "#include \"${_input}\"\n"
       "// This is required to suppress LNK4221.  Very annoying.\n"
       "void *g_${_targetName}Dummy = 0\;\n")
