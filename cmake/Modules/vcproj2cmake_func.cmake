@@ -199,7 +199,10 @@ _v2c_scc_do_setup()
 
 function(_v2c_pch_do_setup)
   set(v2c_want_pch_default_setting_ ON)
-  set(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT ${v2c_want_pch_default_setting_} CACHE BOOL "Enable re-use of any existing PCH (precompiled header file) info for projects (e.g. on MSVC, gcc)")
+  option(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT "Enable re-use of any existing PCH (precompiled header file) info for projects (e.g. on MSVC, gcc)" ${v2c_want_pch_default_setting_})
+  if(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
+    option(V2C_WANT_PCH_PRECOMPILED_HEADER_WARNINGS "Enable PCH-related compiler warnings." ON)
+  endif(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
 endfunction(_v2c_pch_do_setup)
 
 _v2c_pch_do_setup()
@@ -216,6 +219,15 @@ function(_v2c_ensure_valid_variables)
     endif(NOT ${var_name_})
   endforeach(var_name_ ${ARGV})
 endfunction(_v2c_ensure_valid_variables)
+
+# Provides ON/OFF strings for the case of a non-FALSE/FALSE variable.
+macro(_v2c_bool_get_status_string _var_name _out_status)
+  if(${_var_name})
+    set(${_out_status} "ON")
+  else(${_var_name})
+    set(${_out_status} "OFF")
+  endif(${_var_name})
+endmacro(_v2c_bool_get_status_string _var_name _out_status)
 
 # Converts strings with whitespace and special characters
 # to a flattened representation (using '_' etc.).
@@ -1021,9 +1033,11 @@ endif(_v2c_feat_cmake_include_dirs_prop)
 
 
 if(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
-endif(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
+  function(_v2c_pch_log_setup_status _target _header_file _pch_mode _dowarn)
+    _v2c_bool_get_status_string(V2C_WANT_PCH_PRECOMPILED_HEADER_WARNINGS warnings_status_)
+    _v2c_msg_info("v2c_target_add_precompiled_header: configured target ${_target} to *${_pch_mode}* ${_header_file} as PCH (compiler warnings: ${warnings_status_}).")
+  endfunction(_v2c_pch_log_setup_status _target _header_file _pch_mode _dowarn)
 
-if(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
   # Helper to hook up a precompiled header that might be enabled
   # by a project configuration.
   # See main docs for further details.
@@ -1096,13 +1110,17 @@ if(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
       set(do_use_ FALSE)
       set(do_create_ TRUE)
     endif(do_use_)
+    set(do_warn_ "")
+    if(V2C_WANT_PCH_PRECOMPILED_HEADER_WARNINGS)
+      set(do_warn_ 1)
+    endif(V2C_WANT_PCH_PRECOMPILED_HEADER_WARNINGS)
     if(do_create_)
-      add_precompiled_header(${_target} "${header_file_location_}")
-      _v2c_msg_info("v2c_target_add_precompiled_header: configured target ${_target} to *Create* PCH ${_header_file}")
+      add_precompiled_header(${_target} "${header_file_location_}" "${do_warn_}")
+      _v2c_pch_log_setup_status(${_target} "${_header_file}" "Create" ${V2C_WANT_PCH_PRECOMPILED_HEADER_WARNINGS})
     endif(do_create_)
     if(do_use_)
-      add_precompiled_header_to_target(${_target} "${header_file_location_}" "${_pch_file}")
-      _v2c_msg_info("v2c_target_add_precompiled_header: configured target ${_target} to *Use* PCH ${_header_file}")
+      add_precompiled_header_to_target(${_target} "${header_file_location_}" "${_pch_file}" "${do_warn_}")
+      _v2c_pch_log_setup_status(${_target} "${_header_file}" "Use" ${V2C_WANT_PCH_PRECOMPILED_HEADER_WARNINGS})
     endif(do_use_)
   endfunction(v2c_target_add_precompiled_header _target _build_platform _build_type _use _header_file _pch_file)
 else(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
