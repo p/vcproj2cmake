@@ -446,7 +446,6 @@ end
 # we should include only those entries where each directory
 # now actually does contain a CMakeLists.txt file.
 projects_list_file = "#{v2c_config_dir_source_root}/all_sub_projects.txt"
-log_info "Writing out the projects list file (#{projects_list_file})"
 v2c_source_root_write_projects_list_file(projects_list_file, $v2c_generator_file_create_permissions, arr_project_subdirs)
 
 # Finally, create a skeleton fallback file if needed.

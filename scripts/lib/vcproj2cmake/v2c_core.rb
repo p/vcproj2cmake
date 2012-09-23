@@ -1122,6 +1122,43 @@ def log_error_unhandled_exception(e, action)
   log_error "unhandled exception occurred during #{action}! #{e.message}, #{e.backtrace.inspect}"
 end
 
+class Logger
+  def initialize(class_name, log_descriptor)
+    @class_name = class_name
+    # FIXME: log_descriptor not obeyed yet!
+  end
+
+  def error(str); log_error(formatter(str)) end
+  def fixme(str); log_error(formatter("FIXME: #{str}")) end
+  def warn(str); log_warn(formatter(str)) end
+  def info(str); log_info(formatter(str)) end
+  def debug(str); log_debug(formatter(str)) end
+  # "Ruby Exceptions", http://rubylearning.com/satishtalim/ruby_exceptions.html
+  def unhandled_exception(e, msg); log_error_unhandled_exception(e, msg) end
+  def unhandled_functionality(str_description); error "unhandled functionality: #{str_description}" end
+
+  private
+  # I don't know WTH @class_name is not initialized. Probably an init order issue or whatever the heck is happening here. Oh well...
+  #def formatter(str) "#{@class_name}: #{str}" end
+  def formatter(str) str end
+end
+
+module Logging
+  # This is the magical bit that gets mixed into your classes
+  def logger
+    Logging.logger
+  end
+
+  # Global, memoized, lazy initialized instance of a logger
+  def self.logger
+    @logger ||= Logger.new(self.class.name, STDOUT)
+  end
+
+  def todo(str)
+    log_todo str
+  end
+end
+
 # FIXME: currently our classes _derive_ from V2C_LoggerBase in most cases,
 # however it's common practice to have log channel provided as a class member
 # or even a global variable. Should thus rework things to have a class member each
@@ -1129,7 +1166,7 @@ end
 # by external elements).
 # See http://stackoverflow.com/questions/917566/ruby-share-logger-instance-among-module-classes
 
-module Logging
+module Logging_Redirector
   # This is the magical bit that gets mixed into your classes
   def logger
     # HACK: logger method currently disabled:
@@ -1139,7 +1176,7 @@ module Logging
 
   # Global, memoized, lazy initialized instance of a logger
   def self.logger
-    @logger ||= Logger.new(STDOUT)
+    @logger ||= Logger.new(self.class.name, STDOUT)
   end
 
   def logger_member
@@ -1151,23 +1188,12 @@ module Logging
   end
 end
 
-class V2C_LoggerBase
-  include Logging
+class V2C_LoggerBase < Logger
+  include Logging_Redirector
 
-  # DEPRECATED:
-  def log_error_class(str); log_error "#{self.class.name}: #{str}" end
-  def log_fixme_class(str); log_error "#{self.class.name}: FIXME: #{str}" end
-  def log_info_class(str); log_info "#{self.class.name}: #{str}" end
-  def log_debug_class(str); log_debug "#{self.class.name}: #{str}" end
-  # NEW:
-  def error(str); log_error_class(str) end
-  def fixme(str); log_fixme_class(str) end
-  def warn(str); log_warn "#{self.class.name}: #{str}" end
-  def info(str); log_info_class(str) end
-  def debug(str); log_debug_class(str) end
-  # "Ruby Exceptions", http://rubylearning.com/satishtalim/ruby_exceptions.html
-  def unhandled_exception(e, msg); log_error_unhandled_exception(e, msg) end
-  def unhandled_functionality(str_description); log_error("unhandled functionality: #{str_description}") end
+  def initialize
+    super(self.class.name, STDOUT)
+  end
 end
 
 # FIXME: very rough handling - what to do with those VS10 %(XXX) variables?
@@ -5429,72 +5455,89 @@ def util_flatten_string(in_string)
   return in_string.gsub(WHITESPACE_REGEX_OBJ, '_')
 end
 
-def util_permanentize_temp_file(input_file_location, output_file_fqpn, target_file_permissions)
-  have_old_file = true if File.exists?(output_file_fqpn)
-  if have_old_file
-    # Move away old file.
-    # Usability trick:
-    # rename to <file>.<ext>.previous and not <file>.previous.<ext>
-    # since grepping for all *.<ext> files would then hit these outdated ones.
-    V2C_Util_File.mv(output_file_fqpn, output_file_fqpn + '.previous')
-  end
-  # activate our version
-  # [for chmod() comments, see our $v2c_generator_file_create_permissions settings variable]
-  V2C_Util_File.chmod(target_file_permissions, input_file_location)
-  V2C_Util_File.mv(input_file_location, output_file_fqpn)
-end
+class Util_TempFilePermanentizer
+  MOVE_RES_OK = 1
+  MOVE_RES_SAMECONTENT = 3
+  MOVE_RES_FAIL_ZEROSIZE = 2
 
-def util_permanentize_temp_file_if_ok_and_different(input_file_location, output_file_location, target_file_permissions)
-  file_moved = false
-  configuration_changed = false
-  if File.exists?(output_file_location)
-    if not V2C_Util_File.cmp(input_file_location, output_file_location)
-      configuration_changed = true
+  def initialize(input_file_location, output_file_fqpn, target_file_permissions)
+    @input_file_location = input_file_location
+    @output_file_fqpn = output_file_fqpn
+    @target_file_permissions = target_file_permissions
+  end
+
+  def permanentize()
+    if have_old_output_file()
+      # Move away old file.
+      # Usability trick:
+      # rename to <file>.<ext>.previous and not <file>.previous.<ext>
+      # since grepping for all *.<ext> files would then hit these outdated ones.
+      V2C_Util_File.mv(@output_file_fqpn, @output_file_fqpn + '.previous')
     end
-  else
+    # activate our version
+    # We'll choose to chmod() the input rather than the output file,
+    # since operations on the output file should better be atomic
+    # (a single move, and NOT a subsequent permissions adjustment),
+    # to obey potential build tool requirements.
+    # [for chmod() comments, see our $v2c_generator_file_create_permissions settings variable]
+    V2C_Util_File.chmod(@target_file_permissions, @input_file_location)
+    V2C_Util_File.mv(@input_file_location, @output_file_fqpn)
+    return MOVE_RES_OK
+  end
+  def have_old_output_file(); File.exists?(@output_file_fqpn) end
+  def permanentize_if_ok_and_different
     configuration_changed = true
-  end
+    if have_old_output_file()
+      if V2C_Util_File.cmp(@input_file_location, @output_file_fqpn)
+        configuration_changed = false
+      end
+    end
 
-  if configuration_changed
-    util_permanentize_temp_file(input_file_location, output_file_location, target_file_permissions)
-    file_moved = true
+    if configuration_changed
+      return permanentize()
+    else
+      return MOVE_RES_SAMECONTENT
+    end
   end
-  return file_moved
+  def permanentize_if_nonzero_ok_and_different
+    # This can happen in case of ignored exceptions...
+    if File.zero?(@input_file_location)
+      return MOVE_RES_FAIL_ZEROSIZE
+    end
+    return permanentize_if_ok_and_different()
+  end
 end
 
-def util_permanentize_temp_file_if_nonzero_ok_and_different(input_file_location, output_file_location, target_file_permissions)
-  candidate_ok = true
-  # This can happen in case of ignored exceptions...
-  if File.zero?(input_file_location)
-    logger.error 'zero-size candidate file!?!? Skipping replace of output file...'
-    candidate_ok = false
-    # FIXME: should probably improve things to have the main
-    # script file exit with failure exit code...
+# Logging-enhanced V2C-specific version.
+class V2C_CMakeFilePermanentizer < Util_TempFilePermanentizer
+  include Logging
+
+  def initialize(description, input_file_location, output_file_fqpn, target_file_permissions)
+    super(input_file_location, output_file_fqpn, target_file_permissions)
+    @description = description
   end
-
-  file_moved = false
-  if true == candidate_ok
-    # Since we're forced to fumble our source tree
-    # (a definite no-no in all other cases!) by writing our CMakeLists.txt there,
-    # use a write-back-when-updated approach to make sure
-    # we only write back the live CMakeLists.txt in case anything did change.
-    # This is especially important in case of multiple concurrent builds
-    # on a shared source on NFS mount.
-
-    file_moved = util_permanentize_temp_file_if_ok_and_different(input_file_location, output_file_location, $v2c_generator_file_create_permissions)
-    if true == file_moved
-      log_info "Wrote #{output_file_location}."
-    else
-      log_info "No settings changed, #{output_file_location} not updated."
+  def process
+    file_moved = false
+    case permanentize_if_nonzero_ok_and_different()
+    when Util_TempFilePermanentizer::MOVE_RES_OK
+      logger.info "Wrote #{@output_file_fqpn}."
+      file_moved = true
+    when Util_TempFilePermanentizer::MOVE_RES_SAMECONTENT
+      logger.info "No settings changed, #{@output_file_fqpn} not updated."
       # tmpfile will auto-delete when finalized...
 
       # Some make dependency mechanisms might require touching (timestamping)
       # the unchanged(!) file to indicate that it's up-to-date,
       # however we won't do this here since it's not such a good idea.
       # Any user who needs that should do a manual touch subsequently.
+      file_moved = true
+    when Util_TempFilePermanentizer::MOVE_RES_FAIL_ZEROSIZE
+      logger.error "zero-size candidate file!?!? Skipping replace of output file #{@output_file_fqpn}..."
+      file_moved = false
+    else
+      file_moved = false
     end
   end
-  return file_moved
 end
 
 class V2C_GeneratorBase < V2C_LoggerBase
@@ -5527,7 +5570,15 @@ class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
         tmpfile.close
       end
 
-      file_moved = util_permanentize_temp_file_if_nonzero_ok_and_different(tmpfile.path, output_file_location, $v2c_generator_file_create_permissions)
+      # Since we're forced to fumble our source tree
+      # (a definite no-no in all other cases!) by writing our CMakeLists.txt there,
+      # use a write-back-when-updated approach to make sure
+      # we only write back the live CMakeLists.txt in case anything did change.
+      # This is especially important in case of multiple concurrent builds
+      # on a shared source on NFS mount.
+
+      mover = V2C_CMakeFilePermanentizer.new('local CMakeLists.txt', tmpfile.path, output_file_location, $v2c_generator_file_create_permissions)
+      mover.process
     }
   end
   def projects_generate_cmake(p_master_project, out, arr_projects)
@@ -5732,7 +5783,8 @@ def v2c_source_root_write_projects_list_file(output_file_fqpn, output_file_permi
     tmpfile.close
   end
 
-  util_permanentize_temp_file_if_nonzero_ok_and_different(tmpfile.path, output_file_fqpn, output_file_permissions)
+  mover = V2C_CMakeFilePermanentizer.new('projects list file', tmpfile.path, output_file_fqpn, output_file_permissions)
+  mover.process
 end
 
 
