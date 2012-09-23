@@ -279,7 +279,9 @@ def push_platform_defn(platform_defs, platform, defn_value)
 end
 
 # IMPORTANT NOTE: the generator/target/parser class hierarchy and _naming_
-# is supposed to be eerily similar to the one used by CMake.
+# is supposed to be eerily similar to the one used by CMake, i.e.
+# basically our parser class hierarchy is the inverse
+# of what CMake implements for its generators.
 # Dito for naming of individual methods...
 #
 # Global generator: generates/manages parts which are not project-local/target-related (i.e., manages things related to the _entire solution_ configuration)
@@ -1197,17 +1199,6 @@ class V2C_LoggerBase < Logger
   end
 end
 
-# FIXME: very rough handling - what to do with those VS10 %(XXX) variables?
-# (terminus technicus appears to be: "item metadata macro")
-# Well, one idea would be to append entries (include directories, dependencies etc.)
-# to individual list vars that are being scoped within a
-# CMake parent directory chain. But these lists should be implementation details
-# hidden behind v2c_xxx(_target _build_type _entries) funcs, of course.
-# Known %(YYY) variable names are:
-# - Filename (e.g. written by CMake VS10 generator)
-VS10_ITEM_METADATA_MACRO_MATCH_REGEX_OBJ = %r{%([^\s]*)}
-
-
 class V2C_SyntaxGeneratorBase < V2C_LoggerBase
   COMMENT_LEVEL_OFF = 0 # no comments generated
   COMMENT_LEVEL_MINIMUM = 1 # minimum amount of comments
@@ -1242,6 +1233,8 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def write_comment_line(line); @textOut.write_line("# #{line}") end
   def write_comment_at_level(level, block)
     return if @textOut.generated_comments_level() < level
+    # Since we'd like the start of a comment paragraph to start with
+    # an upper-case char, perhaps we should check against that and warn.
     block.split("\n").each { |line|
       write_comment_line(line)
     }
@@ -1715,7 +1708,7 @@ class V2C_CMakeV2CSyntaxGeneratorSelfContained < V2C_CMakeV2CSyntaxGeneratorBase
   end
   def gen_put_converter_script_location(script_location)
     write_comment_at_level(COMMENT_LEVEL_MINIMUM,
-      "user override mechanism (don't prevent specifying a custom location of this script)"
+      "User override mechanism (don't prevent specifying a custom location of this script)"
     )
     write_set_var_if_unset('V2C_SCRIPT_LOCATION', element_manual_quoting(script_location))
   end
@@ -1868,7 +1861,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
   end
   def write_include_directories(arr_includes, map_includes)
     # Side note: unfortunately CMake as of 2.8.7 probably still does not have
-    # a # way of specifying _per-configuration_ syntax of include_directories().
+    # a way of specifying _per-configuration_ syntax of include_directories().
     # See "[CMake] vcproj2cmake.rb script: announcing new version / hosting questions"
     #   http://www.cmake.org/pipermail/cmake/2010-June/037538.html
     #
@@ -2002,6 +1995,9 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
       "since in certain situations both may end up used\n" \
       "(think build tree created from standalone project)."
     )
+    # Whatever we do here - make sure we don't stomp out any potential prior CMAKE_MODULE_PATH definition!!
+    # (for details, see "CMake coding guide"
+    #    http://www.aldebaran-robotics.com/documentation/qibuild/contrib/cmake/coding_guide.html )
     arr_args_func = [ "${V2C_MASTER_PROJECT_SOURCE_DIR}/#{$v2c_module_path_local}", "${CMAKE_SOURCE_DIR}/#{$v2c_module_path_local}", get_dereferenced_variable_name('CMAKE_MODULE_PATH') ]
     write_list_quoted('CMAKE_MODULE_PATH', arr_args_func)
   end
@@ -2010,7 +2006,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
   def put_include_vcproj2cmake_func
     next_paragraph()
     write_comment_at_level(COMMENT_LEVEL_STANDARD,
-      "include the main file for pre-defined vcproj2cmake helper functions\n" \
+      "Include the main file for pre-defined vcproj2cmake helper functions\n" \
       "This module will also include the configuration settings definitions module"
     )
     write_include('vcproj2cmake_func')
@@ -2350,7 +2346,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     @localGenerator.put_customization_hook_commented_from_cmake_var(
       'V2C_HOOK_POST_DEFINITIONS',
       COMMENT_LEVEL_MINIMUM,
-      "hook include after all definitions have been made\n" \
+      "Hook include after all definitions have been made\n" \
       "(but _before_ target is created using the source list!)"
     )
   end
@@ -2358,6 +2354,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # TODO: should use condition to alternatively open-code the conditional variable
     # here in case self-contained mode is requested.
     # ... = get_buildcfg_var_name_of_condition(condition)
+
+    # For an MIDL discussion, see
+    #   http://cmake.3232098.n2.nabble.com/CMake-with-IDL-file-generation-td7581589.html
     arr_args_midl = [ condition.get_build_type(), condition.platform, midl_info.header_file_name, midl_info.iface_id_file_name, midl_info.type_library_name ]
     write_invoke_config_object_v2c_function_quoted('v2c_target_midl_specify_files', target_name, arr_args_midl)
   end
@@ -2521,7 +2520,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     @localGenerator.put_customization_hook_commented_from_cmake_var(
       'V2C_HOOK_POST_TARGET',
       COMMENT_LEVEL_MINIMUM,
-      "e.g. to be used for tweaking target properties etc."
+      "E.g. to be used for tweaking target properties etc."
     )
   end
   def put_property_compile_definitions(config_name, arr_compile_defn)
@@ -2812,11 +2811,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
           print_marker_line('per-compiler_info')
 
-          # Since the precompiled header CMake module currently
-          # _resets_ a target's COMPILE_FLAGS property,
-          # make sure to generate it _before_ generating COMPILE_FLAGS:
-          write_precompiled_header(condition, compiler_info_curr.precompiled_header_info)
-
           arr_target_config_info.each { |target_config_info_curr|
 	    next if not condition.entails(target_config_info_curr.condition)
 
@@ -2844,6 +2838,15 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
               write_property_compile_flags(condition, compiler_specific.arr_flags, str_conditional_compiler_platform)
             } # compiler.tool_specific.each
           } # arr_target_config_info.each
+
+          # Since the precompiled header CMake module currently
+          # _resets_ a target's COMPILE_FLAGS property,
+          # make sure to generate it _before_ specifying any COMPILE_FLAGS:
+          # UPDATE: nope, it's now fixed, thus move it *after* the target
+	  # is fully configured (it needs to be able to correctly gather
+	  # all settings of the target it is supposed to be used for).
+          write_precompiled_header(condition, compiler_info_curr.precompiled_header_info)
+
         } # config_info_curr.tools.arr_compiler_info.each
         tools.arr_linker_info.each { |linker_info_curr|
           linker_info_curr.arr_tool_variant_specific_info.each { |linker_specific|
@@ -2932,7 +2935,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     if @textOut.generated_comments_level() >= 2
       @textOut.write_data %{\
 
-# this part is for including a file which contains
+# This part is for including a file which contains
 # _globally_ applicable settings for all sub projects of a master project
 # (compiler flags, path settings, platform stuff, ...)
 # e.g. have vcproj2cmake-specific MasterProjectDefaults_vcproj2cmake
@@ -2973,7 +2976,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     put_customization_hook_commented_from_cmake_var(
       'V2C_HOOK_PROJECT',
       COMMENT_LEVEL_STANDARD,
-      "hook e.g. for invoking Find scripts as expected by\n" \
+      "Hook e.g. for invoking Find scripts as expected by\n" \
       "the _LIBRARIES / _INCLUDE_DIRS mappings created\n" \
       "by your include/dependency map files."
     )
@@ -3198,6 +3201,23 @@ class V2C_ParserBase < V2C_LoggerBase
 end
 
 class V2C_VSXmlParserBase < V2C_ParserBase
+  # FIXME: very rough handling - what to do with those VS10 %(XXX) variables?
+  # (terminus technicus appears to be: "item metadata macro")
+  # Well, one idea would be to append entries (include directories, dependencies etc.)
+  # to individual list vars that are being scoped within a
+  # CMake parent directory chain. But these lists should be implementation details
+  # hidden behind v2c_xxx(_target _build_type _entries) funcs, of course.
+  # Known %(YYY) variable names are:
+  # - Filename (e.g. written by CMake VS10 generator)
+  # See also old VS7 $(Inherit) / $(NoInherit)
+  # "<PropertyGroup Label="UserMacros" />" might be related, too.
+  # For details, see
+  #   http://stackoverflow.com/questions/8626333/what-is-additionaldependencies-macro
+  #   http://stackoverflow.com/questions/3058111/how-do-i-set-environment-variables-in-visual-studio-2010
+  #   http://connect.microsoft.com/VisualStudio/feedback/details/606484/property-sheets-upgraded
+  #   http://blogs.msdn.com/b/vcblog/archive/2010/02/16/project-settings-changes-with-vs2010.aspx
+  VS10_ITEM_METADATA_MACRO_MATCH_REGEX_OBJ = %r{%([^\s]*)}
+
   # Hmm, \n at least appears in VS10 (DisableSpecificWarnings element), but in VS7 as well?
   # WS_VALUE is for entries containing (and preserving!) whitespace (no split on whitespace!).
   VS_VALUE_SEPARATOR_REGEX_OBJ    = %r{[;,\s]} # (\s char set includes \n)
@@ -4594,6 +4614,8 @@ end
 # NOTE: VS10 == MSBuild == somewhat Ant-based.
 # Thus it would probably be useful to create an Ant syntax parser base class
 # and derive MSBuild-specific behaviour from it.
+# For a list of XML file element names (i.e. schema info), see
+#   http://stackoverflow.com/questions/7899043/getting-lots-of-warnings-when-building-with-targets-in-visual-studio-2010
 class V2C_VS10ParserBase < V2C_VSXmlParserBase
 end
 
