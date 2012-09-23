@@ -107,24 +107,32 @@ macro(_v2c_msg_fatal_error_please_report _msg)
 endmacro(_v2c_msg_fatal_error_please_report _msg)
 
 
-# Sanitize CMAKE_BUILD_TYPE setting:
+# Validate CMAKE_BUILD_TYPE setting:
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
-  if(NOT V2C_WANT_SKIP_CMAKE_BUILD_TYPE_SANITIZE) # user-side disabling option - user might not want this to happen...
-    # Hohumm - need to actively preserve the cache variable documentation string
-    # when doing CACHE FORCE... :-\
-    # DOES NOT WORK - docs will only be available for _defined_ variables,
-    # thus neither FULL_DOCS nor BRIEF_DOCS return anything other than
-    # NOTFOUND. Hrmm.
-    #get_property(cmake_build_type_full_docs CACHE PROPERTY CMAKE_BUILD_TYPE FULL_DOCS)
-    # Oh well... try to adopt a sufficiently original string:
-    set(cmake_build_type_full_docs "Choose the type of build, options are: None(CMAKE_CXX_FLAGS or CMAKE_C_FLAGS used) Debug Release RelWithDebInfo MinSizeRel Maintainer.")
-    set(CMAKE_BUILD_TYPE Debug CACHE STRING "${cmake_build_type_full_docs}" FORCE)
-    # Side note: this message may appear during _initial_ configuration run
-    # (MSVS 2005 generator). I suppose that this is perfectly ok,
+  if(NOT V2C_WANT_SKIP_CMAKE_BUILD_TYPE_CHECK) # user-side disabling option - user might not want this to happen...
+    # We used to actively correct an unset CMAKE_BUILD_TYPE setting,
+    # but this is not a good idea for several reasons:
+    # - V2C may be one sub functionality within a larger tree -
+    #   it's not our business to fumble a global setting
+    # - setting a variable via CACHE FORCE is problematic since one needs
+    #   to specify a docstring. Querying the standard docstring of CMake's
+    #   CMAKE_BUILD_TYPE DOES NOT WORK - docs will only be available
+    #   for _defined_ variables, thus neither FULL_DOCS nor BRIEF_DOCS
+    #   return anything other than NOTFOUND.
+    # See also
+    # "[CMake] Understanding why CMAKE_BUILD_TYPE cannot be set"
+    #   http://www.cmake.org/pipermail/cmake/2008-September/023808.html
+    # "[CMake] Modifying a variable's value without resetting the docstring"
+    #   http://www.cmake.org/pipermail/cmake/2012-September/052117.html
+    # Thus from a modular POV the most benign handling is to provide
+    # a hard error message which can be user-disabled if required.
+
+    # Side note: this message may appear during an _initial_ configuration run
+    # at least on MSVS 2005 generator. I suppose that this initial error is ok,
     # since CMake probably still needs to make up its mind as to which
     # configuration types (MinSizeRel, Debug etc.) are available.
-    _v2c_msg_warning("CMAKE_BUILD_TYPE was not specified - defaulting to ${CMAKE_BUILD_TYPE} setting!")
-  endif(NOT V2C_WANT_SKIP_CMAKE_BUILD_TYPE_SANITIZE) # user might not want this to happen...
+    _v2c_msg_fatal_error("Important CMAKE_BUILD_TYPE variable was not specified - should be properly set, or actively ignored by setting V2C_WANT_SKIP_CMAKE_BUILD_TYPE_CHECK (not recommended).")
+  endif(NOT V2C_WANT_SKIP_CMAKE_BUILD_TYPE_CHECK) # user might not want this to happen...
 endif(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 
 
