@@ -463,12 +463,16 @@ into a sufficiently cross-platform-compatible state,
 it is advisable to configure all Visual Studio projects to use
 the most strict platform settings that are currently possible,
 to avoid having other people let unwanted dependencies (MFC, ATL) creep in.
-I.e. for (almost?) Win32-only projects, do configure a Win32 setting,
+I.e. for (almost?) Win32-only projects, do configure a Win32 setting
+(and prefer SubSystem Console rather than Windows),
 for Non-Win32 projects (possibly some toolkits have a strictly
 POSIX-only interface, thus a corresponding user-side project
 is able to consist of POSIX-only parts, too),
 try to setup a POSIX-only setting (this is not openly documented,
 but I believe it's possible; see e.g. .vcxproj SubSystem element or some such).
+Indeed, SubSystem values are listed as Console, Windows, Native, EFI Application, EFI ROM, EFI Runtime, WindowsCE, POSIX
+(MSVC /SUBSYSTEM: does have a POSIX flag; however KB308259 says that POSIX
+subsystem has been deprecated in XP).
 You really don't want to have the unbelievably bloated windows.h header
 to be reachable by default within a project wherever it can be avoided...
 
