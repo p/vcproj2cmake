@@ -3125,6 +3125,8 @@ EOF
     when 'INPUTFILENAME', 'PROJECTFILENAME'
       # config_var_replacement = '${PROJECT_NAME}.vcproj'
       config_var_replacement = "${v2c_VS_#{config_var}}"
+    when 'INTDIR'
+      config_var_replacement = '${CMAKE_CFG_INTDIR}'
     when 'OUTDIR'
       # FIXME: should extend code to do executable/library/... checks
       # and assign CMAKE_LIBRARY_OUTPUT_DIRECTORY / CMAKE_RUNTIME_OUTPUT_DIRECTORY
@@ -3234,6 +3236,7 @@ class V2C_VSXmlParserBase < V2C_ParserBase
     @called_base_parse_attribute = false
     @called_base_parse_setting = false
     @called_base_parse_post_hook = false
+    @arr_config_var_dummy = Array.new
   end
   # THE MAIN PARSER ENTRY POINT.
   # Will invoke all methods of derived parser classes, whenever available.
@@ -3284,9 +3287,12 @@ class V2C_VSXmlParserBase < V2C_ParserBase
     return true
   end
   def get_filesystem_location(path)
+    # TODO: rather ad-hoc handling of VS7 vars, should get improved eventually.
+    path_translated = vs7_create_config_variable_translation(path, @arr_config_var_dummy)
+
     # TODO: should think of a way to do central verification
     # of existence of the file system paths found here near this helper.
-    path_cooked = normalize_path(path).strip
+    path_cooked = normalize_path(path_translated).strip
     return path_cooked.empty? ? nil : path_cooked
   end
   def split_values_list(str_value)
