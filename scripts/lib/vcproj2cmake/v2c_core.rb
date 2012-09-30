@@ -1944,6 +1944,11 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
 
   def put_file_header_cmake_minimum_version
     # Required version line to make cmake happy.
+    write_comment_at_level(COMMENT_LEVEL_VERBOSE,
+      "For features provided (or not) by various CMake versions,\n" \
+      "please see http://www.cmake.org/Wiki/CMake_Released_Versions\n" \
+      "(and page CMake_Version_Compatibility_Matrix)."
+    )
     str_cmake_minimum_version = '2.6'
     write_comment_at_level(COMMENT_LEVEL_MINIMUM,
       ">= #{str_cmake_minimum_version} due to crucial set_property(... COMPILE_DEFINITIONS_* ...)"
