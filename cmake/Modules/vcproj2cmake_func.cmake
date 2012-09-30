@@ -22,7 +22,7 @@
 # - implement many flexible base helper functions (list manipulation, ...)
 # - function prefix: _v2c_* indicates internal functions, whereas v2c_* are
 #   relatively public ones
-# - prefer _upper-case_ V2C prefix for _cache variables_ such as V2C_RUBY_BIN,
+# - prefer _upper-case_ V2C prefix for _cache variables_ such as V2C_BUILD_PLATFORM,
 #   to ensure that they're all sorted under The One True upper-case "V2C" prefix
 #   in "grouped view" mode of CMake GUI (dito for properties)
 # - several functions are expected to be _very_ volatile,
@@ -531,18 +531,18 @@ function(_v2c_config_do_setup_rebuilder)
     add_custom_target(update_cmakelists_ALL)
   endif(NOT TARGET update_cmakelists_ALL)
 
-  if(NOT V2C_RUBY_BIN) # avoid repeated checks (see cmake --trace)
-    find_program(V2C_RUBY_BIN NAMES ruby)
-    if(NOT V2C_RUBY_BIN)
+  if(NOT RUBY_EXECUTABLE) # avoid repeated checks (see cmake --trace)
+    find_package(Ruby)
+    if(NOT RUBY_EXECUTABLE)
       _v2c_msg_warning("could not detect your ruby installation (perhaps forgot to set CMAKE_PREFIX_PATH?), bailing out: won't automagically rebuild CMakeLists.txt on changes...")
       return()
-    endif(NOT V2C_RUBY_BIN)
-  endif(NOT V2C_RUBY_BIN)
+    endif(NOT RUBY_EXECUTABLE)
+  endif(NOT RUBY_EXECUTABLE)
 
   set(cmakelists_rebuilder_deps_static_list_
     ${root_mappings_files_list_}
     "${project_exclude_list_file_location_}"
-    "${V2C_RUBY_BIN}"
+    "${RUBY_EXECUTABLE}"
     # TODO add any other relevant dependencies here
   )
   _v2c_config_set(cmakelists_rebuilder_deps_static_list_v1
@@ -719,7 +719,7 @@ if(v2c_cmakelists_rebuilder_available)
     # since this global recursive target is supposed to be
     # a _forced_, one-time explicitly user-requested operation.
     add_custom_target(${cmakelists_target_rebuild_all_name_}
-      COMMAND "${V2C_RUBY_BIN}" "${script_recursive_}"
+      COMMAND "${RUBY_EXECUTABLE}" "${script_recursive_}"
       WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
       DEPENDS ${cmakelists_rebuilder_deps_recursive_list_}
       COMMENT "Doing recursive .vcproj --> CMakeLists.txt conversion in all source root sub directories."
@@ -833,7 +833,7 @@ if(v2c_cmakelists_rebuilder_available)
     # that it gets executed after *all* conversion targets are done.
     # THE ACTUAL CONVERSION COMMAND:
     add_custom_command(OUTPUT "${cmakelists_update_this_cmakelists_updated_stamp_file_}"
-      COMMAND "${V2C_RUBY_BIN}" "${_script}" "${orig_proj_file_main_}" "${_cmakelists_file}" "${_master_proj_dir}"
+      COMMAND "${RUBY_EXECUTABLE}" "${_script}" "${orig_proj_file_main_}" "${_cmakelists_file}" "${_master_proj_dir}"
       COMMAND "${CMAKE_COMMAND}" -E remove -f "${cmakelists_update_check_stamp_file_v1_}"
       COMMAND "${CMAKE_COMMAND}" -E touch "${cmakelists_update_this_cmakelists_updated_stamp_file_}"
       DEPENDS ${cmakelists_rebuilder_deps_list_}
