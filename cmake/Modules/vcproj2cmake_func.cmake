@@ -214,9 +214,9 @@ _v2c_pch_do_setup()
 # but rather list simple _names_ of the variables.
 function(_v2c_ensure_valid_variables)
   foreach(var_name_ ${ARGV})
-    if(NOT ${var_name_})
+    if(NOT DEFINED ${var_name_})
       _v2c_msg_fatal_error("important vcproj2cmake variable ${var_name_} not valid/available!?")
-    endif(NOT ${var_name_})
+    endif(NOT DEFINED ${var_name_})
   endforeach(var_name_ ${ARGV})
 endfunction(_v2c_ensure_valid_variables)
 
