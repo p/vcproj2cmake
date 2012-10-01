@@ -63,6 +63,9 @@ class V2C_Path_Config
     @source_root = master_project_source_dir
     @rel_config_dir_source_root = $v2c_config_dir_local
     @config_dir_source_root = "#{@source_root}/#{@rel_config_dir_source_root}"
+    # Provide a special directory for temporary/generated content that's not
+    # supposed to be added to SCM (entire content can be ignored easily,
+    # by mentioning this directory in SCM config files such as .gitignore)
     @rel_config_dir_source_root_temp_store = "#{@rel_config_dir_source_root}/generated_temporary_content"
     @config_dir_source_root_temp_store = "#{@config_dir_source_root}/generated_temporary_content"
     if not File.exist?(@config_dir_source_root_temp_store)
