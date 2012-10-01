@@ -36,13 +36,9 @@ script_fqpn = File.expand_path $0
 script_path = Pathname.new(script_fqpn).parent
 source_root = Dir.pwd
 
-script_location = "#{script_path}/vcproj2cmake.rb"
+v2c_path_config = v2c_get_path_config(source_root)
 
-v2c_config_dir_source_root = $v2c_config_dir_local
-if not File.exist?(v2c_config_dir_source_root)
-  V2C_Util_File.mkdir_p v2c_config_dir_source_root
-end
-
+v2c_config_dir_source_root = v2c_path_config.get_abs_config_dir_source_root()
 time_cmake_root_folder = 0
 arr_excl_proj_expr = Array.new()
 time_cmake_root_folder = File.stat(v2c_config_dir_source_root).mtime.to_i
@@ -414,7 +410,7 @@ def handle_thread_work(threadGlobal, myWork)
   v2c_convert_project_outer(threadGlobal.script_location, threadGlobal.source_root, myWork.arr_proj_files, str_cmakelists_file_location)
 end
 
-threadGlobal = ThreadGlobalData.new(script_location, source_root)
+threadGlobal = ThreadGlobalData.new("#{script_path}/vcproj2cmake.rb", source_root)
 
 if ($v2c_enable_threads)
   log_info 'Recursively converting projects, multi-threaded.'
@@ -445,9 +441,11 @@ end
 # e.g. in case of CMake-converted .vcproj:s),
 # we should include only those entries where each directory
 # now actually does contain a CMakeLists.txt file.
-projects_list_file = "#{v2c_config_dir_source_root}/all_sub_projects.txt"
+projects_list_file_name = 'all_sub_projects.txt'
+projects_list_file_rel = "#{v2c_path_config.get_rel_config_dir_source_root_temp_store()}/#{projects_list_file_name}"
+projects_list_file = "#{v2c_path_config.get_abs_config_dir_source_root_temp_store()}/#{projects_list_file_name}"
 v2c_source_root_write_projects_list_file(projects_list_file, $v2c_generator_file_create_permissions, arr_project_subdirs)
 
 # Finally, create a skeleton fallback file if needed.
-v2c_source_root_ensure_usable_cmakelists_skeleton_file(source_root, projects_list_file)
+v2c_source_root_ensure_usable_cmakelists_skeleton_file(source_root, projects_list_file_rel)
 v2c_convert_finished()
