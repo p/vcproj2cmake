@@ -3188,6 +3188,13 @@ EOF
       # depending on which of the possibly *multiple* solution sub dir hierarchies
       # it's being defined by).
       config_var_replacement = '${V2C_MASTER_PROJECT_SOURCE_DIR}'
+    when 'TARGETNAME'
+      # NOTE: $(TargetName) is available in both VS7/VS10,
+      # however it changed its content (see
+      # "Visual Studio 2010 - $(TargetName) macro" http://social.msdn.microsoft.com/Forums/en/vcprerelease/thread/3c03e730-6a0e-4ee4-a0d6-6a5c3ce4343c )
+      # Might want to have a switch depending on whether input was
+      # .vcproj or .vcxproj.
+      config_var_replacement = '${PROJECT_NAME}'
     when 'TARGETPATH'
       config_var_emulation_code = ''
       arr_config_var_handling.push(config_var_emulation_code)
