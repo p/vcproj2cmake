@@ -1342,7 +1342,10 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     @textOut.indent_less()
     write_command_single_line('endif', str_conditional)
   end
-  def get_keyword_bool(setting); return setting ? 'true' : 'false' end
+  # http://www.cmake.org/Wiki/CMake/Language_Syntax says
+  # one can use any of TRUE/FALSE, ON/OFF, YES/NO,
+  # thus we'll obviously choose the shortest solution.
+  def get_keyword_bool(setting); return setting ? 'ON' : 'OFF' end
   def write_set_var(var_name, setting)
     write_command_list('set', var_name, [ setting ])
   end
