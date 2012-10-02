@@ -1995,6 +1995,12 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     write_conditional_if(str_conditional)
       # CMP0005: manual quoting of brackets in definitions doesn't seem to work otherwise,
       # in cmake 2.6.4-7.el5 with "OLD".
+      # We'll decide to write the policies one after another -
+      # we could be embedding all higher-numbered policies
+      # within the conditionals of the lower ones,
+      # but this would be less compatible (it is conceivable
+      # that certain policy numbers get withdrawn completely in future,
+      # in which case hierarchic conditionals would fail).
       write_cmake_policy(5, true, "automatic quoting of brackets")
       write_cmake_policy(11, false, \
 	"we do want the includer to be affected by our updates,\n" \
