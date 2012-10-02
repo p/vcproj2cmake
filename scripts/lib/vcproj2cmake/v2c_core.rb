@@ -2940,36 +2940,27 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_languages = detect_programming_languages(project_info)
     put_project(project_info.name, arr_languages)
   end
-  def put_converted_timestamp(project_name)
+  def put_conversion_info(project_name, str_from_buildtool_version)
     # Add an explicit file generation timestamp,
     # to enable easy identification (grepping) of files of a certain age
     # (a filesystem-based creation/modification timestamp might be unreliable
     # due to copying/modification).
+    str_time = ''
     timestamp_format = $v2c_generator_timestamp_format
-    return if timestamp_format.nil? or timestamp_format.empty?
-    timestamp_format_docs = timestamp_format.tr('%', '')
-    write_comment_at_level(COMMENT_LEVEL_VERBOSE, "Indicates project conversion moment in time (UTC, format #{timestamp_format_docs})")
-    time = Time.new
-    str_time = time.utc.strftime(timestamp_format)
-    # Add project_name as _prefix_ (keep variables grep:able, via "v2c_converted_at_utc")
-    # Since timestamp format now is user-configurable, quote potential whitespace.
-    write_set_var("#{project_name}_v2c_converted_at_utc", element_handle_quoting(str_time))
-  end
-  def put_converted_from_marker(project_name, str_from_buildtool_version)
-    write_comment_at_level(COMMENT_LEVEL_VERBOSE, 'Indicates originating build environment / IDE')
-    # Add project_name as _prefix_ (keep variables grep:able, via "v2c_converted_from")
-    write_set_var("#{project_name}_v2c_converted_from", element_handle_quoting(str_from_buildtool_version))
+    if not timestamp_format.nil? and not timestamp_format.empty?
+      timestamp_format_docs = timestamp_format.tr('%', '')
+      time = Time.new
+      str_time = time.utc.strftime(timestamp_format)
+    end
+    write_comment_at_level(COMMENT_LEVEL_VERBOSE,
+      "For this project's file, indicates originating build environment / IDE,\n" \
+      "and indicates conversion moment in time (UTC, format #{timestamp_format_docs})"
+    )
+    write_invoke_v2c_function_quoted('v2c_project_conversion_info_set', [ project_name, str_time, str_from_buildtool_version ])
   end
   def detect_programming_languages(project_info)
     language_detector = V2C_CMakeProjectLanguageDetector.new(project_info)
     language_detector.detect
-  end
-  def put_conversion_details(project_name, orig_environment_shortname)
-    # We could have stored all information in one (list) variable,
-    # but generating two lines instead of one isn't much waste
-    # and actually much easier to parse.
-    put_converted_timestamp(project_name)
-    put_converted_from_marker(project_name, orig_environment_shortname)
   end
   def put_include_MasterProjectDefaults_vcproj2cmake
     if @textOut.generated_comments_level() >= 2
@@ -3024,7 +3015,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
   def generate_project_leadin(project_info)
     write_project(project_info)
-    put_conversion_details(project_info.name, project_info.orig_environment_shortname)
+    put_conversion_info(project_info.name, project_info.orig_environment_shortname)
     put_include_MasterProjectDefaults_vcproj2cmake()
     write_funcs_v2c_project_platform_define_build_types(project_info.name, project_info.build_platform_configs)
     put_hook_project()

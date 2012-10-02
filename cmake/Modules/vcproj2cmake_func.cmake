@@ -333,6 +333,15 @@ if("${_v2c_cmake_version_this}" VERSION_GREATER "${cmake_version_include_dirs_pr
 endif("${_v2c_cmake_version_this}" VERSION_GREATER "${cmake_version_include_dirs_prop_insufficient}")
 
 
+# # # # #   PROJECT INFO   # # # # #
+
+macro(v2c_project_conversion_info_set _target _timestamp_utc _orig_environment)
+  # Since timestamp format now is user-configurable, quote potential whitespace.
+  set(${_target}_v2c_converted_at_utc "${_timestamp_utc}")
+  set(${_target}_v2c_converted_from "${_orig_environment}")
+endmacro(v2c_project_conversion_info_set _target _timestamp_utc _orig_environment)
+
+
 # # # # #   BUILD PLATFORM SETUP   # # # # #
 
 function(_v2c_project_platform_append _target _build_platform)
