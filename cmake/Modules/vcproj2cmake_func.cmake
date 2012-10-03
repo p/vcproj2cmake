@@ -87,6 +87,12 @@ macro(_v2c_var_set_empty _var_name)
   set(${_var_name} "")
 endmacro(_v2c_var_set_empty _var_name)
 
+macro(_v2c_var_set_default_if_not_set _var_name _v2c_default_setting)
+  if(NOT DEFINED ${_var_name})
+    set(${_var_name} "${_v2c_default_setting}")
+  endif(NOT DEFINED ${_var_name})
+endmacro(_v2c_var_set_default_if_not_set _var_name _v2c_default_setting)
+
 macro(_v2c_msg_info _msg)
   message(STATUS "${V2C_CMAKE_CONFIGURE_PROMPT}${_msg}")
 endmacro(_v2c_msg_info _msg)
@@ -155,9 +161,7 @@ endif(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 # (querying deprecated variables - missing result).
 
 
-if(NOT V2C_STAMP_FILES_SUBDIR)
-  set(V2C_STAMP_FILES_SUBDIR "stamps")
-endif(NOT V2C_STAMP_FILES_SUBDIR)
+_v2c_var_set_default_if_not_set(V2C_STAMP_FILES_SUBDIR "stamps")
 # Enable customization (via cache entry), someone might need it.
 set(V2C_STAMP_FILES_DIR "${CMAKE_BINARY_DIR}/${V2C_GLOBAL_CONFIG_RELPATH}/${V2C_STAMP_FILES_SUBDIR}" CACHE PATH "The directory to place any stamp files used by vcproj2cmake in.")
 mark_as_advanced(V2C_STAMP_FILES_DIR)
@@ -969,9 +973,7 @@ if(v2c_cmakelists_rebuilder_available)
   # *V2C_DOCS_POLICY_MACRO*
   macro(v2c_converter_script_set_location _location)
     # user override mechanism (don't prevent specifying a custom location of this script)
-    if(NOT V2C_SCRIPT_LOCATION)
-      set(V2C_SCRIPT_LOCATION "${_location}")
-    endif(NOT V2C_SCRIPT_LOCATION)
+    _v2c_var_set_default_if_not_set(V2C_SCRIPT_LOCATION "${_location}")
   endmacro(v2c_converter_script_set_location _location)
 else(v2c_cmakelists_rebuilder_available)
   macro(v2c_converter_script_set_location _location)
