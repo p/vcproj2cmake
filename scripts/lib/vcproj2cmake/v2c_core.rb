@@ -66,8 +66,9 @@ class V2C_Path_Config
     # Provide a special directory for temporary/generated content that's not
     # supposed to be added to SCM (entire content can be ignored easily,
     # by mentioning this directory in SCM config files such as .gitignore)
-    @rel_config_dir_source_root_temp_store = "#{@rel_config_dir_source_root}/generated_temporary_content"
-    @config_dir_source_root_temp_store = "#{@config_dir_source_root}/generated_temporary_content"
+    temp_store_dir_name = "generated_temporary_content"
+    @rel_config_dir_source_root_temp_store = "#{@rel_config_dir_source_root}/#{temp_store_dir_name}"
+    @config_dir_source_root_temp_store = "#{@config_dir_source_root}/#{temp_store_dir_name}"
     if not File.exist?(@config_dir_source_root_temp_store)
       V2C_Util_File.mkdir_p @config_dir_source_root_temp_store
     end
@@ -1830,6 +1831,127 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
   end
 end
 
+# Generates the CMake code required to bootstrap V2C operation
+# (provided by each scope which may still need to execute this init code)
+class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
+  def initialize(textOut, relative_path_to_root)
+    super(textOut)
+    @relative_path_to_root = relative_path_to_root
+  end
+  def generate
+    put_per_scope_setup(@relative_path_to_root)
+  end
+
+  private
+
+  def put_per_scope_setup(str_conversion_root_rel)
+    write_comment_at_level(COMMENT_LEVEL_STANDARD,
+      "This part of *global* V2C setup steps (policies, include function module, ...)\n" \
+      "*has* to be repeated within each *local* file,\n" \
+      "to be able to support the use case of creating a build environment\n" \
+      "from single local project directories, too.\n" \
+      "But there's a nice trick: if a guard variable is already defined,\n" \
+      "then some other (parent?) scope already did all that work for us." \
+    )
+    str_per_scope_definition_guard = '_v2c_global_defs_per_scope_defined'
+    str_condition_inverse = get_conditional_inverted(str_per_scope_definition_guard)
+    write_conditional_if(str_condition_inverse)
+      put_per_scope_cmake_minimum_version()
+      put_per_scope_cmake_policies()
+
+      put_cmake_module_path(str_conversion_root_rel)
+      put_var_config_dir_local()
+      write_set_var_bool(str_per_scope_definition_guard, true)
+    write_conditional_end(str_condition_inverse)
+  end
+
+  # cmake_minimum_required() is required to be mentioned open-coded
+  # per-CMakeLists.txt (exact requirement seems to be:
+  # to be executed whenever it has not been done before within a scope),
+  # thus we always do need to generate this line
+  # rather than having it carried out by our module file.
+  # Having it mentioned by an included macro executed locally is not
+  # accepted either.
+  def put_per_scope_cmake_minimum_version
+    # Required version line to make cmake happy.
+    write_comment_at_level(COMMENT_LEVEL_VERBOSE,
+      "For features provided (or not) by various CMake versions,\n" \
+      "please see http://www.cmake.org/Wiki/CMake_Released_Versions\n" \
+      "(and page CMake_Version_Compatibility_Matrix)."
+    )
+    str_cmake_minimum_version = '2.6'
+    write_comment_at_level(COMMENT_LEVEL_MINIMUM,
+      ">= #{str_cmake_minimum_version} due to crucial set_property(... COMPILE_DEFINITIONS_* ...)"
+    )
+    write_cmake_minimum_version(str_cmake_minimum_version)
+  end
+  def put_per_scope_cmake_policies
+    str_conditional = get_var_conditional_command('cmake_policy')
+    write_conditional_if(str_conditional)
+      # CMP0005: manual quoting of brackets in definitions doesn't seem to work otherwise,
+      # in cmake 2.6.4-7.el5 with "OLD".
+      # We'll decide to write the policies one after another -
+      # we could be embedding all higher-numbered policies
+      # within the conditionals of the lower ones,
+      # but this would be less compatible (it is conceivable
+      # that certain policy numbers get withdrawn completely in future,
+      # in which case hierarchic conditionals would fail).
+      write_cmake_policy(5, true, "automatic quoting of brackets")
+      write_cmake_policy(11, false, \
+	"we do want the includer to be affected by our updates,\n" \
+        "since it might define project-global settings.\n" \
+      )
+      write_cmake_policy(15, true, \
+        ".vcproj contains relative paths to additional library directories,\n" \
+        "thus we need to be able to cope with that" \
+      )
+    write_conditional_end(str_conditional)
+  end
+  def put_cmake_module_path(str_conversion_root_rel)
+    # try to point to cmake/Modules of the topmost directory of the vcproj2cmake conversion tree.
+    # This also contains vcproj2cmake helper modules (these should - just like the CMakeLists.txt -
+    # be within the project tree as well, since someone might want to copy the entire project tree
+    # including .vcproj conversions to a different machine, thus all v2c components should be available)
+    # NOTE that V2C_MASTER_PROJECT_SOURCE_DIR is a very important variable
+    # which may eventually be supported to end up _different_ from CMAKE_SOURCE_DIR
+    # (e.g. in the case of integrating _multiple_ different solution (.sln) files
+    # - and their project hierarchy each! - into a _higher-level_ natively CMake-based tree!!).
+    # We might possibly eventually want to rename V2C_MASTER_PROJECT_SOURCE_DIR into V2C_SOLUTION_ROOT_SOURCE_DIR
+    # to reflect the fact that a project hierarchy has been created from a solution
+    # that sits in a specific directory...
+    next_paragraph()
+    write_comment_at_level(COMMENT_LEVEL_STANDARD,
+      "Denotes the source root directory where the V2C conversion run was carried out.\n" \
+      "This directory also contains certain global vcproj2cmake support subdirs."
+    )
+
+    # Handle the case of generating for V2C root (== empty relative path).
+    str_conversion_root_rel_cooked = ''
+    if not str_conversion_root_rel.empty?
+      str_conversion_root_rel_cooked = "/#{str_conversion_root_rel}"
+    end
+    str_master_proj_source_dir = "#{get_dereferenced_variable_name('CMAKE_CURRENT_SOURCE_DIR')}#{str_conversion_root_rel_cooked}"
+    write_set_var_quoted('V2C_MASTER_PROJECT_SOURCE_DIR', str_master_proj_source_dir)
+    str_master_proj_binary_dir = "#{get_dereferenced_variable_name('CMAKE_CURRENT_BINARY_DIR')}#{str_conversion_root_rel_cooked}"
+    write_set_var_quoted('V2C_MASTER_PROJECT_BINARY_DIR', str_master_proj_binary_dir)
+    # NOTE: use set() instead of list(APPEND...) to _prepend_ path
+    # (otherwise not able to provide proper _overrides_)
+    write_comment_at_level(COMMENT_LEVEL_STANDARD,
+      "Extend module path with both a precise relative hint to source root\n" \
+      "and a flexible link via CMAKE_SOURCE_DIR expression,\n" \
+      "since in certain situations both may end up used\n" \
+      "(think build tree created from standalone project)."
+    )
+    # Whatever we do here - make sure we don't stomp out any potential prior CMAKE_MODULE_PATH definition!!
+    # (for details, see "CMake coding guide"
+    #    http://www.aldebaran-robotics.com/documentation/qibuild/contrib/cmake/coding_guide.html )
+    arr_args_func = [ "${V2C_MASTER_PROJECT_SOURCE_DIR}/#{$v2c_module_path_local}", "${CMAKE_SOURCE_DIR}/#{$v2c_module_path_local}", get_dereferenced_variable_name('CMAKE_MODULE_PATH') ]
+    write_list_quoted('CMAKE_MODULE_PATH', arr_args_func)
+  end
+  # "export" our internal $v2c_config_dir_local variable (to be able to reference it in CMake scripts as well)
+  def put_var_config_dir_local; write_set_var_quoted('V2C_CONFIG_DIR_LOCAL', $v2c_config_dir_local) end
+end
+
 # This class generates the output of multiple input projects to a text output
 # (usually CMakeLists.txt within a local directory).
 class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
@@ -1849,8 +1971,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     p_local_dir_fqpn = Pathname.new(local_dir_fqpn)
     p_root = Pathname.new(@master_project_dir)
     relative_path_to_root = p_root.relative_path_from(p_local_dir_fqpn)
-    put_file_header(relative_path_to_root)
-
+    put_file_header(relative_path_to_root.to_s)
     put_converter_script_location(@script_location_relative_to_master)
 
     @arr_local_project_targets.each { |project_info|
@@ -1868,29 +1989,11 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     }
     write_func_v2c_directory_post_setup
   end
-  def put_local_per_scope_setup(str_conversion_root_rel)
-    write_comment_at_level(COMMENT_LEVEL_STANDARD,
-      "This part of *global* V2C setup steps (policies, include function module, ...)\n" \
-      "*has* to be repeated within each *local* file,\n" \
-      "to be able to support the use case of creating a build environment\n" \
-      "from single local project directories, too.\n" \
-      "But there's a nice trick: if a guard variable is already defined,\n" \
-      "then some other (parent?) scope already did all that work for us." \
-    )
-    str_per_scope_definition_guard = '_v2c_global_defs_per_scope_defined'
-    str_condition_inverse = get_conditional_inverted(str_per_scope_definition_guard)
-    write_conditional_if(str_condition_inverse)
-      put_file_header_cmake_minimum_version()
-      put_file_header_cmake_policies()
-
-      put_cmake_module_path(str_conversion_root_rel)
-      put_var_config_dir_local()
-      write_set_var_bool(str_per_scope_definition_guard, true)
-    write_conditional_end(str_condition_inverse)
-  end
   def put_file_header(str_conversion_root_rel)
     @textOut.put_file_header_temporary_marker()
-    put_local_per_scope_setup(str_conversion_root_rel)
+    bootstrap_generator =
+      V2C_CMakeGlobalBootstrapCodeGenerator.new(@textOut, str_conversion_root_rel)
+    bootstrap_generator.generate
     put_include_vcproj2cmake_func()
     put_hook_pre()
   end
@@ -1977,78 +2080,6 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
 
   private
 
-  def put_file_header_cmake_minimum_version
-    # Required version line to make cmake happy.
-    write_comment_at_level(COMMENT_LEVEL_VERBOSE,
-      "For features provided (or not) by various CMake versions,\n" \
-      "please see http://www.cmake.org/Wiki/CMake_Released_Versions\n" \
-      "(and page CMake_Version_Compatibility_Matrix)."
-    )
-    str_cmake_minimum_version = '2.6'
-    write_comment_at_level(COMMENT_LEVEL_MINIMUM,
-      ">= #{str_cmake_minimum_version} due to crucial set_property(... COMPILE_DEFINITIONS_* ...)"
-    )
-    write_cmake_minimum_version(str_cmake_minimum_version)
-  end
-  def put_file_header_cmake_policies
-    str_conditional = get_var_conditional_command('cmake_policy')
-    write_conditional_if(str_conditional)
-      # CMP0005: manual quoting of brackets in definitions doesn't seem to work otherwise,
-      # in cmake 2.6.4-7.el5 with "OLD".
-      # We'll decide to write the policies one after another -
-      # we could be embedding all higher-numbered policies
-      # within the conditionals of the lower ones,
-      # but this would be less compatible (it is conceivable
-      # that certain policy numbers get withdrawn completely in future,
-      # in which case hierarchic conditionals would fail).
-      write_cmake_policy(5, true, "automatic quoting of brackets")
-      write_cmake_policy(11, false, \
-	"we do want the includer to be affected by our updates,\n" \
-        "since it might define project-global settings.\n" \
-      )
-      write_cmake_policy(15, true, \
-        ".vcproj contains relative paths to additional library directories,\n" \
-        "thus we need to be able to cope with that" \
-      )
-    write_conditional_end(str_conditional)
-  end
-  def put_cmake_module_path(str_conversion_root_rel)
-    # try to point to cmake/Modules of the topmost directory of the vcproj2cmake conversion tree.
-    # This also contains vcproj2cmake helper modules (these should - just like the CMakeLists.txt -
-    # be within the project tree as well, since someone might want to copy the entire project tree
-    # including .vcproj conversions to a different machine, thus all v2c components should be available)
-    # NOTE that V2C_MASTER_PROJECT_SOURCE_DIR is a very important variable
-    # which may eventually be supported to end up _different_ from CMAKE_SOURCE_DIR
-    # (e.g. in the case of integrating _multiple_ different solution (.sln) files
-    # - and their project hierarchy each! - into a _higher-level_ natively CMake-based tree!!).
-    # We might possibly eventually want to rename V2C_MASTER_PROJECT_SOURCE_DIR into V2C_SOLUTION_ROOT_SOURCE_DIR
-    # to reflect the fact that a project hierarchy has been created from a solution
-    # that sits in a specific directory...
-    next_paragraph()
-    write_comment_at_level(COMMENT_LEVEL_STANDARD,
-      "Denotes the source root directory where the V2C conversion run was carried out.\n" \
-      "This directory also contains certain global vcproj2cmake support subdirs."
-    )
-    str_master_proj_source_dir = "#{get_dereferenced_variable_name('CMAKE_CURRENT_SOURCE_DIR')}/#{str_conversion_root_rel}"
-    write_set_var_quoted('V2C_MASTER_PROJECT_SOURCE_DIR', str_master_proj_source_dir)
-    str_master_proj_binary_dir = "#{get_dereferenced_variable_name('CMAKE_CURRENT_BINARY_DIR')}/#{str_conversion_root_rel}"
-    write_set_var_quoted('V2C_MASTER_PROJECT_BINARY_DIR', str_master_proj_binary_dir)
-    # NOTE: use set() instead of list(APPEND...) to _prepend_ path
-    # (otherwise not able to provide proper _overrides_)
-    write_comment_at_level(COMMENT_LEVEL_STANDARD,
-      "Extend module path with both a precise relative hint to source root\n" \
-      "and a flexible link via CMAKE_SOURCE_DIR expression,\n" \
-      "since in certain situations both may end up used\n" \
-      "(think build tree created from standalone project)."
-    )
-    # Whatever we do here - make sure we don't stomp out any potential prior CMAKE_MODULE_PATH definition!!
-    # (for details, see "CMake coding guide"
-    #    http://www.aldebaran-robotics.com/documentation/qibuild/contrib/cmake/coding_guide.html )
-    arr_args_func = [ "${V2C_MASTER_PROJECT_SOURCE_DIR}/#{$v2c_module_path_local}", "${CMAKE_SOURCE_DIR}/#{$v2c_module_path_local}", get_dereferenced_variable_name('CMAKE_MODULE_PATH') ]
-    write_list_quoted('CMAKE_MODULE_PATH', arr_args_func)
-  end
-  # "export" our internal $v2c_config_dir_local variable (to be able to reference it in CMake scripts as well)
-  def put_var_config_dir_local; write_set_var_quoted('V2C_CONFIG_DIR_LOCAL', $v2c_config_dir_local) end
   def put_include_vcproj2cmake_func
     next_paragraph()
     write_comment_at_level(COMMENT_LEVEL_STANDARD,
@@ -5887,7 +5918,20 @@ class V2C_CMakeSkeletonFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
       "vcproj2cmake.sf.net #{V2C_TEXT_FILE_SKELETON_MARKER}.\n" \
       "Feel free to modify or remove (rename away?) as needed.\n"
     )
-    write_cmake_minimum_version('2.6')
+    next_paragraph()
+    bootstrap_generator =
+      V2C_CMakeGlobalBootstrapCodeGenerator.new(@textOut, '')
+    bootstrap_generator.generate
+    next_paragraph()
+    put_projects_list_file_include()
+  end
+  def put_projects_list_file_include
+    write_comment_at_level(COMMENT_LEVEL_MINIMUM,
+      "Includes the generated file that adds all sub directories\n" \
+      "which contain projects converted by V2C."
+    )
+    # TODO: once vcproj2cmake_func.cmake is available at this point in
+    # time, should invoke a V2C helper macro instead which does that.
     write_include(@projects_list_file)
   end
 end
