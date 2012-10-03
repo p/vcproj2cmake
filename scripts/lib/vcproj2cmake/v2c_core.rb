@@ -20,8 +20,11 @@ def load_configuration_file(str_file, str_descr, arr_descr_loaded)
     arr_descr_loaded.push("#{str_descr} #{str_file}")
     success = true
   rescue LoadError
-    # ignore it (config file is optional!). Need a dummy var to silence Excellent warning.
-    loaderror_dummy = 0
+    # Ignore it (config file is optional!).
+    # Need a dummy var to silence Excellent warning
+    # (nope, unused dummy var will trigger Ruby warning -
+    # use existing "success").
+    success = true
   end
   return success
 end
