@@ -427,6 +427,7 @@ class V2C_Tool_Base_Info
   attr_accessor :name
   attr_accessor :suppress_startup_banner_enable
   attr_accessor :show_progress_enable
+  attr_accessor :arr_tool_variant_specific_info
 end
 
 class V2C_Tool_Define_Base_Info < V2C_Tool_Base_Info
@@ -490,11 +491,20 @@ class V2C_Precompiled_Header_Info
   attr_accessor :header_binary_name
 end
 
-module V2C_CompilerDefines
+module V2C_Compiler_Defines
   BASIC_RUNTIME_CHECKS_DEFAULT = 0
   BASIC_RUNTIME_CHECKS_STACKFRAME = 1
   BASIC_RUNTIME_CHECKS_UNINITIALIZED_LOCAL_USAGE = 2
   BASIC_RUNTIME_CHECKS_FAST = 3
+  CRT_MULTITHREADED = 1
+  CRT_MULTITHREADED_DEBUG = 2
+  CRT_MULTITHREADED_DLL = 3
+  CRT_MULTITHREADED_DEBUG_DLL = 4
+  DEBUG_INFO_FORMAT_DISABLED = 0
+  DEBUG_INFO_FORMAT_OLDSTYLE = 1
+  DEBUG_INFO_FORMAT_NONE = 2
+  DEBUG_INFO_FORMAT_PDB = 3
+  DEBUG_INFO_FORMAT_EDITANDCONTINUE = 4
   INLINE_FUNCTION_EXPANSION_DEFAULT = -1
   INLINE_FUNCTION_EXPANSION_DISABLED = 0
   INLINE_FUNCTION_EXPANSION_ONLYEXPLICITINLINE = 1
@@ -502,12 +512,13 @@ module V2C_CompilerDefines
 end
 
 class V2C_Tool_Compiler_Info < V2C_Tool_Define_Base_Info
-  include V2C_CompilerDefines
+  include V2C_Compiler_Defines
   def initialize(tool_variant_specific_info = nil)
     super(tool_variant_specific_info)
     @arr_info_include_dirs = Array.new
     @asm_listing_location = nil
     @basic_runtime_checks = BASIC_RUNTIME_CHECKS_DEFAULT
+    @debug_information_format = DEBUG_INFO_FORMAT_DISABLED
     @rtti = true
     @precompiled_header_info = nil
     @detect_64bit_porting_problems_enable = true # TODO: translate into MSVC /Wp64 flag; Enabled by default is preferable, right?
@@ -520,6 +531,7 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Define_Base_Info
     @show_includes_enable = false # Whether to show the filenames of included header files. TODO: translate into MSVC /showIncludes flag
     @function_level_linking_enable = false
     @intrinsic_functions_enable = false
+    @runtime_library_variant = V2C_VSToolCompilerDefines::VS_DEFAULT_SETTING_RUNTIMELIBRARY
     @static_code_analysis_enable = false # TODO: translate into MSVC7/10 /analyze flag
     @string_pooling_enable = false
     @treat_wchar_t_as_builtin_type_enable = false
@@ -528,6 +540,7 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Define_Base_Info
   attr_accessor :arr_info_include_dirs
   attr_accessor :asm_listing_location
   attr_accessor :basic_runtime_checks
+  attr_accessor :debug_information_format
   attr_accessor :rtti
   attr_accessor :precompiled_header_info
   attr_accessor :detect_64bit_porting_problems_enable
@@ -540,11 +553,11 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Define_Base_Info
   attr_accessor :show_includes_enable
   attr_accessor :function_level_linking_enable
   attr_accessor :intrinsic_functions_enable
+  attr_accessor :runtime_library_variant
   attr_accessor :static_code_analysis_enable
   attr_accessor :string_pooling_enable
   attr_accessor :treat_wchar_t_as_builtin_type_enable
   attr_accessor :optimization
-  attr_accessor :arr_tool_variant_specific_info
 
   def get_include_dirs(flag_system, flag_before)
     #arr_includes = Array.new
@@ -569,13 +582,19 @@ class V2C_Tool_Linker_Specific_Info < V2C_Tool_Specific_Info_Base
   attr_accessor :arr_flags
 end
 
-class V2C_Tool_Linker_Specific_Info_MSVC7 < V2C_Tool_Linker_Specific_Info
+class V2C_Tool_Linker_Specific_Info_MSVC < V2C_Tool_Linker_Specific_Info
+  def initialize(linker_name)
+    super(linker_name)
+  end
+end
+
+class V2C_Tool_Linker_Specific_Info_MSVC7 < V2C_Tool_Linker_Specific_Info_MSVC
   def initialize()
     super('MSVC7')
   end
 end
 
-class V2C_Tool_Linker_Specific_Info_MSVC10 < V2C_Tool_Linker_Specific_Info
+class V2C_Tool_Linker_Specific_Info_MSVC10 < V2C_Tool_Linker_Specific_Info_MSVC
   def initialize()
     super('MSVC10')
   end
@@ -625,6 +644,7 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
     @pdb_file = nil
     @subsystem = SUBSYSTEM_CONSOLE
     @target_machine = MACHINE_NOT_SET
+    @uac_manifest_enable = false # EnableUAC (MSVC linker /MANIFESTUAC option); for now we'll assume that it's NOT MSVC-specific, i.e. other linkers sometimes possibly are able to do UAC manifests, too.
     @arr_lib_dirs = Array.new
   end
   attr_accessor :arr_dependencies
@@ -637,6 +657,7 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
   attr_accessor :pdb_file
   attr_accessor :subsystem
   attr_accessor :target_machine
+  attr_accessor :uac_manifest_enable
   attr_accessor :arr_lib_dirs
   attr_accessor :arr_tool_variant_specific_info
 end
@@ -3655,11 +3676,12 @@ class V2C_VSToolDefineParserBase < V2C_VSToolParserBase
 end
 
 module V2C_VSToolCompilerDefines
-  include V2C_CompilerDefines
+  include V2C_Compiler_Defines
   include V2C_VSToolDefineDefines
   TEXT_ADDITIONALINCLUDEDIRECTORIES = 'AdditionalIncludeDirectories'
   TEXT_ASSEMBLERLISTINGLOCATION = 'AssemblerListingLocation'
   TEXT_BASICRUNTIMECHECKS = 'BasicRuntimeChecks'
+  TEXT_DEBUGINFORMATIONFORMAT = 'DebugInformationFormat'
   TEXT_DISABLESPECIFICWARNINGS = 'DisableSpecificWarnings'
   TEXT_ENABLEFUNCTIONLEVELLINKING = 'EnableFunctionLevelLinking'
   TEXT_ENABLEINTRINSICFUNCTIONS = 'EnableIntrinsicFunctions'
@@ -3672,6 +3694,8 @@ module V2C_VSToolCompilerDefines
   VS_DEFAULT_SETTING_MINIMALREBUILD = false # VS10 default: "No (/Gm-)"
   TEXT_OPTIMIZATION = 'Optimization'
   TEXT_PROGRAMDATABASEFILENAME = 'ProgramDatabaseFileName'
+  TEXT_RUNTIMELIBRARY = 'RuntimeLibrary'
+  VS_DEFAULT_SETTING_RUNTIMELIBRARY = V2C_Compiler_Defines::CRT_MULTITHREADED
   TEXT_RUNTIMETYPEINFO = 'RuntimeTypeInfo'
   TEXT_SHOWINCLUDES = 'ShowIncludes'
   VS_DEFAULT_SETTING_SHOWINCLUDES = false # VS10 default: "No"
@@ -3704,6 +3728,8 @@ class V2C_VSToolCompilerParser < V2C_VSToolDefineParserBase
       get_compiler_info().asm_listing_location = get_filesystem_location(setting_value)
     when TEXT_BASICRUNTIMECHECKS
       get_compiler_info().basic_runtime_checks = parse_basic_runtime_checks(setting_value)
+    when TEXT_DEBUGINFORMATIONFORMAT
+      get_compiler_info().debug_information_format = parse_debug_information_format(setting_value)
     when TEXT_DISABLESPECIFICWARNINGS
       parse_disable_specific_warnings(get_compiler_info().arr_tool_variant_specific_info[0].arr_disable_warnings, setting_value)
     when TEXT_ENABLEFUNCTIONLEVELLINKING
@@ -3722,6 +3748,8 @@ class V2C_VSToolCompilerParser < V2C_VSToolDefineParserBase
       get_compiler_info().optimization = parse_optimization(setting_value)
     when TEXT_PROGRAMDATABASEFILENAME
       get_compiler_info().pdb_filename = get_filesystem_location(setting_value)
+    when TEXT_RUNTIMELIBRARY
+      get_compiler_info().runtime_library_variant = parse_runtime_library(setting_value)
     when TEXT_RUNTIMETYPEINFO
       get_compiler_info().rtti = get_boolean_value(setting_value)
     when TEXT_SHOWINCLUDES
@@ -3806,9 +3834,13 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
   def parse_basic_runtime_checks(str_basic_runtime_checks)
     return parse_integer(str_basic_runtime_checks)
   end
+  def parse_debug_information_format(str_debug_information_format)
+    return parse_integer(str_debug_information_format)
+  end
   def parse_exception_handling(setting_value); return parse_integer(setting_value) end
   def parse_inline_function_expansion(setting_value); return parse_integer(setting_value) end
   def parse_optimization(setting_value); return parse_integer(setting_value) end
+  def parse_runtime_library(setting_value); return parse_integer(setting_value) end
   def parse_use_precompiled_header(value_use_precompiled_header)
     use_val = parse_integer(value_use_precompiled_header)
     if use_val == 3; use_val = 2 end # VS7 --> VS8 migration change: all values of 3 have been replaced by 2, it seems...
@@ -3830,6 +3862,7 @@ module V2C_VSToolLinkerDefines
   TEXT_PROGRAMDATABASEFILE = 'ProgramDatabaseFile'
   TEXT_SUBSYSTEM = 'SubSystem'
   TEXT_TARGETMACHINE = 'TargetMachine'
+  TEXT_ENABLEUAC = 'EnableUAC'
   VS_DEFAULT_SETTING_SUBSYSTEM = V2C_Linker_Defines::SUBSYSTEM_WINDOWS
   VS_DEFAULT_SETTING_TARGET_MACHINE = V2C_Linker_Defines::MACHINE_NOT_SET
 end
@@ -3839,6 +3872,7 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
   include V2C_VSToolLinkerDefines
 
   def get_linker_info; return @info_elem end
+  def get_linker_specific_info; return @info_elem.arr_tool_variant_specific_info[0] end
   def parse_setting(setting_key, setting_value)
     found = be_optimistic()
     linker_info = get_linker_info()
@@ -3848,7 +3882,7 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
     when TEXT_ADDITIONALLIBRARYDIRECTORIES
       parse_additional_library_directories(setting_value, linker_info.arr_lib_dirs)
     when TEXT_ADDITIONALOPTIONS
-      parse_additional_options(linker_info.arr_tool_variant_specific_info[0].arr_flags, setting_value)
+      parse_additional_options(get_linker_specific_info().arr_flags, setting_value)
     when TEXT_BASEADDRESS
       linker_info.base_address = setting_value.hex
     when TEXT_ENABLECOMDATFOLDING
@@ -3865,6 +3899,8 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
       linker_info.subsystem = parse_subsystem(setting_value)
     when TEXT_TARGETMACHINE
       linker_info.target_machine = parse_target_machine(setting_value)
+    when TEXT_ENABLEUAC
+      linker_info.uac_manifest_enable = get_boolean_value(setting_value)
     else
       found = super
     end
@@ -5058,6 +5094,16 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
     ]
     return string_to_index(arr_basic_runtime_checks, str_basic_runtime_checks, 0)
   end
+  def parse_debug_information_format(str_debug_information_format)
+    arr_debug_information_format = [
+      '', # Disabled
+      'OldStyle', # 1, /Z7
+      'None', # 2
+      'ProgramDatabase', # 3, /Zi
+      'EditAndContinue' # 4, /ZI
+    ]
+    return string_to_index(arr_debug_information_format, str_debug_information_format, 0)
+  end
   def parse_exception_handling(str_exception_handling)
     arr_except = [
       'false', # 0, false
@@ -5083,6 +5129,16 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
       'Full' # 3, /Ox
     ]
     return string_to_index(arr_optimization, str_optimization, 0)
+  end
+  def parse_runtime_library(str_crt)
+    arr_crt = [
+      '', # 0, None (?)
+      'MultiThreaded', # 1, /MT
+      'MultiThreadedDebug', # 2, /MTd
+      'MultiThreadedDLL', # 3, /MD
+      'MultiThreadedDebugDLL', # 4, /MDd
+    ]
+    return string_to_index(arr_crt, str_crt, 1)
   end
   def parse_use_precompiled_header(str_use_precompiled_header)
     return string_to_index([ 'NotUsing', 'Create', 'Use' ], str_use_precompiled_header.strip, 0)
