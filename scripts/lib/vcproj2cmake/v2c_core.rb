@@ -1,6 +1,7 @@
 # This file is part of the vcproj2cmake build converter (vcproj2cmake.sf.net)
 #
 
+require 'tempfile'
 require 'vcproj2cmake/util_file' # V2C_Util_File.cmp()
 
 $VERBOSE=true

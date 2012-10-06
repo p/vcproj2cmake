@@ -1,7 +1,6 @@
 #!/usr/bin/ruby -w
 
 require 'find'
-require 'tempfile'
 require 'pathname'
 
 # HACK: have $script_dir as global variable currently
@@ -21,8 +20,6 @@ end
 v2cc_load_path_extend_for_own_libs()
 
 require 'vcproj2cmake/v2c_core' # (currently) large amount of random "core" functionality
-
-require 'vcproj2cmake/util_file' # V2C_Util_File.mkdir_p()
 
 ################
 #     MAIN     #
