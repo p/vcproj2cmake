@@ -1001,7 +1001,7 @@ endmacro(v2c_hook_invoke _hook_file_name)
 # _Unfortunately_ CMake historically decided to have these very dirty global flags
 # rather than a per-target property. Should eventually be fixed there.
 # *V2C_DOCS_POLICY_MACRO*
-macro(v2c_local_set_cmake_atl_mfc_flags _target _build_type _build_platform _atl_flag _mfc_flag)
+macro(v2c_local_set_cmake_atl_mfc_flags _target _build_platform _build_type _atl_flag _mfc_flag)
   v2c_buildcfg_check_if_platform_buildtype_active(${_target} "${_build_platform}" "${_build_type}" is_active_)
   # If active, then _we_ are the one to define the setting,
   # otherwise some other invocation will define it.
@@ -1010,7 +1010,7 @@ macro(v2c_local_set_cmake_atl_mfc_flags _target _build_type _build_platform _atl
     set(CMAKE_ATL_FLAG ${_atl_flag})
     set(CMAKE_MFC_FLAG ${_mfc_flag})
   endif(is_active_)
-endmacro(v2c_local_set_cmake_atl_mfc_flags _target _build_type _build_platform _atl_flag _mfc_flag)
+endmacro(v2c_local_set_cmake_atl_mfc_flags _target _build_platform _build_type _atl_flag _mfc_flag)
 
 
 # *static* conditional switch between
@@ -1143,10 +1143,10 @@ endif(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
 
 
 if(WIN32)
-  function(v2c_target_midl_specify_files _target _build_type _build_platform _header_file_name _iface_id_file_name _type_library_name)
+  function(v2c_target_midl_specify_files _target _build_platform _build_type _header_file_name _iface_id_file_name _type_library_name)
     # DUMMY - WIN32 (Visual Studio) already has its own implicit custom commands for MIDL generation
     # (plus, CMake's Visual Studio generator also already properly passes MIDL-related files to the setup...)
-  endfunction(v2c_target_midl_specify_files _target _build_type _build_platform _header_file_name _iface_id_file_name _type_library_name)
+  endfunction(v2c_target_midl_specify_files _target _build_platform _build_type _header_file_name _iface_id_file_name _type_library_name)
 else(WIN32)
   function(_v2c_target_midl_create_dummy_file _midl_file _description)
     _v2c_ensure_valid_variables(_midl_file _description)
@@ -1157,7 +1157,7 @@ else(WIN32)
       COMMENT "${comment_}"
     )
   endfunction(_v2c_target_midl_create_dummy_file _file _description)
-  function(v2c_target_midl_specify_files _target _build_type _build_platform _header_file_name _iface_id_file_name _type_library_name)
+  function(v2c_target_midl_specify_files _target _build_platform _build_type _header_file_name _iface_id_file_name _type_library_name)
     v2c_buildcfg_check_if_platform_buildtype_active(${_target} "${_build_platform}" "${_build_type}" is_active_)
     if(NOT is_active_)
       return()
@@ -1175,7 +1175,7 @@ else(WIN32)
     if(_iface_id_file_name)
       _v2c_target_midl_create_dummy_file("${_iface_id_file_name}" "interface identifier")
     endif(_iface_id_file_name)
-  endfunction(v2c_target_midl_specify_files _target _build_type _build_platform _header_file_name _iface_id_file_name _type_library_name)
+  endfunction(v2c_target_midl_specify_files _target _build_platform _build_type _header_file_name _iface_id_file_name _type_library_name)
 endif(WIN32)
 
 

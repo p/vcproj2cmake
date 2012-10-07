@@ -1728,15 +1728,17 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
         #end
       write_conditional_end(var_v2c_want_buildcfg_curr)
     else
-      str_build_type = ''
-      str_build_platform = ''
-      if not condition.nil?
-        str_build_type = condition.get_build_type()
-        str_build_platform = condition.platform
-      end
-      arr_args_func = [ target_name, str_build_type, str_build_platform, use_of_atl.to_s(), use_of_mfc.to_s() ]
-      write_invoke_v2c_function_quoted('v2c_local_set_cmake_atl_mfc_flags', arr_args_func)
+      arr_args_func = [ use_of_atl.to_s(), use_of_mfc.to_s() ]
+      write_invoke_object_conditional_v2c_function('v2c_local_set_cmake_atl_mfc_flags', target_name, condition, arr_args_func)
     end
+  end
+  def write_invoke_object_conditional_v2c_function(str_function, object_name, condition, arr_args_func_other)
+    arr_args_func = [
+      prepare_string_literal(condition.platform),
+      prepare_string_literal(condition.get_build_type())
+    ]
+    arr_args_func.concat(arr_args_func_other)
+    write_invoke_config_object_v2c_function_quoted(str_function, object_name, arr_args_func)
   end
 end
 
@@ -2459,8 +2461,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
     # For an MIDL discussion, see
     #   http://cmake.3232098.n2.nabble.com/CMake-with-IDL-file-generation-td7581589.html
-    arr_args_midl = [ condition.get_build_type(), condition.platform, midl_info.header_file_name, midl_info.iface_id_file_name, midl_info.type_library_name ]
-    write_invoke_config_object_v2c_function_quoted('v2c_target_midl_specify_files', target_name, arr_args_midl)
+    arr_args_midl = [ midl_info.header_file_name, midl_info.iface_id_file_name, midl_info.type_library_name ]
+    write_invoke_object_conditional_v2c_function('v2c_target_midl_specify_files', target_name, condition, arr_args_midl)
   end
   def hook_up_midl_files(file_lists, config_info)
     # VERY Q&D way to mark MIDL-related files as GENERATED,
@@ -2644,11 +2646,10 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # and should derive the header from that - but we could grep the
     # .cpp file for the similarly named include......).
     return if pch_source_name.nil? or pch_source_name.empty?
-    str_build_type = prepare_string_literal(condition.get_build_type())
-    str_platform_name = prepare_string_literal(condition.platform)
-    str_pch_use_mode = "#{pch_use_mode}"
-    arr_args_precomp_header = [ str_platform_name, str_build_type, str_pch_use_mode, pch_source_name, pch_binary_name ]
-    write_invoke_config_object_v2c_function_quoted('v2c_target_add_precompiled_header', target_name, arr_args_precomp_header)
+    str_pch_use_mode = "#{pch_use_mode}" # stringify integer
+    arr_args_precomp_header = [ str_pch_use_mode, pch_source_name, pch_binary_name ]
+    write_invoke_object_conditional_v2c_function('v2c_target_add_precompiled_header',
+    target_name, condition, arr_args_precomp_header)
   end
   def write_precompiled_header(condition, precompiled_header_info)
     return if not $v2c_target_precompiled_header_enable
