@@ -1142,6 +1142,37 @@ else(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
 endif(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
 
 
+function(v2c_target_config_charset_set _target _build_platform _build_type _charset)
+  v2c_buildcfg_check_if_platform_buildtype_active(${_target} "${_build_platform}" "${_build_type}" is_active_)
+  if(NOT is_active_)
+    return()
+  endif(NOT is_active_)
+  # Might perhaps want to have a
+  # if(COMMAND user_side_hook)
+  # to query for a user-side function which does the target's charset setup,
+  # since not all build environments might have a setup
+  # where simply adding UNICODE/MBCS defines is sufficient.
+  _v2c_var_set_empty(charset_defines_list_)
+  # http://blog.m-ri.de/index.php/2007/05/31/_unicode-versus-unicode-und-so-manches-eigentuemliche/
+  #   "    "Use Unicode Character Set" setzt beide Defines _UNICODE und UNICODE
+  #       "Use Multi-Byte Character Set" setzt nur _MBCS.
+  #           "Not set" setzt Erwartungsgemäß keinen der Defines..."
+  if("${_charset}" STREQUAL "UNICODE")
+    list(APPEND charset_defines_list_ "_UNICODE" "UNICODE")
+  elseif("${_charset}" STREQUAL "MBCS")
+    list(APPEND charset_defines_list_ "_MBCS")
+  else()
+    # SBCS (e.g. ASCII, old standard configuration, no defines here)
+  endif("${_charset}" STREQUAL "UNICODE")
+  if(charset_defines_list_)
+    # FIXME: for property names, possibly we need to convert
+    # space to underscore, too.
+    string(TOUPPER "${_build_type}" build_type_upper_)
+    set_property(TARGET ${_target} APPEND PROPERTY COMPILE_DEFINITIONS_"${build_type_upper_}" ${charset_defines_list_})
+  endif(charset_defines_list_)
+endfunction(v2c_target_config_charset_set _target _build_platform _build_type _charset)
+
+
 if(WIN32)
   function(v2c_target_midl_specify_files _target _build_platform _build_type _header_file_name _iface_id_file_name _type_library_name)
     # DUMMY - WIN32 (Visual Studio) already has its own implicit custom commands for MIDL generation

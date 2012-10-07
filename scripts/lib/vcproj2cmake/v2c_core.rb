@@ -2773,7 +2773,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     write_invoke_config_object_v2c_function_quoted('v2c_target_set_properties_vs_scc', target_name, arr_args_func)
   end
 
-  def add_target_config_specific_definitions(target_config_info, hash_defines)
+  def add_target_config_specific_definitions(condition, target_config_info, hash_defines)
     # Hrmm, are we even supposed to be doing this?
     # On Windows I guess UseOfMfc in generated VS project files
     # would automatically cater for it, and all other platforms
@@ -2790,20 +2790,19 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       hash_defines['_AFXEXT'] = ''
       hash_defines['_AFXDLL'] = ''
     end
+    charset_type = 'SBCS'
     case target_config_info.charset
-    when V2C_TargetConfig_Defines::CHARSET_SBCS # nothing to do?
+    when V2C_TargetConfig_Defines::CHARSET_SBCS
+      charset_type = 'SBCS'
     when V2C_TargetConfig_Defines::CHARSET_UNICODE
-      # http://blog.m-ri.de/index.php/2007/05/31/_unicode-versus-unicode-und-so-manches-eigentuemliche/
-      #   "    "Use Unicode Character Set" setzt beide Defines _UNICODE und UNICODE
-      #       "Use Multi-Byte Character Set" setzt nur _MBCS.
-      #           "Not set" setzt Erwartungsgemäß keinen der Defines..."
-      hash_defines['_UNICODE'] = ''
-      hash_defines['UNICODE'] = ''
+      charset_type = 'UNICODE'
     when V2C_TargetConfig_Defines::CHARSET_MBCS
-      hash_defines['_MBCS'] = ''
+      charset_type = 'MBCS'
     else
       log_implementation_bug('unknown charset type!?')
     end
+    arr_args_func_other = [ charset_type ]
+    write_invoke_object_conditional_v2c_function('v2c_target_config_charset_set', @target.name, condition, arr_args_func_other)
   end
 
   def generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
@@ -2919,7 +2918,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
 	    hash_defines_augmented = compiler_info_curr.hash_defines.clone
 
-	    add_target_config_specific_definitions(target_config_info_curr, hash_defines_augmented)
+	    add_target_config_specific_definitions(condition, target_config_info_curr, hash_defines_augmented)
             # Convert hash into array as required by the definitions helper function
             # (it's probably a good idea to provide "cooked" "key=value" entries
             # for more complete matching possibilities
