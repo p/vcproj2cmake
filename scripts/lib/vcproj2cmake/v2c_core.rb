@@ -638,11 +638,19 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
     @arr_dependencies = Array.new # V2C_Dependency_Info (we need an attribute which indicates whether this dependency is a library _file_ or a target name, since we should be reliably able to decide whether we can add "debug"/"optimized" keywords to CMake variables or target_link_library() parms)
     @base_address = BASE_ADDRESS_NOT_SET
     @comdat_folding = COMDAT_FOLDING_DEFAULT
+    @data_execution_prevention_enable = true # Suitable default?
+    @arr_delay_load_dlls = Array.new
     @generate_debug_information_enable = false
+    @generate_map_file_enable = false
+    @arr_ignore_specific_default_libraries = Array.new
     @link_incremental = 0 # 1 means NO, thus 2 probably means YES?
+    @map_file_name = nil
     @module_definition_file = nil
     @optimize_references_enable = false
     @pdb_file = nil
+    @per_user_redirection_enable = false
+    @randomized_base_address_enable = false
+    @register_output_enable = false
     @subsystem = SUBSYSTEM_CONSOLE
     @target_machine = MACHINE_NOT_SET
     @uac_manifest_enable = false # EnableUAC (MSVC linker /MANIFESTUAC option); for now we'll assume that it's NOT MSVC-specific, i.e. other linkers sometimes possibly are able to do UAC manifests, too.
@@ -651,11 +659,19 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
   attr_accessor :arr_dependencies
   attr_accessor :base_address
   attr_accessor :comdat_folding
+  attr_accessor :data_execution_prevention_enable
+  attr_accessor :arr_delay_load_dlls
   attr_accessor :generate_debug_information_enable
+  attr_accessor :generate_map_file_enable
+  attr_accessor :arr_ignore_specific_default_libraries
   attr_accessor :link_incremental
+  attr_accessor :map_file_name
   attr_accessor :module_definition_file
   attr_accessor :optimize_references_enable
   attr_accessor :pdb_file
+  attr_accessor :per_user_redirection_enable
+  attr_accessor :randomized_base_address_enable
+  attr_accessor :register_output_enable
   attr_accessor :subsystem
   attr_accessor :target_machine
   attr_accessor :uac_manifest_enable
@@ -3643,6 +3659,16 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
       opt
     }
   end
+  def parse_fs_item_list(attr_fs_items, arr_fs_items)
+    return if attr_fs_items.empty?
+    split_values_list_preserve_ws_discard_empty(attr_fs_items).each { |elem|
+      next if skip_vs10_percent_sign_var(elem)
+      elem_fs = get_filesystem_location(elem)
+      next if elem_fs.nil?
+      #logger.info "fs item is '#{elem_fs}'"
+      arr_fs_items.push(elem_fs)
+    }
+  end
 end
 
 module V2C_VSToolDefineDefines
@@ -3855,12 +3881,20 @@ module V2C_VSToolLinkerDefines
   TEXT_ADDITIONALDEPENDENCIES = 'AdditionalDependencies'
   TEXT_ADDITIONALLIBRARYDIRECTORIES = 'AdditionalLibraryDirectories'
   TEXT_BASEADDRESS = 'BaseAddress'
+  TEXT_DATAEXECUTIONPREVENTION = 'DataExecutionPrevention'
+  TEXT_DELAYLOADDLLS = 'DelayLoadDLLs'
   TEXT_ENABLECOMDATFOLDING = 'EnableCOMDATFolding'
   TEXT_GENERATEDEBUGINFORMATION = 'GenerateDebugInformation'
+  TEXT_GENERATEMAPFILE = 'GenerateMapFile'
+  TEXT_IGNORESPECIFICDEFAULTLIBRARIES = 'IgnoreSpecificDefaultLibraries'
   TEXT_LINKINCREMENTAL = 'LinkIncremental'
+  TEXT_MAPFILENAME = 'MapFileName'
   TEXT_MODULEDEFINITIONFILE = 'ModuleDefinitionFile'
   TEXT_OPTIMIZEREFERENCES = 'OptimizeReferences'
+  TEXT_PERUSERREDIRECTION = 'PerUserRedirection'
   TEXT_PROGRAMDATABASEFILE = 'ProgramDatabaseFile'
+  TEXT_RANDOMIZEDBASEADDRESS = 'RandomizedBaseAddress'
+  TEXT_REGISTEROUTPUT = 'RegisterOutput'
   TEXT_SUBSYSTEM = 'SubSystem'
   TEXT_TARGETMACHINE = 'TargetMachine'
   TEXT_ENABLEUAC = 'EnableUAC'
@@ -3886,22 +3920,38 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
       parse_additional_options(get_linker_specific_info().arr_flags, setting_value)
     when TEXT_BASEADDRESS
       linker_info.base_address = setting_value.hex
+    when TEXT_DATAEXECUTIONPREVENTION
+      linker_info.data_execution_prevention_enable = parse_data_execution_prevention_enable(setting_value)
+    when TEXT_DELAYLOADDLLS
+      parse_delay_load_dlls(setting_value, linker_info.arr_delay_load_dlls)
     when TEXT_ENABLECOMDATFOLDING
       linker_info.comdat_folding = parse_comdat_folding(setting_value)
     when TEXT_GENERATEDEBUGINFORMATION
       linker_info.generate_debug_information_enable = get_boolean_value(setting_value)
+    when TEXT_GENERATEMAPFILE
+      linker_info.generate_map_file_enable = parse_generate_map_file_enable(setting_value)
+    when TEXT_IGNORESPECIFICDEFAULTLIBRARIES
+      linker_info.arr_ignore_specific_default_libraries = parse_ignore_specific_default_libraries(setting_value)
+    when TEXT_MAPFILENAME
+      linker_info.map_file_name = parse_map_file_name(setting_value)
     when TEXT_MODULEDEFINITIONFILE
       linker_info.module_definition_file = parse_module_definition_file(setting_value)
     when TEXT_OPTIMIZEREFERENCES
       linker_info.optimize_references_enable = parse_optimize_references(setting_value)
+    when TEXT_PERUSERREDIRECTION
+      linker_info.per_user_redirection_enable = parse_per_user_redirection_enable(setting_value)
     when TEXT_PROGRAMDATABASEFILE
       linker_info.pdb_file = parse_pdb_file(setting_value)
+    when TEXT_RANDOMIZEDBASEADDRESS
+      linker_info.randomized_base_address_enable = parse_randomized_base_address_enable(setting_value)
+    when TEXT_REGISTEROUTPUT
+      linker_info.register_output_enable = parse_register_output_enable(setting_value)
     when TEXT_SUBSYSTEM
       linker_info.subsystem = parse_subsystem(setting_value)
     when TEXT_TARGETMACHINE
       linker_info.target_machine = parse_target_machine(setting_value)
     when TEXT_ENABLEUAC
-      linker_info.uac_manifest_enable = get_boolean_value(setting_value)
+      linker_info.uac_manifest_enable = parse_uac_manifest_enable(setting_value)
     else
       found = super
     end
@@ -3919,25 +3969,42 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
       arr_dependencies.push(V2C_Dependency_Info.new(dependency_name))
     }
   end
+  def parse_data_execution_prevention_enable(str_data_execution_prevention_enable)
+    get_boolean_value(str_data_execution_prevention_enable)
+  end
+  def parse_delay_load_dlls(str_delay_load_dlls)
+    parse_fs_item_list(str_delay_load_dlls, arr_delay_load_dlls)
+  end
   def parse_additional_library_directories(attr_lib_dirs, arr_lib_dirs)
-    return if attr_lib_dirs.empty?
-    split_values_list_preserve_ws_discard_empty(attr_lib_dirs).each { |elem_lib_dir|
-      next if skip_vs10_percent_sign_var(elem_lib_dir)
-      elem_lib_dir = get_filesystem_location(elem_lib_dir)
-      next if elem_lib_dir.nil?
-      #logger.info "lib dir is '#{elem_lib_dir}'"
-      arr_lib_dirs.push(elem_lib_dir)
-    }
+    parse_fs_item_list(attr_lib_dirs, arr_lib_dirs)
   end
   # See comment at compiler-side method counterpart
   # It seems VS7 linker arguments are separated by whitespace --> empty split() argument.
   # UPDATE: now commented out since the common base method probably
   # can handle it correctly.
   #def parse_additional_options(arr_flags, attr_options); arr_flags.replace(attr_options.split()) end
+  def parse_generate_map_file_enable(str_generate_map_file_enable)
+    get_boolean_value(str_generate_map_file_enable)
+  end
+  def parse_ignore_specific_default_libraries(str_ignore_specific_default_libraries)
+    str_ignore_specific_default_libraries.split()
+  end
+  def parse_map_file_name(str_map_file_name)
+    get_filesystem_location(str_map_file_name)
+  end
   def parse_module_definition_file(attr_module_definition_file)
-    return get_filesystem_location(attr_module_definition_file)
+    get_filesystem_location(attr_module_definition_file)
   end
   def parse_pdb_file(attr_pdb_file); return get_filesystem_location(attr_pdb_file) end
+  def parse_randomized_base_address_enable(str_randomized_base_address_enable)
+    get_boolean_value(str_randomized_base_address_enable)
+  end
+  def parse_register_output_enable(str_parse_register_output_enable)
+    get_boolean_value(str_parse_register_output_enable)
+  end
+  def parse_uac_manifest_enable(str_uac_manifest_enable)
+    get_boolean_value(str_uac_manifest_enable)
+  end
 end
 
 module V2C_VS7ToolLinkerDefines
@@ -5177,8 +5244,11 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
   #  end
   #  return found
   #end
-  def parse_comdat_folding(str_comdat_folding); return get_boolean_value(str_comdat_folding) end
-  def parse_optimize_references(setting_value); return get_boolean_value(setting_value) end
+  def parse_comdat_folding(str_comdat_folding); get_boolean_value(str_comdat_folding) end
+  def parse_optimize_references(setting_value); get_boolean_value(setting_value) end
+  def parse_per_user_redirection_enable(str_per_user_redirection_enable)
+    get_boolean_value(str_per_user_redirection_enable)
+  end
   def parse_target_machine(str_machine)
      machine = VS_DEFAULT_SETTING_TARGET_MACHINE
      case str_machine
@@ -5314,7 +5384,7 @@ private
   def parse_use_of_atl_mfc(str_use_of_atl_mfc)
     return string_to_index([ 'false', 'Static', 'Dynamic' ], str_use_of_atl_mfc, VS_DEFAULT_SETTING_MFC)
   end
-  def parse_wp_optimization(str_opt); return get_boolean_value(str_opt) end
+  def parse_wp_optimization(str_opt); get_boolean_value(str_opt) end
 end
 
 class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10BaseElemParser
