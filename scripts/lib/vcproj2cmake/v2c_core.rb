@@ -3517,7 +3517,7 @@ class V2C_VSXmlParserBase < V2C_ParserBase
         error_unknown_case_value(found)
       end
     rescue ArgumentError => e
-      logger.warn "encountered ArgumentError #{e.message} - perhaps integer parsing of #{setting_key} --> #{setting value} failed?"
+      logger.warn "encountered ArgumentError #{e.message} - perhaps integer parsing of #{setting_key} --> #{setting_value} failed?"
     end
     return success
   end
