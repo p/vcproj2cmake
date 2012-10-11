@@ -3312,9 +3312,23 @@ class V2C_ParserBase < V2C_LoggerBase
   end
   attr_accessor :info_elem
 
-  def parser_error(str_description); logger.error(str_description) end
+  def parser_error(str_description, critical)
+    do_raise = false
+    if true == critical
+      # TODO: should check a user-side config setting on whether to actually abort.
+      do_raise = true
+    end
+    if true == do_raise
+      raise V2C_ParserError, str_description
+    else
+      logger.error(str_description)
+    end
+  end
+  def parser_error_logic(str_description); parser_error("logic: #{str_description}", false) end
+  def parser_error_syntax(str_description); parser_error("syntax: #{str_description}", false) end
+  def parser_error_todo(str_description); parser_error("todo: #{str_description}", false) end
   def error_unknown_case_value(description, val)
-    raise V2C_ParserError, "unknown/unsupported/corrupt #{description} case value! (#{val})"
+    parser_error("unknown/unsupported/corrupt #{description} case value! (#{val})", true)
   end
 end
 
@@ -3389,7 +3403,7 @@ class V2C_VSXmlParserBase < V2C_ParserBase
         value = false
       else
         # Hrmm, did we hit a totally unexpected (new) element value!?
-        parser_error("unknown boolean value text \"#{str_value}\"")
+        parser_error_syntax("unknown boolean value text \"#{str_value}\"")
       end
     end
     return value
@@ -3566,7 +3580,7 @@ class V2C_VSXmlParserBase < V2C_ParserBase
     @called_base_parse_post_hook = true
   end
   def announce_missing_base_call(str_method)
-    parser_error "one of its classes forgot to service the #{str_method} base handler!"
+    parser_error_logic("one of its classes forgot to service the #{str_method} base handler!")
   end
   def verify_calls
     missing_call = nil
@@ -4047,7 +4061,7 @@ class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
      when 17
        machine = V2C_Linker_Defines::MACHINE_X64
      else
-       parser_error("unknown target machine #{setting_value}")
+       parser_error_todo("unknown target machine #{setting_value}")
      end
      return machine
   end
@@ -4830,7 +4844,7 @@ class V2C_VS10BaseElemParser < V2C_VS10ParserBase
       # Or is there a better way to achieve common, reliable parsing of that condition information?
       @have_condition = true
       if not get_base_elem().condition.nil?
-        parser_error 'huh, pre-existing condition!?'
+        parser_error_logic('huh, pre-existing condition!?')
       else
         get_base_elem().condition = V2C_Info_Condition.new(setting_value)
       end
@@ -4844,7 +4858,7 @@ class V2C_VS10BaseElemParser < V2C_VS10ParserBase
 
   def verify_execution
     if not check_condition
-      parser_error 'unhandled condition element!?'
+      parser_error_logic('unhandled condition element!?')
     end
   end
   def check_condition
@@ -4984,7 +4998,7 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
   def get_file_list; return @info_elem end
   def parse_element(subelem_xml)
     if not subelem_xml.name == @list_name
-      parser_error "ItemGroup element mismatch! list name #{@list_name} vs. element name #{subelem_xml.name}!"
+      parser_error_syntax("ItemGroup element mismatch! list name #{@list_name} vs. element name #{subelem_xml.name}!")
     end
     file_info = V2C_Info_File.new
     file_parser = V2C_VS10ItemGroupFileElemParser.new(subelem_xml, file_info)
@@ -5050,7 +5064,7 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
     # TODO:
     #if not @itemgroup.label.nil?
     #  if not setting_key == @itemgroup.label
-    #    parser_error("item label #{setting_key} does not match group's label #{@itemgroup.label}!?")
+    #    parser_error_syntax("item label #{setting_key} does not match group's label #{@itemgroup.label}!?")
     #  end
     #end
     return found
@@ -5259,7 +5273,7 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
      when 'MachineX64'
        machine = V2C_Linker_Defines::MACHINE_X64
      else
-       parser_error("unknown target machine #{str_machine}")
+       parser_todo_error("unknown target machine #{str_machine}")
      end
      return machine
   end
@@ -5443,7 +5457,7 @@ class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10BaseElemParser
       # despite sbnc.vcproj containing Name and NOT RootNamespace. WEIRD.
       # Couldn't find any hint how this case should be handled,
       # which setting to adopt then. FIXME check on MSVS.
-      parser_error('missing project name? Adopting root namespace...')
+      parser_error_syntax('missing project name? Adopting root namespace...')
       get_project().name = get_project().root_namespace
     end
   end
