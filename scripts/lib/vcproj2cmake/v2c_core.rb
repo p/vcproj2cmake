@@ -3564,11 +3564,14 @@ class V2C_VSXmlParserBase < V2C_ParserBase
       # to certain Ruby functions (integer parsing)
       # AND for function argument count errors in Ruby methods.
       # I.e. for both implementation-time AND run-time issues.
-      # And then of course telling things apart properly is impossible
-      # (probably not even checking .message for "wrong number of arguments").
-      # This looks like a collossal design issue.
-      parser_error("encountered ArgumentError #{e.message} - perhaps integer parsing of #{setting_key} --> #{setting_value} failed?", true)
-      raise
+      # And then of course telling things apart properly is impossible.
+      # This looks like a collossal design issue. "Ruby, bad doggie, no bone!"
+      # Oh well, seems it's possible to check .message for the specific error string.
+      if e.message.start_with?('invalid value for Integer')
+        parser_error("encountered ArgumentError #{e.message} - probably integer parsing of #{setting_key} --> #{setting_value} failed", true)
+      else
+        raise
+      end
     end
     return success
   end
