@@ -3394,19 +3394,7 @@ class V2C_VSXmlParserBase < V2C_ParserBase
     logger.todo "#{self.class.name}: unhandled less important XML element (#{elem_name})!"
   end
   def get_boolean_value(str_value)
-    value = false
-    if not str_value.nil?
-      case str_value.downcase
-      when 'true'
-        value = true
-      when 'false', '' # seems empty string is VS equivalent to false, right?
-        value = false
-      else
-        # Hrmm, did we hit a totally unexpected (new) element value!?
-        parser_error_syntax("unknown boolean value text \"#{str_value}\"")
-      end
-    end
-    return value
+    parse_boolean_property_value(str_value)
   end
   def skip_vs10_percent_sign_var(str_var)
     # shortcut :)
@@ -3465,6 +3453,31 @@ class V2C_VSXmlParserBase < V2C_ParserBase
   end
 
   private
+
+  def parse_boolean_text(str_value)
+    bool_out = false
+    success = true # be optimistic :)
+    if not str_value.nil?
+      case str_value.downcase
+      when 'true'
+        bool_out = true
+      when 'false'
+        bool_out = false
+      else
+        # Seems empty (whitespace-only) string is VS equivalent to false, right?
+        # http://stackoverflow.com/a/1634814/1541578
+        str_value_cooked = str_value.gsub(/\s+/, "")
+        if str_value_cooked.empty?
+          bool_out = false
+          success = true
+        else
+	  # Unknown syntax (caller should probably log an error).
+          success = false
+        end
+      end
+    end
+    [success, bool_out]
+  end
 
   # @brief Descriptively named helper, to save a ton of useless comments :) ("be optimistic :)")
   def be_optimistic; return FOUND_TRUE end
@@ -3612,6 +3625,23 @@ class V2C_VSProjectFileXmlParserBase < V2C_VSXmlParserBase
   def get_arr_projects_out; return @info_elem end
 end
 
+module V2C_VS7Syntax
+  # In VS7, a boolean property appears to be representable
+  # by "0", "1" values as well. FIXME: perhaps we're being imprecise here:
+  # we should make sure to implement precise handling for specific VS7/VS10 element/attribute types.
+  def parse_boolean_property_value(str_value)
+    success, value = parse_boolean_text(str_value)
+    if true != success
+      value = parse_integer(str_value)
+    end
+    return value
+  end
+end
+
+class V2C_VS7ParserBase < V2C_VSXmlParserBase
+  include V2C_VS7Syntax
+end
+
 class V2C_VSProjectParserBase < V2C_VSXmlParserBase
   def initialize(elem_xml, info_elem_out)
     super(elem_xml, info_elem_out)
@@ -3631,6 +3661,7 @@ class V2C_VSProjectParserBase < V2C_VSXmlParserBase
 end
 
 class V2C_VS7ProjectParserBase < V2C_VSProjectParserBase
+  include V2C_VS7Syntax
 end
 
 module V2C_VSToolDefines
@@ -3825,15 +3856,16 @@ class V2C_VSToolCompilerParser < V2C_VSToolDefineParserBase
   end
 end
 
-module V2C_VS7ToolDefines
+module V2C_VS7ToolSyntax
+  include V2C_VS7Syntax
   include V2C_VSToolDefines
   TEXT_NAME = 'Name'
   TEXT_VCCLCOMPILERTOOL = 'VCCLCompilerTool'
   TEXT_VCLINKERTOOL = 'VCLinkerTool'
 end
 
-module V2C_VS7ToolCompilerDefines
-  include V2C_VS7ToolDefines
+module V2C_VS7ToolCompilerSyntax
+  include V2C_VS7ToolSyntax
   include V2C_VSToolCompilerDefines
   # pch names are _different_ (_swapped_) from their VS10 meanings...
   TEXT_PRECOMPILEDHEADERFILE_BINARY = 'PrecompiledHeaderFile'
@@ -3843,7 +3875,7 @@ module V2C_VS7ToolCompilerDefines
 end
 
 class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
-  include V2C_VS7ToolCompilerDefines
+  include V2C_VS7ToolCompilerSyntax
 
   private
 
@@ -4023,7 +4055,7 @@ end
 
 module V2C_VS7ToolLinkerDefines
   include V2C_VSToolLinkerDefines
-  include V2C_VS7ToolDefines
+  include V2C_VS7ToolSyntax
 end
 
 class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
@@ -4098,11 +4130,8 @@ class V2C_VSToolMIDLParser < V2C_VSToolDefineParserBase
   end
 end
 
-class V2C_VS10ToolMIDLParser < V2C_VSToolMIDLParser
-end
-
 # Simple forwarder class. Creates specific parsers and invokes them.
-class V2C_VS7ToolParser < V2C_VSXmlParserBase
+class V2C_VS7ToolParser < V2C_VS7ParserBase
   def parse
     found = be_optimistic()
     toolname = @elem_xml.attributes[TEXT_NAME]
@@ -4128,7 +4157,7 @@ class V2C_VS7ToolParser < V2C_VSXmlParserBase
     return found
   end
   private
-  include V2C_VS7ToolDefines
+  include V2C_VS7ToolSyntax
 
   def get_tools_info; return @info_elem end
 end
@@ -4181,7 +4210,7 @@ module V2C_VS7ConfigurationDefines
   TEXT_VS7_USEOFMFC = 'UseOfMFC'
 end
 
-class V2C_VS7ConfigurationBaseParser < V2C_VSXmlParserBase
+class V2C_VS7ConfigurationBaseParser < V2C_VS7ParserBase
   # VS10 has added a separation of these structs,
   # thus we need to pass _two_ distinct params even in VS7...
   def initialize(elem_xml, target_config_info_out, config_info_out)
@@ -4271,7 +4300,7 @@ class V2C_VS7FileConfigurationParser < V2C_VS7ConfigurationBaseParser
   end
 end
 
-class V2C_VS7ConfigurationsParser < V2C_VSXmlParserBase
+class V2C_VS7ConfigurationsParser < V2C_VS7ParserBase
   def initialize(elem_xml, info_elem_out, arr_target_config_info_out, build_platform_configs_out)
     super(elem_xml, info_elem_out)
     @arr_target_config_info = arr_target_config_info_out
@@ -4329,7 +4358,7 @@ class V2C_Info_File
   def is_generated; return (@attr & ATTR_GENERATED) > 0 end
 end
 
-class V2C_VS7FileParser < V2C_VSXmlParserBase
+class V2C_VS7FileParser < V2C_VS7ParserBase
   VS7_IDL_FILE_TYPES_REGEX_OBJ = %r{_(i|p).c$}
   def initialize(file_xml, arr_file_infos_out)
     super(file_xml, arr_file_infos_out)
@@ -4434,7 +4463,7 @@ module V2C_VSFilterDefines
   TEXT_UNIQUEIDENTIFIER = 'UniqueIdentifier'
 end
 
-class V2C_VS7FilterParser < V2C_VSXmlParserBase
+class V2C_VS7FilterParser < V2C_VS7ParserBase
   def initialize(files_xml, project_out, files_str_out)
     super(files_xml, project_out)
     @files_str = files_str_out
@@ -4550,7 +4579,7 @@ class V2C_VS7FilterParser < V2C_VSXmlParserBase
   end
 end
 
-class V2C_VS7PlatformParser < V2C_VSXmlParserBase
+class V2C_VS7PlatformParser < V2C_VS7ParserBase
   def initialize(elem_xml, info_elem_out)
     super(elem_xml, info_elem_out)
   end
@@ -4568,7 +4597,7 @@ class V2C_VS7PlatformParser < V2C_VSXmlParserBase
   end
 end
 
-class V2C_VS7PlatformsParser < V2C_VSXmlParserBase
+class V2C_VS7PlatformsParser < V2C_VS7ParserBase
   def initialize(elem_xml, info_elem_out)
     super(elem_xml, info_elem_out)
   end
@@ -4598,7 +4627,7 @@ class V2C_VS7PlatformsParser < V2C_VSXmlParserBase
   end
 end
 
-class V2C_VS7ToolFilesParser < V2C_VSXmlParserBase
+class V2C_VS7ToolFilesParser < V2C_VS7ParserBase
   def initialize(elem_xml, info_elem_out)
     super(elem_xml, info_elem_out)
   end
@@ -4813,12 +4842,26 @@ module V2C_VS10Defines
   TEXT_CONDITION = 'Condition'
 end
 
+module V2C_VS10Syntax
+  include V2C_VS10Defines
+
+  def parse_boolean_property_value(str_value)
+    success, value = parse_boolean_text(str_value)
+    if true != success
+      # Hrmm, did we hit a totally unexpected (new) element value!?
+      parser_error_syntax("unknown boolean value text \"#{str_value}\"")
+    end
+    return value
+  end
+end
+
 # NOTE: VS10 == MSBuild == somewhat Ant-based.
 # Thus it would probably be useful to create an Ant syntax parser base class
 # and derive MSBuild-specific behaviour from it.
 # For a list of XML file element names (i.e. schema info), see
 #   http://stackoverflow.com/questions/7899043/getting-lots-of-warnings-when-building-with-targets-in-visual-studio-2010
 class V2C_VS10ParserBase < V2C_VSXmlParserBase
+  include V2C_VS10Syntax
 end
 
 # Parses elements with optional conditional information (Condition=xxx).
@@ -5120,13 +5163,13 @@ class V2C_VS10ItemGroupParser < V2C_VS10ParserBase
   def get_project; return @info_elem end
 end
 
-module V2C_VS10ToolDefines
+module V2C_VS10ToolSyntax
   include V2C_VSToolDefines
-  include V2C_VS10Defines
+  include V2C_VS10Syntax
 end
 
-module V2C_VS10ToolCompilerDefines
-  include V2C_VS10ToolDefines
+module V2C_VS10ToolCompilerSyntax
+  include V2C_VS10ToolSyntax
   include V2C_VSToolCompilerDefines
   TEXT_PRECOMPILEDHEADER = 'PrecompiledHeader'
   TEXT_PRECOMPILEDHEADERFILE = 'PrecompiledHeaderFile'
@@ -5136,7 +5179,7 @@ end
 
 class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
   private
-  include V2C_VS10ToolCompilerDefines
+  include V2C_VS10ToolCompilerSyntax
 
   def parse_element(subelem_xml)
     found = be_optimistic()
@@ -5238,14 +5281,14 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
   end
 end
 
-module V2C_VS10ToolLinkerDefines
+module V2C_VS10ToolLinkerSyntax
+  include V2C_VS10ToolSyntax
   include V2C_VSToolLinkerDefines
+  include V2C_Linker_Defines
 end
 
 class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
-  include V2C_VS10ToolLinkerDefines
-  include V2C_VS10Defines
-  include V2C_Linker_Defines
+  include V2C_VS10ToolLinkerSyntax
   private
 
   #def parse_setting(setting_key, setting_value)
@@ -5292,6 +5335,10 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
     ]
     return string_to_index(arr_subsystem, str_subsystem, VS_DEFAULT_SETTING_SUBSYSTEM)
   end
+end
+
+class V2C_VS10ToolMIDLParser < V2C_VSToolMIDLParser
+  include V2C_VS10Syntax
 end
 
 class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
@@ -5609,7 +5656,7 @@ end
 # that a .filters file's content is simply a KISS extension of the
 # (possibly same) content of a .vcxproj file. IOW, parsing should
 # most likely be _identical_ (and thus enhance possibly already added structures!?).
-class V2C_VS10ProjectFiltersXmlParser < V2C_VSXmlParserBase
+class V2C_VS10ProjectFiltersXmlParser < V2C_VS10ParserBase
   def initialize(doc_proj_filters, arr_projects)
     super(doc_proj_filters, arr_projects)
     @idx_target = 0 # to count the number of <project> elems in the XML stream
