@@ -5895,7 +5895,7 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
   arr_projects = Array.new
 
   arr_p_parser_proj_files.each { |p_parser_proj_file|
-    log_debug "About to parse #{p_parser_proj_file}"
+    log_info "About to parse #{p_parser_proj_file}"
     parser_project_extension = p_parser_proj_file.extname
     # Q&D parser switch...
     parser = nil # IMPORTANT: reset it!
