@@ -497,6 +497,9 @@ module V2C_Compiler_Defines
   BASIC_RUNTIME_CHECKS_STACKFRAME = 1
   BASIC_RUNTIME_CHECKS_UNINITIALIZED_LOCAL_USAGE = 2
   BASIC_RUNTIME_CHECKS_FAST = 3
+  COMPILE_AS_DEFAULT = 0
+  COMPILE_AS_C = 1
+  COMPILE_AS_CXX = 2
   CRT_MULTITHREADED = 1
   CRT_MULTITHREADED_DEBUG = 2
   CRT_MULTITHREADED_DLL = 3
@@ -519,6 +522,7 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Define_Base_Info
     @arr_info_include_dirs = Array.new
     @asm_listing_location = nil
     @basic_runtime_checks = BASIC_RUNTIME_CHECKS_DEFAULT
+    @compile_as = COMPILE_AS_DEFAULT
     @debug_information_format = DEBUG_INFO_FORMAT_DISABLED
     @rtti = true
     @precompiled_header_info = nil
@@ -541,6 +545,7 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Define_Base_Info
   attr_accessor :arr_info_include_dirs
   attr_accessor :asm_listing_location
   attr_accessor :basic_runtime_checks
+  attr_accessor :compile_as
   attr_accessor :debug_information_format
   attr_accessor :rtti
   attr_accessor :precompiled_header_info
@@ -651,6 +656,7 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
     @per_user_redirection_enable = false
     @randomized_base_address_enable = false
     @register_output_enable = false
+    @strip_private_symbols_file = nil
     @subsystem = SUBSYSTEM_CONSOLE
     @target_machine = MACHINE_NOT_SET
     @uac_manifest_enable = false # EnableUAC (MSVC linker /MANIFESTUAC option); for now we'll assume that it's NOT MSVC-specific, i.e. other linkers sometimes possibly are able to do UAC manifests, too.
@@ -672,6 +678,7 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
   attr_accessor :per_user_redirection_enable
   attr_accessor :randomized_base_address_enable
   attr_accessor :register_output_enable
+  attr_accessor :strip_private_symbols_file
   attr_accessor :subsystem
   attr_accessor :target_machine
   attr_accessor :uac_manifest_enable
@@ -3764,6 +3771,7 @@ module V2C_VSToolCompilerDefines
   TEXT_ADDITIONALINCLUDEDIRECTORIES = 'AdditionalIncludeDirectories'
   TEXT_ASSEMBLERLISTINGLOCATION = 'AssemblerListingLocation'
   TEXT_BASICRUNTIMECHECKS = 'BasicRuntimeChecks'
+  TEXT_COMPILEAS = 'CompileAs'
   TEXT_DEBUGINFORMATIONFORMAT = 'DebugInformationFormat'
   TEXT_DISABLESPECIFICWARNINGS = 'DisableSpecificWarnings'
   TEXT_ENABLEFUNCTIONLEVELLINKING = 'EnableFunctionLevelLinking'
@@ -3811,6 +3819,8 @@ class V2C_VSToolCompilerParser < V2C_VSToolDefineParserBase
       get_compiler_info().asm_listing_location = get_filesystem_location(setting_value)
     when TEXT_BASICRUNTIMECHECKS
       get_compiler_info().basic_runtime_checks = parse_basic_runtime_checks(setting_value)
+    when TEXT_COMPILEAS
+      get_compiler_info().compile_as = parse_compile_as(setting_value)
     when TEXT_DEBUGINFORMATIONFORMAT
       get_compiler_info().debug_information_format = parse_debug_information_format(setting_value)
     when TEXT_DISABLESPECIFICWARNINGS
@@ -3918,6 +3928,9 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
   def parse_basic_runtime_checks(str_basic_runtime_checks)
     return parse_integer(str_basic_runtime_checks)
   end
+  def parse_compile_as(str_compile_as)
+    parse_integer(str_compile_as)
+  end
   def parse_debug_information_format(str_debug_information_format)
     return parse_integer(str_debug_information_format)
   end
@@ -3952,6 +3965,7 @@ module V2C_VSToolLinkerDefines
   TEXT_PROGRAMDATABASEFILE = 'ProgramDatabaseFile'
   TEXT_RANDOMIZEDBASEADDRESS = 'RandomizedBaseAddress'
   TEXT_REGISTEROUTPUT = 'RegisterOutput'
+  TEXT_STRIPPRIVATESYMBOLS = 'StripPrivateSymbols'
   TEXT_SUBSYSTEM = 'SubSystem'
   TEXT_TARGETMACHINE = 'TargetMachine'
   TEXT_ENABLEUAC = 'EnableUAC'
@@ -4003,6 +4017,8 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
       linker_info.randomized_base_address_enable = parse_randomized_base_address_enable(setting_value)
     when TEXT_REGISTEROUTPUT
       linker_info.register_output_enable = parse_register_output_enable(setting_value)
+    when TEXT_STRIPPRIVATESYMBOLS
+      linker_info.strip_private_symbols_file = get_filesystem_location(setting_value)
     when TEXT_SUBSYSTEM
       linker_info.subsystem = parse_subsystem(setting_value)
     when TEXT_TARGETMACHINE
@@ -4851,6 +4867,8 @@ end
 
 module V2C_VS10Defines
   TEXT_CONDITION = 'Condition'
+  TEXT_DEFAULT = 'Default'
+  TEXT_DISABLED = 'Disabled'
 end
 
 module V2C_VS10Syntax
@@ -5223,12 +5241,20 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
 
   def parse_basic_runtime_checks(str_basic_runtime_checks)
     arr_basic_runtime_checks = [
-      'Default', # 0
+      TEXT_DEFAULT, # 0
       'StackFrameRuntimeCheck', # 1, /RTCs
       'UninitializedLocalUsageCheck', # 2, /RTCu
       'EnableFastChecks' # 3, /RTC1
     ]
     return string_to_index(arr_basic_runtime_checks, str_basic_runtime_checks, 0)
+  end
+  def parse_compile_as(str_compile_as)
+    arr_compile_as = [
+      TEXT_DEFAULT, # 0
+      'C', # 1 (FIXME: might be incorrect)
+      'CPlusPlus' # 2 (FIXME: might be incorrect)
+    ]
+    return string_to_index(arr_compile_as, str_compile_as, 0)
   end
   def parse_debug_information_format(str_debug_information_format)
     arr_debug_information_format = [
@@ -5251,7 +5277,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
   end
   def parse_inline_function_expansion(str_inline_func_expand)
     arr_inline_func = [
-      'Disabled', # 0, /Ob0
+      TEXT_DISABLED, # 0, /Ob0
       'OnlyExplicitInline', # 1, /Ob1
       'AnySuitable' # 2, /Ob2
     ]
@@ -5259,7 +5285,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
   end
   def parse_optimization(str_optimization)
     arr_optimization = [
-      'Disabled', # 0, /Od
+      TEXT_DISABLED, # 0, /Od
       'MinSpace', # 1, /O1
       'MaxSpeed', # 2, /O2
       'Full' # 3, /Ox
