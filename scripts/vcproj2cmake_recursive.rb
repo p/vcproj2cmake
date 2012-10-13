@@ -237,12 +237,12 @@ Find.find('./') do
   end
   # Also, skip CMake build directories! (containing CMake-generated .vcproj files!)
   # FIXME: more precise checking: check file _content_ against CMake generation!
-  if not true == is_excluded_recursive
+  if true != is_excluded_recursive
     if f =~ /\/build[^\/]*$/i
       is_excluded_recursive = true
     end
   end
-  if is_excluded_recursive == true
+  if true == is_excluded_recursive
     puts "EXCLUDED RECURSIVELY #{f}!"
     Find.prune() # throws exception to skip entire recursive directories block
   end
@@ -255,7 +255,7 @@ Find.find('./') do
     end
   end
   #puts "excluded: #{is_excluded_single}"
-  if is_excluded_single == true
+  if true == is_excluded_single
     puts "EXCLUDED SINGLE #{f}!"
     next
   end
