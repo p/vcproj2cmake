@@ -333,14 +333,54 @@ class V2C_Info_Condition
     @platform = nil
   end
   attr_reader :str_condition
-  attr_reader :platform
   # FIXME: Q&D interim function - I don't think such raw handling should be in this data container...
   BUILD_TYPE_SCAN_QD_REGEX_OBJ = %r{^'\$\(Configuration\)\|\$\(Platform\)'=='(.*)\|(.*)'$}
+  def get_build_platform
+    update_build_type_platform
+    return @platform
+  end
   def get_build_type
+    update_build_type_platform
+    return @build_type
+  end
+  def set_build_type(build_type); @build_type = build_type end
+  def set_platform(platform); @platform = platform end
+
+  # Returns true if we are at least as strict as the other condition,
+  # i.e. indicates whether the other condition is fulfilled within our realms.
+  # For the theory behind this, see e.g. Truth Table
+  # ( http://en.wikipedia.org/wiki/Truth_table ) and
+  # http://en.wikipedia.org/wiki/Logical_conditional and http://en.wikipedia.org/wiki/Entailment
+  def entails(condition_other)
+    build_type = get_build_type()
+    build_platform = get_build_platform()
+    log_debug "condition: build_type #{build_type} platform #{build_platform}"
+    if not condition_other.nil?
+      log_debug "condition_other: build_type #{condition_other.get_build_type()} platform #{condition_other.get_build_platform()}"
+      build_type_other = condition_other.get_build_type()
+      if not build_type_other.nil?
+        return false if build_type_other != build_type
+      end
+      platform_other = condition_other.get_build_platform()
+      if not platform_other.nil?
+        return false if platform_other != build_platform
+      end
+    end
+    log_debug "ENTAILS!"
+    return true
+  end
+
+  private
+
+  # Indicates whether our attributes are maximally specific.
+  def build_config_fully_qualified
+    not @build_type.nil? and not @platform.nil?
+  end
+  def update_build_type_platform
+    return if build_config_fully_qualified()
+
     # For now, prefer raw build_type (VS7) only in case no complex condition string is available.
-    if str_condition.nil?
-      build_type = @build_type
-    else
+    if not str_condition.nil?
       log_debug "str_condition: #{@str_condition}"
       build_type = nil
       platform = nil
@@ -355,31 +395,6 @@ class V2C_Info_Condition
       @build_type = build_type
       @platform = platform
     end
-    return @build_type
-  end
-  def set_build_type(build_type); @build_type = build_type end
-  def set_platform(platform); @platform = platform end
-
-  # Returns true if we are at least as strict as the other condition,
-  # i.e. indicates whether the other condition is fulfilled within our realms.
-  # For the theory behind this, see e.g. Truth Table
-  # ( http://en.wikipedia.org/wiki/Truth_table ) and
-  # http://en.wikipedia.org/wiki/Logical_conditional and http://en.wikipedia.org/wiki/Entailment
-  def entails(condition_other)
-    log_debug "condition: build_type #{get_build_type()} platform #{platform}"
-    if not condition_other.nil?
-      log_debug "condition_other: build_type #{condition_other.get_build_type()} platform #{condition_other.platform}"
-      build_type_other = condition_other.get_build_type()
-      if not build_type_other.nil?
-        return false if build_type_other != @build_type
-      end
-      platform_other = condition_other.platform
-      if not platform_other.nil?
-        return false if platform_other != @platform
-      end
-    end
-    log_debug "ENTAILS!"
-    return true
   end
 end
 
@@ -1640,7 +1655,7 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     # Hrmm, for now we'll abuse a method at the V2C_Info_Condition class,
     # but I'm not convinced at all that this is how things should be structured.
     build_type = condition.get_build_type()
-    platform_name = condition.platform
+    platform_name = condition.get_build_platform()
     var_name = nil
     if not build_type.nil? and not platform_name.nil?
       # Name may contain spaces - need to handle them!
@@ -1756,7 +1771,7 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
   end
   def write_invoke_object_conditional_v2c_function(str_function, object_name, condition, arr_args_func_other)
     arr_args_func = [
-      prepare_string_literal(condition.platform),
+      prepare_string_literal(condition.get_build_platform()),
       prepare_string_literal(condition.get_build_type())
     ]
     arr_args_func.concat(arr_args_func_other)
@@ -4365,9 +4380,10 @@ class V2C_VS7ConfigurationsParser < V2C_VS7ParserBase
   def add_platform_config(condition)
     config_entry = V2C_BuildConfigurationEntry.new
     build_type = condition.get_build_type()
-    config_entry.description = "#{condition.platform}|#{build_type}"
+    build_platform = condition.get_build_platform()
+    config_entry.description = "#{build_platform}|#{build_type}"
     config_entry.build_type = build_type
-    config_entry.platform = condition.platform
+    config_entry.platform = build_platform
     get_build_platform_configs().add(config_entry)
   end
 end
