@@ -1924,6 +1924,7 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
       put_per_scope_cmake_policies()
 
       put_cmake_module_path(str_conversion_root_rel)
+      put_include_vcproj2cmake_func()
       put_var_config_dir_local()
       write_set_var_bool(str_per_scope_definition_guard, true)
     write_conditional_end(str_condition_inverse)
@@ -2012,6 +2013,13 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_args_func = [ "${V2C_MASTER_PROJECT_SOURCE_DIR}/#{$v2c_module_path_local}", "${CMAKE_SOURCE_DIR}/#{$v2c_module_path_local}", get_dereferenced_variable_name('CMAKE_MODULE_PATH') ]
     write_list_quoted('CMAKE_MODULE_PATH', arr_args_func)
   end
+  def put_include_vcproj2cmake_func
+    next_paragraph()
+    write_comment_at_level(COMMENT_LEVEL_STANDARD,
+      "Include the main file for pre-defined vcproj2cmake helper functions"
+    )
+    write_include('vcproj2cmake_func')
+  end
   # "export" our internal $v2c_config_dir_local variable (to be able to reference it in CMake scripts as well)
   def put_var_config_dir_local; write_set_var_quoted('V2C_CONFIG_DIR_LOCAL', $v2c_config_dir_local) end
 end
@@ -2058,7 +2066,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     bootstrap_generator =
       V2C_CMakeGlobalBootstrapCodeGenerator.new(@textOut, str_conversion_root_rel)
     bootstrap_generator.generate
-    put_include_vcproj2cmake_func()
+    put_include_vcproj2cmake_defs()
     put_hook_pre()
   end
   def write_include_directories(arr_includes, map_includes)
@@ -2144,13 +2152,13 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
 
   private
 
-  def put_include_vcproj2cmake_func
+  def put_include_vcproj2cmake_defs
     next_paragraph()
     write_comment_at_level(COMMENT_LEVEL_STANDARD,
-      "Include the main file for pre-defined vcproj2cmake helper functions\n" \
-      "This module will also include the configuration settings definitions module"
+      "Include the global module for re-init of local (per-scope)\n" \
+      "configuration settings definitions (to be customized by user as needed)"
     )
-    write_include('vcproj2cmake_func')
+    write_include('vcproj2cmake_defs')
   end
   def put_hook_pre
     # this CMakeLists.txt-global optional include could be used e.g.

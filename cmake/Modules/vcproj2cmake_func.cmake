@@ -61,12 +61,6 @@
 
 
 
-# First, include main file (to be customized by user as needed),
-# to have important vcproj2cmake configuration settings
-# re-defined per each new vcproj-converted project.
-include(vcproj2cmake_defs)
-
-
 # Avoid useless repeated parsing of static-data function definitions
 if(V2C_FUNC_DEFINED)
   return()
