@@ -1910,12 +1910,12 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
 
   def put_per_scope_setup(str_conversion_root_rel)
     write_comment_at_level(COMMENT_LEVEL_STANDARD,
-      "This part of *global* V2C setup steps (policies, include function module, ...)\n" \
+      "This part of *global* V2C bootstrap steps (policies, include function module, ...)\n" \
       "*has* to be repeated within each *local* file,\n" \
       "to be able to support the use case of creating a build environment\n" \
       "from single local project directories, too.\n" \
       "But there's a nice trick: if a guard variable is already defined,\n" \
-      "then some other (parent?) scope already did all that work for us." \
+      "then some other (parent?) scope already did all that setup work for us." \
     )
     str_per_scope_definition_guard = '_v2c_global_defs_per_scope_defined'
     str_condition_inverse = get_conditional_inverted(str_per_scope_definition_guard)
@@ -2155,7 +2155,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
   def put_include_vcproj2cmake_defs
     next_paragraph()
     write_comment_at_level(COMMENT_LEVEL_STANDARD,
-      "Include the global module for re-init of local (per-scope)\n" \
+      "Include the globally provided module for re-init of local (per-scope)\n" \
       "configuration settings definitions (to be customized by user as needed)"
     )
     write_include('vcproj2cmake_defs')
@@ -3074,8 +3074,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       @textOut.write_data %{\
 
 # This part is for including a file which contains
-# _globally_ applicable settings for all sub projects of a master project
-# (compiler flags, path settings, platform stuff, ...)
+# settings (compiler flags, path settings, platform stuff, ...)
+# which are _globally_ applicable for all sub projects of a solution
 # e.g. have vcproj2cmake-specific MasterProjectDefaults_vcproj2cmake
 # which then _also_ includes a global MasterProjectDefaults module
 # for _all_ CMakeLists.txt. This needs to sit post-project()
