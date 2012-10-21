@@ -444,5 +444,5 @@ projects_list_file = "#{v2c_path_config.get_abs_config_dir_source_root_temp_stor
 v2c_source_root_write_projects_list_file(projects_list_file, $v2c_generator_file_create_permissions, arr_project_subdirs)
 
 # Finally, create a skeleton fallback file if needed.
-v2c_source_root_ensure_usable_cmakelists_skeleton_file(source_root, projects_list_file_rel)
+v2c_source_root_ensure_usable_cmakelists_skeleton_file(threadGlobal.script_location, source_root, projects_list_file_rel)
 v2c_convert_finished()

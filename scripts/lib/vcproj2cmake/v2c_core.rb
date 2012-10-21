@@ -1605,6 +1605,25 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
   def write_vcproj2cmake_func_comment()
     write_comment_at_level(COMMENT_LEVEL_STANDARD, "See function implementation/docs in #{$v2c_module_path_root}/#{VCPROJ2CMAKE_FUNC_CMAKE}")
   end
+  def put_converter_script_location(script_location_relative_to_master)
+    return if $v2c_generator_one_time_conversion_only
+
+    if script_location_relative_to_master.nil?
+      generator_error('converter script location missing!?')
+    end
+
+    # For the CMakeLists.txt rebuilder (automatic rebuild on file changes),
+    # add handling of a script file location variable, to enable users
+    # to override the script location if needed.
+    next_paragraph()
+    # NOTE: we'll make V2C_SCRIPT_LOCATION express its path via
+    # relative argument to global V2C_MASTER_PROJECT_SOURCE_DIR (i.e. CMAKE_SOURCE_DIR)
+    # and _not_ CMAKE_CURRENT_SOURCE_DIR,
+    # (this provision should even enable people to manually relocate
+    # an entire sub project within the source tree).
+    v2c_converter_script_location = "${V2C_MASTER_PROJECT_SOURCE_DIR}/#{script_location_relative_to_master}"
+    gen_put_converter_script_location(v2c_converter_script_location)
+  end
   def put_include_dir_project_source_dir(target_name)
     # AFAIK .vcproj implicitly adds the project root to standard include path
     # (for automatic stdafx.h resolution etc.), thus add this
@@ -1795,6 +1814,9 @@ class V2C_CMakeV2CSyntaxGeneratorV2CFunc < V2C_CMakeV2CSyntaxGeneratorBase
   end
 end
 
+# class variant which is supposed to create a self-contained file
+# (i.e. one which does not rely on our V2C functions module).
+# Currently this most certainly does not work fully.
 class V2C_CMakeV2CSyntaxGeneratorSelfContained < V2C_CMakeV2CSyntaxGeneratorBase
   private
   def gen_put_customization_hook(include_file)
@@ -1898,9 +1920,10 @@ end
 # Generates the CMake code required to bootstrap V2C operation
 # (provided by each scope which may still need to execute this init code)
 class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
-  def initialize(textOut, relative_path_to_root)
+  def initialize(textOut, relative_path_to_root, script_location_relative_to_master)
     super(textOut)
     @relative_path_to_root = relative_path_to_root
+    @script_location_relative_to_master = script_location_relative_to_master
   end
   def generate
     put_per_scope_setup(@relative_path_to_root)
@@ -1926,6 +1949,11 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
       put_cmake_module_path(str_conversion_root_rel)
       put_include_vcproj2cmake_func()
       put_var_config_dir_local()
+      # We'll have converter script setup one-time within global setup as well -
+      # while different project files/dirs may have been converted
+      # with differing scripts, such a use case can be considered
+      # sufficiently pathological, thus we will not support it.
+      put_converter_script_location(@script_location_relative_to_master)
       write_set_var_bool(str_per_scope_definition_guard, true)
     write_conditional_end(str_condition_inverse)
   end
@@ -2044,7 +2072,6 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     p_root = Pathname.new(@master_project_dir)
     relative_path_to_root = p_root.relative_path_from(p_local_dir_fqpn)
     put_file_header(relative_path_to_root.to_s)
-    put_converter_script_location(@script_location_relative_to_master)
 
     @arr_local_project_targets.each { |project_info|
       project_generator = V2C_CMakeProjectTargetGenerator.new(project_info, local_dir, self, @textOut)
@@ -2064,7 +2091,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
   def put_file_header(str_conversion_root_rel)
     @textOut.put_file_header_temporary_marker()
     bootstrap_generator =
-      V2C_CMakeGlobalBootstrapCodeGenerator.new(@textOut, str_conversion_root_rel)
+      V2C_CMakeGlobalBootstrapCodeGenerator.new(@textOut, str_conversion_root_rel, @script_location_relative_to_master)
     bootstrap_generator.generate
     put_include_vcproj2cmake_defs()
     put_hook_pre()
@@ -2125,25 +2152,6 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
         write_command_list_quoted(cmake_command, cmake_command_arg, arr_platdefs)
       write_conditional_end(str_platform)
     }
-  end
-  def put_converter_script_location(script_location_relative_to_master)
-    return if $v2c_generator_one_time_conversion_only
-
-    if script_location_relative_to_master.nil?
-      generator_error('converter script location missing!?')
-    end
-
-    # For the CMakeLists.txt rebuilder (automatic rebuild on file changes),
-    # add handling of a script file location variable, to enable users
-    # to override the script location if needed.
-    next_paragraph()
-    # NOTE: we'll make V2C_SCRIPT_LOCATION express its path via
-    # relative argument to global V2C_MASTER_PROJECT_SOURCE_DIR (i.e. CMAKE_SOURCE_DIR)
-    # and _not_ CMAKE_CURRENT_SOURCE_DIR,
-    # (this provision should even enable people to manually relocate
-    # an entire sub project within the source tree).
-    v2c_converter_script_location = "${V2C_MASTER_PROJECT_SOURCE_DIR}/#{script_location_relative_to_master}"
-    gen_put_converter_script_location(v2c_converter_script_location)
   end
   def write_func_v2c_directory_post_setup
     write_invoke_v2c_function_quoted('v2c_directory_post_setup', [])
@@ -6161,9 +6169,10 @@ end
 
 
 class V2C_CMakeSkeletonFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
-  def initialize(textOut, projects_list_file)
+  def initialize(textOut, projects_list_file, script_location_relative_to_master)
     super(textOut)
     @projects_list_file = projects_list_file
+    @script_location_relative_to_master = script_location_relative_to_master
   end
   def generate
     @textOut.put_file_header_temporary_marker
@@ -6173,7 +6182,7 @@ class V2C_CMakeSkeletonFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     )
     next_paragraph()
     bootstrap_generator =
-      V2C_CMakeGlobalBootstrapCodeGenerator.new(@textOut, '')
+      V2C_CMakeGlobalBootstrapCodeGenerator.new(@textOut, '', @script_location_relative_to_master)
     bootstrap_generator.generate
     next_paragraph()
     put_projects_list_file_include()
@@ -6189,7 +6198,7 @@ class V2C_CMakeSkeletonFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
   end
 end
 
-def v2c_source_root_write_cmakelists_skeleton_file(path_cmakelists_txt, projects_list_file)
+def v2c_source_root_write_cmakelists_skeleton_file(p_master_project, p_script, path_cmakelists_txt, projects_list_file)
   tmpfile_path = nil
   # Scoped block operation (ensure closing file,
   # since Fileutils.mv on an open file will barf on Windows (XP))
@@ -6201,7 +6210,8 @@ def v2c_source_root_write_cmakelists_skeleton_file(path_cmakelists_txt, projects
         $v2c_generator_comments_level
       )
       textOut = V2C_TextStreamSyntaxGeneratorBase.new(tmpfile, textstream_attributes)
-      skeleton_generator = V2C_CMakeSkeletonFileContentGenerator.new(textOut, projects_list_file)
+      script_location_relative_to_master = p_script.relative_path_from(p_master_project)
+      skeleton_generator = V2C_CMakeSkeletonFileContentGenerator.new(textOut, projects_list_file, script_location_relative_to_master)
       skeleton_generator.generate
     rescue Exception => e
       logger.unhandled_exception(e, 'while generating root skeleton CMakeLists.txt')
@@ -6218,7 +6228,7 @@ end
 # create a skeleton fallback root file whenever there's no user-provided main file
 # pre-existing:
 # FIXME: conflicts with the "V2C-generated project file" case, will overwrite!!!
-def v2c_source_root_ensure_usable_cmakelists_skeleton_file(source_root, projects_list_file)
+def v2c_source_root_ensure_usable_cmakelists_skeleton_file(project_converter_script_filename, source_root, projects_list_file)
   root_cmakelists_txt_file = "#{source_root}/CMakeLists.txt"
   root_cmakelists_txt_type = check_cmakelists_txt_type(root_cmakelists_txt_file)
   skip_skeleton_root_file_reason = nil
@@ -6236,7 +6246,9 @@ def v2c_source_root_ensure_usable_cmakelists_skeleton_file(source_root, projects
   if nil == skip_skeleton_root_file_reason
     begin
       log_info "Creating/updating an #{file_descr} at #{root_cmakelists_txt_file}"
-      v2c_source_root_write_cmakelists_skeleton_file(root_cmakelists_txt_file, projects_list_file)
+      script_location = File.expand_path(project_converter_script_filename)
+      p_script = Pathname.new(script_location)
+      v2c_source_root_write_cmakelists_skeleton_file(Pathname.new(source_root), p_script, root_cmakelists_txt_file, projects_list_file)
     rescue
       log_error "FAILED to create #{root_cmakelists_txt_file}, aborting!"
       raise
