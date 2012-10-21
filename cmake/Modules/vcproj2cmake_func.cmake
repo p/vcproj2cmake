@@ -270,6 +270,13 @@ function(_v2c_list_locate_similar_entry _list _key _match_out)
   set("${_match_out}" "${match_}" PARENT_SCOPE)
 endfunction(_v2c_list_locate_similar_entry _list _key _match_out)
 
+function(_v2c_list_create_prefix_suffix_expanded_version _list _prefix _suffix _result_list)
+  _v2c_var_set_empty(result_list_)
+  foreach(item_ ${_list})
+    list(APPEND result_list_ "${_prefix}${item_}${_suffix}")
+  endforeach(item_ ${_list})
+  set(${_result_list} "${result_list_}" PARENT_SCOPE)
+endfunction(_v2c_list_create_prefix_suffix_expanded_version _list _prefix _suffix _result_list)
 
 # Sets a V2C config value.
 # Most input is versioned (ZZZZ_vY), to be able to do clean changes
@@ -1115,7 +1122,7 @@ if(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
       set(do_use_ FALSE)
       set(do_create_ TRUE)
     endif(do_use_)
-    set(do_warn_ "")
+    _v2c_var_set_empty(do_warn_)
     if(V2C_WANT_PCH_PRECOMPILED_HEADER_WARNINGS)
       set(do_warn_ 1)
     endif(V2C_WANT_PCH_PRECOMPILED_HEADER_WARNINGS)
@@ -1437,17 +1444,19 @@ endfunction(_v2c_directory_register_project _target)
 # vcproj2cmake.rb converter rebuilder invocation.
 function(v2c_project_post_setup _project _orig_proj_files_list)
   _v2c_directory_register_project(${_project})
+  _v2c_var_set_empty(orig_proj_files_w_source_dir_list_)
+  _v2c_list_create_prefix_suffix_expanded_version("${_orig_proj_files_list}" "${CMAKE_CURRENT_SOURCE_DIR}/" "" orig_proj_files_w_source_dir_list_)
   # Some projects are header-only and thus don't add an actual target
   # where our target-related properties could be set at,
   # thus we unfortunately need to resort to hooking these things
   # to a DIRECTORY property instead...
-  set_property(DIRECTORY PROPERTY V2C_PROJECT_${_project}_ORIG_PROJ_FILES_LIST "${_orig_proj_files_list}")
+  set_property(DIRECTORY PROPERTY V2C_PROJECT_${_project}_ORIG_PROJ_FILES_LIST "${orig_proj_files_w_source_dir_list_}")
   # Better make sure to include a hook _after_ all other local preparations
   # are already available.
   v2c_hook_invoke("${V2C_HOOK_POST}")
 endfunction(v2c_project_post_setup _project _orig_proj_files_list)
 
-function(v2c_directory_post_setup _cmake_current_list_file)
+function(v2c_directory_post_setup)
   _v2c_directory_get_projects_list(directory_projects_list_)
   _v2c_ensure_valid_variables(directory_projects_list_)
   foreach(proj_ ${directory_projects_list_})
@@ -1460,6 +1469,6 @@ function(v2c_directory_post_setup _cmake_current_list_file)
   # _v2c_project_rebuild_on_update() should be as much of a 1:1 passthrough of
   # the input argument to the CMakeLists.txt converter ruby script execution as possible/suitable,
   # since invocation arguments of this script on rebuild should be (roughly) identical.
-  _v2c_project_rebuild_on_update("${directory_projects_list_}" "${dir_orig_proj_files_list_}" "${_cmake_current_list_file}" "${V2C_SCRIPT_LOCATION}" "${V2C_MASTER_PROJECT_SOURCE_DIR}")
+  _v2c_project_rebuild_on_update("${directory_projects_list_}" "${dir_orig_proj_files_list_}" "${CMAKE_CURRENT_LIST_FILE}" "${V2C_SCRIPT_LOCATION}" "${V2C_MASTER_PROJECT_SOURCE_DIR}")
   v2c_hook_invoke("${V2C_HOOK_DIRECTORY_POST}")
-endfunction(v2c_directory_post_setup _cmake_current_list_file)
+endfunction(v2c_directory_post_setup)

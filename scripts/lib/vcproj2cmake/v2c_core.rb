@@ -2146,8 +2146,7 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
     gen_put_converter_script_location(v2c_converter_script_location)
   end
   def write_func_v2c_directory_post_setup
-    arr_args_func = [ get_dereferenced_variable_name('CMAKE_CURRENT_LIST_FILE') ]
-    write_invoke_v2c_function_quoted('v2c_directory_post_setup', arr_args_func)
+    write_invoke_v2c_function_quoted('v2c_directory_post_setup', [])
   end
 
   private
@@ -3143,10 +3142,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # of the current generated CMakeLists.txt file - all boilerplate handling functionality
     # that's identical for each project should be implemented by the v2c_project_post_setup() function
     # _internally_.
-    arr_proj_files_w_source_dir = arr_proj_files.collect { |proj_file|
-      "${CMAKE_CURRENT_SOURCE_DIR}/#{proj_file}"
-    }
-    arr_args_func = [ array_to_cmake_list(arr_proj_files_w_source_dir) ]
+    arr_args_func = [ array_to_cmake_list(arr_proj_files) ]
     write_invoke_config_object_v2c_function_quoted('v2c_project_post_setup', project_name, arr_args_func)
   end
 end
