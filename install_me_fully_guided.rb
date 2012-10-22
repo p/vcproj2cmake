@@ -44,7 +44,7 @@ log_info "Unfortunately this script is not quite ready for public consumption ye
 do_delay(user_abort_delay)
 
 cmake_bin='cmake'
-ccmake_bin='ccmake'
+cmake_wizard_bin='ccmake'
 
 log_info 'Verifying cmake binary availability.'
 output = `#{cmake_bin} --version`
@@ -62,6 +62,18 @@ if not Dir.chdir(build_install_dir)
   log_fatal 'could not change into build directory for guided installation'
 end
 
+def grep_cmakecache_variable_value(cmakecache_location, cmake_var)
+  var_value = nil
+  File.open(cmakecache_location) { |cmakecache_file|
+    cmakecache_file.grep(/#{cmake_var}:(STRING|.*PATH)=/).each { |line|
+      var_value = line.chomp.split('=')[1]
+    }
+  }
+  return var_value
+end
+
+cmakecache_location = "#{build_install_dir}/CMakeCache.txt"
+
 # I'm not sure whether it's a good idea to have Subversion fetching done
 # as a build-time rule. This requires us to re-configure things multiple
 # times (to provide the install target once all preconditions are
@@ -69,17 +81,25 @@ end
 # The (possibly better) alternative would be to do SVN fetching at configure
 # time.
 
+
+# First, evaluate a possibly pre-existing entry:
+cmake_wizard_bin = grep_cmakecache_variable_value(cmakecache_location, 'CMAKE_EDIT_COMMAND')
+if cmake_wizard_bin.nil?
+  cmake_wizard_bin = 'ccmake'
+end
+
 # Hmm, we probably should also support the Qt-based GUI.
-output = `#{ccmake_bin} --help`
+output = `#{cmake_wizard_bin} --help`
 if not $?.success?
-  log_fatal 'could not run ccmake - perhaps it is not installed. On Debian-based Linux, installing the cmake-curses-gui package might help.'
+  cmake_wizard_bin='cmake -i'
+  log_error "could not run #{cmake_wizard_bin} - perhaps it is not installed. On Debian-based Linux, installing the cmake-curses-gui package might help. Now falling back to using #{cmake_wizard_bin}."
 end
 
 log_info 'About to prepare the build tree (CMake configure run) which is required for installation of vcproj2cmake components. Please setup configuration as needed there, then proceed (do CMake Configure run multiple times, and finally press Generate).'
 do_delay(10)
-system "#{ccmake_bin} ../"
+system "#{cmake_wizard_bin} ../"
 if not $?.success?
-  log_fatal 'invocation of ccmake failed'
+  log_fatal "invocation of #{cmake_wizard_bin} failed"
 end
 
 system "#{cmake_bin} ."
@@ -98,18 +118,7 @@ log_info ''
 # Figure out which CMAKE_MAKE_PROGRAM is configured (ninja? make?),
 # then use it for install.
 
-def grep_cmakecache_variable_value(cmakecache_location, cmake_var)
-  var_value = nil
-  File.open(cmakecache_location) { |cmakecache_file|
-    cmakecache_file.grep(/#{cmake_var}:(STRING|.*PATH)=/).each { |line|
-      var_value = line.chomp.split('=')[1]
-    }
-  }
-  return var_value
-end
-
 build_cmd = 'make' # assume a suitable fallback
-cmakecache_location = "#{build_install_dir}/CMakeCache.txt"
 
 build_cmd = grep_cmakecache_variable_value(cmakecache_location, 'CMAKE_MAKE_PROGRAM')
 
@@ -165,7 +174,7 @@ if not Dir.chdir(proj_build_dir)
   log_fatal "could not change into build directory #{proj_build_dir} of converted project"
 end
 
-cmake_invocation_proj = "#{ccmake_bin} -DCMAKE_BUILD_TYPE=Debug #{proj_source_dir}"
+cmake_invocation_proj = "#{cmake_wizard_bin} -DCMAKE_BUILD_TYPE=Debug #{proj_source_dir}"
 log_info "Running #{cmake_invocation_proj} to configure the converted project"
 do_delay(5)
 system(cmake_invocation_proj)
