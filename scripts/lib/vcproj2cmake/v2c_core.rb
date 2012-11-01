@@ -1294,7 +1294,11 @@ class V2C_LoggerBase < Logger
   end
 end
 
-class V2C_SyntaxGeneratorBase < V2C_LoggerBase
+class V2C_GeneratorBase < V2C_LoggerBase
+  def generator_error(str_description); logger.error(str_description) end
+end
+
+class V2C_SyntaxGeneratorBase < V2C_GeneratorBase
   COMMENT_LEVEL_OFF = 0 # no comments generated
   COMMENT_LEVEL_MINIMUM = 1 # minimum amount of comments
   COMMENT_LEVEL_STANDARD = 2 # standard setting
@@ -5923,10 +5927,6 @@ class V2C_CMakeFilePermanentizer < Util_TempFilePermanentizer
       file_moved = false
     end
   end
-end
-
-class V2C_GeneratorBase < V2C_LoggerBase
-  def generator_error(str_description); logger.error(str_description) end
 end
 
 class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
