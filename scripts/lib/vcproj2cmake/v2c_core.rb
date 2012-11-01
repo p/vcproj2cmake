@@ -785,6 +785,9 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
   attr_accessor :arr_tool_variant_specific_info
 end
 
+# For TypeLibrary file naming info, visit
+#   "Appendix B. Builders"
+#   http://www.scons.org/doc/2.0.1/HTML/scons-user/a8524.html
 class V2C_Tool_MIDL_Specific_Info < V2C_Tool_Specific_Info_Base
   def initialize(midl_name)
     super()
