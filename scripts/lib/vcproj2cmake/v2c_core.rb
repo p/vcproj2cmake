@@ -5946,6 +5946,47 @@ class V2C_CMakeFilePermanentizer < Util_TempFilePermanentizer
   end
 end
 
+# Write into temporary file, to avoid corrupting previous
+# CMakeLists.txt due to syntax error abort, disk space or failure
+# issues. Implement as scoped block operation (ensure closing file,
+# since Fileutils.mv on an open file will barf on Windows (XP)).
+class V2C_GenerateIntoTempFile
+  include Logging
+  def initialize(file_description, tempfile_prefix, destination_file)
+    @file_description = file_description
+    @tempfile_prefix = tempfile_prefix
+    @destination_file = destination_file
+    textstream_attributes = V2C_TextStream_Attributes.new(
+      $v2c_generator_indent_initial_num_spaces,
+      $v2c_generator_indent_step,
+      $v2c_generator_comments_level
+    )
+    @textstream_attributes = textstream_attributes
+    @file_create_permissions = $v2c_generator_file_create_permissions
+  end
+  def generate
+    tmpfile_path = nil
+    Tempfile.open(@tempfile_prefix) { |tmpfile|
+      begin
+        textOut = V2C_TextStreamSyntaxGeneratorBase.new(tmpfile, @textstream_attributes)
+        yield textOut
+      rescue Exception => e
+        logger.unhandled_exception(e, "while generating #{@file_description}")
+        raise
+      end
+      tmpfile_path = tmpfile.path
+    }
+    # Since we're forced to fumble our source tree
+    # (a definite no-no in all other cases!) by writing our files (CMakeLists.txt etc.) there,
+    # use a write-back-when-updated approach to make sure
+    # we only write back the live CMakeLists.txt in case anything did change.
+    # This is especially important in case of multiple concurrent builds
+    # on a shared source on NFS mount.
+    mover = V2C_CMakeFilePermanentizer.new(@file_description, tmpfile_path, @destination_file, @file_create_permissions)
+    mover.process
+  end
+end
+
 class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
   def initialize(p_v2c_script, p_master_project, p_generator_proj_file, arr_projects)
     @p_master_project = p_master_project
@@ -5959,33 +6000,11 @@ class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
   def generate
     output_file_location = @p_generator_proj_file.to_s
     logger.info "Generating project(s) in #{@p_generator_proj_file.dirname} into #{output_file_location}"
-
-    # write into temporary file, to avoid corrupting previous CMakeLists.txt due to syntax error abort, disk space or failure issues
-    tmpfile_path = nil
-    Tempfile.open('vcproj2cmake') { |tmpfile|
-      begin
-        textstream_attributes = V2C_TextStream_Attributes.new(
-          $v2c_generator_indent_initial_num_spaces,
-          $v2c_generator_indent_step,
-          $v2c_generator_comments_level
-        )
-        textOut = V2C_TextStreamSyntaxGeneratorBase.new(tmpfile, textstream_attributes)
+    generate_local = V2C_GenerateIntoTempFile.new('local CMakeLists.txt', 'vcproj2cmake', output_file_location)
+    generate_local.generate { |textOut|
 	content_generator = V2C_CMakeLocalFileContentGenerator.new(textOut, @p_generator_proj_file.dirname, @p_master_project, @arr_projects, @script_location_relative_to_master)
 	content_generator.generate
-	tmpfile_path = tmpfile.path
-      rescue Exception => e
-        logger.unhandled_exception(e, 'while generating projects')
-        raise
-      end
     }
-    # Since we're forced to fumble our source tree
-    # (a definite no-no in all other cases!) by writing our CMakeLists.txt there,
-    # use a write-back-when-updated approach to make sure
-    # we only write back the live CMakeLists.txt in case anything did change.
-    # This is especially important in case of multiple concurrent builds
-    # on a shared source on NFS mount.
-    mover = V2C_CMakeFilePermanentizer.new('local CMakeLists.txt', tmpfile_path, output_file_location, $v2c_generator_file_create_permissions)
-    mover.process
   end
 end
 
@@ -6136,23 +6155,13 @@ end
 
 def v2c_source_root_write_projects_list_file(output_file_fqpn, output_file_permissions, arr_project_subdirs)
   # write into temporary file, to avoid corrupting previous file due to syntax error abort, disk space or failure issues
-  tmpfile_path = nil
-  Tempfile.open('vcproj2cmake_recursive') { |tmpfile|
-    textstream_attributes = V2C_TextStream_Attributes.new(
-      $v2c_generator_indent_initial_num_spaces,
-      $v2c_generator_indent_step,
-      $v2c_generator_comments_level
-    )
-    textOut = V2C_TextStreamSyntaxGeneratorBase.new(tmpfile, textstream_attributes)
+  generate_projects_list = V2C_GenerateIntoTempFile.new('projects list file', 'vcproj2cmake_recursive', output_file_fqpn)
+  generate_projects_list.generate { |textOut|
     projects_list_generator = V2C_CMakeSyntaxGenerator.new(textOut)
     arr_project_subdirs.each { |subdir|
       projects_list_generator.add_subdirectory(subdir)
     }
-    tmpfile_path = tmpfile.path
   }
-
-  mover = V2C_CMakeFilePermanentizer.new('projects list file', tmpfile_path, output_file_fqpn, output_file_permissions)
-  mover.process
 end
 
 
@@ -6187,29 +6196,12 @@ class V2C_CMakeSkeletonFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
 end
 
 def v2c_source_root_write_cmakelists_skeleton_file(p_master_project, p_script, path_cmakelists_txt, projects_list_file)
-  tmpfile_path = nil
-  # Scoped block operation (ensure closing file,
-  # since Fileutils.mv on an open file will barf on Windows (XP))
-  Tempfile.open('vcproj2cmake_root_skeleton') { |tmpfile|
-    begin
-      textstream_attributes = V2C_TextStream_Attributes.new(
-        $v2c_generator_indent_initial_num_spaces,
-        $v2c_generator_indent_step,
-        $v2c_generator_comments_level
-      )
-      textOut = V2C_TextStreamSyntaxGeneratorBase.new(tmpfile, textstream_attributes)
-      script_location_relative_to_master = p_script.relative_path_from(p_master_project)
-      skeleton_generator = V2C_CMakeSkeletonFileContentGenerator.new(textOut, projects_list_file, script_location_relative_to_master)
-      skeleton_generator.generate
-    rescue Exception => e
-      logger.unhandled_exception(e, 'while generating root skeleton CMakeLists.txt')
-      raise
-    end
-    tmpfile_path = tmpfile.path
+  generate_skeleton = V2C_GenerateIntoTempFile.new('root skeleton CMakeLists.txt', 'vcproj2cmake_root_skeleton', path_cmakelists_txt)
+  generate_skeleton.generate { |textOut|
+    script_location_relative_to_master = p_script.relative_path_from(p_master_project)
+    content_generator = V2C_CMakeSkeletonFileContentGenerator.new(textOut, projects_list_file, script_location_relative_to_master)
+    content_generator.generate
   }
-
-  mover = V2C_CMakeFilePermanentizer.new('root skeleton CMakeLists.txt', tmpfile_path, path_cmakelists_txt, $v2c_generator_file_create_permissions)
-  mover.process
 end
 
 # For collections of project configs,
