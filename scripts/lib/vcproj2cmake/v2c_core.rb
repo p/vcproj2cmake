@@ -1222,6 +1222,12 @@ class Logger
     # FIXME: log_descriptor not obeyed yet!
   end
 
+  # Ensures proper copy&paste'ability of some log items (e.g.
+  # filenames).
+  # E.g. a dot directly following a filename would disrupt proper
+  # filename-only selection.
+  def escape_item(file); "\"#{file}\"" end
+
   def error(str); log_error(formatter(str)) end
   def fixme(str); log_error(formatter("FIXME: #{str}")) end
   def warn(str); log_warn(formatter(str)) end
@@ -3351,7 +3357,7 @@ EOF
       end
     end
     if config_var_replacement != ''
-      log_info "Replacing #{config_var_type_descr} $(#{config_var}) by #{config_var_replacement}."
+      log_info "Replacing $(#{config_var}) [#{config_var_type_descr}] by #{config_var_replacement}."
       str.gsub!(/\$\(#{config_var}\)/, config_var_replacement)
     end
   }
@@ -5926,10 +5932,10 @@ class V2C_CMakeFilePermanentizer < Util_TempFilePermanentizer
     file_moved = false
     case permanentize_if_nonzero_ok_and_different()
     when Util_TempFilePermanentizer::MOVE_RES_OK
-      logger.info "Wrote #{@output_file_fqpn}."
+      logger.info "Wrote #{logger.escape_item(@output_file_fqpn)}."
       file_moved = true
     when Util_TempFilePermanentizer::MOVE_RES_SAMECONTENT
-      logger.info "No settings changed, #{@output_file_fqpn} not updated."
+      logger.info "No settings changed, #{logger.escape_item(@output_file_fqpn)} not updated."
       # tmpfile will auto-delete when finalized...
 
       # Some make dependency mechanisms might require touching (timestamping)
@@ -5938,7 +5944,7 @@ class V2C_CMakeFilePermanentizer < Util_TempFilePermanentizer
       # Any user who needs that should do a manual touch subsequently.
       file_moved = true
     when Util_TempFilePermanentizer::MOVE_RES_FAIL_ZEROSIZE
-      logger.error "zero-size candidate file!?!? Skipping replace of output file #{@output_file_fqpn}..."
+      logger.error "zero-size candidate file!?!? Skipping replace of output file #{logger.escape_item(@output_file_fqpn)}..."
       file_moved = false
     else
       file_moved = false
@@ -5999,7 +6005,7 @@ class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
   end
   def generate
     output_file_location = @p_generator_proj_file.to_s
-    logger.info "Generating project(s) in #{@p_generator_proj_file.dirname} into #{output_file_location}"
+    logger.info "Generating project(s) in #{logger.escape_item(@p_generator_proj_file.dirname)} into #{logger.escape_item(output_file_location)}"
     generate_local = V2C_GenerateIntoTempFile.new('local CMakeLists.txt', 'vcproj2cmake', output_file_location)
     generate_local.generate { |textOut|
 	content_generator = V2C_CMakeLocalFileContentGenerator.new(textOut, @p_generator_proj_file.dirname, @p_master_project, @arr_projects, @script_location_relative_to_master)
