@@ -210,6 +210,90 @@ def log_fatal(str); log_error "#{str}. Aborting!" if $v2c_log_level > V2C_LOG_LE
 
 def log_implementation_bug(str); log_fatal(str) end
 
+class Logger
+  def initialize(class_name, log_descriptor)
+    @class_name = class_name
+    # FIXME: log_descriptor not obeyed yet!
+  end
+
+  # Ensures proper copy&paste'ability of some log items (e.g.
+  # filenames).
+  # E.g. a dot directly following a filename would disrupt proper
+  # filename-only selection.
+  def escape_item(file); "\"#{file}\"" end
+
+  def error(str); log_error(formatter(str)) end
+  def fixme(str); log_error(formatter("FIXME: #{str}")) end
+  def warn(str); log_warn(formatter(str)) end
+  def info(str); log_info(formatter(str)) end
+  def debug(str); log_debug(formatter(str)) end
+
+  # "Ruby Exceptions", http://rubylearning.com/satishtalim/ruby_exceptions.html
+  # NOTE: user side should probably re-raise() the exception in most cases...
+  def unhandled_exception(e, action)
+    log_error "unhandled exception occurred during #{action}! #{e.message}, #{e.backtrace.inspect}"
+  end
+  def unhandled_functionality(str_description); error "unhandled functionality: #{str_description}" end
+
+  private
+  # I don't know WTH @class_name is not initialized. Probably an init order issue or whatever the heck is happening here. Oh well...
+  #def formatter(str) "#{@class_name}: #{str}" end
+  def formatter(str) str end
+end
+
+module Logging
+  # This is the magical bit that gets mixed into your classes
+  def logger
+    Logging.logger
+  end
+
+  # Global, memoized, lazy initialized instance of a logger
+  def self.logger
+    @logger ||= Logger.new(self.class.name, STDOUT)
+  end
+
+  def todo(str)
+    log_todo str
+  end
+end
+
+# FIXME: currently our classes _derive_ from V2C_LoggerBase in most cases,
+# however it's common practice to have log channel provided as a class member
+# or even a global variable. Should thus rework things to have a class member each
+# (best supplied as ctor param, to have flexible output channel configuration
+# by external elements).
+# See http://stackoverflow.com/questions/917566/ruby-share-logger-instance-among-module-classes
+
+module Logging_Redirector
+  # This is the magical bit that gets mixed into your classes
+  def logger
+    # HACK: logger method currently disabled:
+    #Logging.logger
+    logger_member
+  end
+
+  # Global, memoized, lazy initialized instance of a logger
+  def self.logger
+    @logger ||= Logger.new(self.class.name, STDOUT)
+  end
+
+  def logger_member
+    self # HACK - we're currently the base class of certain classes, but ultimately the logger target should be a ctor param (i.e., member) of all classes). This trick allows us to do a gradual migration :)
+  end
+
+  def todo(str)
+    log_todo str
+  end
+end
+
+class V2C_LoggerBase < Logger
+  include Logging_Redirector
+
+  def initialize
+    super(self.class.name, STDOUT)
+  end
+end
+
 # Change \ to /, and remove leading ./
 def normalize_path(p)
   felems = p.tr('\\', '/').split('/')
@@ -1056,815 +1140,6 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
   attr_accessor :have_build_units
 end
 
-class V2C_ValidationError < StandardError
-end
-
-class V2C_ProjectValidator
-  def initialize(project_info)
-    @project_info = project_info
-  end
-  def validate
-    validate_project
-  end
-  private
-  def validate_config(target_config_info)
-    if target_config_info.cfg_type == V2C_TargetConfig_Defines::CFG_TYPE_INVALID
-      validation_error('config type not set!?')
-    end
-  end
-  def validate_target_configs(arr_target_config_info)
-    arr_target_config_info.each { |target_config_info|
-      validate_config(target_config_info)
-    }
-  end
-  def validate_project
-    validate_target_configs(@project_info.arr_target_config_info)
-    #log_debug "project data: #{@project_info.inspect}"
-    if @project_info.orig_environment_shortname.nil?; validation_error('original environment not set!?') end
-    if @project_info.name.nil?; validation_error('name not set!?') end
-    # FIXME: Disabled for TESTING only - should re-enable a fileset check once VS10 parsing is complete.
-    #if @project_info.main_files.nil?; validation_error('no files!?') end
-    arr_config_info = @project_info.arr_config_info
-    if arr_config_info.nil? or arr_config_info.empty?
-      validation_error('no config information!?')
-    end
-  end
-  def validation_error(str_message)
-    raise V2C_ValidationError, "Project #{@project_info.name}: #{str_message}; #{@project_info.inspect}"
-  end
-end
-
-class V2C_BaseGlobalGenerator
-  def initialize(master_project_dir)
-    @filename_map_inc = "#{$v2c_config_dir_local}/include_mappings.txt"
-    @master_project_dir = master_project_dir
-    @map_includes = Hash.new
-    read_mappings_includes()
-  end
-
-  attr_accessor :map_includes
-
-  private
-
-  def read_mappings_includes
-    # These mapping files may contain things such as mapping .vcproj "Vc7/atlmfc/src/mfc"
-    # into CMake "SYSTEM ${MFC_INCLUDE}" information.
-    read_mappings_combined(@filename_map_inc, @map_includes, @master_project_dir)
-  end
-end
-
-
-class V2C_GeneratorError < StandardError
-end
-
-CMAKE_VAR_MATCH_REGEX_STR = '\\$\\{[[:alnum:]_]+\\}'
-CMAKE_IS_LIST_VAR_CONTENT_REGEX_OBJ = %r{^".*;.*"$}
-CMAKE_ENV_VAR_MATCH_REGEX_STR = '\\$ENV\\{[[:alnum:]_]+\\}'
-
-V2C_TEXT_FILE_AUTO_GENERATED_MARKER = 'AUTO-GENERATED by'
-V2C_TEXT_FILE_SKELETON_MARKER = 'source root skeleton file'
-
-class V2C_TextStream_Attributes
-  def initialize(indent_start, indent_step, comments_level)
-    @indent_start = indent_start
-    @indent_step = indent_step
-    @comments_level = comments_level
-  end
-  attr_accessor :indent_start
-  attr_accessor :indent_step
-  attr_accessor :comments_level
-end
-
-# Contains functionality common to _any_ file-based generator
-class V2C_TextStreamSyntaxGeneratorBase
-  def initialize(out, textstream_attributes)
-    @out = out
-    @indent_now = textstream_attributes.indent_start
-    @indent_step = textstream_attributes.indent_step
-    @comments_level = textstream_attributes.comments_level
-  end
-
-  def generated_comments_level; @comments_level end
-
-  def get_indent; @indent_now end
-
-  def indent_more; @indent_now += @indent_step end
-  def indent_less; @indent_now -= @indent_step end
-
-  def write_data(data)
-    @out.puts data
-  end
-  def write_block(block)
-    block.split("\n").each { |line|
-      write_line(line)
-    }
-  end
-  def write_line(part)
-    @out.print ' ' * get_indent()
-    write_data(part)
-  end
-
-  def write_empty_line; @out.puts end
-  def put_file_header_temporary_marker
-    return if $v2c_generator_one_time_conversion_only
-    # WARNING: since this comment header is meant to advertise
-    # _generated_ vcproj2cmake files, user-side code _will_ check for this
-    # particular wording to tell apart generated text files (e.g. CMakeLists.txt)
-    # from custom-written ones, thus one should definitely avoid changing
-    # this phrase.
-    write_data %{\
-#
-# TEMPORARY Build file, #{V2C_TEXT_FILE_AUTO_GENERATED_MARKER} http://vcproj2cmake.sf.net
-# DO NOT CHECK INTO VERSION CONTROL OR APPLY \"PERMANENT\" MODIFICATIONS!!
-#
-
-}
-  end
-end
-
-def string_storage_contains(string_storage, regex)
-  return string_storage.grep(regex).any?
-end
-
-CMAKELISTS_FILE_TYPE_NONE = 0
-CMAKELISTS_FILE_TYPE_ZERO_SIZE = 1
-CMAKELISTS_FILE_TYPE_CUSTOM = 2
-CMAKELISTS_FILE_TYPE_V2C_ROOT = 3
-CMAKELISTS_FILE_TYPE_V2C_LOCAL = 4
-
-CMAKELISTS_AUTO_GENERATED_REGEX_OBJ = /#{V2C_TEXT_FILE_AUTO_GENERATED_MARKER}/
-CMAKELISTS_SKELETON_REGEX_OBJ = /#{V2C_TEXT_FILE_SKELETON_MARKER}/
-def check_cmakelists_txt_type(str_cmakelists_file_fqpn)
-
-  return CMAKELISTS_FILE_TYPE_NONE if not File.exist?(str_cmakelists_file_fqpn)
-
-  File.open(str_cmakelists_file_fqpn, 'r') { |f_cmakelists|
-    lines = f_cmakelists.readlines()
-    prior_file_was_generated_by_v2c = string_storage_contains(lines, CMAKELISTS_AUTO_GENERATED_REGEX_OBJ)
-    if prior_file_was_generated_by_v2c
-      is_skeleton_file = string_storage_contains(lines, CMAKELISTS_SKELETON_REGEX_OBJ)
-      return is_skeleton_file ? CMAKELISTS_FILE_TYPE_V2C_ROOT : CMAKELISTS_FILE_TYPE_V2C_LOCAL
-    else
-      # For zero-size files, the auto-generation marker check above is obviously
-      # not delivering a useful result...
-      if File.zero?(str_cmakelists_file_fqpn)
-        return CMAKELISTS_FILE_TYPE_ZERO_SIZE
-      else
-        return CMAKELISTS_FILE_TYPE_CUSTOM
-      end
-    end
-  }
-end
-
-class Logger
-  def initialize(class_name, log_descriptor)
-    @class_name = class_name
-    # FIXME: log_descriptor not obeyed yet!
-  end
-
-  # Ensures proper copy&paste'ability of some log items (e.g.
-  # filenames).
-  # E.g. a dot directly following a filename would disrupt proper
-  # filename-only selection.
-  def escape_item(file); "\"#{file}\"" end
-
-  def error(str); log_error(formatter(str)) end
-  def fixme(str); log_error(formatter("FIXME: #{str}")) end
-  def warn(str); log_warn(formatter(str)) end
-  def info(str); log_info(formatter(str)) end
-  def debug(str); log_debug(formatter(str)) end
-
-  # "Ruby Exceptions", http://rubylearning.com/satishtalim/ruby_exceptions.html
-  # NOTE: user side should probably re-raise() the exception in most cases...
-  def unhandled_exception(e, action)
-    log_error "unhandled exception occurred during #{action}! #{e.message}, #{e.backtrace.inspect}"
-  end
-  def unhandled_functionality(str_description); error "unhandled functionality: #{str_description}" end
-
-  private
-  # I don't know WTH @class_name is not initialized. Probably an init order issue or whatever the heck is happening here. Oh well...
-  #def formatter(str) "#{@class_name}: #{str}" end
-  def formatter(str) str end
-end
-
-module Logging
-  # This is the magical bit that gets mixed into your classes
-  def logger
-    Logging.logger
-  end
-
-  # Global, memoized, lazy initialized instance of a logger
-  def self.logger
-    @logger ||= Logger.new(self.class.name, STDOUT)
-  end
-
-  def todo(str)
-    log_todo str
-  end
-end
-
-# FIXME: currently our classes _derive_ from V2C_LoggerBase in most cases,
-# however it's common practice to have log channel provided as a class member
-# or even a global variable. Should thus rework things to have a class member each
-# (best supplied as ctor param, to have flexible output channel configuration
-# by external elements).
-# See http://stackoverflow.com/questions/917566/ruby-share-logger-instance-among-module-classes
-
-module Logging_Redirector
-  # This is the magical bit that gets mixed into your classes
-  def logger
-    # HACK: logger method currently disabled:
-    #Logging.logger
-    logger_member
-  end
-
-  # Global, memoized, lazy initialized instance of a logger
-  def self.logger
-    @logger ||= Logger.new(self.class.name, STDOUT)
-  end
-
-  def logger_member
-    self # HACK - we're currently the base class of certain classes, but ultimately the logger target should be a ctor param (i.e., member) of all classes). This trick allows us to do a gradual migration :)
-  end
-
-  def todo(str)
-    log_todo str
-  end
-end
-
-class V2C_LoggerBase < Logger
-  include Logging_Redirector
-
-  def initialize
-    super(self.class.name, STDOUT)
-  end
-end
-
-class V2C_GeneratorBase < V2C_LoggerBase
-  def generator_error(str_description); logger.error(str_description) end
-end
-
-class V2C_SyntaxGeneratorBase < V2C_GeneratorBase
-  COMMENT_LEVEL_OFF = 0 # no comments generated
-  COMMENT_LEVEL_MINIMUM = 1 # minimum amount of comments
-  COMMENT_LEVEL_STANDARD = 2 # standard setting
-  COMMENT_LEVEL_VERBOSE = 3 # verbose mode - even more comments
-  COMMENT_LEVEL_ALL = 4 # highly verbose, many comments
-  def initialize(textOut)
-    @textOut = textOut
-  end
-  def ensure_string_nonempty(str_test)
-    if str_test.nil? or str_test.empty?
-      raise V2C_GeneratorError, 'detected invalid string'
-    end
-  end
-  def error_unknown_case_value(description, val)
-    raise V2C_GeneratorError, "unknown/unsupported/corrupt #{description} case value! (#{val})"
-  end
-end
-
-# @brief CMake syntax generator base class.
-#        Strictly about converting requests into specific CMake syntax,
-#        no build-specific generator knowledge at this level!
-class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
-  def next_paragraph()
-    @textOut.write_empty_line()
-  end
-  # debug helper, to help figuring out
-  # which part within the generator is generating which lines.
-  def print_marker_line(line)
-    # write_comment_line(line) # UNCOMMENT THIS CALL IF NEEDED
-  end
-  def write_comment_line(line); @textOut.write_line("# #{line}") end
-  def write_comment_at_level(level, block)
-    return if @textOut.generated_comments_level() < level
-    # Since we'd like the start of a comment paragraph to start with
-    # an upper-case char, perhaps we should check against that and warn.
-    block.split("\n").each { |line|
-      write_comment_line(line)
-    }
-  end
-  # TODO: ideally we would do single-line/multi-line splitting operation _automatically_
-  # (and bonus points for configurable line length...)
-  def write_command_list(cmake_command, cmake_command_arg, arr_elems)
-    if cmake_command_arg.nil?; cmake_command_arg = '' end
-    @textOut.write_line("#{cmake_command}(#{cmake_command_arg}")
-    @textOut.indent_more()
-      arr_elems.each do |curr_elem|
-        @textOut.write_line(curr_elem)
-      end
-    @textOut.indent_less()
-    @textOut.write_line(')')
-  end
-  def write_command_list_quoted(cmake_command, cmake_command_arg, arr_elems)
-    cmake_command_arg_quoted = element_handle_quoting(cmake_command_arg) if not cmake_command_arg.nil?
-    arr_elems_quoted = Array.new
-    arr_elems.each do |curr_elem|
-      # HACK for nil input of SCC info.
-      if curr_elem.nil?; curr_elem = '' end
-      arr_elems_quoted.push(element_handle_quoting(curr_elem))
-    end
-    write_command_list(cmake_command, cmake_command_arg_quoted, arr_elems_quoted)
-  end
-  def write_command_single_line(cmake_command, str_cmake_command_args)
-    @textOut.write_line("#{cmake_command}(#{str_cmake_command_args})")
-  end
-  def write_command_list_single_line(cmake_command, arr_args_cmd)
-    str_cmake_command_args = arr_args_cmd.join(' ')
-    write_command_single_line(cmake_command, str_cmake_command_args)
-  end
-  def write_list(list_var_name, arr_elems)
-    write_command_list('set', list_var_name, arr_elems)
-  end
-  def write_list_quoted(list_var_name, arr_elems)
-    write_command_list_quoted('set', list_var_name, arr_elems)
-  end
-  # Special helper to invoke functions which act on a specific object
-  # (e.g. target) given as first param.
-  def write_invoke_config_object_function_quoted(str_function, str_object, arr_args_func)
-    write_command_list_quoted(str_function, str_object, arr_args_func)
-  end
-  # Special helper to invoke custom user-defined functions.
-  def write_invoke_function_quoted(str_function, arr_args_func)
-    write_command_list_quoted(str_function, nil, arr_args_func)
-  end
-  def get_dereferenced_variable_name(str_var); "${#{str_var}}" end
-  def add_subdirectory(str_subdir)
-    # quote strings containing spaces!!
-    str_subdir_quoted = element_handle_quoting(str_subdir)
-    write_command_single_line('add_subdirectory', str_subdir_quoted)
-  end
-
-  def get_var_conditional_command(command_name); "COMMAND #{command_name}" end
-
-  def get_conditional_inverted(str_conditional); "NOT #{str_conditional}" end
-  # WIN32, MSVC, ...
-  def write_conditional_if(str_conditional)
-    return if str_conditional.nil?
-    write_command_single_line('if', str_conditional)
-    @textOut.indent_more()
-  end
-  def write_conditional_else(str_conditional)
-    return if str_conditional.nil?
-    @textOut.indent_less()
-    write_command_single_line('else', str_conditional)
-    @textOut.indent_more()
-  end
-  def write_conditional_end(str_conditional)
-    return if str_conditional.nil?
-    @textOut.indent_less()
-    write_command_single_line('endif', str_conditional)
-  end
-  # http://www.cmake.org/Wiki/CMake/Language_Syntax says
-  # one can use any of TRUE/FALSE, ON/OFF, YES/NO,
-  # thus we'll obviously choose the shortest solution.
-  def get_keyword_bool(setting); setting ? 'ON' : 'OFF' end
-  def write_set_var(var_name, setting)
-    write_command_list('set', var_name, [ setting ])
-  end
-  def write_set_var_bool(var_name, setting)
-    write_set_var(var_name, get_keyword_bool(setting))
-  end
-  def write_set_var_bool_conditional(var_name, str_condition)
-    write_conditional_if(str_condition)
-      write_set_var_bool(var_name, true)
-    write_conditional_else(str_condition)
-      write_set_var_bool(var_name, false)
-    write_conditional_end(str_condition)
-  end
-  def write_set_var_if_unset(var_name, setting)
-    str_conditional = get_conditional_inverted(var_name)
-    write_conditional_if(str_conditional)
-      write_set_var(var_name, setting)
-    write_conditional_end(str_conditional)
-  end
-  # Hrmm, I'm currently unsure whether there _should_ in fact
-  # be any difference between write_set_var() and write_set_var_quoted()...
-  def write_set_var_quoted(var_name, setting)
-    write_command_list_quoted('set', var_name, [ setting ])
-  end
-  def write_include(include_file, optional = false)
-    arr_args_include_file = [ element_handle_quoting(include_file) ]
-    arr_args_include_file.push('OPTIONAL') if optional
-    write_command_list('include', nil, arr_args_include_file)
-  end
-  def write_include_from_cmake_var(include_file_var, optional = false)
-    write_include(get_dereferenced_variable_name(include_file_var), optional)
-  end
-  def write_cmake_minimum_version(str_cmake_minimum_version)
-    ensure_string_nonempty(str_cmake_minimum_version)
-    write_command_single_line('cmake_minimum_required', "VERSION #{str_cmake_minimum_version}")
-  end
-  def write_cmake_policy(policy_num, set_to_new, comment) # comment parm better not default-nil (enforce commenting)
-    str_policy = '%s%04d' % [ 'CMP', policy_num ]
-    str_conditional = "POLICY #{str_policy}"
-    write_conditional_if(str_conditional)
-      if not comment.nil?
-        write_comment_at_level(COMMENT_LEVEL_VERBOSE, comment)
-      end
-      str_OLD_NEW = set_to_new ? 'NEW' : 'OLD'
-      arr_args_set_policy = [ 'SET', str_policy, str_OLD_NEW ]
-      write_command_list_single_line('cmake_policy', arr_args_set_policy)
-    write_conditional_end(str_conditional)
-  end
-  def put_source_group(source_group_name, arr_filters, source_files_variable)
-    arr_elems = Array.new
-    if not arr_filters.nil?
-      # WARNING: need to keep as separate array elements (whitespace separator would lead to bogus quoting!)
-      # And _need_ to keep manually quoted,
-      # since we receive this as a ;-separated list and need to pass it on unmodified.
-      str_regex_list = array_to_cmake_list(arr_filters)
-      arr_elems.push('REGULAR_EXPRESSION', str_regex_list)
-    end
-    arr_elems.push('FILES', get_dereferenced_variable_name(source_files_variable))
-    # Use multi-line method since source_group() arguments can be very long.
-    write_command_list_quoted('source_group', source_group_name, arr_elems)
-  end
-  def put_include_directories(target_name, arr_directories, flags)
-    arr_args = Array.new
-    arr_args.push('SYSTEM') if (flags & V2C_Include_Dir_Defines::SYSTEM > 0)
-    arr_args.push('BEFORE') if (flags & V2C_Include_Dir_Defines::BEFORE > 0)
-    arr_args.concat(arr_directories)
-    gen_put_include_directories(target_name, arr_args)
-  end
-  # analogous to CMake separate_arguments() command
-  def separate_arguments(array_in); array_in.join(';') end
-
-  # Hrmm, I'm not quite happy about this helper's location and
-  # purpose. Probably some hierarchy is not really clean.
-  def prepare_string_literal(str_in)
-    return element_handle_quoting(str_in)
-  end
-  private
-
-  def element_manual_quoting(elem)
-    return "\"#{elem}\""
-  end
-  def array_to_cmake_list(arr_elems)
-    return element_manual_quoting(arr_elems.join(';'))
-  end
-  # (un)quote strings as needed
-  #
-  # Once we added a variable in the string,
-  # we definitely _need_ to have the resulting full string quoted
-  # in the generated file, otherwise we won't obey
-  # CMake filesystem whitespace requirements! (string _variables_ _need_ quoting)
-  # However, there is a strong argument to be made for applying the quotes
-  # on the _generator_ and not _parser_ side, since it's a CMake syntax attribute
-  # that such strings need quoting.
-  CMAKE_STRING_NEEDS_QUOTING_REGEX_OBJ = %r{[^\}\s]\s|\s[^\s\$]|^$}
-  CMAKE_STRING_HAS_QUOTES_REGEX_OBJ = %r{".*"}
-  CMAKE_STRING_QUOTED_CONTENT_MATCH_REGEX_OBJ = %r{"(.*)"}
-  def element_handle_quoting(elem)
-    # Determine whether quoting needed
-    # (in case of whitespace or variable content):
-    #if elem.match(/\s|#{CMAKE_VAR_MATCH_REGEX_STR}|#{CMAKE_ENV_VAR_MATCH_REGEX_STR}/)
-    # Hrmm, turns out that variables better should _not_ be quoted.
-    # But what we _do_ need to quote is regular strings which include
-    # whitespace characters, i.e. check for alphanumeric char following
-    # whitespace or the other way around.
-    # Quoting rules seem terribly confusing, will need to revisit things
-    # to get it all precisely correct.
-    # For details, see REF_QUOTING: "Quoting" http://www.itk.org/Wiki/CMake/Language_Syntax#Quoting
-    content_needs_quoting = false
-    has_quotes = false
-    # "contains at least one whitespace character,
-    # and then prefixed or followed by any non-whitespace char value"
-    # Well, that's not enough - consider a concatenation of variables
-    # such as
-    # ${v1} ${v2}
-    # which should NOT be quoted (whereas ${v1} ascii ${v2} should!).
-    # As a bandaid to detect variable syntax, make sure to skip
-    # closing bracket/dollar sign as well.
-    # And an empty string needs quoting, too!!
-    # (this empty content might be a counted parameter of a function invocation,
-    # in which case unquoted syntax would implicitly throw away that empty parameter!
-    if CMAKE_STRING_NEEDS_QUOTING_REGEX_OBJ.match(elem)
-      content_needs_quoting = true
-    end
-    if CMAKE_STRING_HAS_QUOTES_REGEX_OBJ.match(elem)
-      has_quotes = true
-    end
-    needs_quoting = (content_needs_quoting and not has_quotes)
-    #puts "QUOTING: elem #{elem} content_needs_quoting #{content_needs_quoting} has_quotes #{has_quotes} needs_quoting #{needs_quoting}"
-    if needs_quoting
-      #puts 'QUOTING: do quote!'
-      return element_manual_quoting(elem)
-    end
-    if has_quotes
-      if not content_needs_quoting
-        is_list = elem_is_cmake_list(elem)
-        needs_unquoting = (not is_list)
-        if needs_unquoting
-          #puts 'QUOTING: do UNquoting!'
-          return elem.sub(CMAKE_STRING_QUOTED_CONTENT_MATCH_REGEX_OBJ, '\1')
-        end
-      end
-    end
-    #puts 'QUOTING: do no changes!'
-    return elem
-  end
-  # Do we have a string such as "aaa;bbb" ?
-  def elem_is_cmake_list(str_elem)
-    # Warning: String.start_with?/end_with? cannot be used (new API)
-    # And using index() etc. for checking of start/end '"' and ';'
-    # is not very useful either, thus use a combined match().
-    #return (not (str_elem.match(CMAKE_IS_LIST_VAR_CONTENT_REGEX_OBJ) == nil))
-    return CMAKE_IS_LIST_VAR_CONTENT_REGEX_OBJ.match(str_elem)
-  end
-  def get_config_name_upcase(config_name)
-    # need to also convert config names with spaces into underscore variants, right?
-    config_name.clone.upcase.tr(' ','_')
-  end
-  def get_name_of_per_config_type_property(property_name, config_name)
-    if config_name.nil?
-      res = property_name
-    else
-      config_name_upper = get_config_name_upcase(config_name)
-      res = "#{property_name}_#{config_name_upper}"
-    end
-    return res
-  end
-  COMPILE_DEF_NEEDS_CMAKE_ESCAPING_REGEX_OBJ = %r{[\(\)]+}
-  def cmake_escape_compile_definitions(arr_compile_defn)
-    arr_compile_defn.collect do |compile_defn|
-      # Need to escape the value part of the key=value definition:
-      if COMPILE_DEF_NEEDS_CMAKE_ESCAPING_REGEX_OBJ.match(compile_defn)
-        escape_char(compile_defn, '\\(')
-        escape_char(compile_defn, '\\)')
-      end
-      compile_defn
-    end
-  end
-end
-
-# @brief V2C_CMakeV2CSyntaxGenerator isn't supposed to be a base class
-# of other CMake generator classes, but rather a _member_ of those classes only.
-# Reasoning: that class implements the border crossing towards specific CMake syntax,
-# i.e. it is the _only one_ to know specific CMake syntax (well, "ideally", I have to say, currently).
-# If it was the base class of the various CMake generators,
-# then it would be _hard-coded_ i.e. not configurable (which would be the case
-# when having ctor parameterisation from the outside).
-# This class derived from base contains extended functions
-# that aren't strictly about CMake syntax generation any more
-# (i.e., some build-specific configuration content).
-class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
-  VCPROJ2CMAKE_FUNC_CMAKE = 'vcproj2cmake_func.cmake'
-  V2C_ATTRIBUTE_NOT_PROVIDED_MARKER = 'V2C_NOT_PROVIDED' # WARNING KEEP IN SYNC: that exact string literal is being checked by vcproj2cmake_func.cmake!
-  V2C_ALL_PLATFORMS_MARKER = 'ALL'
-  def write_vcproj2cmake_func_comment()
-    write_comment_at_level(COMMENT_LEVEL_STANDARD, "See function implementation/docs in #{$v2c_module_path_root}/#{VCPROJ2CMAKE_FUNC_CMAKE}")
-  end
-  def put_converter_script_location(script_location_relative_to_master)
-    return if $v2c_generator_one_time_conversion_only
-
-    if script_location_relative_to_master.nil?
-      generator_error('converter script location missing!?')
-    end
-
-    # For the CMakeLists.txt rebuilder (automatic rebuild on file changes),
-    # add handling of a script file location variable, to enable users
-    # to override the script location if needed.
-    next_paragraph()
-    # NOTE: we'll make V2C_SCRIPT_LOCATION express its path via
-    # relative argument to global V2C_MASTER_PROJECT_SOURCE_DIR (i.e. CMAKE_SOURCE_DIR)
-    # and _not_ CMAKE_CURRENT_SOURCE_DIR,
-    # (this provision should even enable people to manually relocate
-    # an entire sub project within the source tree).
-    v2c_converter_script_location = "${V2C_MASTER_PROJECT_SOURCE_DIR}/#{script_location_relative_to_master}"
-    gen_put_converter_script_location(v2c_converter_script_location)
-  end
-  def put_include_dir_project_source_dir(target_name)
-    # AFAIK .vcproj implicitly adds the project root to standard include path
-    # (for automatic stdafx.h resolution etc.), thus add this
-    # (and make sure to add it with high priority, i.e. use BEFORE).
-    # For now sitting in LocalGenerator and not per-target handling since this setting is valid for the entire directory.
-    next_paragraph()
-    arr_directories = [ get_dereferenced_variable_name('PROJECT_SOURCE_DIR') ]
-    put_include_directories(target_name, arr_directories, V2C_Include_Dir_Defines::BEFORE)
-  end
-  def write_invoke_config_object_v2c_function_quoted(str_function, str_object, arr_args_func)
-    write_vcproj2cmake_func_comment()
-    write_invoke_config_object_function_quoted(str_function, str_object, arr_args_func)
-  end
-  def write_invoke_v2c_function_quoted(str_function, arr_args_func)
-    write_vcproj2cmake_func_comment()
-    write_invoke_function_quoted(str_function, arr_args_func)
-  end
-  def put_v2c_hook_invoke(str_filename)
-      write_invoke_v2c_function_quoted('v2c_hook_invoke', [ str_filename ])
-  end
-  def put_customization_hook(include_file)
-    return if $v2c_generator_one_time_conversion_only
-    gen_put_customization_hook(include_file)
-  end
-  def put_customization_hook_from_cmake_var(include_file_var)
-    return if $v2c_generator_one_time_conversion_only
-    gen_put_customization_hook_from_cmake_var(include_file_var)
-  end
-  def put_customization_hook_commented_from_cmake_var(include_file_var, comment_level, comment)
-    return if $v2c_generator_one_time_conversion_only
-    write_comment_at_level(comment_level, comment)
-    put_customization_hook_from_cmake_var(include_file_var)
-  end
-  # Hrmm, I'm not quite sure yet where to aggregate this function...
-  #
-  # In most cases this function will be called internally within methods
-  # which generate calls to our vcproj2cmake_func.cmake helpers,
-  # so that these helpers can switch fully internally between
-  # either generating CMake calls
-  # (passing platform / build type parameters as gathered from condition)
-  # or (in self-contained mode) instead using the result of this function
-  # to add an open-coded CMake "if(CONDITIONAL)".
-  def get_buildcfg_var_name_of_condition(condition)
-    # HACK: very Q&D handling, to make things work quickly.
-    # Should think of implementing a proper abstraction for handling of conditions.
-    # Probably we _at least_ need to create a _condition generator_ class.
-
-    # Hrmm, for now we'll abuse a method at the V2C_Info_Condition class,
-    # but I'm not convinced at all that this is how things should be structured.
-    build_type = condition.get_build_type()
-    platform_name = condition.get_build_platform()
-    var_name = nil
-    if not build_type.nil? and not platform_name.nil?
-      # Name may contain spaces - need to handle them!
-      build_type_flattened = util_flatten_string(build_type)
-      platform_name_flattened = util_flatten_string(platform_name)
-      var_name = "v2c_want_buildcfg_platform_#{platform_name_flattened}_build_type_#{build_type_flattened}"
-    end
-    return var_name
-  end
-  def parse_platform_conversions_internal(platform_defs, arr_defs, map_defs, skip_failed_lookups)
-    arr_defs.each { |curr_defn|
-      #log_debug map_defs[curr_defn]
-      map_line = map_defs[curr_defn]
-      if map_line.nil?
-        # hmm, no direct match! Try to figure out whether any map entry
-        # is a regex which would match our curr_defn
-        hash_ensure_sorted_each(map_defs).each do |key_regex, value|
-          if curr_defn =~ /^#{key_regex}$/
-            log_debug "KEY: #{key_regex} curr_defn #{curr_defn}"
-            map_line = value
-            break
-          end
-        end
-      end
-      if map_line.nil?
-        # no mapping? --> unconditionally use the original define
-        if true != skip_failed_lookups
-          push_platform_defn(platform_defs, V2C_ALL_PLATFORMS_MARKER, curr_defn)
-        end
-      else
-        # Tech note: chomp on map_line should not be needed as long as
-        # original _constant_ input has already been pre-treated (chomped).
-        map_line.split('|').each do |platform_element|
-          #log_debug "platform_element #{platform_element}"
-          platform, replacement_defn = platform_element.split('=')
-          if platform.empty?
-            # specified a replacement without a specific platform?
-            # ("tag:=REPLACEMENT")
-            # --> unconditionally use it!
-            platform = V2C_ALL_PLATFORMS_MARKER
-          else
-            replacement_defn ||= curr_defn
-          end
-          push_platform_defn(platform_defs, platform, replacement_defn)
-        end
-      end
-    }
-  end
-  def parse_platform_conversions(platform_defs, arr_defs, map_defs, skip_failed_lookups)
-    platform_defs_raw = Hash.new
-    parse_platform_conversions_internal(platform_defs_raw, arr_defs, map_defs, skip_failed_lookups)
-    platform_defs_raw.each do |key, arr_platdefs|
-      #logger.info "arr_platdefs: #{arr_platdefs}"
-      next if arr_platdefs.empty?
-      arr_platdefs.uniq!
-      platform_defs[key] = arr_platdefs
-    end
-    #hash_ensure_sorted(platform_defs)
-  end
-
-  V2C_COMPILER_MSVC_REGEX_OBJ = %r{^MSVC}
-  def map_compiler_name_to_cmake_platform_conditional(compiler_name)
-    str_conditional_compiler_platform = nil
-    # For a number of platform indentifier variables,
-    # see "CMake Useful Variables" http://www.cmake.org/Wiki/CMake_Useful_Variables
-    case compiler_name
-    when V2C_COMPILER_MSVC_REGEX_OBJ
-      str_conditional_compiler_platform = 'MSVC'
-    else
-      logger.unhandled_functionality "unknown (unsupported) compiler name #{compiler_name}!"
-    end
-    return str_conditional_compiler_platform
-  end
-  def map_linker_name_to_cmake_platform_conditional(linker_name)
-    # For now, let's assume that compiler / linker name mappings are the same:
-    # BTW, we probably don't have much use for the CMAKE_LINKER variable anywhere, right?
-    return map_compiler_name_to_cmake_platform_conditional(linker_name)
-  end
-  def do_configure_atl_mfc_flag(target_name, condition, use_of_atl, use_of_mfc)
-    # CMAKE_MFC_FLAG setting is supposed to be done _before_
-    # a target gets created (via add_executable() etc.).
-    #
-    # Hmm, do we need to actively _reset_ CMAKE_MFC_FLAG / CMAKE_ATL_FLAG
-    # (i.e. _unconditionally_ set() it, even if it's 0),
-    # since projects in subdirs shouldn't inherit?
-    # Given the discussion at
-    # "[CMake] CMAKE_MFC_FLAG is inherited in subdirectory ?"
-    #   http://www.cmake.org/pipermail/cmake/2009-February/026896.html
-    # I'd strongly assume yes...
-    # See also "Re: [CMake] CMAKE_MFC_FLAG not working in functions"
-    #   http://www.mail-archive.com/cmake@cmake.org/msg38677.html
-
-    if 1 == $v2c_generate_self_contained_file
-      var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
-      write_conditional_if(var_v2c_want_buildcfg_curr)
-        #if use_of_mfc > V2C_TargetConfig_Defines::MFC_FALSE
-          write_set_var('CMAKE_MFC_FLAG', use_of_mfc)
-        #end
-        # ok, there's no CMAKE_ATL_FLAG yet, AFAIK, but still prepare
-        # for it (also to let people probe on this in hook includes)
-        # FIXME: since this flag does not exist yet yet MFC sort-of
-        # includes ATL configuration, perhaps as a workaround one should
-        # set the MFC flag if use_of_atl is true?
-        #if use_of_atl > 0
-          # TODO: should also set the per-configuration-type variable variant
-          write_set_var('CMAKE_ATL_FLAG', use_of_atl)
-        #end
-      write_conditional_end(var_v2c_want_buildcfg_curr)
-    else
-      arr_args_func = [ use_of_atl.to_s(), use_of_mfc.to_s() ]
-      write_invoke_object_conditional_v2c_function('v2c_local_set_cmake_atl_mfc_flags', target_name, condition, arr_args_func)
-    end
-  end
-  def write_invoke_object_conditional_v2c_function(str_function, object_name, condition, arr_args_func_other)
-    arr_args_func = [
-      prepare_string_literal(condition.get_build_platform()),
-      prepare_string_literal(condition.get_build_type())
-    ]
-    arr_args_func.concat(arr_args_func_other)
-    write_invoke_config_object_v2c_function_quoted(str_function, object_name, arr_args_func)
-  end
-end
-
-class V2C_CMakeV2CSyntaxGeneratorV2CFunc < V2C_CMakeV2CSyntaxGeneratorBase
-  private
-  def gen_put_customization_hook(include_file)
-    put_v2c_hook_invoke(include_file)
-  end
-  def gen_put_customization_hook_from_cmake_var(include_file_var)
-    put_v2c_hook_invoke(get_dereferenced_variable_name(include_file_var))
-  end
-  def gen_put_include_directories(target_name, arr_args)
-    write_command_list_quoted('v2c_target_include_directories', target_name, arr_args)
-  end
-  def gen_put_converter_script_location(script_location)
-    write_invoke_v2c_function_quoted('v2c_converter_script_set_location', [ script_location ])
-  end
-end
-
-# class variant which is supposed to create a self-contained file
-# (i.e. one which does not rely on our V2C functions module).
-# Currently this most certainly does not work fully.
-class V2C_CMakeV2CSyntaxGeneratorSelfContained < V2C_CMakeV2CSyntaxGeneratorBase
-  private
-  def gen_put_customization_hook(include_file)
-    write_include(include_file, true)
-  end
-  def gen_put_customization_hook_from_cmake_var(include_file_var)
-    write_include_from_cmake_var(include_file_var, true)
-  end
-  def gen_put_include_directories(target_name, arr_args)
-    write_command_list_quoted('include_directories', nil, arr_args)
-  end
-  def gen_put_converter_script_location(script_location)
-    write_comment_at_level(COMMENT_LEVEL_MINIMUM,
-      "User override mechanism (don't prevent specifying a custom location of this script)"
-    )
-    write_set_var_if_unset('V2C_SCRIPT_LOCATION', element_manual_quoting(script_location))
-  end
-end
-
-if 1 == $v2c_generate_self_contained_file
-  class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeV2CSyntaxGeneratorSelfContained
-  end
-else
-  class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeV2CSyntaxGeneratorV2CFunc
-  end
-end
-
-# Supposed to generate the globally configured parts
-# within an entire "solution" hierarchy.
-# Currently, these end up (repeated) in each local CMakeLists.txt file.
-# Should be generating into a common include() file instead.
-class V2C_CMakeGlobalGenerator < V2C_CMakeV2CSyntaxGenerator
-  def put_configuration_types(configuration_types)
-    configuration_types_list = separate_arguments(configuration_types)
-    write_set_var_quoted('CMAKE_CONFIGURATION_TYPES', configuration_types_list)
-  end
-end
-
 class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
   def initialize(project_info)
     @project_info = project_info
@@ -1926,1264 +1201,6 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
     return @arr_languages
   end
 end
-
-# Generates the CMake code required to bootstrap V2C operation
-# (provided by each scope which may still need to execute this init code)
-class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
-  def initialize(textOut, relative_path_to_root, script_location_relative_to_master)
-    super(textOut)
-    @relative_path_to_root = relative_path_to_root
-    @script_location_relative_to_master = script_location_relative_to_master
-  end
-  def generate
-    put_per_scope_setup(@relative_path_to_root)
-  end
-
-  private
-
-  def put_per_scope_setup(str_conversion_root_rel)
-    write_comment_at_level(COMMENT_LEVEL_STANDARD,
-      "This part of *global* V2C bootstrap steps (policies, include function module, ...)\n" \
-      "*has* to be repeated within each *local* file,\n" \
-      "to be able to support the use case of creating a build environment\n" \
-      "from single local project directories, too.\n" \
-      "But there's a nice trick: if a guard variable is already defined,\n" \
-      "then some other (parent?) scope already did all that setup work for us." \
-    )
-    str_per_scope_definition_guard = '_v2c_global_defs_per_scope_defined'
-    str_condition_inverse = get_conditional_inverted(str_per_scope_definition_guard)
-    write_conditional_if(str_condition_inverse)
-      put_per_scope_cmake_minimum_version()
-      put_per_scope_cmake_policies()
-
-      put_cmake_module_path(str_conversion_root_rel)
-      put_include_vcproj2cmake_func()
-      put_var_config_dir_local()
-      # We'll have converter script setup one-time within global setup as well -
-      # while different project files/dirs may have been converted
-      # with differing scripts, such a use case can be considered
-      # sufficiently pathological, thus we will not support it.
-      put_converter_script_location(@script_location_relative_to_master)
-      write_set_var_bool(str_per_scope_definition_guard, true)
-    write_conditional_end(str_condition_inverse)
-  end
-
-  # cmake_minimum_required() is required to be mentioned open-coded
-  # per-CMakeLists.txt (exact requirement seems to be:
-  # to be executed whenever it has not been done before within a scope),
-  # thus we always do need to generate this line
-  # rather than having it carried out by our module file.
-  # Having it mentioned by an included macro executed locally is not
-  # accepted either.
-  def put_per_scope_cmake_minimum_version
-    # Required version line to make cmake happy.
-    write_comment_at_level(COMMENT_LEVEL_VERBOSE,
-      "For features provided (or not) by various CMake versions,\n" \
-      "please see http://www.cmake.org/Wiki/CMake_Released_Versions\n" \
-      "(and page CMake_Version_Compatibility_Matrix)."
-    )
-    str_cmake_minimum_version = '2.6'
-    write_comment_at_level(COMMENT_LEVEL_MINIMUM,
-      ">= #{str_cmake_minimum_version} due to crucial set_property(... COMPILE_DEFINITIONS_* ...)"
-    )
-    write_cmake_minimum_version(str_cmake_minimum_version)
-  end
-  def put_per_scope_cmake_policies
-    str_conditional = get_var_conditional_command('cmake_policy')
-    write_conditional_if(str_conditional)
-      # CMP0005: manual quoting of brackets in definitions doesn't seem to work otherwise,
-      # in cmake 2.6.4-7.el5 with "OLD".
-      # We'll decide to write the policies one after another -
-      # we could be embedding all higher-numbered policies
-      # within the conditionals of the lower ones,
-      # but this would be less compatible (it is conceivable
-      # that certain policy numbers get withdrawn completely in future,
-      # in which case hierarchic conditionals would fail).
-      write_cmake_policy(5, true, "automatic quoting of brackets")
-      write_cmake_policy(11, false, \
-	"we do want the includer to be affected by our updates,\n" \
-        "since it might define project-global settings.\n" \
-      )
-      write_cmake_policy(15, true, \
-        ".vcproj contains relative paths to additional library directories,\n" \
-        "thus we need to be able to cope with that" \
-      )
-    write_conditional_end(str_conditional)
-  end
-  def put_cmake_module_path(str_conversion_root_rel)
-    # try to point to cmake/Modules of the topmost directory of the vcproj2cmake conversion tree.
-    # This also contains vcproj2cmake helper modules (these should - just like the CMakeLists.txt -
-    # be within the project tree as well, since someone might want to copy the entire project tree
-    # including .vcproj conversions to a different machine, thus all v2c components should be available)
-    # NOTE that V2C_MASTER_PROJECT_SOURCE_DIR is a very important variable
-    # which may eventually be supported to end up _different_ from CMAKE_SOURCE_DIR
-    # (e.g. in the case of integrating _multiple_ different solution (.sln) files
-    # - and their project hierarchy each! - into a _higher-level_ natively CMake-based tree!!).
-    # We might possibly eventually want to rename V2C_MASTER_PROJECT_SOURCE_DIR into V2C_SOLUTION_ROOT_SOURCE_DIR
-    # to reflect the fact that a project hierarchy has been created from a solution
-    # that sits in a specific directory...
-    next_paragraph()
-    write_comment_at_level(COMMENT_LEVEL_STANDARD,
-      "Denotes the source root directory where the V2C conversion run was carried out.\n" \
-      "This directory also contains certain global vcproj2cmake support subdirs."
-    )
-
-    # Handle the case of generating for V2C root (== empty relative path).
-    str_conversion_root_rel_cooked = ''
-    if not str_conversion_root_rel.empty?
-      str_conversion_root_rel_cooked = "/#{str_conversion_root_rel}"
-    end
-    str_master_proj_source_dir = "#{get_dereferenced_variable_name('CMAKE_CURRENT_SOURCE_DIR')}#{str_conversion_root_rel_cooked}"
-    write_set_var_quoted('V2C_MASTER_PROJECT_SOURCE_DIR', str_master_proj_source_dir)
-    str_master_proj_binary_dir = "#{get_dereferenced_variable_name('CMAKE_CURRENT_BINARY_DIR')}#{str_conversion_root_rel_cooked}"
-    write_set_var_quoted('V2C_MASTER_PROJECT_BINARY_DIR', str_master_proj_binary_dir)
-    # NOTE: use set() instead of list(APPEND...) to _prepend_ path
-    # (otherwise not able to provide proper _overrides_)
-    write_comment_at_level(COMMENT_LEVEL_STANDARD,
-      "Extend module path with both a precise relative hint to source root\n" \
-      "and a flexible link via CMAKE_SOURCE_DIR expression,\n" \
-      "since in certain situations both may end up used\n" \
-      "(think build tree created from standalone project)."
-    )
-    # Whatever we do here - make sure we don't stomp out any potential prior CMAKE_MODULE_PATH definition!!
-    # (for details, see "CMake coding guide"
-    #    http://www.aldebaran-robotics.com/documentation/qibuild/contrib/cmake/coding_guide.html )
-    arr_args_func = [ "${V2C_MASTER_PROJECT_SOURCE_DIR}/#{$v2c_module_path_local}", "${CMAKE_SOURCE_DIR}/#{$v2c_module_path_local}", get_dereferenced_variable_name('CMAKE_MODULE_PATH') ]
-    write_list_quoted('CMAKE_MODULE_PATH', arr_args_func)
-  end
-  def put_include_vcproj2cmake_func
-    next_paragraph()
-    write_comment_at_level(COMMENT_LEVEL_STANDARD,
-      "Include the main file for pre-defined vcproj2cmake helper functions"
-    )
-    write_include('vcproj2cmake_func')
-  end
-  # "export" our internal $v2c_config_dir_local variable (to be able to reference it in CMake scripts as well)
-  def put_var_config_dir_local; write_set_var_quoted('V2C_CONFIG_DIR_LOCAL', $v2c_config_dir_local) end
-end
-
-# This class generates the output of multiple input projects to a text output
-# (usually CMakeLists.txt within a local directory).
-class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
-  def initialize(textOut, local_dir, p_solution_dir, arr_local_project_targets, script_location_relative_to_master)
-    super(textOut)
-    @local_dir = local_dir
-    @p_solution_dir = p_solution_dir
-    @master_project_dir = p_solution_dir.to_s
-    @arr_local_project_targets = arr_local_project_targets
-    @script_location_relative_to_master = script_location_relative_to_master
-    # FIXME: handle arr_config_var_handling appropriately
-    # (place the translated CMake commands somewhere suitable)
-    @arr_config_var_handling = Array.new
-  end
-
-  def generate
-    master_project_dir = @p_solution_dir.to_s
-    generator_base = V2C_BaseGlobalGenerator.new(master_project_dir)
-    map_lib_dirs = Hash.new
-    read_mappings_combined(FILENAME_MAP_LIB_DIRS, map_lib_dirs, master_project_dir)
-    map_lib_dirs_dep = Hash.new
-    read_mappings_combined(FILENAME_MAP_LIB_DIRS_DEP, map_lib_dirs_dep, master_project_dir)
-    map_dependencies = Hash.new
-    read_mappings_combined(FILENAME_MAP_DEP, map_dependencies, master_project_dir)
-    map_defines = Hash.new
-    read_mappings_combined(FILENAME_MAP_DEF, map_defines, master_project_dir)
-
-    generate_it(@local_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
-  end
-  def write_include_directories(arr_includes, map_includes)
-    # Side note: unfortunately CMake as of 2.8.7 probably still does not have
-    # a way of specifying _per-configuration_ syntax of include_directories().
-    # See "[CMake] vcproj2cmake.rb script: announcing new version / hosting questions"
-    #   http://www.cmake.org/pipermail/cmake/2010-June/037538.html
-    #
-    # Side note #2: relative arguments to include_directories() (e.g. "..")
-    # are relative to CMAKE_PROJECT_SOURCE_DIR and _not_ BINARY,
-    # at least on Makefile and .vcproj.
-    # CMake dox currently don't offer such details... (yet!)
-    return if arr_includes.empty?
-    arr_includes_translated = arr_includes.collect { |elem_inc_dir|
-      vs7_create_config_variable_translation(elem_inc_dir, @arr_config_var_handling)
-    }
-    write_build_attributes('include_directories', arr_includes_translated, map_includes, nil)
-  end
-
-  def write_link_directories(arr_lib_dirs, map_lib_dirs)
-    arr_lib_dirs_translated = arr_lib_dirs.collect { |elem_lib_dir|
-      vs7_create_config_variable_translation(elem_lib_dir, @arr_config_var_handling)
-    }
-    arr_lib_dirs_translated.push(get_dereferenced_variable_name('V2C_LIB_DIRS'))
-    write_comment_at_level(COMMENT_LEVEL_VERBOSE,
-      "It is said to be much preferable to be able to use target_link_libraries()\n" \
-      "rather than the very unspecific link_directories()."
-    )
-    write_build_attributes('link_directories', arr_lib_dirs_translated, map_lib_dirs, nil)
-  end
-  def put_directory_property_compile_flags(attr_opts, flag_append)
-    write_command_single_line('set_property', "DIRECTORY APPEND PROPERTY COMPILE_FLAGS #{attr_opts}")
-  end
-  def write_directory_property_compile_flags(attr_opts)
-    next_paragraph()
-    # Query WIN32 instead of MSVC, since AFAICS there's nothing in the
-    # .vcproj to indicate tool specifics, thus these seem to
-    # be settings for ANY PARTICULAR tool that is configured
-    # on the Win32 side (.vcproj in general).
-    str_platform = 'WIN32'
-    write_conditional_if(str_platform)
-      put_directory_property_compile_flags(attr_opts, true)
-    write_conditional_end(str_platform)
-  end
-  def write_build_attributes(cmake_command, arr_defs, map_defs, cmake_command_arg, skip_failed_lookups = false)
-    # the container for the list of _actual_ dependencies as stated by the project
-    all_platform_defs = Hash.new
-    parse_platform_conversions(all_platform_defs, arr_defs, map_defs, skip_failed_lookups)
-    # HACK: yes, we do need to re-sort this Hash _right before_ using it...
-    hash_ensure_sorted_each(all_platform_defs).each { |key, arr_platdefs|
-      #logger.info "arr_platdefs: #{arr_platdefs}"
-      next_paragraph()
-      str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
-      write_conditional_if(str_platform)
-        write_command_list_quoted(cmake_command, cmake_command_arg, arr_platdefs)
-      write_conditional_end(str_platform)
-    }
-  end
-  private
-
-  # FIXME: all these function arguments are temporary crap! - they're supposed to be per-ProjectTarget mostly.
-  def generate_it(local_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
-    local_dir_fqpn = File.expand_path(local_dir)
-    p_local_dir_fqpn = Pathname.new(local_dir_fqpn)
-    p_root = Pathname.new(@master_project_dir)
-    relative_path_to_root = p_root.relative_path_from(p_local_dir_fqpn)
-    put_file_header(relative_path_to_root.to_s)
-
-    @arr_local_project_targets.each { |project_info|
-      project_generator = V2C_CMakeProjectTargetGenerator.new(project_info, local_dir, self, @textOut)
-
-      begin
-        project_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
-      rescue V2C_GeneratorError => e
-        logger.error("project #{project_info.name} generation failed: #{e.message}")
-        # Hohumm, this variable is not really what we should be having here...
-        if ($v2c_validate_vcproj_abort_on_error > 0)
-          raise # escalate the problem
-        end
-      end
-    }
-    write_func_v2c_directory_post_setup
-  end
-  def put_file_header(str_conversion_root_rel)
-    @textOut.put_file_header_temporary_marker()
-    bootstrap_generator =
-      V2C_CMakeGlobalBootstrapCodeGenerator.new(@textOut, str_conversion_root_rel, @script_location_relative_to_master)
-    bootstrap_generator.generate
-    put_include_vcproj2cmake_defs()
-    put_hook_pre()
-  end
-  def write_func_v2c_directory_post_setup
-    write_invoke_v2c_function_quoted('v2c_directory_post_setup', [])
-  end
-
-  private
-
-  def put_include_vcproj2cmake_defs
-    next_paragraph()
-    write_comment_at_level(COMMENT_LEVEL_STANDARD,
-      "Include the globally provided module for re-init of local (per-scope)\n" \
-      "configuration settings definitions (to be customized by user as needed)"
-    )
-    write_include('vcproj2cmake_defs')
-  end
-  def put_hook_pre
-    # this CMakeLists.txt-global optional include could be used e.g.
-    # to skip the entire build of this file on certain platforms:
-    # if(PLATFORM) message(STATUS "not supported") return() ...
-    # (note that we appended CMAKE_MODULE_PATH _prior_ to this include()!)
-    put_customization_hook('${V2C_CONFIG_DIR_LOCAL}/hook_pre.txt')
-  end
-end
-
-# Hrmm, I'm not quite sure yet where to aggregate this function...
-# (missing some proper generator base class or so...)
-def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name, throw_error)
-  file_accessible = false
-  if $v2c_validate_vcproj_ensure_files_ok
-    if file_relative.nil? or file_relative.empty?
-      log_warn "#{project_name}: empty file argument! (#{file_item_description})"
-    else
-      # TODO: perhaps we need to add a permissions check, too?
-      file_location = "#{project_dir}/#{file_relative}"
-      if File.exist?(file_location)
-        file_accessible = true
-      else
-        log_error "File #{file_relative} (#{file_item_description}) as listed by project #{project_name} does not exist!? (perhaps filename with wrong case, or wrong path, ...)"
-        if throw_error
-  	# FIXME: should be throwing an exception, to not exit out
-  	# on entire possibly recursive (global) operation
-          # when a single project is in error...
-          log_fatal "Improper original file - will abort and NOT generate a broken converted project file. Please fix content of the original project file!"
-        end
-      end
-    end
-  else
-    file_accessible = true
-  end
-  return file_accessible
-end
-
-class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
-  VS7_UNWANTED_FILE_TYPES_REGEX_OBJ = %r{\.(lex|y|ico|bmp|txt)$}
-  VS7_LIB_FILE_TYPES_REGEX_OBJ = %r{\.lib$}
-  def initialize(textOut, project_name, project_dir, arr_sub_sources_for_parent)
-    super(textOut)
-    @project_name = project_name
-    @project_dir = project_dir
-    @arr_sub_sources_for_parent = arr_sub_sources_for_parent
-  end
-  def filter_files(arr_file_infos)
-    arr_local_sources = nil
-    if not arr_file_infos.nil?
-      arr_local_sources = Array.new
-      arr_file_infos.each { |file|
-        f = file.path_relative
-
-	v2c_generator_check_file_accessible(@project_dir, f, 'file item in project', @project_name, ($v2c_validate_vcproj_abort_on_error > 0))
-
-        # Ignore all generated files, for now.
-        if true == file.is_generated
-          logger.fixme "#{@info_file.path_relative} is a generated file - skipping!"
-          next # no complex handling, just skip
-        end
-
-        ## Ignore header files
-        #return if f =~ /\.(h|H|lex|y|ico|bmp|txt)$/
-        # No we should NOT ignore header files: if they aren't added to the target,
-        # then VS won't display them in the file tree.
-        next if VS7_UNWANTED_FILE_TYPES_REGEX_OBJ.match(f)
-
-        # Verbosely ignore .lib "sources"
-        if VS7_LIB_FILE_TYPES_REGEX_OBJ.match(f)
-          # probably these entries are supposed to serve as dependencies
-          # (i.e., non-link header-only include dependency, to ensure
-          # rebuilds in case of foreign-library header file changes).
-          # Not sure whether these were added by users or
-          # it's actually some standard MSVS mechanism... FIXME
-          logger.info "#{@project_name}::#{f} registered as a \"source\" file!? Skipping!"
-          next # no complex handling, just skip
-        end
-
-        arr_local_sources.push(f)
-      }
-    end
-    return arr_local_sources
-  end
-  def write_sources_list(source_list_name, arr_sources, var_prefix = 'SOURCES_files_')
-    source_files_variable = "#{var_prefix}#{source_list_name}"
-    write_list_quoted(source_files_variable, arr_sources)
-    return source_files_variable
-  end
-  # Side note: we will NOT prefix source variables within a newly
-  # generated CMakeLists.txt with V2C_[TARGET NAME],
-  # since they are re-created in each newly generated CMakeLists.txt,
-  # so it's no problem, and hook script will need to precisely know
-  # which variable to modify, which would be a problem.......
-  def register_new_source_list_variable(sources_variable)
-    @arr_sub_sources_for_parent.push(sources_variable)
-  end
-end
-
-# FIXME: temporarily appended a _VS7 suffix since we're currently changing file list generation during our VS10 generator work.
-class V2C_CMakeFileListsGenerator_VS7 < V2C_CMakeFileListGeneratorBase
-  def initialize(textOut, project_name, project_dir, files_str, parent_source_group, arr_sub_sources_for_parent)
-    super(textOut, project_name, project_dir, arr_sub_sources_for_parent)
-    @files_str = files_str
-    @parent_source_group = parent_source_group
-  end
-  def generate; put_file_list_recursive(@files_str, @parent_source_group, @arr_sub_sources_for_parent) end
-
-  # Hrmm, I'm not quite sure yet where to aggregate this function...
-  def get_filter_group_name(filter_info); return filter_info.nil? ? 'COMMON' : filter_info.name; end
-
-  # Related TODO item: for .cpp files which happen to be listed as
-  # include files in their native projects, we should likely
-  # explicitly set the HEADER_FILE_ONLY property (note that for .h files,
-  # man cmakeprops seems to say that CMake
-  # will _implicitly_ configure these correctly).
-  VS7_UNWANTED_GROUP_TAG_CHARS_MATCH_REGEX_OBJ = %r{( |\\)}
-  def put_file_list_recursive(files_str, parent_source_group, arr_sub_sources_for_parent)
-    filter_info = files_str[:filter_info]
-    group_name = get_filter_group_name(filter_info)
-      log_debug("#{self.class.name}: #{group_name}")
-    if not files_str[:arr_sub_filters].nil?
-      arr_sub_filters = files_str[:arr_sub_filters]
-    end
-    arr_file_infos = files_str[:arr_file_infos]
-
-    arr_local_sources = filter_files(arr_file_infos)
-
-    # TODO: CMake is said to have a weird bug in case of parent_source_group being "Source Files":
-    # "Re: [CMake] SOURCE_GROUP does not function in Visual Studio 8"
-    #   http://www.mail-archive.com/cmake@cmake.org/msg05002.html
-    if parent_source_group.nil?
-      this_source_group = ''
-    else
-      if parent_source_group == ''
-        this_source_group = group_name
-      else
-        this_source_group = "#{parent_source_group}\\\\#{group_name}"
-      end
-    end
-
-    # process sub-filters, have their main source variable added to arr_my_sub_sources
-    arr_my_sub_sources = Array.new
-    if not arr_sub_filters.nil?
-      @textOut.indent_more()
-        arr_sub_filters.each { |subfilter|
-          #logger.info "writing: #{subfilter}"
-          put_file_list_recursive(subfilter, this_source_group, arr_my_sub_sources)
-        }
-      @textOut.indent_less()
-    end
-
-    source_group_var_suffix = this_source_group.clone.gsub(VS7_UNWANTED_GROUP_TAG_CHARS_MATCH_REGEX_OBJ,'_')
-
-    # process our hierarchy's own files
-    if not arr_local_sources.nil?
-      source_files_variable = write_sources_list(source_group_var_suffix, arr_local_sources)
-      # create source_group() of our local files
-      if not parent_source_group.nil?
-        # use list of filters if available: have it generated as source_group(REGULAR_EXPRESSION "regex" ...).
-        arr_filters = nil
-        if not filter_info.nil?
-          arr_filters = filter_info.arr_scfilter
-        end
-        put_source_group(this_source_group, arr_filters, source_files_variable)
-      end
-    end
-    if not source_files_variable.nil? or not arr_my_sub_sources.empty?
-      sources_variable = "SOURCES_#{source_group_var_suffix}"
-      # dump sub filters...
-      arr_source_vars = arr_my_sub_sources.collect { |sources_elem|
-        get_dereferenced_variable_name(sources_elem)
-      }
-      # ...then our own files
-      if not source_files_variable.nil?
-        arr_source_vars.push(get_dereferenced_variable_name(source_files_variable))
-      end
-      next_paragraph()
-      write_list_quoted(sources_variable, arr_source_vars)
-
-      # add our source list variable to parent return
-      # FIXME: cannot use register_new_source_list_variable()  (base class) yet -
-      # we're doing our own inner recursion with _changing_ variables!
-      arr_sub_sources_for_parent.push(sources_variable)
-    end
-  end
-end
-
-class V2C_CMakeFileListGenerator_VS10 < V2C_CMakeFileListGeneratorBase
-  def initialize(textOut, project_name, project_dir, file_list, parent_source_group, arr_sub_sources_for_parent)
-    super(textOut, project_name, project_dir, arr_sub_sources_for_parent)
-    @file_list = file_list
-    @parent_source_group = parent_source_group
-  end
-  def generate; put_file_list(@file_list) end
-
-  private
-
-  def put_file_list(file_list)
-    arr_local_sources = filter_files(file_list.arr_files)
-    source_files_variable = write_sources_list(file_list.name, arr_local_sources)
-    register_new_source_list_variable(source_files_variable)
-  end
-end
-
-class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
-  def initialize(target, project_dir, localGenerator, textOut)
-    super(textOut)
-    @target = target
-    @project_dir = project_dir
-    @localGenerator = localGenerator
-  end
-
-  # These configuration types (Debug, Release) may be _different_
-  # in each .vc[x]proj file, thus it's a target generator functionality
-  # and _not_ a functionality of the local generator (which may generate
-  # *multiple* project targets!).
-  def generate_assignments_of_build_type_variables(arr_config_info)
-    # ARGH, we have an issue with CMake not being fully up to speed with
-    # multi-configuration generators (e.g. .vcproj/.vcxproj):
-    # it should be able to declare _all_ configuration-dependent settings
-    # in a .vcproj file as configuration-dependent variables
-    # (just like set_property(... COMPILE_DEFINITIONS_DEBUG ...)),
-    # but with configuration-specific(!) include directories on .vcproj side,
-    # there's currently only a _generic_ include_directories() command :-(
-    # (dito with target_link_libraries() - or are we supposed to create an imported
-    # target for each dependency, for more precise configuration-specific library names??)
-    # Thus we should specifically specify include_directories() where we can
-    # discern the configuration type (in single-configuration generators using
-    # CMAKE_BUILD_TYPE) and - in the case of multi-config generators - pray
-    # that the authoritative configuration has an AdditionalIncludeDirectories setting
-    # that matches that of all other configs, since we're unable to specify
-    # it in a configuration-specific way :(
-    # Well, in that case we should simply resort to generating
-    # the _union_ of all include directories of all configurations...
-    # "Re: [CMake] debug/optimized include directories"
-    #   http://www.mail-archive.com/cmake@cmake.org/msg38940.html
-    # is a long discussion of this severe issue.
-    # Probably the best we can do is to add a function to add to vcproj2cmake_func.cmake which calls either raw include_directories() or sets the future
-    # target property, depending on a pre-determined support flag
-    # for proper include dirs setting.
-
-    # HACK global var (multi-thread unsafety!)
-    # Thus make sure to have a local copy, for internal modifications.
-    config_multi_authoritative = $config_multi_authoritative
-    if config_multi_authoritative.empty?
-      # Hrmm, we used to fetch this via REXML next_element,
-      # which returned the _second_ setting (index 1)
-      # i.e. Release in a certain file,
-      # while we now get the first config, Debug, in that file.
-      config_multi_authoritative = arr_config_info[0].condition.get_build_type()
-    end
-
-    if 1 == $v2c_generate_self_contained_file
-      arr_config_info.each { |config_info_curr|
-        condition = config_info_curr.condition
-        build_type = condition.get_build_type()
-        build_type_cooked = prepare_string_literal(build_type)
-        str_cmake_build_type_condition = ''
-        if config_multi_authoritative == build_type
-          str_cmake_build_type_condition = "CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
-        else
-          # YES, this condition is supposed to NOT trigger in case of a multi-configuration generator
-          str_cmake_build_type_condition = "CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
-        end
-        write_set_var_bool_conditional(get_buildcfg_var_name_of_condition(condition), str_cmake_build_type_condition)
-      }
-    #else... implicitly being done by v2c_platform_build_setting_configure() invoked during project leadin.
-    end
-  end
-  # File-related TODO:
-  # should definitely support the following CMake properties, as needed:
-  # PUBLIC_HEADER (cmake --help-property PUBLIC_HEADER), PRIVATE_HEADER, HEADER_FILE_ONLY
-  # and possibly the PUBLIC_HEADER option of the INSTALL(TARGETS) command.
-  def put_file_list(project_info, arr_sub_source_list_var_names)
-    put_file_list_source_group_recursive(project_info.name, project_info.main_files, nil, arr_sub_source_list_var_names)
-
-    put_file_list_vs10(project_info.name, project_info.file_lists, nil, arr_sub_source_list_var_names)
-
-    if not arr_sub_source_list_var_names.empty?
-      # add a ${V2C_SOURCES} variable to the list, to be able to append
-      # all sorts of (auto-generated, ...) files to this list within
-      # hook includes.
-      # - _right before_ creating the target with its sources
-      # - and not earlier since earlier .vcproj-defined variables should be clean (not be made to contain V2C_SOURCES contents yet)
-      arr_sub_source_list_var_names.push('V2C_SOURCES')
-    else
-      logger.warn "#{project_info.name}: no source files at all!? (header-based project?)"
-    end
-  end
-  def put_file_list_source_group_recursive(project_name, files_str, parent_source_group, arr_sub_sources_for_parent)
-    if files_str.nil?
-      puts "ERROR: WHAT THE HELL, NO FILES!?"
-      return
-    end
-    filelist_generator = V2C_CMakeFileListsGenerator_VS7.new(@textOut, project_name, @project_dir, files_str, parent_source_group, arr_sub_sources_for_parent)
-    filelist_generator.generate
-  end
-  def put_file_list_vs10(project_name, file_lists, parent_source_group, arr_sub_sources_for_parent)
-    if file_lists.nil?
-      puts "ERROR: WHAT THE HELL, NO FILES!?"
-      return
-    end
-    # FIXME: for resource files ('ResourceCompile' items),
-    # we should be adding a custom target
-    # (most likely within a new vcproj2cmake_func.cmake helper function)
-    # making use of CMAKE_RC_COMPILER.
-    # Also, for resource files we should ideally be setting the
-    # LANGUAGE property of the file (to RC).
-    # See also CMAKE_RC_SOURCE_FILE_EXTENSIONS, CMAKE_RC_OUTPUT_EXTENSION,
-    # CMAKE_RC_COMPILER, CMAKE_RC_COMPILE_OBJECT and CMake modules
-    # CMakeDetermineRCCompiler.cmake, CMakeRCInformation.cmake
-    # We currently add resource (.rc) files to the project target as well...
-    # While this doesn't lead to rogue rebuilds of the independent target,
-    # in some environments this might happen. Thus we might want to skip adding
-    # the resource files list (VS10: ResourceCompile list) to the target.
-    file_lists.arr_file_lists.each { |file_list|
-      filelist_generator = V2C_CMakeFileListGenerator_VS10.new(@textOut, project_name, @project_dir, file_list, parent_source_group, arr_sub_sources_for_parent)
-      filelist_generator.generate
-      #arr_generated = file_list.get_generated_files
-      #puts "arr_generated #{arr_generated}"
-    }
-  end
-  def put_source_vars(arr_sub_source_list_var_names)
-    arr_source_vars = arr_sub_source_list_var_names.collect { |sources_elem|
-	get_dereferenced_variable_name(sources_elem)
-    }
-    next_paragraph()
-    write_list_quoted('SOURCES', arr_source_vars)
-  end
-  def put_hook_post_sources; @localGenerator.put_customization_hook_from_cmake_var('V2C_HOOK_POST_SOURCES') end
-  def put_hook_post_definitions
-    next_paragraph()
-    @localGenerator.put_customization_hook_commented_from_cmake_var(
-      'V2C_HOOK_POST_DEFINITIONS',
-      COMMENT_LEVEL_MINIMUM,
-      "Hook include after all definitions have been made\n" \
-      "(but _before_ target is created using the source list!)"
-    )
-  end
-  def put_v2c_target_midl_specify_files(target_name, condition, midl_info)
-    # TODO: should use condition to alternatively open-code the conditional variable
-    # here in case self-contained mode is requested.
-    # ... = get_buildcfg_var_name_of_condition(condition)
-
-    # For an MIDL discussion, see
-    #   http://cmake.3232098.n2.nabble.com/CMake-with-IDL-file-generation-td7581589.html
-    arr_args_midl = [ midl_info.header_file_name, midl_info.iface_id_file_name, midl_info.type_library_name ]
-    write_invoke_object_conditional_v2c_function('v2c_target_midl_specify_files', target_name, condition, arr_args_midl)
-  end
-  def hook_up_midl_files(file_lists, config_info)
-    # VERY Q&D way to mark MIDL-related files as GENERATED,
-    # to keep CMake from erroring out when adding these source files to a target.
-    # Well, even marking these files as GENERATED does not help,
-    # since they simply won't be available for the target --> error.
-    # Instead, we do need to have an add_custom_command()
-    # which generates them (or suitable dummy files if needed).
-    arr_midl_info = config_info.tools.arr_midl_info
-    if not arr_midl_info.empty?
-      midl_info = arr_midl_info[0]
-      #put_v2c_target_midl_preprocessor_definitions(...)
-      #put_v2c_target_midl_options(GENERATESTUBLESSPROXIES ... MKTYPLIBCOMPATIBLE ... VALIDATEALLPARAMETERS ...)
-      # put_v2c_target_midl_specify_files() will be the last line to be generated - the invoked function
-      # will then implement the MIDL custom command using all previously configured MIDL target properties settings.
-      # FIXME: the .idl file is currently missing (contained within the file list called "Midl")
-      # - possibly we'd need it here, too (at least if we _can_ do something useful with MIDL information
-      # on Non-Win32 platforms...).
-      put_v2c_target_midl_specify_files(@target.name, config_info.condition, midl_info)
-    end
-  end
-  # Currently UNUSED!
-  def mark_files_as_generated(arr_generated_files)
-    if not arr_generated_files.empty?
-      # FIXME: doing correct handling of quoting for these files!?
-      str_cmake_command_args = "SOURCE #{arr_generated_files.join(' ')} PROPERTY GENERATED"
-      @localGenerator.write_command_single_line('set_property', str_cmake_command_args)
-    end
-  end
-  def put_atl_mfc_config(target_config_info)
-    # FIXME: should check whether CMAKE_MFC_FLAG is ok with specifying
-    # it anywhere within CMakeLists.txt at our local directory scope -
-    # if so, then we could place this function call _after_ having
-    # established the target, thus we could already pretend this configuration
-    # item to always have proper target property scope...
-    do_configure_atl_mfc_flag(@target.name, target_config_info.condition, target_config_info.use_of_atl, target_config_info.use_of_mfc)
-  end
-  #def evaluate_precompiled_header_config(target, files_str)
-  #end
-  #
-  def write_conditional_target_valid_begin
-    write_conditional_if(get_target_syntax_expression(@target.name))
-  end
-  def write_conditional_target_valid_end
-    write_conditional_end(get_target_syntax_expression(@target.name))
-  end
-
-  def get_target_syntax_expression(target_name); "TARGET #{target_name}" end
-
-  # FIXME: not sure whether map_lib_dirs etc. should be passed in in such a raw way -
-  # probably mapping should already have been done at that stage...
-  def put_target(target, arr_sub_source_list_var_names, map_lib_dirs, map_lib_dirs_dep, map_dependencies, config_info_curr, target_config_info_curr)
-    target_is_valid = false
-
-    # first add source reference, then do linker setup, then create target
-
-    put_source_vars(arr_sub_source_list_var_names)
-
-    # write link_directories() (BEFORE establishing a target!)
-    config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
-      @localGenerator.write_link_directories(linker_info_curr.arr_lib_dirs, map_lib_dirs)
-    }
-
-    target_is_valid = put_target_type(target, map_dependencies, config_info_curr, target_config_info_curr)
-
-    # Add a special collection of those library dependencies
-    # which we successfully translated from a bare link directory auto-link dependency
-    # (AFTER establishing a target!):
-    config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
-      @localGenerator.write_build_attributes('target_link_libraries', linker_info_curr.arr_lib_dirs, map_lib_dirs_dep, @target.name, true)
-    }
-
-    put_hook_post_target()
-    return target_is_valid
-  end
-  def put_target_type(target, map_dependencies, target_info_curr, target_config_info_curr)
-    target_is_valid = false
-
-    str_condition_no_target = get_conditional_inverted(get_target_syntax_expression(target.name))
-    write_conditional_if(str_condition_no_target)
-          # FIXME: should use a macro like rosbuild_add_executable(),
-          # http://www.ros.org/wiki/rosbuild/CMakeLists ,
-          # https://kermit.cse.wustl.edu/project/robotics/browser/trunk/vendor/ros/core/rosbuild/rosbuild.cmake?rev=3
-          # to be able to detect non-C++ file types within a source file list
-          # and add a hook to handle them specially.
-
-          # see VCProjectEngine ConfigurationTypes enumeration
-    case target_config_info_curr.cfg_type
-    when V2C_TargetConfig_Defines::CFG_TYPE_APP
-      target_is_valid = true
-      #syntax_generator.write_line("add_executable_vcproj2cmake( #{target.name} WIN32 ${SOURCES} )")
-      # TODO: perhaps for real cross-platform binaries (i.e.
-      # console apps not needing a WinMain()), we should detect
-      # this and not use WIN32 in this case...
-      # Well, this toggle probably is related to the .vcproj Keyword attribute...
-      write_target_executable()
-    when V2C_TargetConfig_Defines::CFG_TYPE_DLL
-      target_is_valid = true
-      #syntax_generator.write_line("add_library_vcproj2cmake( #{target.name} SHARED ${SOURCES} )")
-      # add_library() docs: "If no type is given explicitly the type is STATIC or  SHARED
-      #                      based on whether the current value of the variable
-      #                      BUILD_SHARED_LIBS is true."
-      # --> Thus we would like to leave it unspecified for typeDynamicLibrary,
-      #     and do specify STATIC for explicitly typeStaticLibrary targets.
-      # However, since then the global BUILD_SHARED_LIBS variable comes into play,
-      # this is a backwards-incompatible change, thus leave it for now.
-      # Or perhaps make use of new V2C_TARGET_LINKAGE_{SHARED|STATIC}_LIB
-      # variables here, to be able to define "SHARED"/"STATIC" externally?
-      write_target_library_dynamic()
-    when V2C_TargetConfig_Defines::CFG_TYPE_STATIC_LIB
-      target_is_valid = true
-      write_target_library_static()
-    when V2C_TargetConfig_Defines::CFG_TYPE_UNKNOWN
-      logger.warn "Project type 0 (typeUnknown - utility, configured for target #{target.name}) is a _custom command_ type and thus probably cannot be supported easily. We will not abort and thus do write out a file, but it probably needs fixup (hook scripts?) to work properly. If this project type happens to use VCNMakeTool tool, then I would suggest to examine BuildCommandLine/ReBuildCommandLine/CleanCommandLine attributes for clues on how to proceed."
-    when V2C_TargetConfig_Defines::CFG_TYPE_GENERIC
-      logger.unhandled_functionality "#{@target.name}: project type #{target_config_info_curr.cfg_type} almost non-supported."
-      # Certain .vcproj:s do contain a list of source/header files,
-      # thus do try to establish a normal library/executable target - maybe we're in luck.
-      write_target_library_dynamic()
-    else
-    #when 10    # typeGeneric (Makefile) [and possibly other things...]
-      # TODO: we _should_ somehow support these project types...
-      # In fact this is likely to be equivalent to cmTarget::UTILITY,
-      # which is a direct translation of an add_custom_command().
-      # Thus such things should most likely end up generated as an
-      # add_custom_command() / add_custom_target() combo.
-      # The most challenging part will be achieving
-      # flexible cross-platform translation of any system-specific commands
-      # that are executed by the command.
-      log_debug "#{@target.inspect}"
-      raise V2C_GeneratorError, "#{@target.name}: project type #{target_config_info_curr.cfg_type} not supported."
-    end
-    write_conditional_end(str_condition_no_target)
-
-    # write target_link_libraries() in case there's a valid target
-    if target_is_valid
-      target_info_curr.tools.arr_linker_info.each { |linker_info_curr|
-        arr_dependencies = linker_info_curr.arr_dependencies.collect { |dep| dep.dependency }
-        write_link_libraries(arr_dependencies, map_dependencies)
-      }
-    end # target_is_valid
-    return target_is_valid
-  end
-  def write_target_executable
-    write_command_single_line('add_executable', "#{@target.name} WIN32 ${SOURCES}")
-  end
-
-  def write_target_library_dynamic
-    next_paragraph()
-    write_command_single_line('add_library', "#{@target.name} SHARED ${SOURCES}")
-  end
-
-  def write_target_library_static
-    next_paragraph()
-    write_command_single_line('add_library', "#{@target.name} STATIC ${SOURCES}")
-  end
-  def put_hook_post_target
-    next_paragraph()
-    @localGenerator.put_customization_hook_commented_from_cmake_var(
-      'V2C_HOOK_POST_TARGET',
-      COMMENT_LEVEL_MINIMUM,
-      "E.g. to be used for tweaking target properties etc."
-    )
-  end
-  def put_property_compile_definitions(config_name, arr_compile_defn)
-    arr_compile_defn_cooked = cmake_escape_compile_definitions(arr_compile_defn)
-    property_name = get_name_of_per_config_type_property('COMPILE_DEFINITIONS', config_name)
-    # make sure to specify APPEND for greater flexibility (hooks etc.)
-    cmake_command_arg = "TARGET #{@target.name} APPEND PROPERTY #{property_name}"
-    write_command_list('set_property', cmake_command_arg, arr_compile_defn_cooked)
-  end
-  def generate_property_compile_definitions_per_platform(config_name, arr_platdefs, str_platform)
-    write_conditional_if(str_platform)
-      put_property_compile_definitions(config_name, arr_platdefs)
-    write_conditional_end(str_platform)
-  end
-  def put_precompiled_header(target_name, condition, pch_use_mode, pch_source_name, pch_binary_name)
-    # FIXME: empty filename may happen in case of precompiled file
-    # indicated via VS7 FileConfiguration UsePrecompiledHeader
-    # (however this is an entry of the .cpp file: not sure whether we can
-    # and should derive the header from that - but we could grep the
-    # .cpp file for the similarly named include......).
-    return if pch_source_name.nil? or pch_source_name.empty?
-    str_pch_use_mode = "#{pch_use_mode}" # stringify integer
-    arr_args_precomp_header = [ str_pch_use_mode, pch_source_name, pch_binary_name ]
-    write_invoke_object_conditional_v2c_function('v2c_target_add_precompiled_header',
-    target_name, condition, arr_args_precomp_header)
-  end
-  def write_precompiled_header(condition, precompiled_header_info)
-    return if not $v2c_target_precompiled_header_enable
-    return if precompiled_header_info.nil?
-    return if precompiled_header_info.header_source_name.nil?
-    ## FIXME: this filesystem validation should be carried out by a non-parser/non-generator validator class...
-    #header_file_is_existing = v2c_generator_check_file_accessible(@project_dir, precompiled_header_info.header_source_name, 'header file to be precompiled', @target.name, false)
-    logger.info "#{@target.name}: generating PCH functionality (use mode #{precompiled_header_info.use_mode}, header file #{precompiled_header_info.header_source_name}, PCH output binary #{precompiled_header_info.header_binary_name})"
-    put_precompiled_header(
-      @target.name,
-      condition,
-      precompiled_header_info.use_mode,
-      precompiled_header_info.header_source_name,
-      precompiled_header_info.header_binary_name
-    )
-  end
-  def write_property_compile_definitions(condition, arr_defs_assignments, map_defs)
-    return if arr_defs_assignments.empty?
-    # the container for the list of _actual_ dependencies as stated by the project
-    all_platform_defs = Hash.new
-    parse_platform_conversions(all_platform_defs, arr_defs_assignments, map_defs, false)
-    var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
-    write_conditional_if(var_v2c_want_buildcfg_curr)
-      build_type = condition.get_build_type()
-      hash_ensure_sorted_each(all_platform_defs).each { |key, arr_platdefs|
-        #logger.info "arr_platdefs: #{arr_platdefs}"
-        next_paragraph()
-        str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
-        generate_property_compile_definitions_per_platform(build_type, arr_platdefs, str_platform)
-      }
-    write_conditional_end(var_v2c_want_buildcfg_curr)
-  end
-  def write_property_compile_flags(condition, arr_flags, str_conditional)
-    return if arr_flags.empty?
-    next_paragraph()
-    var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
-    write_conditional_if(var_v2c_want_buildcfg_curr)
-      write_conditional_if(str_conditional)
-        # FIXME!!! It appears that while CMake source has COMPILE_DEFINITIONS_<CONFIG>,
-        # it does NOT provide a per-config COMPILE_FLAGS property! Need to verify ASAP
-        # whether compile flags do get passed properly in debug / release.
-        # Strangely enough it _does_ have LINK_FLAGS_<CONFIG>, though!
-        str_target_expr = get_target_syntax_expression(@target.name)
-        build_type = condition.get_build_type()
-        property_name = get_name_of_per_config_type_property('COMPILE_FLAGS', build_type)
-        cmake_command_arg = "#{str_target_expr} APPEND PROPERTY #{property_name}"
-        write_command_list('set_property', cmake_command_arg, arr_flags)
-      write_conditional_end(str_conditional)
-    write_conditional_end(var_v2c_want_buildcfg_curr)
-  end
-  def write_property_link_flags(condition, arr_flags, str_conditional)
-    return if arr_flags.empty?
-    next_paragraph()
-    var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
-    write_conditional_if(var_v2c_want_buildcfg_curr)
-      write_conditional_if(str_conditional)
-        str_target_expr = get_target_syntax_expression(@target.name)
-        build_type = condition.get_build_type()
-        property_name = get_name_of_per_config_type_property('LINK_FLAGS', build_type)
-        cmake_command_arg = "#{str_target_expr} APPEND PROPERTY #{property_name}"
-        write_command_list('set_property', cmake_command_arg, arr_flags)
-      write_conditional_end(str_conditional)
-    write_conditional_end(var_v2c_want_buildcfg_curr)
-  end
-  def write_link_libraries(arr_dependencies, map_dependencies)
-    arr_dependencies_augmented = arr_dependencies.clone
-    arr_dependencies_augmented.push(get_dereferenced_variable_name('V2C_LIBS'))
-    @localGenerator.write_build_attributes('target_link_libraries', arr_dependencies_augmented, map_dependencies, @target.name)
-  end
-  def write_func_v2c_target_post_setup(project_name, project_keyword)
-    # Rationale: keep count of generated lines of CMakeLists.txt to a bare minimum -
-    # call v2c_project_post_setup(), by simply passing all parameters that are _custom_ data
-    # of the current generated CMakeLists.txt file - all boilerplate handling functionality
-    # that's identical for each project should be implemented by the v2c_project_post_setup() function
-    # _internally_.
-    if project_keyword.nil?; project_keyword = V2C_ATTRIBUTE_NOT_PROVIDED_MARKER end
-    arr_args_func = [ project_name, project_keyword ]
-    write_invoke_config_object_v2c_function_quoted('v2c_target_post_setup', @target.name, arr_args_func)
-  end
-  def set_properties_vs_scc(target_name, scc_info_in)
-    # Keep source control integration in our conversion!
-    # FIXME: does it really work? Then reply to
-    # http://www.itk.org/Bug/view.php?id=10237 !!
-
-    # If even scc_info.project_name is unavailable,
-    # then we can bail out right away...
-    return if scc_info_in.project_name.nil?
-
-    scc_info_cmake = scc_info_in.clone
-
-    # Hmm, perhaps need to use CGI.escape since chars other than just '"' might need to be escaped?
-    # NOTE: needed to clone() this string above since otherwise modifying (same) source object!!
-    # We used to escape_char('"') below, but this was problematic
-    # on VS7 .vcproj generator since that one is BUGGY (GIT trunk
-    # 201007xx): it should escape quotes into XMLed "&quot;" yet
-    # it doesn't. Thus it's us who has to do that and pray that it
-    # won't fail on us... (but this bogus escaping within
-    # CMakeLists.txt space might lead to severe trouble
-    # with _other_ IDE generators which cannot deal with a raw "&quot;").
-    # If so, one would need to extend v2c_target_set_properties_vs_scc()
-    # to have a CMAKE_GENERATOR branch check, to support all cases.
-    # Or one could argue that the escaping should better be done on
-    # CMake-side code (i.e. in v2c_target_set_properties_vs_scc()).
-    # Note that perhaps we should also escape all other chars
-    # as in CMake's EscapeForXML() method.
-    scc_info_cmake.project_name.gsub!(/"/, '&quot;')
-    if scc_info_cmake.local_path
-      escape_backslash(scc_info_cmake.local_path)
-      escape_char(scc_info_cmake.local_path, '"')
-    end
-    if scc_info_cmake.provider
-      escape_char(scc_info_cmake.provider, '"')
-    end
-    if scc_info_cmake.aux_path
-      escape_backslash(scc_info_cmake.aux_path)
-      escape_char(scc_info_cmake.aux_path, '"')
-    end
-
-    next_paragraph()
-    arr_args_func = [ scc_info_cmake.project_name, scc_info_cmake.local_path, scc_info_cmake.provider, scc_info_cmake.aux_path ]
-    write_invoke_config_object_v2c_function_quoted('v2c_target_set_properties_vs_scc', target_name, arr_args_func)
-  end
-
-  def add_target_config_specific_definitions(condition, target_config_info, hash_defines)
-    # Hrmm, are we even supposed to be doing this?
-    # On Windows I guess UseOfMfc in generated VS project files
-    # would automatically cater for it, and all other platforms
-    # would have to handle it some way or another anyway.
-    # But then I guess there are other build environments on Windows
-    # which would need us handling it here manually, so let's just keep it for now.
-    # Plus, defining _AFXEXT already includes the _AFXDLL setting
-    # (MFC will define it implicitly),
-    # thus it's quite likely that our current handling is somewhat incorrect.
-    if target_config_info.use_of_mfc == V2C_TargetConfig_Defines::MFC_DYNAMIC
-      # FIXME: need to add a compiler flag lookup entry
-      # to compiler-specific info as well!
-      # (in case of MSVC it would yield: /MD [dynamic] or /MT [static])
-      hash_defines['_AFXEXT'] = ''
-      hash_defines['_AFXDLL'] = ''
-    end
-    charset_type = 'SBCS'
-    case target_config_info.charset
-    when V2C_TargetConfig_Defines::CHARSET_SBCS
-      charset_type = 'SBCS'
-    when V2C_TargetConfig_Defines::CHARSET_UNICODE
-      charset_type = 'UNICODE'
-    when V2C_TargetConfig_Defines::CHARSET_MBCS
-      charset_type = 'MBCS'
-    else
-      log_implementation_bug('unknown charset type!?')
-    end
-    arr_args_func_other = [ charset_type ]
-    write_invoke_object_conditional_v2c_function('v2c_target_config_charset_set', @target.name, condition, arr_args_func_other)
-  end
-
-  def generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
-
-    project_info = @target # HACK
-
-    generate_project_leadin(project_info)
-
-    # arr_sub_source_list_var_names will receive the names of the individual source list variables:
-    arr_sub_source_list_var_names = Array.new
-
-    put_file_list(project_info, arr_sub_source_list_var_names)
-
-    put_include_dir_project_source_dir(project_info.name)
-
-    put_hook_post_sources()
-
-    arr_config_info = project_info.arr_config_info
-
-    generate_assignments_of_build_type_variables(arr_config_info)
-
-    arr_target_config_info = project_info.arr_target_config_info
-
-    target_is_valid = false
-
-    arr_config_info.each { |config_info_curr|
-      next_paragraph()
-
-      # Generate all functions which already have their own conditional
-      # platform / build type handling here, prior to generating the
-      # var_v2c_want_buildcfg_curr below...
-      hook_up_midl_files(project_info.file_lists, config_info_curr)
-
-      condition = config_info_curr.condition
-      var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
-      write_conditional_if(var_v2c_want_buildcfg_curr)
-
-      config_info_curr.tools.arr_compiler_info.each { |compiler_info_curr|
-        arr_includes = compiler_info_curr.get_include_dirs(false, false)
-        @localGenerator.write_include_directories(arr_includes, generator_base.map_includes)
-      }
-
-      # At this point (before target creation - much earlier than we
-      # would want to), we'll have to iterate through target configs
-      # for all settings which are target related but are (stupidly)
-      # NOT being applied as target properties (i.e. post-target-setup).
-      arr_target_config_info.each { |target_config_info_curr|
-	next if not condition.entails(target_config_info_curr.condition)
-	# FIXME: put_atl_mfc_config() does not need
-	# var_v2c_want_buildcfg_curr i.e. should be outside of it
-	# (already does own condition handling) - how to resolve this?
-        put_atl_mfc_config(target_config_info_curr)
-      }
-
-      # FIXME: hohumm, the position of this hook include is outdated, need to update it
-      # Well, there's a distinction between
-      # ("dirty") global settings (defined _prior_ to adding a target)
-      # and target-aggregated settings (properties),
-      # thus maybe we need different hooks for these two mechanisms.
-      # Well, but for now at least MAKE SURE TO ALWAYS KEEP IT RIGHT BEFORE
-      # adding the target! (to be able to manipulate _all_ prior settings
-      # if needed).
-      put_hook_post_definitions()
-
-      # Technical note: target type (library, executable, ...) in .vcproj can be configured per-config
-      # (or, in other words, different configs are capable of generating _different_ target _types_
-      # for the _same_ target), but in CMake this isn't possible since _one_ target name
-      # maps to _one_ target type and we _need_ to restrict ourselves to using the project name
-      # as the exact target name (we are unable to define separate PROJ_lib and PROJ_exe target names,
-      # since other .vcproj file contents always link to our target via the main project name only!!).
-      # Thus we need to declare the target _outside_ the scope of per-config handling :(
-
-      # create a target only in case we do have any meat at all
-      if project_info.have_build_units
-        arr_target_config_info.each { |target_config_info_curr|
-          next if not condition.entails(target_config_info_curr.condition)
-          target_is_valid = put_target(project_info, arr_sub_source_list_var_names, map_lib_dirs, map_lib_dirs_dep, map_dependencies, config_info_curr, target_config_info_curr)
-        }
-      end # target.have_build_units
-
-      write_conditional_end(var_v2c_want_buildcfg_curr)
-    } # [END per-config handling]
-
-    # Now that we likely _do_ have a valid target
-    # (created by at least one of the Debug/Release/... build configs),
-    # _iterate through the configs again_ and add config-specific
-    # definitions. This is necessary (fix for multi-config
-    # environment).
-    #
-    # UGH, now added yet another loop iteration.
-    # FIXME This is getting waaaaay too messy, need to refactor it to have a
-    # clean hierarchy.
-    if target_is_valid
-      write_conditional_target_valid_begin()
-      arr_config_info.each { |config_info_curr|
-        condition = config_info_curr.condition
-
-        tools = config_info_curr.tools
-
-        # NOTE: the commands below can stay in the general section (outside of
-        # var_v2c_want_buildcfg_curr above), but only since they define properties
-        # which are clearly named as being configuration-_specific_ already!
-        #
-        # I don't know WhyTH we're iterating over a compiler_info here,
-        # but let's just do it like that for now since it's required
-        # by our current data model:
-        tools.arr_compiler_info.each { |compiler_info_curr|
-
-          print_marker_line('per-compiler_info')
-
-          arr_target_config_info.each { |target_config_info_curr|
-	    next if not condition.entails(target_config_info_curr.condition)
-
-	    hash_defines_augmented = compiler_info_curr.hash_defines.clone
-
-	    add_target_config_specific_definitions(condition, target_config_info_curr, hash_defines_augmented)
-            # Convert hash into array as required by the definitions helper function
-            # (it's probably a good idea to provide "cooked" "key=value" entries
-            # for more complete matching possibilities
-            # within the regex matching parts done by it).
-            # TODO: this might be relocatable to a common generator base helper method.
-            arr_defs_assignments = Array.new
-            hash_ensure_sorted_each(hash_defines_augmented).each { |key, value|
-              str_define = value.empty? ? key : "#{key}=#{value}"
-              arr_defs_assignments.push(str_define)
-            }
-            write_property_compile_definitions(condition, arr_defs_assignments, map_defines)
-            # Original compiler flags are MSVC-only, of course. TODO: provide an automatic conversion towards gcc?
-            compiler_info_curr.arr_tool_variant_specific_info.each { |compiler_specific|
-  	      str_conditional_compiler_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.compiler_name)
-              # I don't think we need this (we have per-target properties), thus we'll NOT write it!
-              #if not attr_opts.nil?
-              #  local_generator.write_directory_property_compile_flags(attr_options)
-              #end
-              write_property_compile_flags(condition, compiler_specific.arr_flags, str_conditional_compiler_platform)
-            } # compiler.tool_specific.each
-          } # arr_target_config_info.each
-
-          # Since the precompiled header CMake module currently
-          # _resets_ a target's COMPILE_FLAGS property,
-          # make sure to generate it _before_ specifying any COMPILE_FLAGS:
-          # UPDATE: nope, it's now fixed, thus move it *after* the target
-	  # is fully configured (it needs to be able to correctly gather
-	  # all settings of the target it is supposed to be used for).
-          write_precompiled_header(condition, compiler_info_curr.precompiled_header_info)
-
-        } # config_info_curr.tools.arr_compiler_info.each
-        tools.arr_linker_info.each { |linker_info_curr|
-          linker_info_curr.arr_tool_variant_specific_info.each { |linker_specific|
-	    str_conditional_linker_platform = map_linker_name_to_cmake_platform_conditional(linker_specific.linker_name)
-            # Probably more linker flags support needed? (mention via
-            # CMAKE_SHARED_LINKER_FLAGS / CMAKE_MODULE_LINKER_FLAGS / CMAKE_EXE_LINKER_FLAGS
-            # depending on target type, and make sure to filter out options pre-defined by CMake platform
-            # setup modules)
-            write_property_link_flags(condition, linker_specific.arr_flags, str_conditional_linker_platform)
-          } # linker.tool_specific.each
-        } # arr_linker_info.each
-      } # config_info_curr
-      write_conditional_target_valid_end()
-    end
-
-    if target_is_valid
-      write_func_v2c_target_post_setup(project_info.name, project_info.vs_keyword)
-
-      set_properties_vs_scc(@target.name, project_info.scc_info)
-
-      # TODO: might want to set a target's FOLDER property, too...
-      # (and perhaps a .vcproj has a corresponding attribute
-      # which indicates that?)
-
-      # TODO: perhaps there are useful Xcode (XCODE_ATTRIBUTE_*) properties to convert?
-    end # target_is_valid
-
-    arr_orig_proj_files = project_info.arr_p_original_project_files.collect { |orig_proj_file|
-      orig_proj_file.relative_path_from(@project_dir)
-    }
-    write_func_v2c_project_post_setup(project_info.name, arr_orig_proj_files)
-  end
-
-  private
-
-  def put_project(project_name, arr_progr_languages = nil)
-    arr_args_project_name_and_attrs = [ project_name ]
-    if arr_progr_languages.nil? or arr_progr_languages.empty?
-      ## No programming language given? Indicate special marker "NONE"
-      ## to skip any compiler checks.
-      # Nope, no language means "unknown", thus don't specify anything -
-      # to keep CMake's auto-detection mechanism active.
-      #arr_args_project_name_and_attrs.push('NONE')
-    else
-      arr_args_project_name_and_attrs.concat(arr_progr_languages)
-    end
-    write_command_list_single_line('project', arr_args_project_name_and_attrs)
-  end
-  def write_project(project_info)
-    # Figure out language type (C CXX etc.) and add it to project() command
-    arr_languages = detect_programming_languages(project_info)
-    put_project(project_info.name, arr_languages)
-  end
-  def put_conversion_info(project_name, str_from_buildtool_version)
-    # Add an explicit file generation timestamp,
-    # to enable easy identification (grepping) of files of a certain age
-    # (a filesystem-based creation/modification timestamp might be unreliable
-    # due to copying/modification).
-    str_time = ''
-    timestamp_format = $v2c_generator_timestamp_format
-    if not timestamp_format.nil? and not timestamp_format.empty?
-      timestamp_format_docs = timestamp_format.tr('%', '')
-      time = Time.new
-      str_time = time.utc.strftime(timestamp_format)
-    end
-    write_comment_at_level(COMMENT_LEVEL_VERBOSE,
-      "For this project's file, indicates originating build environment / IDE,\n" \
-      "and indicates conversion moment in time (UTC, format #{timestamp_format_docs})"
-    )
-    write_invoke_v2c_function_quoted('v2c_project_conversion_info_set', [ project_name, str_time, str_from_buildtool_version ])
-  end
-  def detect_programming_languages(project_info)
-    language_detector = V2C_CMakeProjectLanguageDetector.new(project_info)
-    language_detector.detect
-  end
-  def put_include_MasterProjectDefaults_vcproj2cmake
-    if @textOut.generated_comments_level() >= 2
-      @textOut.write_data %{\
-
-# This part is for including a file which contains
-# settings (compiler flags, path settings, platform stuff, ...)
-# which are _globally_ applicable for all sub projects of a solution
-# e.g. have vcproj2cmake-specific MasterProjectDefaults_vcproj2cmake
-# which then _also_ includes a global MasterProjectDefaults module
-# for _all_ CMakeLists.txt. This needs to sit post-project()
-# since e.g. compiler info is dependent on a valid project.
-}
-      # NOTE: V2C_LIBS, V2C_SOURCES are _target_-specific
-      # (one local directory - i.e. one single CMakeLists.txt - may contain _multiple_
-      # project files - i.e. project()s -!). I.e., they need to be reset
-      # per-project()!
-      @textOut.write_block( \
-	"# MasterProjectDefaults_vcproj2cmake is supposed to define generic settings\n" \
-        "# (such as V2C_HOOK_PROJECT, defined as e.g.\n" \
-        "# #{$v2c_config_dir_local}/hook_project.txt,\n" \
-        "# and other hook include variables below).\n" \
-        "# NOTE: it usually should also reset variables\n" \
-        "# V2C_LIBS, V2C_SOURCES etc. as used below since they should contain\n" \
-        "# project-specific contents only, not accumulate!" \
-      )
-    end
-    # (side note: see "ldd -u -r" on Linux for superfluous link parts potentially caused by this!)
-    write_include('MasterProjectDefaults_vcproj2cmake', true)
-  end
-  def write_funcs_v2c_project_platform_define_build_types(project_name, build_platform_configs)
-    build_platform_configs.get_platforms().each { |platform_name|
-      arr_platform_build_types = build_platform_configs.get_build_types(platform_name)
-      write_func_v2c_project_platform_define_build_types(project_name, platform_name, arr_platform_build_types)
-    }
-    write_invoke_v2c_function_quoted('v2c_platform_build_setting_configure', [ project_name ])
-  end
-  def write_func_v2c_project_platform_define_build_types(project_name, platform_name, arr_platform_build_types)
-    arr_args_func = [ platform_name ]
-    arr_args_func.concat(arr_platform_build_types)
-    write_invoke_config_object_v2c_function_quoted('v2c_project_platform_define_build_types', project_name, arr_args_func)
-  end
-  def put_hook_project
-    put_customization_hook_commented_from_cmake_var(
-      'V2C_HOOK_PROJECT',
-      COMMENT_LEVEL_STANDARD,
-      "Hook e.g. for invoking Find scripts as expected by\n" \
-      "the _LIBRARIES / _INCLUDE_DIRS mappings created\n" \
-      "by your include/dependency map files."
-    )
-  end
-
-  def generate_project_leadin(project_info)
-    write_project(project_info)
-    put_conversion_info(project_info.name, project_info.orig_environment_shortname)
-    put_include_MasterProjectDefaults_vcproj2cmake()
-    write_funcs_v2c_project_platform_define_build_types(project_info.name, project_info.build_platform_configs)
-    put_hook_project()
-  end
-  # _target_ generator specific method.
-  def set_property(target_name, property, value)
-    arr_args_func = [ 'TARGET', target_name, 'PROPERTY', property, value ]
-    write_command_list_quoted('set_property', nil, arr_args_func)
-  end
-  def write_func_v2c_project_post_setup(project_name, arr_proj_files)
-    # This function invokes CMakeLists.txt rebuilder only
-    # (TODO: should be changed into specific naming!),
-    # thus skip on one-time generation.
-    return if $v2c_generator_one_time_conversion_only
-
-    # Rationale: keep count of generated lines of CMakeLists.txt to a bare minimum -
-    # call v2c_project_post_setup(), by simply passing all parameters that are _custom_ data
-    # of the current generated CMakeLists.txt file - all boilerplate handling functionality
-    # that's identical for each project should be implemented by the v2c_project_post_setup() function
-    # _internally_.
-    arr_args_func = [ array_to_cmake_list(arr_proj_files) ]
-    write_invoke_config_object_v2c_function_quoted('v2c_project_post_setup', project_name, arr_args_func)
-  end
-end
-
-# XML support as required by VS7+/VS10 parsers:
-require 'rexml/document'
 
 # See "Format of a .vcproj File" http://msdn.microsoft.com/en-us/library/2208a1f2%28v=vs.71%29.aspx
 
@@ -3395,6 +1412,9 @@ class V2C_ParserBase < V2C_LoggerBase
     parser_error("unknown/unsupported/corrupt #{description} case value! (#{val})", true)
   end
 end
+
+# XML support as required by VS7+/VS10 parsers:
+require 'rexml/document'
 
 class V2C_XmlParserBase < V2C_ParserBase
   FOUND_FALSE = 0
@@ -5843,28 +3863,42 @@ class V2C_VS10ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
   end
 end
 
-# Detect .vcproj files actually generated by CMake generator itself:
-# This detection is a bit troublesome since
-# - apart from the CMake generator having added its CMakeLists.txt to the source groups -
-# some people may have decided to manually list the CMakeLists.txt in their projects -
-# in which case the file is NOT a generated project file, however.
-VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{CMakeLists.txt}
-def v2c_is_project_file_generated_by_cmake(str_proj_file)
-  generated_file = false
-  cmakelists_text = ''
-  File.open(str_proj_file, 'r') { |f_vcproj|
-    cmakelists_text = f_vcproj.grep(VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ)
-  }
-  if not cmakelists_text.empty?
-    generated_file = true
-  end
-  return generated_file
+class V2C_ValidationError < StandardError
 end
 
-
-WHITESPACE_REGEX_OBJ = %r{\s}
-def util_flatten_string(in_string)
-  return in_string.gsub(WHITESPACE_REGEX_OBJ, '_')
+class V2C_ProjectValidator
+  def initialize(project_info)
+    @project_info = project_info
+  end
+  def validate
+    validate_project
+  end
+  private
+  def validate_config(target_config_info)
+    if target_config_info.cfg_type == V2C_TargetConfig_Defines::CFG_TYPE_INVALID
+      validation_error('config type not set!?')
+    end
+  end
+  def validate_target_configs(arr_target_config_info)
+    arr_target_config_info.each { |target_config_info|
+      validate_config(target_config_info)
+    }
+  end
+  def validate_project
+    validate_target_configs(@project_info.arr_target_config_info)
+    #log_debug "project data: #{@project_info.inspect}"
+    if @project_info.orig_environment_shortname.nil?; validation_error('original environment not set!?') end
+    if @project_info.name.nil?; validation_error('name not set!?') end
+    # FIXME: Disabled for TESTING only - should re-enable a fileset check once VS10 parsing is complete.
+    #if @project_info.main_files.nil?; validation_error('no files!?') end
+    arr_config_info = @project_info.arr_config_info
+    if arr_config_info.nil? or arr_config_info.empty?
+      validation_error('no config information!?')
+    end
+  end
+  def validation_error(str_message)
+    raise V2C_ValidationError, "Project #{@project_info.name}: #{str_message}; #{@project_info.inspect}"
+  end
 end
 
 class Util_TempFilePermanentizer
@@ -5993,7 +4027,1971 @@ class V2C_GenerateIntoTempFile
   end
 end
 
-class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
+class V2C_BaseGlobalGenerator
+  def initialize(master_project_dir)
+    @filename_map_inc = "#{$v2c_config_dir_local}/include_mappings.txt"
+    @master_project_dir = master_project_dir
+    @map_includes = Hash.new
+    read_mappings_includes()
+  end
+
+  attr_accessor :map_includes
+
+  private
+
+  def read_mappings_includes
+    # These mapping files may contain things such as mapping .vcproj "Vc7/atlmfc/src/mfc"
+    # into CMake "SYSTEM ${MFC_INCLUDE}" information.
+    read_mappings_combined(@filename_map_inc, @map_includes, @master_project_dir)
+  end
+end
+
+V2C_TEXT_FILE_AUTO_GENERATED_MARKER = 'AUTO-GENERATED by'
+V2C_TEXT_FILE_SKELETON_MARKER = 'source root skeleton file'
+
+class V2C_TextStream_Attributes
+  def initialize(indent_start, indent_step, comments_level)
+    @indent_start = indent_start
+    @indent_step = indent_step
+    @comments_level = comments_level
+  end
+  attr_accessor :indent_start
+  attr_accessor :indent_step
+  attr_accessor :comments_level
+end
+
+# Contains functionality common to _any_ file-based generator
+class V2C_TextStreamSyntaxGeneratorBase
+  def initialize(out, textstream_attributes)
+    @out = out
+    @indent_now = textstream_attributes.indent_start
+    @indent_step = textstream_attributes.indent_step
+    @comments_level = textstream_attributes.comments_level
+  end
+
+  def generated_comments_level; @comments_level end
+
+  def get_indent; @indent_now end
+
+  def indent_more; @indent_now += @indent_step end
+  def indent_less; @indent_now -= @indent_step end
+
+  def write_data(data)
+    @out.puts data
+  end
+  def write_block(block)
+    block.split("\n").each { |line|
+      write_line(line)
+    }
+  end
+  def write_line(part)
+    @out.print ' ' * get_indent()
+    write_data(part)
+  end
+
+  def write_empty_line; @out.puts end
+  def put_file_header_temporary_marker
+    return if $v2c_generator_one_time_conversion_only
+    # WARNING: since this comment header is meant to advertise
+    # _generated_ vcproj2cmake files, user-side code _will_ check for this
+    # particular wording to tell apart generated text files (e.g. CMakeLists.txt)
+    # from custom-written ones, thus one should definitely avoid changing
+    # this phrase.
+    write_data %{\
+#
+# TEMPORARY Build file, #{V2C_TEXT_FILE_AUTO_GENERATED_MARKER} http://vcproj2cmake.sf.net
+# DO NOT CHECK INTO VERSION CONTROL OR APPLY \"PERMANENT\" MODIFICATIONS!!
+#
+
+}
+  end
+end
+
+def string_storage_contains(string_storage, regex)
+  return string_storage.grep(regex).any?
+end
+
+CMAKELISTS_FILE_TYPE_NONE = 0
+CMAKELISTS_FILE_TYPE_ZERO_SIZE = 1
+CMAKELISTS_FILE_TYPE_CUSTOM = 2
+CMAKELISTS_FILE_TYPE_V2C_ROOT = 3
+CMAKELISTS_FILE_TYPE_V2C_LOCAL = 4
+
+CMAKELISTS_AUTO_GENERATED_REGEX_OBJ = /#{V2C_TEXT_FILE_AUTO_GENERATED_MARKER}/
+CMAKELISTS_SKELETON_REGEX_OBJ = /#{V2C_TEXT_FILE_SKELETON_MARKER}/
+def check_cmakelists_txt_type(str_cmakelists_file_fqpn)
+
+  return CMAKELISTS_FILE_TYPE_NONE if not File.exist?(str_cmakelists_file_fqpn)
+
+  File.open(str_cmakelists_file_fqpn, 'r') { |f_cmakelists|
+    lines = f_cmakelists.readlines()
+    prior_file_was_generated_by_v2c = string_storage_contains(lines, CMAKELISTS_AUTO_GENERATED_REGEX_OBJ)
+    if prior_file_was_generated_by_v2c
+      is_skeleton_file = string_storage_contains(lines, CMAKELISTS_SKELETON_REGEX_OBJ)
+      return is_skeleton_file ? CMAKELISTS_FILE_TYPE_V2C_ROOT : CMAKELISTS_FILE_TYPE_V2C_LOCAL
+    else
+      # For zero-size files, the auto-generation marker check above is obviously
+      # not delivering a useful result...
+      if File.zero?(str_cmakelists_file_fqpn)
+        return CMAKELISTS_FILE_TYPE_ZERO_SIZE
+      else
+        return CMAKELISTS_FILE_TYPE_CUSTOM
+      end
+    end
+  }
+end
+
+class V2C_GeneratorError < StandardError
+end
+
+class V2C_GeneratorBase < V2C_LoggerBase
+  def generator_error(str_description); logger.error(str_description) end
+end
+
+class V2C_SyntaxGeneratorBase < V2C_GeneratorBase
+  COMMENT_LEVEL_OFF = 0 # no comments generated
+  COMMENT_LEVEL_MINIMUM = 1 # minimum amount of comments
+  COMMENT_LEVEL_STANDARD = 2 # standard setting
+  COMMENT_LEVEL_VERBOSE = 3 # verbose mode - even more comments
+  COMMENT_LEVEL_ALL = 4 # highly verbose, many comments
+  def initialize(textOut)
+    @textOut = textOut
+  end
+  def ensure_string_nonempty(str_test)
+    if str_test.nil? or str_test.empty?
+      raise V2C_GeneratorError, 'detected invalid string'
+    end
+  end
+  def error_unknown_case_value(description, val)
+    raise V2C_GeneratorError, "unknown/unsupported/corrupt #{description} case value! (#{val})"
+  end
+end
+
+# @brief CMake syntax generator base class.
+#        Strictly about converting requests into specific CMake syntax,
+#        no build-specific generator knowledge at this level!
+class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
+  CMAKE_IS_LIST_VAR_CONTENT_REGEX_OBJ = %r{^".*;.*"$}
+  CMAKE_VAR_MATCH_REGEX_STR = '\\$\\{[[:alnum:]_]+\\}'
+  CMAKE_ENV_VAR_MATCH_REGEX_STR = '\\$ENV\\{[[:alnum:]_]+\\}'
+  WHITESPACE_REGEX_OBJ = %r{\s}
+
+  def next_paragraph()
+    @textOut.write_empty_line()
+  end
+  # debug helper, to help figuring out
+  # which part within the generator is generating which lines.
+  def print_marker_line(line)
+    # write_comment_line(line) # UNCOMMENT THIS CALL IF NEEDED
+  end
+  def write_comment_line(line); @textOut.write_line("# #{line}") end
+  def write_comment_at_level(level, block)
+    return if @textOut.generated_comments_level() < level
+    # Since we'd like the start of a comment paragraph to start with
+    # an upper-case char, perhaps we should check against that and warn.
+    block.split("\n").each { |line|
+      write_comment_line(line)
+    }
+  end
+  # TODO: ideally we would do single-line/multi-line splitting operation _automatically_
+  # (and bonus points for configurable line length...)
+  def write_command_list(cmake_command, cmake_command_arg, arr_elems)
+    if cmake_command_arg.nil?; cmake_command_arg = '' end
+    @textOut.write_line("#{cmake_command}(#{cmake_command_arg}")
+    @textOut.indent_more()
+      arr_elems.each do |curr_elem|
+        @textOut.write_line(curr_elem)
+      end
+    @textOut.indent_less()
+    @textOut.write_line(')')
+  end
+  def write_command_list_quoted(cmake_command, cmake_command_arg, arr_elems)
+    cmake_command_arg_quoted = element_handle_quoting(cmake_command_arg) if not cmake_command_arg.nil?
+    arr_elems_quoted = Array.new
+    arr_elems.each do |curr_elem|
+      # HACK for nil input of SCC info.
+      if curr_elem.nil?; curr_elem = '' end
+      arr_elems_quoted.push(element_handle_quoting(curr_elem))
+    end
+    write_command_list(cmake_command, cmake_command_arg_quoted, arr_elems_quoted)
+  end
+  def write_command_single_line(cmake_command, str_cmake_command_args)
+    @textOut.write_line("#{cmake_command}(#{str_cmake_command_args})")
+  end
+  def write_command_list_single_line(cmake_command, arr_args_cmd)
+    str_cmake_command_args = arr_args_cmd.join(' ')
+    write_command_single_line(cmake_command, str_cmake_command_args)
+  end
+  def write_list(list_var_name, arr_elems)
+    write_command_list('set', list_var_name, arr_elems)
+  end
+  def write_list_quoted(list_var_name, arr_elems)
+    write_command_list_quoted('set', list_var_name, arr_elems)
+  end
+  # Special helper to invoke functions which act on a specific object
+  # (e.g. target) given as first param.
+  def write_invoke_config_object_function_quoted(str_function, str_object, arr_args_func)
+    write_command_list_quoted(str_function, str_object, arr_args_func)
+  end
+  # Special helper to invoke custom user-defined functions.
+  def write_invoke_function_quoted(str_function, arr_args_func)
+    write_command_list_quoted(str_function, nil, arr_args_func)
+  end
+  def get_dereferenced_variable_name(str_var); "${#{str_var}}" end
+  def add_subdirectory(str_subdir)
+    # quote strings containing spaces!!
+    str_subdir_quoted = element_handle_quoting(str_subdir)
+    write_command_single_line('add_subdirectory', str_subdir_quoted)
+  end
+
+  def get_var_conditional_command(command_name); "COMMAND #{command_name}" end
+
+  def get_conditional_inverted(str_conditional); "NOT #{str_conditional}" end
+  # WIN32, MSVC, ...
+  def write_conditional_if(str_conditional)
+    return if str_conditional.nil?
+    write_command_single_line('if', str_conditional)
+    @textOut.indent_more()
+  end
+  def write_conditional_else(str_conditional)
+    return if str_conditional.nil?
+    @textOut.indent_less()
+    write_command_single_line('else', str_conditional)
+    @textOut.indent_more()
+  end
+  def write_conditional_end(str_conditional)
+    return if str_conditional.nil?
+    @textOut.indent_less()
+    write_command_single_line('endif', str_conditional)
+  end
+  # http://www.cmake.org/Wiki/CMake/Language_Syntax says
+  # one can use any of TRUE/FALSE, ON/OFF, YES/NO,
+  # thus we'll obviously choose the shortest solution.
+  def get_keyword_bool(setting); setting ? 'ON' : 'OFF' end
+  def write_set_var(var_name, setting)
+    write_command_list('set', var_name, [ setting ])
+  end
+  def write_set_var_bool(var_name, setting)
+    write_set_var(var_name, get_keyword_bool(setting))
+  end
+  def write_set_var_bool_conditional(var_name, str_condition)
+    write_conditional_if(str_condition)
+      write_set_var_bool(var_name, true)
+    write_conditional_else(str_condition)
+      write_set_var_bool(var_name, false)
+    write_conditional_end(str_condition)
+  end
+  def write_set_var_if_unset(var_name, setting)
+    str_conditional = get_conditional_inverted(var_name)
+    write_conditional_if(str_conditional)
+      write_set_var(var_name, setting)
+    write_conditional_end(str_conditional)
+  end
+  # Hrmm, I'm currently unsure whether there _should_ in fact
+  # be any difference between write_set_var() and write_set_var_quoted()...
+  def write_set_var_quoted(var_name, setting)
+    write_command_list_quoted('set', var_name, [ setting ])
+  end
+  def write_include(include_file, optional = false)
+    arr_args_include_file = [ element_handle_quoting(include_file) ]
+    arr_args_include_file.push('OPTIONAL') if optional
+    write_command_list('include', nil, arr_args_include_file)
+  end
+  def write_include_from_cmake_var(include_file_var, optional = false)
+    write_include(get_dereferenced_variable_name(include_file_var), optional)
+  end
+  def write_cmake_minimum_version(str_cmake_minimum_version)
+    ensure_string_nonempty(str_cmake_minimum_version)
+    write_command_single_line('cmake_minimum_required', "VERSION #{str_cmake_minimum_version}")
+  end
+  def write_cmake_policy(policy_num, set_to_new, comment) # comment parm better not default-nil (enforce commenting)
+    str_policy = '%s%04d' % [ 'CMP', policy_num ]
+    str_conditional = "POLICY #{str_policy}"
+    write_conditional_if(str_conditional)
+      if not comment.nil?
+        write_comment_at_level(COMMENT_LEVEL_VERBOSE, comment)
+      end
+      str_OLD_NEW = set_to_new ? 'NEW' : 'OLD'
+      arr_args_set_policy = [ 'SET', str_policy, str_OLD_NEW ]
+      write_command_list_single_line('cmake_policy', arr_args_set_policy)
+    write_conditional_end(str_conditional)
+  end
+  def put_source_group(source_group_name, arr_filters, source_files_variable)
+    arr_elems = Array.new
+    if not arr_filters.nil?
+      # WARNING: need to keep as separate array elements (whitespace separator would lead to bogus quoting!)
+      # And _need_ to keep manually quoted,
+      # since we receive this as a ;-separated list and need to pass it on unmodified.
+      str_regex_list = array_to_cmake_list(arr_filters)
+      arr_elems.push('REGULAR_EXPRESSION', str_regex_list)
+    end
+    arr_elems.push('FILES', get_dereferenced_variable_name(source_files_variable))
+    # Use multi-line method since source_group() arguments can be very long.
+    write_command_list_quoted('source_group', source_group_name, arr_elems)
+  end
+  def put_include_directories(target_name, arr_directories, flags)
+    arr_args = Array.new
+    arr_args.push('SYSTEM') if (flags & V2C_Include_Dir_Defines::SYSTEM > 0)
+    arr_args.push('BEFORE') if (flags & V2C_Include_Dir_Defines::BEFORE > 0)
+    arr_args.concat(arr_directories)
+    gen_put_include_directories(target_name, arr_args)
+  end
+  # analogous to CMake separate_arguments() command
+  def separate_arguments(array_in); array_in.join(';') end
+
+  # Hrmm, I'm not quite happy about this helper's location and
+  # purpose. Probably some hierarchy is not really clean.
+  def prepare_string_literal(str_in)
+    return element_handle_quoting(str_in)
+  end
+  private
+
+  def element_manual_quoting(elem)
+    return "\"#{elem}\""
+  end
+  def array_to_cmake_list(arr_elems)
+    return element_manual_quoting(arr_elems.join(';'))
+  end
+  # (un)quote strings as needed
+  #
+  # Once we added a variable in the string,
+  # we definitely _need_ to have the resulting full string quoted
+  # in the generated file, otherwise we won't obey
+  # CMake filesystem whitespace requirements! (string _variables_ _need_ quoting)
+  # However, there is a strong argument to be made for applying the quotes
+  # on the _generator_ and not _parser_ side, since it's a CMake syntax attribute
+  # that such strings need quoting.
+  CMAKE_STRING_NEEDS_QUOTING_REGEX_OBJ = %r{[^\}\s]\s|\s[^\s\$]|^$}
+  CMAKE_STRING_HAS_QUOTES_REGEX_OBJ = %r{".*"}
+  CMAKE_STRING_QUOTED_CONTENT_MATCH_REGEX_OBJ = %r{"(.*)"}
+  def element_handle_quoting(elem)
+    # Determine whether quoting needed
+    # (in case of whitespace or variable content):
+    #if elem.match(/\s|#{CMAKE_VAR_MATCH_REGEX_STR}|#{CMAKE_ENV_VAR_MATCH_REGEX_STR}/)
+    # Hrmm, turns out that variables better should _not_ be quoted.
+    # But what we _do_ need to quote is regular strings which include
+    # whitespace characters, i.e. check for alphanumeric char following
+    # whitespace or the other way around.
+    # Quoting rules seem terribly confusing, will need to revisit things
+    # to get it all precisely correct.
+    # For details, see REF_QUOTING: "Quoting" http://www.itk.org/Wiki/CMake/Language_Syntax#Quoting
+    content_needs_quoting = false
+    has_quotes = false
+    # "contains at least one whitespace character,
+    # and then prefixed or followed by any non-whitespace char value"
+    # Well, that's not enough - consider a concatenation of variables
+    # such as
+    # ${v1} ${v2}
+    # which should NOT be quoted (whereas ${v1} ascii ${v2} should!).
+    # As a bandaid to detect variable syntax, make sure to skip
+    # closing bracket/dollar sign as well.
+    # And an empty string needs quoting, too!!
+    # (this empty content might be a counted parameter of a function invocation,
+    # in which case unquoted syntax would implicitly throw away that empty parameter!
+    if CMAKE_STRING_NEEDS_QUOTING_REGEX_OBJ.match(elem)
+      content_needs_quoting = true
+    end
+    if CMAKE_STRING_HAS_QUOTES_REGEX_OBJ.match(elem)
+      has_quotes = true
+    end
+    needs_quoting = (content_needs_quoting and not has_quotes)
+    #puts "QUOTING: elem #{elem} content_needs_quoting #{content_needs_quoting} has_quotes #{has_quotes} needs_quoting #{needs_quoting}"
+    if needs_quoting
+      #puts 'QUOTING: do quote!'
+      return element_manual_quoting(elem)
+    end
+    if has_quotes
+      if not content_needs_quoting
+        is_list = elem_is_cmake_list(elem)
+        needs_unquoting = (not is_list)
+        if needs_unquoting
+          #puts 'QUOTING: do UNquoting!'
+          return elem.sub(CMAKE_STRING_QUOTED_CONTENT_MATCH_REGEX_OBJ, '\1')
+        end
+      end
+    end
+    #puts 'QUOTING: do no changes!'
+    return elem
+  end
+  # Do we have a string such as "aaa;bbb" ?
+  def elem_is_cmake_list(str_elem)
+    # Warning: String.start_with?/end_with? cannot be used (new API)
+    # And using index() etc. for checking of start/end '"' and ';'
+    # is not very useful either, thus use a combined match().
+    #return (not (str_elem.match(CMAKE_IS_LIST_VAR_CONTENT_REGEX_OBJ) == nil))
+    return CMAKE_IS_LIST_VAR_CONTENT_REGEX_OBJ.match(str_elem)
+  end
+  def util_flatten_string(in_string)
+    return in_string.gsub(WHITESPACE_REGEX_OBJ, '_')
+  end
+  def get_config_name_upcase(config_name)
+    # need to also convert config names with spaces into underscore variants, right?
+    config_name.clone.upcase.tr(' ','_')
+  end
+  def get_name_of_per_config_type_property(property_name, config_name)
+    if config_name.nil?
+      res = property_name
+    else
+      config_name_upper = get_config_name_upcase(config_name)
+      res = "#{property_name}_#{config_name_upper}"
+    end
+    return res
+  end
+  COMPILE_DEF_NEEDS_CMAKE_ESCAPING_REGEX_OBJ = %r{[\(\)]+}
+  def cmake_escape_compile_definitions(arr_compile_defn)
+    arr_compile_defn.collect do |compile_defn|
+      # Need to escape the value part of the key=value definition:
+      if COMPILE_DEF_NEEDS_CMAKE_ESCAPING_REGEX_OBJ.match(compile_defn)
+        escape_char(compile_defn, '\\(')
+        escape_char(compile_defn, '\\)')
+      end
+      compile_defn
+    end
+  end
+end
+
+# @brief V2C_CMakeV2CSyntaxGenerator isn't supposed to be a base class
+# of other CMake generator classes, but rather a _member_ of those classes only.
+# Reasoning: that class implements the border crossing towards specific CMake syntax,
+# i.e. it is the _only one_ to know specific CMake syntax (well, "ideally", I have to say, currently).
+# If it was the base class of the various CMake generators,
+# then it would be _hard-coded_ i.e. not configurable (which would be the case
+# when having ctor parameterisation from the outside).
+# This class derived from base contains extended functions
+# that aren't strictly about CMake syntax generation any more
+# (i.e., some build-specific configuration content).
+class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
+  VCPROJ2CMAKE_FUNC_CMAKE = 'vcproj2cmake_func.cmake'
+  V2C_ATTRIBUTE_NOT_PROVIDED_MARKER = 'V2C_NOT_PROVIDED' # WARNING KEEP IN SYNC: that exact string literal is being checked by vcproj2cmake_func.cmake!
+  V2C_ALL_PLATFORMS_MARKER = 'ALL'
+  def write_vcproj2cmake_func_comment()
+    write_comment_at_level(COMMENT_LEVEL_STANDARD, "See function implementation/docs in #{$v2c_module_path_root}/#{VCPROJ2CMAKE_FUNC_CMAKE}")
+  end
+  def put_converter_script_location(script_location_relative_to_master)
+    return if $v2c_generator_one_time_conversion_only
+
+    if script_location_relative_to_master.nil?
+      generator_error('converter script location missing!?')
+    end
+
+    # For the CMakeLists.txt rebuilder (automatic rebuild on file changes),
+    # add handling of a script file location variable, to enable users
+    # to override the script location if needed.
+    next_paragraph()
+    # NOTE: we'll make V2C_SCRIPT_LOCATION express its path via
+    # relative argument to global V2C_MASTER_PROJECT_SOURCE_DIR (i.e. CMAKE_SOURCE_DIR)
+    # and _not_ CMAKE_CURRENT_SOURCE_DIR,
+    # (this provision should even enable people to manually relocate
+    # an entire sub project within the source tree).
+    v2c_converter_script_location = "${V2C_MASTER_PROJECT_SOURCE_DIR}/#{script_location_relative_to_master}"
+    gen_put_converter_script_location(v2c_converter_script_location)
+  end
+  def put_include_dir_project_source_dir(target_name)
+    # AFAIK .vcproj implicitly adds the project root to standard include path
+    # (for automatic stdafx.h resolution etc.), thus add this
+    # (and make sure to add it with high priority, i.e. use BEFORE).
+    # For now sitting in LocalGenerator and not per-target handling since this setting is valid for the entire directory.
+    next_paragraph()
+    arr_directories = [ get_dereferenced_variable_name('PROJECT_SOURCE_DIR') ]
+    put_include_directories(target_name, arr_directories, V2C_Include_Dir_Defines::BEFORE)
+  end
+  def write_invoke_config_object_v2c_function_quoted(str_function, str_object, arr_args_func)
+    write_vcproj2cmake_func_comment()
+    write_invoke_config_object_function_quoted(str_function, str_object, arr_args_func)
+  end
+  def write_invoke_v2c_function_quoted(str_function, arr_args_func)
+    write_vcproj2cmake_func_comment()
+    write_invoke_function_quoted(str_function, arr_args_func)
+  end
+  def put_v2c_hook_invoke(str_filename)
+      write_invoke_v2c_function_quoted('v2c_hook_invoke', [ str_filename ])
+  end
+  def put_customization_hook(include_file)
+    return if $v2c_generator_one_time_conversion_only
+    gen_put_customization_hook(include_file)
+  end
+  def put_customization_hook_from_cmake_var(include_file_var)
+    return if $v2c_generator_one_time_conversion_only
+    gen_put_customization_hook_from_cmake_var(include_file_var)
+  end
+  def put_customization_hook_commented_from_cmake_var(include_file_var, comment_level, comment)
+    return if $v2c_generator_one_time_conversion_only
+    write_comment_at_level(comment_level, comment)
+    put_customization_hook_from_cmake_var(include_file_var)
+  end
+  # Hrmm, I'm not quite sure yet where to aggregate this function...
+  #
+  # In most cases this function will be called internally within methods
+  # which generate calls to our vcproj2cmake_func.cmake helpers,
+  # so that these helpers can switch fully internally between
+  # either generating CMake calls
+  # (passing platform / build type parameters as gathered from condition)
+  # or (in self-contained mode) instead using the result of this function
+  # to add an open-coded CMake "if(CONDITIONAL)".
+  def get_buildcfg_var_name_of_condition(condition)
+    # HACK: very Q&D handling, to make things work quickly.
+    # Should think of implementing a proper abstraction for handling of conditions.
+    # Probably we _at least_ need to create a _condition generator_ class.
+
+    # Hrmm, for now we'll abuse a method at the V2C_Info_Condition class,
+    # but I'm not convinced at all that this is how things should be structured.
+    build_type = condition.get_build_type()
+    platform_name = condition.get_build_platform()
+    var_name = nil
+    if not build_type.nil? and not platform_name.nil?
+      # Name may contain spaces - need to handle them!
+      build_type_flattened = util_flatten_string(build_type)
+      platform_name_flattened = util_flatten_string(platform_name)
+      var_name = "v2c_want_buildcfg_platform_#{platform_name_flattened}_build_type_#{build_type_flattened}"
+    end
+    return var_name
+  end
+  def parse_platform_conversions_internal(platform_defs, arr_defs, map_defs, skip_failed_lookups)
+    arr_defs.each { |curr_defn|
+      #log_debug map_defs[curr_defn]
+      map_line = map_defs[curr_defn]
+      if map_line.nil?
+        # hmm, no direct match! Try to figure out whether any map entry
+        # is a regex which would match our curr_defn
+        hash_ensure_sorted_each(map_defs).each do |key_regex, value|
+          if curr_defn =~ /^#{key_regex}$/
+            log_debug "KEY: #{key_regex} curr_defn #{curr_defn}"
+            map_line = value
+            break
+          end
+        end
+      end
+      if map_line.nil?
+        # no mapping? --> unconditionally use the original define
+        if true != skip_failed_lookups
+          push_platform_defn(platform_defs, V2C_ALL_PLATFORMS_MARKER, curr_defn)
+        end
+      else
+        # Tech note: chomp on map_line should not be needed as long as
+        # original _constant_ input has already been pre-treated (chomped).
+        map_line.split('|').each do |platform_element|
+          #log_debug "platform_element #{platform_element}"
+          platform, replacement_defn = platform_element.split('=')
+          if platform.empty?
+            # specified a replacement without a specific platform?
+            # ("tag:=REPLACEMENT")
+            # --> unconditionally use it!
+            platform = V2C_ALL_PLATFORMS_MARKER
+          else
+            replacement_defn ||= curr_defn
+          end
+          push_platform_defn(platform_defs, platform, replacement_defn)
+        end
+      end
+    }
+  end
+  def parse_platform_conversions(platform_defs, arr_defs, map_defs, skip_failed_lookups)
+    platform_defs_raw = Hash.new
+    parse_platform_conversions_internal(platform_defs_raw, arr_defs, map_defs, skip_failed_lookups)
+    platform_defs_raw.each do |key, arr_platdefs|
+      #logger.info "arr_platdefs: #{arr_platdefs}"
+      next if arr_platdefs.empty?
+      arr_platdefs.uniq!
+      platform_defs[key] = arr_platdefs
+    end
+    #hash_ensure_sorted(platform_defs)
+  end
+
+  V2C_COMPILER_MSVC_REGEX_OBJ = %r{^MSVC}
+  def map_compiler_name_to_cmake_platform_conditional(compiler_name)
+    str_conditional_compiler_platform = nil
+    # For a number of platform indentifier variables,
+    # see "CMake Useful Variables" http://www.cmake.org/Wiki/CMake_Useful_Variables
+    case compiler_name
+    when V2C_COMPILER_MSVC_REGEX_OBJ
+      str_conditional_compiler_platform = 'MSVC'
+    else
+      logger.unhandled_functionality "unknown (unsupported) compiler name #{compiler_name}!"
+    end
+    return str_conditional_compiler_platform
+  end
+  def map_linker_name_to_cmake_platform_conditional(linker_name)
+    # For now, let's assume that compiler / linker name mappings are the same:
+    # BTW, we probably don't have much use for the CMAKE_LINKER variable anywhere, right?
+    return map_compiler_name_to_cmake_platform_conditional(linker_name)
+  end
+  def do_configure_atl_mfc_flag(target_name, condition, use_of_atl, use_of_mfc)
+    # CMAKE_MFC_FLAG setting is supposed to be done _before_
+    # a target gets created (via add_executable() etc.).
+    #
+    # Hmm, do we need to actively _reset_ CMAKE_MFC_FLAG / CMAKE_ATL_FLAG
+    # (i.e. _unconditionally_ set() it, even if it's 0),
+    # since projects in subdirs shouldn't inherit?
+    # Given the discussion at
+    # "[CMake] CMAKE_MFC_FLAG is inherited in subdirectory ?"
+    #   http://www.cmake.org/pipermail/cmake/2009-February/026896.html
+    # I'd strongly assume yes...
+    # See also "Re: [CMake] CMAKE_MFC_FLAG not working in functions"
+    #   http://www.mail-archive.com/cmake@cmake.org/msg38677.html
+
+    if 1 == $v2c_generate_self_contained_file
+      var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
+      write_conditional_if(var_v2c_want_buildcfg_curr)
+        #if use_of_mfc > V2C_TargetConfig_Defines::MFC_FALSE
+          write_set_var('CMAKE_MFC_FLAG', use_of_mfc)
+        #end
+        # ok, there's no CMAKE_ATL_FLAG yet, AFAIK, but still prepare
+        # for it (also to let people probe on this in hook includes)
+        # FIXME: since this flag does not exist yet yet MFC sort-of
+        # includes ATL configuration, perhaps as a workaround one should
+        # set the MFC flag if use_of_atl is true?
+        #if use_of_atl > 0
+          # TODO: should also set the per-configuration-type variable variant
+          write_set_var('CMAKE_ATL_FLAG', use_of_atl)
+        #end
+      write_conditional_end(var_v2c_want_buildcfg_curr)
+    else
+      arr_args_func = [ use_of_atl.to_s(), use_of_mfc.to_s() ]
+      write_invoke_object_conditional_v2c_function('v2c_local_set_cmake_atl_mfc_flags', target_name, condition, arr_args_func)
+    end
+  end
+  def write_invoke_object_conditional_v2c_function(str_function, object_name, condition, arr_args_func_other)
+    arr_args_func = [
+      prepare_string_literal(condition.get_build_platform()),
+      prepare_string_literal(condition.get_build_type())
+    ]
+    arr_args_func.concat(arr_args_func_other)
+    write_invoke_config_object_v2c_function_quoted(str_function, object_name, arr_args_func)
+  end
+end
+
+class V2C_CMakeV2CSyntaxGeneratorV2CFunc < V2C_CMakeV2CSyntaxGeneratorBase
+  private
+  def gen_put_customization_hook(include_file)
+    put_v2c_hook_invoke(include_file)
+  end
+  def gen_put_customization_hook_from_cmake_var(include_file_var)
+    put_v2c_hook_invoke(get_dereferenced_variable_name(include_file_var))
+  end
+  def gen_put_include_directories(target_name, arr_args)
+    write_command_list_quoted('v2c_target_include_directories', target_name, arr_args)
+  end
+  def gen_put_converter_script_location(script_location)
+    write_invoke_v2c_function_quoted('v2c_converter_script_set_location', [ script_location ])
+  end
+end
+
+# class variant which is supposed to create a self-contained file
+# (i.e. one which does not rely on our V2C functions module).
+# Currently this most certainly does not work fully.
+class V2C_CMakeV2CSyntaxGeneratorSelfContained < V2C_CMakeV2CSyntaxGeneratorBase
+  private
+  def gen_put_customization_hook(include_file)
+    write_include(include_file, true)
+  end
+  def gen_put_customization_hook_from_cmake_var(include_file_var)
+    write_include_from_cmake_var(include_file_var, true)
+  end
+  def gen_put_include_directories(target_name, arr_args)
+    write_command_list_quoted('include_directories', nil, arr_args)
+  end
+  def gen_put_converter_script_location(script_location)
+    write_comment_at_level(COMMENT_LEVEL_MINIMUM,
+      "User override mechanism (don't prevent specifying a custom location of this script)"
+    )
+    write_set_var_if_unset('V2C_SCRIPT_LOCATION', element_manual_quoting(script_location))
+  end
+end
+
+if 1 == $v2c_generate_self_contained_file
+  class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeV2CSyntaxGeneratorSelfContained
+  end
+else
+  class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeV2CSyntaxGeneratorV2CFunc
+  end
+end
+
+class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
+  VS7_UNWANTED_FILE_TYPES_REGEX_OBJ = %r{\.(lex|y|ico|bmp|txt)$}
+  VS7_LIB_FILE_TYPES_REGEX_OBJ = %r{\.lib$}
+  def initialize(textOut, project_name, project_dir, arr_sub_sources_for_parent)
+    super(textOut)
+    @project_name = project_name
+    @project_dir = project_dir
+    @arr_sub_sources_for_parent = arr_sub_sources_for_parent
+  end
+  def filter_files(arr_file_infos)
+    arr_local_sources = nil
+    if not arr_file_infos.nil?
+      arr_local_sources = Array.new
+      arr_file_infos.each { |file|
+        f = file.path_relative
+
+	v2c_generator_check_file_accessible(@project_dir, f, 'file item in project', @project_name, ($v2c_validate_vcproj_abort_on_error > 0))
+
+        # Ignore all generated files, for now.
+        if true == file.is_generated
+          logger.fixme "#{@info_file.path_relative} is a generated file - skipping!"
+          next # no complex handling, just skip
+        end
+
+        ## Ignore header files
+        #return if f =~ /\.(h|H|lex|y|ico|bmp|txt)$/
+        # No we should NOT ignore header files: if they aren't added to the target,
+        # then VS won't display them in the file tree.
+        next if VS7_UNWANTED_FILE_TYPES_REGEX_OBJ.match(f)
+
+        # Verbosely ignore .lib "sources"
+        if VS7_LIB_FILE_TYPES_REGEX_OBJ.match(f)
+          # probably these entries are supposed to serve as dependencies
+          # (i.e., non-link header-only include dependency, to ensure
+          # rebuilds in case of foreign-library header file changes).
+          # Not sure whether these were added by users or
+          # it's actually some standard MSVS mechanism... FIXME
+          logger.info "#{@project_name}::#{f} registered as a \"source\" file!? Skipping!"
+          next # no complex handling, just skip
+        end
+
+        arr_local_sources.push(f)
+      }
+    end
+    return arr_local_sources
+  end
+  def write_sources_list(source_list_name, arr_sources, var_prefix = 'SOURCES_files_')
+    source_files_variable = "#{var_prefix}#{source_list_name}"
+    write_list_quoted(source_files_variable, arr_sources)
+    return source_files_variable
+  end
+  # Side note: we will NOT prefix source variables within a newly
+  # generated CMakeLists.txt with V2C_[TARGET NAME],
+  # since they are re-created in each newly generated CMakeLists.txt,
+  # so it's no problem, and hook script will need to precisely know
+  # which variable to modify, which would be a problem.......
+  def register_new_source_list_variable(sources_variable)
+    @arr_sub_sources_for_parent.push(sources_variable)
+  end
+end
+
+# FIXME: temporarily appended a _VS7 suffix since we're currently changing file list generation during our VS10 generator work.
+class V2C_CMakeFileListsGenerator_VS7 < V2C_CMakeFileListGeneratorBase
+  def initialize(textOut, project_name, project_dir, files_str, parent_source_group, arr_sub_sources_for_parent)
+    super(textOut, project_name, project_dir, arr_sub_sources_for_parent)
+    @files_str = files_str
+    @parent_source_group = parent_source_group
+  end
+  def generate; put_file_list_recursive(@files_str, @parent_source_group, @arr_sub_sources_for_parent) end
+
+  # Hrmm, I'm not quite sure yet where to aggregate this function...
+  def get_filter_group_name(filter_info); return filter_info.nil? ? 'COMMON' : filter_info.name; end
+
+  # Related TODO item: for .cpp files which happen to be listed as
+  # include files in their native projects, we should likely
+  # explicitly set the HEADER_FILE_ONLY property (note that for .h files,
+  # man cmakeprops seems to say that CMake
+  # will _implicitly_ configure these correctly).
+  VS7_UNWANTED_GROUP_TAG_CHARS_MATCH_REGEX_OBJ = %r{( |\\)}
+  def put_file_list_recursive(files_str, parent_source_group, arr_sub_sources_for_parent)
+    filter_info = files_str[:filter_info]
+    group_name = get_filter_group_name(filter_info)
+      log_debug("#{self.class.name}: #{group_name}")
+    if not files_str[:arr_sub_filters].nil?
+      arr_sub_filters = files_str[:arr_sub_filters]
+    end
+    arr_file_infos = files_str[:arr_file_infos]
+
+    arr_local_sources = filter_files(arr_file_infos)
+
+    # TODO: CMake is said to have a weird bug in case of parent_source_group being "Source Files":
+    # "Re: [CMake] SOURCE_GROUP does not function in Visual Studio 8"
+    #   http://www.mail-archive.com/cmake@cmake.org/msg05002.html
+    if parent_source_group.nil?
+      this_source_group = ''
+    else
+      if parent_source_group == ''
+        this_source_group = group_name
+      else
+        this_source_group = "#{parent_source_group}\\\\#{group_name}"
+      end
+    end
+
+    # process sub-filters, have their main source variable added to arr_my_sub_sources
+    arr_my_sub_sources = Array.new
+    if not arr_sub_filters.nil?
+      @textOut.indent_more()
+        arr_sub_filters.each { |subfilter|
+          #logger.info "writing: #{subfilter}"
+          put_file_list_recursive(subfilter, this_source_group, arr_my_sub_sources)
+        }
+      @textOut.indent_less()
+    end
+
+    source_group_var_suffix = this_source_group.clone.gsub(VS7_UNWANTED_GROUP_TAG_CHARS_MATCH_REGEX_OBJ,'_')
+
+    # process our hierarchy's own files
+    if not arr_local_sources.nil?
+      source_files_variable = write_sources_list(source_group_var_suffix, arr_local_sources)
+      # create source_group() of our local files
+      if not parent_source_group.nil?
+        # use list of filters if available: have it generated as source_group(REGULAR_EXPRESSION "regex" ...).
+        arr_filters = nil
+        if not filter_info.nil?
+          arr_filters = filter_info.arr_scfilter
+        end
+        put_source_group(this_source_group, arr_filters, source_files_variable)
+      end
+    end
+    if not source_files_variable.nil? or not arr_my_sub_sources.empty?
+      sources_variable = "SOURCES_#{source_group_var_suffix}"
+      # dump sub filters...
+      arr_source_vars = arr_my_sub_sources.collect { |sources_elem|
+        get_dereferenced_variable_name(sources_elem)
+      }
+      # ...then our own files
+      if not source_files_variable.nil?
+        arr_source_vars.push(get_dereferenced_variable_name(source_files_variable))
+      end
+      next_paragraph()
+      write_list_quoted(sources_variable, arr_source_vars)
+
+      # add our source list variable to parent return
+      # FIXME: cannot use register_new_source_list_variable()  (base class) yet -
+      # we're doing our own inner recursion with _changing_ variables!
+      arr_sub_sources_for_parent.push(sources_variable)
+    end
+  end
+end
+
+class V2C_CMakeFileListGenerator_VS10 < V2C_CMakeFileListGeneratorBase
+  def initialize(textOut, project_name, project_dir, file_list, parent_source_group, arr_sub_sources_for_parent)
+    super(textOut, project_name, project_dir, arr_sub_sources_for_parent)
+    @file_list = file_list
+    @parent_source_group = parent_source_group
+  end
+  def generate; put_file_list(@file_list) end
+
+  private
+
+  def put_file_list(file_list)
+    arr_local_sources = filter_files(file_list.arr_files)
+    source_files_variable = write_sources_list(file_list.name, arr_local_sources)
+    register_new_source_list_variable(source_files_variable)
+  end
+end
+
+class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
+  def initialize(target, project_dir, localGenerator, textOut)
+    super(textOut)
+    @target = target
+    @project_dir = project_dir
+    @localGenerator = localGenerator
+  end
+
+  # These configuration types (Debug, Release) may be _different_
+  # in each .vc[x]proj file, thus it's a target generator functionality
+  # and _not_ a functionality of the local generator (which may generate
+  # *multiple* project targets!).
+  def generate_assignments_of_build_type_variables(arr_config_info)
+    # ARGH, we have an issue with CMake not being fully up to speed with
+    # multi-configuration generators (e.g. .vcproj/.vcxproj):
+    # it should be able to declare _all_ configuration-dependent settings
+    # in a .vcproj file as configuration-dependent variables
+    # (just like set_property(... COMPILE_DEFINITIONS_DEBUG ...)),
+    # but with configuration-specific(!) include directories on .vcproj side,
+    # there's currently only a _generic_ include_directories() command :-(
+    # (dito with target_link_libraries() - or are we supposed to create an imported
+    # target for each dependency, for more precise configuration-specific library names??)
+    # Thus we should specifically specify include_directories() where we can
+    # discern the configuration type (in single-configuration generators using
+    # CMAKE_BUILD_TYPE) and - in the case of multi-config generators - pray
+    # that the authoritative configuration has an AdditionalIncludeDirectories setting
+    # that matches that of all other configs, since we're unable to specify
+    # it in a configuration-specific way :(
+    # Well, in that case we should simply resort to generating
+    # the _union_ of all include directories of all configurations...
+    # "Re: [CMake] debug/optimized include directories"
+    #   http://www.mail-archive.com/cmake@cmake.org/msg38940.html
+    # is a long discussion of this severe issue.
+    # Probably the best we can do is to add a function to add to vcproj2cmake_func.cmake which calls either raw include_directories() or sets the future
+    # target property, depending on a pre-determined support flag
+    # for proper include dirs setting.
+
+    # HACK global var (multi-thread unsafety!)
+    # Thus make sure to have a local copy, for internal modifications.
+    config_multi_authoritative = $config_multi_authoritative
+    if config_multi_authoritative.empty?
+      # Hrmm, we used to fetch this via REXML next_element,
+      # which returned the _second_ setting (index 1)
+      # i.e. Release in a certain file,
+      # while we now get the first config, Debug, in that file.
+      config_multi_authoritative = arr_config_info[0].condition.get_build_type()
+    end
+
+    if 1 == $v2c_generate_self_contained_file
+      arr_config_info.each { |config_info_curr|
+        condition = config_info_curr.condition
+        build_type = condition.get_build_type()
+        build_type_cooked = prepare_string_literal(build_type)
+        str_cmake_build_type_condition = ''
+        if config_multi_authoritative == build_type
+          str_cmake_build_type_condition = "CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
+        else
+          # YES, this condition is supposed to NOT trigger in case of a multi-configuration generator
+          str_cmake_build_type_condition = "CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
+        end
+        write_set_var_bool_conditional(get_buildcfg_var_name_of_condition(condition), str_cmake_build_type_condition)
+      }
+    #else... implicitly being done by v2c_platform_build_setting_configure() invoked during project leadin.
+    end
+  end
+  # File-related TODO:
+  # should definitely support the following CMake properties, as needed:
+  # PUBLIC_HEADER (cmake --help-property PUBLIC_HEADER), PRIVATE_HEADER, HEADER_FILE_ONLY
+  # and possibly the PUBLIC_HEADER option of the INSTALL(TARGETS) command.
+  def put_file_list(project_info, arr_sub_source_list_var_names)
+    put_file_list_source_group_recursive(project_info.name, project_info.main_files, nil, arr_sub_source_list_var_names)
+
+    put_file_list_vs10(project_info.name, project_info.file_lists, nil, arr_sub_source_list_var_names)
+
+    if not arr_sub_source_list_var_names.empty?
+      # add a ${V2C_SOURCES} variable to the list, to be able to append
+      # all sorts of (auto-generated, ...) files to this list within
+      # hook includes.
+      # - _right before_ creating the target with its sources
+      # - and not earlier since earlier .vcproj-defined variables should be clean (not be made to contain V2C_SOURCES contents yet)
+      arr_sub_source_list_var_names.push('V2C_SOURCES')
+    else
+      logger.warn "#{project_info.name}: no source files at all!? (header-based project?)"
+    end
+  end
+  def put_file_list_source_group_recursive(project_name, files_str, parent_source_group, arr_sub_sources_for_parent)
+    if files_str.nil?
+      puts "ERROR: WHAT THE HELL, NO FILES!?"
+      return
+    end
+    filelist_generator = V2C_CMakeFileListsGenerator_VS7.new(@textOut, project_name, @project_dir, files_str, parent_source_group, arr_sub_sources_for_parent)
+    filelist_generator.generate
+  end
+  def put_file_list_vs10(project_name, file_lists, parent_source_group, arr_sub_sources_for_parent)
+    if file_lists.nil?
+      puts "ERROR: WHAT THE HELL, NO FILES!?"
+      return
+    end
+    # FIXME: for resource files ('ResourceCompile' items),
+    # we should be adding a custom target
+    # (most likely within a new vcproj2cmake_func.cmake helper function)
+    # making use of CMAKE_RC_COMPILER.
+    # Also, for resource files we should ideally be setting the
+    # LANGUAGE property of the file (to RC).
+    # See also CMAKE_RC_SOURCE_FILE_EXTENSIONS, CMAKE_RC_OUTPUT_EXTENSION,
+    # CMAKE_RC_COMPILER, CMAKE_RC_COMPILE_OBJECT and CMake modules
+    # CMakeDetermineRCCompiler.cmake, CMakeRCInformation.cmake
+    # We currently add resource (.rc) files to the project target as well...
+    # While this doesn't lead to rogue rebuilds of the independent target,
+    # in some environments this might happen. Thus we might want to skip adding
+    # the resource files list (VS10: ResourceCompile list) to the target.
+    file_lists.arr_file_lists.each { |file_list|
+      filelist_generator = V2C_CMakeFileListGenerator_VS10.new(@textOut, project_name, @project_dir, file_list, parent_source_group, arr_sub_sources_for_parent)
+      filelist_generator.generate
+      #arr_generated = file_list.get_generated_files
+      #puts "arr_generated #{arr_generated}"
+    }
+  end
+  def put_source_vars(arr_sub_source_list_var_names)
+    arr_source_vars = arr_sub_source_list_var_names.collect { |sources_elem|
+	get_dereferenced_variable_name(sources_elem)
+    }
+    next_paragraph()
+    write_list_quoted('SOURCES', arr_source_vars)
+  end
+  def put_hook_post_sources; @localGenerator.put_customization_hook_from_cmake_var('V2C_HOOK_POST_SOURCES') end
+  def put_hook_post_definitions
+    next_paragraph()
+    @localGenerator.put_customization_hook_commented_from_cmake_var(
+      'V2C_HOOK_POST_DEFINITIONS',
+      COMMENT_LEVEL_MINIMUM,
+      "Hook include after all definitions have been made\n" \
+      "(but _before_ target is created using the source list!)"
+    )
+  end
+  def put_v2c_target_midl_specify_files(target_name, condition, midl_info)
+    # TODO: should use condition to alternatively open-code the conditional variable
+    # here in case self-contained mode is requested.
+    # ... = get_buildcfg_var_name_of_condition(condition)
+
+    # For an MIDL discussion, see
+    #   http://cmake.3232098.n2.nabble.com/CMake-with-IDL-file-generation-td7581589.html
+    arr_args_midl = [ midl_info.header_file_name, midl_info.iface_id_file_name, midl_info.type_library_name ]
+    write_invoke_object_conditional_v2c_function('v2c_target_midl_specify_files', target_name, condition, arr_args_midl)
+  end
+  def hook_up_midl_files(file_lists, config_info)
+    # VERY Q&D way to mark MIDL-related files as GENERATED,
+    # to keep CMake from erroring out when adding these source files to a target.
+    # Well, even marking these files as GENERATED does not help,
+    # since they simply won't be available for the target --> error.
+    # Instead, we do need to have an add_custom_command()
+    # which generates them (or suitable dummy files if needed).
+    arr_midl_info = config_info.tools.arr_midl_info
+    if not arr_midl_info.empty?
+      midl_info = arr_midl_info[0]
+      #put_v2c_target_midl_preprocessor_definitions(...)
+      #put_v2c_target_midl_options(GENERATESTUBLESSPROXIES ... MKTYPLIBCOMPATIBLE ... VALIDATEALLPARAMETERS ...)
+      # put_v2c_target_midl_specify_files() will be the last line to be generated - the invoked function
+      # will then implement the MIDL custom command using all previously configured MIDL target properties settings.
+      # FIXME: the .idl file is currently missing (contained within the file list called "Midl")
+      # - possibly we'd need it here, too (at least if we _can_ do something useful with MIDL information
+      # on Non-Win32 platforms...).
+      put_v2c_target_midl_specify_files(@target.name, config_info.condition, midl_info)
+    end
+  end
+  # Currently UNUSED!
+  def mark_files_as_generated(arr_generated_files)
+    if not arr_generated_files.empty?
+      # FIXME: doing correct handling of quoting for these files!?
+      str_cmake_command_args = "SOURCE #{arr_generated_files.join(' ')} PROPERTY GENERATED"
+      @localGenerator.write_command_single_line('set_property', str_cmake_command_args)
+    end
+  end
+  def put_atl_mfc_config(target_config_info)
+    # FIXME: should check whether CMAKE_MFC_FLAG is ok with specifying
+    # it anywhere within CMakeLists.txt at our local directory scope -
+    # if so, then we could place this function call _after_ having
+    # established the target, thus we could already pretend this configuration
+    # item to always have proper target property scope...
+    do_configure_atl_mfc_flag(@target.name, target_config_info.condition, target_config_info.use_of_atl, target_config_info.use_of_mfc)
+  end
+  #def evaluate_precompiled_header_config(target, files_str)
+  #end
+  #
+  def write_conditional_target_valid_begin
+    write_conditional_if(get_target_syntax_expression(@target.name))
+  end
+  def write_conditional_target_valid_end
+    write_conditional_end(get_target_syntax_expression(@target.name))
+  end
+
+  def get_target_syntax_expression(target_name); "TARGET #{target_name}" end
+
+  # FIXME: not sure whether map_lib_dirs etc. should be passed in in such a raw way -
+  # probably mapping should already have been done at that stage...
+  def put_target(target, arr_sub_source_list_var_names, map_lib_dirs, map_lib_dirs_dep, map_dependencies, config_info_curr, target_config_info_curr)
+    target_is_valid = false
+
+    # first add source reference, then do linker setup, then create target
+
+    put_source_vars(arr_sub_source_list_var_names)
+
+    # write link_directories() (BEFORE establishing a target!)
+    config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
+      @localGenerator.write_link_directories(linker_info_curr.arr_lib_dirs, map_lib_dirs)
+    }
+
+    target_is_valid = put_target_type(target, map_dependencies, config_info_curr, target_config_info_curr)
+
+    # Add a special collection of those library dependencies
+    # which we successfully translated from a bare link directory auto-link dependency
+    # (AFTER establishing a target!):
+    config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
+      @localGenerator.write_build_attributes('target_link_libraries', linker_info_curr.arr_lib_dirs, map_lib_dirs_dep, @target.name, true)
+    }
+
+    put_hook_post_target()
+    return target_is_valid
+  end
+  def put_target_type(target, map_dependencies, target_info_curr, target_config_info_curr)
+    target_is_valid = false
+
+    str_condition_no_target = get_conditional_inverted(get_target_syntax_expression(target.name))
+    write_conditional_if(str_condition_no_target)
+          # FIXME: should use a macro like rosbuild_add_executable(),
+          # http://www.ros.org/wiki/rosbuild/CMakeLists ,
+          # https://kermit.cse.wustl.edu/project/robotics/browser/trunk/vendor/ros/core/rosbuild/rosbuild.cmake?rev=3
+          # to be able to detect non-C++ file types within a source file list
+          # and add a hook to handle them specially.
+
+          # see VCProjectEngine ConfigurationTypes enumeration
+    case target_config_info_curr.cfg_type
+    when V2C_TargetConfig_Defines::CFG_TYPE_APP
+      target_is_valid = true
+      #syntax_generator.write_line("add_executable_vcproj2cmake( #{target.name} WIN32 ${SOURCES} )")
+      # TODO: perhaps for real cross-platform binaries (i.e.
+      # console apps not needing a WinMain()), we should detect
+      # this and not use WIN32 in this case...
+      # Well, this toggle probably is related to the .vcproj Keyword attribute...
+      write_target_executable()
+    when V2C_TargetConfig_Defines::CFG_TYPE_DLL
+      target_is_valid = true
+      #syntax_generator.write_line("add_library_vcproj2cmake( #{target.name} SHARED ${SOURCES} )")
+      # add_library() docs: "If no type is given explicitly the type is STATIC or  SHARED
+      #                      based on whether the current value of the variable
+      #                      BUILD_SHARED_LIBS is true."
+      # --> Thus we would like to leave it unspecified for typeDynamicLibrary,
+      #     and do specify STATIC for explicitly typeStaticLibrary targets.
+      # However, since then the global BUILD_SHARED_LIBS variable comes into play,
+      # this is a backwards-incompatible change, thus leave it for now.
+      # Or perhaps make use of new V2C_TARGET_LINKAGE_{SHARED|STATIC}_LIB
+      # variables here, to be able to define "SHARED"/"STATIC" externally?
+      write_target_library_dynamic()
+    when V2C_TargetConfig_Defines::CFG_TYPE_STATIC_LIB
+      target_is_valid = true
+      write_target_library_static()
+    when V2C_TargetConfig_Defines::CFG_TYPE_UNKNOWN
+      logger.warn "Project type 0 (typeUnknown - utility, configured for target #{target.name}) is a _custom command_ type and thus probably cannot be supported easily. We will not abort and thus do write out a file, but it probably needs fixup (hook scripts?) to work properly. If this project type happens to use VCNMakeTool tool, then I would suggest to examine BuildCommandLine/ReBuildCommandLine/CleanCommandLine attributes for clues on how to proceed."
+    when V2C_TargetConfig_Defines::CFG_TYPE_GENERIC
+      logger.unhandled_functionality "#{@target.name}: project type #{target_config_info_curr.cfg_type} almost non-supported."
+      # Certain .vcproj:s do contain a list of source/header files,
+      # thus do try to establish a normal library/executable target - maybe we're in luck.
+      write_target_library_dynamic()
+    else
+    #when 10    # typeGeneric (Makefile) [and possibly other things...]
+      # TODO: we _should_ somehow support these project types...
+      # In fact this is likely to be equivalent to cmTarget::UTILITY,
+      # which is a direct translation of an add_custom_command().
+      # Thus such things should most likely end up generated as an
+      # add_custom_command() / add_custom_target() combo.
+      # The most challenging part will be achieving
+      # flexible cross-platform translation of any system-specific commands
+      # that are executed by the command.
+      log_debug "#{@target.inspect}"
+      raise V2C_GeneratorError, "#{@target.name}: project type #{target_config_info_curr.cfg_type} not supported."
+    end
+    write_conditional_end(str_condition_no_target)
+
+    # write target_link_libraries() in case there's a valid target
+    if target_is_valid
+      target_info_curr.tools.arr_linker_info.each { |linker_info_curr|
+        arr_dependencies = linker_info_curr.arr_dependencies.collect { |dep| dep.dependency }
+        write_link_libraries(arr_dependencies, map_dependencies)
+      }
+    end # target_is_valid
+    return target_is_valid
+  end
+  def write_target_executable
+    write_command_single_line('add_executable', "#{@target.name} WIN32 ${SOURCES}")
+  end
+
+  def write_target_library_dynamic
+    next_paragraph()
+    write_command_single_line('add_library', "#{@target.name} SHARED ${SOURCES}")
+  end
+
+  def write_target_library_static
+    next_paragraph()
+    write_command_single_line('add_library', "#{@target.name} STATIC ${SOURCES}")
+  end
+  def put_hook_post_target
+    next_paragraph()
+    @localGenerator.put_customization_hook_commented_from_cmake_var(
+      'V2C_HOOK_POST_TARGET',
+      COMMENT_LEVEL_MINIMUM,
+      "E.g. to be used for tweaking target properties etc."
+    )
+  end
+  def put_property_compile_definitions(config_name, arr_compile_defn)
+    arr_compile_defn_cooked = cmake_escape_compile_definitions(arr_compile_defn)
+    property_name = get_name_of_per_config_type_property('COMPILE_DEFINITIONS', config_name)
+    # make sure to specify APPEND for greater flexibility (hooks etc.)
+    cmake_command_arg = "TARGET #{@target.name} APPEND PROPERTY #{property_name}"
+    write_command_list('set_property', cmake_command_arg, arr_compile_defn_cooked)
+  end
+  def generate_property_compile_definitions_per_platform(config_name, arr_platdefs, str_platform)
+    write_conditional_if(str_platform)
+      put_property_compile_definitions(config_name, arr_platdefs)
+    write_conditional_end(str_platform)
+  end
+  def put_precompiled_header(target_name, condition, pch_use_mode, pch_source_name, pch_binary_name)
+    # FIXME: empty filename may happen in case of precompiled file
+    # indicated via VS7 FileConfiguration UsePrecompiledHeader
+    # (however this is an entry of the .cpp file: not sure whether we can
+    # and should derive the header from that - but we could grep the
+    # .cpp file for the similarly named include......).
+    return if pch_source_name.nil? or pch_source_name.empty?
+    str_pch_use_mode = "#{pch_use_mode}" # stringify integer
+    arr_args_precomp_header = [ str_pch_use_mode, pch_source_name, pch_binary_name ]
+    write_invoke_object_conditional_v2c_function('v2c_target_add_precompiled_header',
+    target_name, condition, arr_args_precomp_header)
+  end
+  def write_precompiled_header(condition, precompiled_header_info)
+    return if not $v2c_target_precompiled_header_enable
+    return if precompiled_header_info.nil?
+    return if precompiled_header_info.header_source_name.nil?
+    ## FIXME: this filesystem validation should be carried out by a non-parser/non-generator validator class...
+    #header_file_is_existing = v2c_generator_check_file_accessible(@project_dir, precompiled_header_info.header_source_name, 'header file to be precompiled', @target.name, false)
+    logger.info "#{@target.name}: generating PCH functionality (use mode #{precompiled_header_info.use_mode}, header file #{precompiled_header_info.header_source_name}, PCH output binary #{precompiled_header_info.header_binary_name})"
+    put_precompiled_header(
+      @target.name,
+      condition,
+      precompiled_header_info.use_mode,
+      precompiled_header_info.header_source_name,
+      precompiled_header_info.header_binary_name
+    )
+  end
+  def write_property_compile_definitions(condition, arr_defs_assignments, map_defs)
+    return if arr_defs_assignments.empty?
+    # the container for the list of _actual_ dependencies as stated by the project
+    all_platform_defs = Hash.new
+    parse_platform_conversions(all_platform_defs, arr_defs_assignments, map_defs, false)
+    var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
+    write_conditional_if(var_v2c_want_buildcfg_curr)
+      build_type = condition.get_build_type()
+      hash_ensure_sorted_each(all_platform_defs).each { |key, arr_platdefs|
+        #logger.info "arr_platdefs: #{arr_platdefs}"
+        next_paragraph()
+        str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
+        generate_property_compile_definitions_per_platform(build_type, arr_platdefs, str_platform)
+      }
+    write_conditional_end(var_v2c_want_buildcfg_curr)
+  end
+  def write_property_compile_flags(condition, arr_flags, str_conditional)
+    return if arr_flags.empty?
+    next_paragraph()
+    var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
+    write_conditional_if(var_v2c_want_buildcfg_curr)
+      write_conditional_if(str_conditional)
+        # FIXME!!! It appears that while CMake source has COMPILE_DEFINITIONS_<CONFIG>,
+        # it does NOT provide a per-config COMPILE_FLAGS property! Need to verify ASAP
+        # whether compile flags do get passed properly in debug / release.
+        # Strangely enough it _does_ have LINK_FLAGS_<CONFIG>, though!
+        str_target_expr = get_target_syntax_expression(@target.name)
+        build_type = condition.get_build_type()
+        property_name = get_name_of_per_config_type_property('COMPILE_FLAGS', build_type)
+        cmake_command_arg = "#{str_target_expr} APPEND PROPERTY #{property_name}"
+        write_command_list('set_property', cmake_command_arg, arr_flags)
+      write_conditional_end(str_conditional)
+    write_conditional_end(var_v2c_want_buildcfg_curr)
+  end
+  def write_property_link_flags(condition, arr_flags, str_conditional)
+    return if arr_flags.empty?
+    next_paragraph()
+    var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
+    write_conditional_if(var_v2c_want_buildcfg_curr)
+      write_conditional_if(str_conditional)
+        str_target_expr = get_target_syntax_expression(@target.name)
+        build_type = condition.get_build_type()
+        property_name = get_name_of_per_config_type_property('LINK_FLAGS', build_type)
+        cmake_command_arg = "#{str_target_expr} APPEND PROPERTY #{property_name}"
+        write_command_list('set_property', cmake_command_arg, arr_flags)
+      write_conditional_end(str_conditional)
+    write_conditional_end(var_v2c_want_buildcfg_curr)
+  end
+  def write_link_libraries(arr_dependencies, map_dependencies)
+    arr_dependencies_augmented = arr_dependencies.clone
+    arr_dependencies_augmented.push(get_dereferenced_variable_name('V2C_LIBS'))
+    @localGenerator.write_build_attributes('target_link_libraries', arr_dependencies_augmented, map_dependencies, @target.name)
+  end
+  def write_func_v2c_target_post_setup(project_name, project_keyword)
+    # Rationale: keep count of generated lines of CMakeLists.txt to a bare minimum -
+    # call v2c_project_post_setup(), by simply passing all parameters that are _custom_ data
+    # of the current generated CMakeLists.txt file - all boilerplate handling functionality
+    # that's identical for each project should be implemented by the v2c_project_post_setup() function
+    # _internally_.
+    if project_keyword.nil?; project_keyword = V2C_ATTRIBUTE_NOT_PROVIDED_MARKER end
+    arr_args_func = [ project_name, project_keyword ]
+    write_invoke_config_object_v2c_function_quoted('v2c_target_post_setup', @target.name, arr_args_func)
+  end
+  def set_properties_vs_scc(target_name, scc_info_in)
+    # Keep source control integration in our conversion!
+    # FIXME: does it really work? Then reply to
+    # http://www.itk.org/Bug/view.php?id=10237 !!
+
+    # If even scc_info.project_name is unavailable,
+    # then we can bail out right away...
+    return if scc_info_in.project_name.nil?
+
+    scc_info_cmake = scc_info_in.clone
+
+    # Hmm, perhaps need to use CGI.escape since chars other than just '"' might need to be escaped?
+    # NOTE: needed to clone() this string above since otherwise modifying (same) source object!!
+    # We used to escape_char('"') below, but this was problematic
+    # on VS7 .vcproj generator since that one is BUGGY (GIT trunk
+    # 201007xx): it should escape quotes into XMLed "&quot;" yet
+    # it doesn't. Thus it's us who has to do that and pray that it
+    # won't fail on us... (but this bogus escaping within
+    # CMakeLists.txt space might lead to severe trouble
+    # with _other_ IDE generators which cannot deal with a raw "&quot;").
+    # If so, one would need to extend v2c_target_set_properties_vs_scc()
+    # to have a CMAKE_GENERATOR branch check, to support all cases.
+    # Or one could argue that the escaping should better be done on
+    # CMake-side code (i.e. in v2c_target_set_properties_vs_scc()).
+    # Note that perhaps we should also escape all other chars
+    # as in CMake's EscapeForXML() method.
+    scc_info_cmake.project_name.gsub!(/"/, '&quot;')
+    if scc_info_cmake.local_path
+      escape_backslash(scc_info_cmake.local_path)
+      escape_char(scc_info_cmake.local_path, '"')
+    end
+    if scc_info_cmake.provider
+      escape_char(scc_info_cmake.provider, '"')
+    end
+    if scc_info_cmake.aux_path
+      escape_backslash(scc_info_cmake.aux_path)
+      escape_char(scc_info_cmake.aux_path, '"')
+    end
+
+    next_paragraph()
+    arr_args_func = [ scc_info_cmake.project_name, scc_info_cmake.local_path, scc_info_cmake.provider, scc_info_cmake.aux_path ]
+    write_invoke_config_object_v2c_function_quoted('v2c_target_set_properties_vs_scc', target_name, arr_args_func)
+  end
+
+  def add_target_config_specific_definitions(condition, target_config_info, hash_defines)
+    # Hrmm, are we even supposed to be doing this?
+    # On Windows I guess UseOfMfc in generated VS project files
+    # would automatically cater for it, and all other platforms
+    # would have to handle it some way or another anyway.
+    # But then I guess there are other build environments on Windows
+    # which would need us handling it here manually, so let's just keep it for now.
+    # Plus, defining _AFXEXT already includes the _AFXDLL setting
+    # (MFC will define it implicitly),
+    # thus it's quite likely that our current handling is somewhat incorrect.
+    if target_config_info.use_of_mfc == V2C_TargetConfig_Defines::MFC_DYNAMIC
+      # FIXME: need to add a compiler flag lookup entry
+      # to compiler-specific info as well!
+      # (in case of MSVC it would yield: /MD [dynamic] or /MT [static])
+      hash_defines['_AFXEXT'] = ''
+      hash_defines['_AFXDLL'] = ''
+    end
+    charset_type = 'SBCS'
+    case target_config_info.charset
+    when V2C_TargetConfig_Defines::CHARSET_SBCS
+      charset_type = 'SBCS'
+    when V2C_TargetConfig_Defines::CHARSET_UNICODE
+      charset_type = 'UNICODE'
+    when V2C_TargetConfig_Defines::CHARSET_MBCS
+      charset_type = 'MBCS'
+    else
+      log_implementation_bug('unknown charset type!?')
+    end
+    arr_args_func_other = [ charset_type ]
+    write_invoke_object_conditional_v2c_function('v2c_target_config_charset_set', @target.name, condition, arr_args_func_other)
+  end
+
+  def generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
+
+    project_info = @target # HACK
+
+    generate_project_leadin(project_info)
+
+    # arr_sub_source_list_var_names will receive the names of the individual source list variables:
+    arr_sub_source_list_var_names = Array.new
+
+    put_file_list(project_info, arr_sub_source_list_var_names)
+
+    put_include_dir_project_source_dir(project_info.name)
+
+    put_hook_post_sources()
+
+    arr_config_info = project_info.arr_config_info
+
+    generate_assignments_of_build_type_variables(arr_config_info)
+
+    arr_target_config_info = project_info.arr_target_config_info
+
+    target_is_valid = false
+
+    arr_config_info.each { |config_info_curr|
+      next_paragraph()
+
+      # Generate all functions which already have their own conditional
+      # platform / build type handling here, prior to generating the
+      # var_v2c_want_buildcfg_curr below...
+      hook_up_midl_files(project_info.file_lists, config_info_curr)
+
+      condition = config_info_curr.condition
+      var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
+      write_conditional_if(var_v2c_want_buildcfg_curr)
+
+      config_info_curr.tools.arr_compiler_info.each { |compiler_info_curr|
+        arr_includes = compiler_info_curr.get_include_dirs(false, false)
+        @localGenerator.write_include_directories(arr_includes, generator_base.map_includes)
+      }
+
+      # At this point (before target creation - much earlier than we
+      # would want to), we'll have to iterate through target configs
+      # for all settings which are target related but are (stupidly)
+      # NOT being applied as target properties (i.e. post-target-setup).
+      arr_target_config_info.each { |target_config_info_curr|
+	next if not condition.entails(target_config_info_curr.condition)
+	# FIXME: put_atl_mfc_config() does not need
+	# var_v2c_want_buildcfg_curr i.e. should be outside of it
+	# (already does own condition handling) - how to resolve this?
+        put_atl_mfc_config(target_config_info_curr)
+      }
+
+      # FIXME: hohumm, the position of this hook include is outdated, need to update it
+      # Well, there's a distinction between
+      # ("dirty") global settings (defined _prior_ to adding a target)
+      # and target-aggregated settings (properties),
+      # thus maybe we need different hooks for these two mechanisms.
+      # Well, but for now at least MAKE SURE TO ALWAYS KEEP IT RIGHT BEFORE
+      # adding the target! (to be able to manipulate _all_ prior settings
+      # if needed).
+      put_hook_post_definitions()
+
+      # Technical note: target type (library, executable, ...) in .vcproj can be configured per-config
+      # (or, in other words, different configs are capable of generating _different_ target _types_
+      # for the _same_ target), but in CMake this isn't possible since _one_ target name
+      # maps to _one_ target type and we _need_ to restrict ourselves to using the project name
+      # as the exact target name (we are unable to define separate PROJ_lib and PROJ_exe target names,
+      # since other .vcproj file contents always link to our target via the main project name only!!).
+      # Thus we need to declare the target _outside_ the scope of per-config handling :(
+
+      # create a target only in case we do have any meat at all
+      if project_info.have_build_units
+        arr_target_config_info.each { |target_config_info_curr|
+          next if not condition.entails(target_config_info_curr.condition)
+          target_is_valid = put_target(project_info, arr_sub_source_list_var_names, map_lib_dirs, map_lib_dirs_dep, map_dependencies, config_info_curr, target_config_info_curr)
+        }
+      end # target.have_build_units
+
+      write_conditional_end(var_v2c_want_buildcfg_curr)
+    } # [END per-config handling]
+
+    # Now that we likely _do_ have a valid target
+    # (created by at least one of the Debug/Release/... build configs),
+    # _iterate through the configs again_ and add config-specific
+    # definitions. This is necessary (fix for multi-config
+    # environment).
+    #
+    # UGH, now added yet another loop iteration.
+    # FIXME This is getting waaaaay too messy, need to refactor it to have a
+    # clean hierarchy.
+    if target_is_valid
+      write_conditional_target_valid_begin()
+      arr_config_info.each { |config_info_curr|
+        condition = config_info_curr.condition
+
+        tools = config_info_curr.tools
+
+        # NOTE: the commands below can stay in the general section (outside of
+        # var_v2c_want_buildcfg_curr above), but only since they define properties
+        # which are clearly named as being configuration-_specific_ already!
+        #
+        # I don't know WhyTH we're iterating over a compiler_info here,
+        # but let's just do it like that for now since it's required
+        # by our current data model:
+        tools.arr_compiler_info.each { |compiler_info_curr|
+
+          print_marker_line('per-compiler_info')
+
+          arr_target_config_info.each { |target_config_info_curr|
+	    next if not condition.entails(target_config_info_curr.condition)
+
+	    hash_defines_augmented = compiler_info_curr.hash_defines.clone
+
+	    add_target_config_specific_definitions(condition, target_config_info_curr, hash_defines_augmented)
+            # Convert hash into array as required by the definitions helper function
+            # (it's probably a good idea to provide "cooked" "key=value" entries
+            # for more complete matching possibilities
+            # within the regex matching parts done by it).
+            # TODO: this might be relocatable to a common generator base helper method.
+            arr_defs_assignments = Array.new
+            hash_ensure_sorted_each(hash_defines_augmented).each { |key, value|
+              str_define = value.empty? ? key : "#{key}=#{value}"
+              arr_defs_assignments.push(str_define)
+            }
+            write_property_compile_definitions(condition, arr_defs_assignments, map_defines)
+            # Original compiler flags are MSVC-only, of course. TODO: provide an automatic conversion towards gcc?
+            compiler_info_curr.arr_tool_variant_specific_info.each { |compiler_specific|
+  	      str_conditional_compiler_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.compiler_name)
+              # I don't think we need this (we have per-target properties), thus we'll NOT write it!
+              #if not attr_opts.nil?
+              #  local_generator.write_directory_property_compile_flags(attr_options)
+              #end
+              write_property_compile_flags(condition, compiler_specific.arr_flags, str_conditional_compiler_platform)
+            } # compiler.tool_specific.each
+          } # arr_target_config_info.each
+
+          # Since the precompiled header CMake module currently
+          # _resets_ a target's COMPILE_FLAGS property,
+          # make sure to generate it _before_ specifying any COMPILE_FLAGS:
+          # UPDATE: nope, it's now fixed, thus move it *after* the target
+	  # is fully configured (it needs to be able to correctly gather
+	  # all settings of the target it is supposed to be used for).
+          write_precompiled_header(condition, compiler_info_curr.precompiled_header_info)
+
+        } # config_info_curr.tools.arr_compiler_info.each
+        tools.arr_linker_info.each { |linker_info_curr|
+          linker_info_curr.arr_tool_variant_specific_info.each { |linker_specific|
+	    str_conditional_linker_platform = map_linker_name_to_cmake_platform_conditional(linker_specific.linker_name)
+            # Probably more linker flags support needed? (mention via
+            # CMAKE_SHARED_LINKER_FLAGS / CMAKE_MODULE_LINKER_FLAGS / CMAKE_EXE_LINKER_FLAGS
+            # depending on target type, and make sure to filter out options pre-defined by CMake platform
+            # setup modules)
+            write_property_link_flags(condition, linker_specific.arr_flags, str_conditional_linker_platform)
+          } # linker.tool_specific.each
+        } # arr_linker_info.each
+      } # config_info_curr
+      write_conditional_target_valid_end()
+    end
+
+    if target_is_valid
+      write_func_v2c_target_post_setup(project_info.name, project_info.vs_keyword)
+
+      set_properties_vs_scc(@target.name, project_info.scc_info)
+
+      # TODO: might want to set a target's FOLDER property, too...
+      # (and perhaps a .vcproj has a corresponding attribute
+      # which indicates that?)
+
+      # TODO: perhaps there are useful Xcode (XCODE_ATTRIBUTE_*) properties to convert?
+    end # target_is_valid
+
+    arr_orig_proj_files = project_info.arr_p_original_project_files.collect { |orig_proj_file|
+      orig_proj_file.relative_path_from(@project_dir)
+    }
+    write_func_v2c_project_post_setup(project_info.name, arr_orig_proj_files)
+  end
+
+  private
+
+  def put_project(project_name, arr_progr_languages = nil)
+    arr_args_project_name_and_attrs = [ project_name ]
+    if arr_progr_languages.nil? or arr_progr_languages.empty?
+      ## No programming language given? Indicate special marker "NONE"
+      ## to skip any compiler checks.
+      # Nope, no language means "unknown", thus don't specify anything -
+      # to keep CMake's auto-detection mechanism active.
+      #arr_args_project_name_and_attrs.push('NONE')
+    else
+      arr_args_project_name_and_attrs.concat(arr_progr_languages)
+    end
+    write_command_list_single_line('project', arr_args_project_name_and_attrs)
+  end
+  def write_project(project_info)
+    # Figure out language type (C CXX etc.) and add it to project() command
+    arr_languages = detect_programming_languages(project_info)
+    put_project(project_info.name, arr_languages)
+  end
+  def put_conversion_info(project_name, str_from_buildtool_version)
+    # Add an explicit file generation timestamp,
+    # to enable easy identification (grepping) of files of a certain age
+    # (a filesystem-based creation/modification timestamp might be unreliable
+    # due to copying/modification).
+    str_time = ''
+    timestamp_format = $v2c_generator_timestamp_format
+    if not timestamp_format.nil? and not timestamp_format.empty?
+      timestamp_format_docs = timestamp_format.tr('%', '')
+      time = Time.new
+      str_time = time.utc.strftime(timestamp_format)
+    end
+    write_comment_at_level(COMMENT_LEVEL_VERBOSE,
+      "For this project's file, indicates originating build environment / IDE,\n" \
+      "and indicates conversion moment in time (UTC, format #{timestamp_format_docs})"
+    )
+    write_invoke_v2c_function_quoted('v2c_project_conversion_info_set', [ project_name, str_time, str_from_buildtool_version ])
+  end
+  def detect_programming_languages(project_info)
+    language_detector = V2C_CMakeProjectLanguageDetector.new(project_info)
+    language_detector.detect
+  end
+  def put_include_MasterProjectDefaults_vcproj2cmake
+    if @textOut.generated_comments_level() >= 2
+      @textOut.write_data %{\
+
+# This part is for including a file which contains
+# settings (compiler flags, path settings, platform stuff, ...)
+# which are _globally_ applicable for all sub projects of a solution
+# e.g. have vcproj2cmake-specific MasterProjectDefaults_vcproj2cmake
+# which then _also_ includes a global MasterProjectDefaults module
+# for _all_ CMakeLists.txt. This needs to sit post-project()
+# since e.g. compiler info is dependent on a valid project.
+}
+      # NOTE: V2C_LIBS, V2C_SOURCES are _target_-specific
+      # (one local directory - i.e. one single CMakeLists.txt - may contain _multiple_
+      # project files - i.e. project()s -!). I.e., they need to be reset
+      # per-project()!
+      @textOut.write_block( \
+	"# MasterProjectDefaults_vcproj2cmake is supposed to define generic settings\n" \
+        "# (such as V2C_HOOK_PROJECT, defined as e.g.\n" \
+        "# #{$v2c_config_dir_local}/hook_project.txt,\n" \
+        "# and other hook include variables below).\n" \
+        "# NOTE: it usually should also reset variables\n" \
+        "# V2C_LIBS, V2C_SOURCES etc. as used below since they should contain\n" \
+        "# project-specific contents only, not accumulate!" \
+      )
+    end
+    # (side note: see "ldd -u -r" on Linux for superfluous link parts potentially caused by this!)
+    write_include('MasterProjectDefaults_vcproj2cmake', true)
+  end
+  def write_funcs_v2c_project_platform_define_build_types(project_name, build_platform_configs)
+    build_platform_configs.get_platforms().each { |platform_name|
+      arr_platform_build_types = build_platform_configs.get_build_types(platform_name)
+      write_func_v2c_project_platform_define_build_types(project_name, platform_name, arr_platform_build_types)
+    }
+    write_invoke_v2c_function_quoted('v2c_platform_build_setting_configure', [ project_name ])
+  end
+  def write_func_v2c_project_platform_define_build_types(project_name, platform_name, arr_platform_build_types)
+    arr_args_func = [ platform_name ]
+    arr_args_func.concat(arr_platform_build_types)
+    write_invoke_config_object_v2c_function_quoted('v2c_project_platform_define_build_types', project_name, arr_args_func)
+  end
+  def put_hook_project
+    put_customization_hook_commented_from_cmake_var(
+      'V2C_HOOK_PROJECT',
+      COMMENT_LEVEL_STANDARD,
+      "Hook e.g. for invoking Find scripts as expected by\n" \
+      "the _LIBRARIES / _INCLUDE_DIRS mappings created\n" \
+      "by your include/dependency map files."
+    )
+  end
+
+  def generate_project_leadin(project_info)
+    write_project(project_info)
+    put_conversion_info(project_info.name, project_info.orig_environment_shortname)
+    put_include_MasterProjectDefaults_vcproj2cmake()
+    write_funcs_v2c_project_platform_define_build_types(project_info.name, project_info.build_platform_configs)
+    put_hook_project()
+  end
+  # _target_ generator specific method.
+  def set_property(target_name, property, value)
+    arr_args_func = [ 'TARGET', target_name, 'PROPERTY', property, value ]
+    write_command_list_quoted('set_property', nil, arr_args_func)
+  end
+  def write_func_v2c_project_post_setup(project_name, arr_proj_files)
+    # This function invokes CMakeLists.txt rebuilder only
+    # (TODO: should be changed into specific naming!),
+    # thus skip on one-time generation.
+    return if $v2c_generator_one_time_conversion_only
+
+    # Rationale: keep count of generated lines of CMakeLists.txt to a bare minimum -
+    # call v2c_project_post_setup(), by simply passing all parameters that are _custom_ data
+    # of the current generated CMakeLists.txt file - all boilerplate handling functionality
+    # that's identical for each project should be implemented by the v2c_project_post_setup() function
+    # _internally_.
+    arr_args_func = [ array_to_cmake_list(arr_proj_files) ]
+    write_invoke_config_object_v2c_function_quoted('v2c_project_post_setup', project_name, arr_args_func)
+  end
+end
+
+# Supposed to generate the globally configured parts
+# within an entire "solution" hierarchy.
+# Currently, these end up (repeated) in each local CMakeLists.txt file.
+# Should be generating into a common include() file instead.
+class V2C_CMakeGlobalGenerator < V2C_CMakeV2CSyntaxGenerator
+  def put_configuration_types(configuration_types)
+    configuration_types_list = separate_arguments(configuration_types)
+    write_set_var_quoted('CMAKE_CONFIGURATION_TYPES', configuration_types_list)
+  end
+end
+
+# Generates the CMake code required to bootstrap V2C operation
+# (provided by each scope which may still need to execute this init code)
+class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
+  def initialize(textOut, relative_path_to_root, script_location_relative_to_master)
+    super(textOut)
+    @relative_path_to_root = relative_path_to_root
+    @script_location_relative_to_master = script_location_relative_to_master
+  end
+  def generate
+    put_per_scope_setup(@relative_path_to_root)
+  end
+
+  private
+
+  def put_per_scope_setup(str_conversion_root_rel)
+    write_comment_at_level(COMMENT_LEVEL_STANDARD,
+      "This part of *global* V2C bootstrap steps (policies, include function module, ...)\n" \
+      "*has* to be repeated within each *local* file,\n" \
+      "to be able to support the use case of creating a build environment\n" \
+      "from single local project directories, too.\n" \
+      "But there's a nice trick: if a guard variable is already defined,\n" \
+      "then some other (parent?) scope already did all that setup work for us." \
+    )
+    str_per_scope_definition_guard = '_v2c_global_defs_per_scope_defined'
+    str_condition_inverse = get_conditional_inverted(str_per_scope_definition_guard)
+    write_conditional_if(str_condition_inverse)
+      put_per_scope_cmake_minimum_version()
+      put_per_scope_cmake_policies()
+
+      put_cmake_module_path(str_conversion_root_rel)
+      put_include_vcproj2cmake_func()
+      put_var_config_dir_local()
+      # We'll have converter script setup one-time within global setup as well -
+      # while different project files/dirs may have been converted
+      # with differing scripts, such a use case can be considered
+      # sufficiently pathological, thus we will not support it.
+      put_converter_script_location(@script_location_relative_to_master)
+      write_set_var_bool(str_per_scope_definition_guard, true)
+    write_conditional_end(str_condition_inverse)
+  end
+
+  # cmake_minimum_required() is required to be mentioned open-coded
+  # per-CMakeLists.txt (exact requirement seems to be:
+  # to be executed whenever it has not been done before within a scope),
+  # thus we always do need to generate this line
+  # rather than having it carried out by our module file.
+  # Having it mentioned by an included macro executed locally is not
+  # accepted either.
+  def put_per_scope_cmake_minimum_version
+    # Required version line to make cmake happy.
+    write_comment_at_level(COMMENT_LEVEL_VERBOSE,
+      "For features provided (or not) by various CMake versions,\n" \
+      "please see http://www.cmake.org/Wiki/CMake_Released_Versions\n" \
+      "(and page CMake_Version_Compatibility_Matrix)."
+    )
+    str_cmake_minimum_version = '2.6'
+    write_comment_at_level(COMMENT_LEVEL_MINIMUM,
+      ">= #{str_cmake_minimum_version} due to crucial set_property(... COMPILE_DEFINITIONS_* ...)"
+    )
+    write_cmake_minimum_version(str_cmake_minimum_version)
+  end
+  def put_per_scope_cmake_policies
+    str_conditional = get_var_conditional_command('cmake_policy')
+    write_conditional_if(str_conditional)
+      # CMP0005: manual quoting of brackets in definitions doesn't seem to work otherwise,
+      # in cmake 2.6.4-7.el5 with "OLD".
+      # We'll decide to write the policies one after another -
+      # we could be embedding all higher-numbered policies
+      # within the conditionals of the lower ones,
+      # but this would be less compatible (it is conceivable
+      # that certain policy numbers get withdrawn completely in future,
+      # in which case hierarchic conditionals would fail).
+      write_cmake_policy(5, true, "automatic quoting of brackets")
+      write_cmake_policy(11, false, \
+	"we do want the includer to be affected by our updates,\n" \
+        "since it might define project-global settings.\n" \
+      )
+      write_cmake_policy(15, true, \
+        ".vcproj contains relative paths to additional library directories,\n" \
+        "thus we need to be able to cope with that" \
+      )
+    write_conditional_end(str_conditional)
+  end
+  def put_cmake_module_path(str_conversion_root_rel)
+    # try to point to cmake/Modules of the topmost directory of the vcproj2cmake conversion tree.
+    # This also contains vcproj2cmake helper modules (these should - just like the CMakeLists.txt -
+    # be within the project tree as well, since someone might want to copy the entire project tree
+    # including .vcproj conversions to a different machine, thus all v2c components should be available)
+    # NOTE that V2C_MASTER_PROJECT_SOURCE_DIR is a very important variable
+    # which may eventually be supported to end up _different_ from CMAKE_SOURCE_DIR
+    # (e.g. in the case of integrating _multiple_ different solution (.sln) files
+    # - and their project hierarchy each! - into a _higher-level_ natively CMake-based tree!!).
+    # We might possibly eventually want to rename V2C_MASTER_PROJECT_SOURCE_DIR into V2C_SOLUTION_ROOT_SOURCE_DIR
+    # to reflect the fact that a project hierarchy has been created from a solution
+    # that sits in a specific directory...
+    next_paragraph()
+    write_comment_at_level(COMMENT_LEVEL_STANDARD,
+      "Denotes the source root directory where the V2C conversion run was carried out.\n" \
+      "This directory also contains certain global vcproj2cmake support subdirs."
+    )
+
+    # Handle the case of generating for V2C root (== empty relative path).
+    str_conversion_root_rel_cooked = ''
+    if not str_conversion_root_rel.empty?
+      str_conversion_root_rel_cooked = "/#{str_conversion_root_rel}"
+    end
+    str_master_proj_source_dir = "#{get_dereferenced_variable_name('CMAKE_CURRENT_SOURCE_DIR')}#{str_conversion_root_rel_cooked}"
+    write_set_var_quoted('V2C_MASTER_PROJECT_SOURCE_DIR', str_master_proj_source_dir)
+    str_master_proj_binary_dir = "#{get_dereferenced_variable_name('CMAKE_CURRENT_BINARY_DIR')}#{str_conversion_root_rel_cooked}"
+    write_set_var_quoted('V2C_MASTER_PROJECT_BINARY_DIR', str_master_proj_binary_dir)
+    # NOTE: use set() instead of list(APPEND...) to _prepend_ path
+    # (otherwise not able to provide proper _overrides_)
+    write_comment_at_level(COMMENT_LEVEL_STANDARD,
+      "Extend module path with both a precise relative hint to source root\n" \
+      "and a flexible link via CMAKE_SOURCE_DIR expression,\n" \
+      "since in certain situations both may end up used\n" \
+      "(think build tree created from standalone project)."
+    )
+    # Whatever we do here - make sure we don't stomp out any potential prior CMAKE_MODULE_PATH definition!!
+    # (for details, see "CMake coding guide"
+    #    http://www.aldebaran-robotics.com/documentation/qibuild/contrib/cmake/coding_guide.html )
+    arr_args_func = [ "${V2C_MASTER_PROJECT_SOURCE_DIR}/#{$v2c_module_path_local}", "${CMAKE_SOURCE_DIR}/#{$v2c_module_path_local}", get_dereferenced_variable_name('CMAKE_MODULE_PATH') ]
+    write_list_quoted('CMAKE_MODULE_PATH', arr_args_func)
+  end
+  def put_include_vcproj2cmake_func
+    next_paragraph()
+    write_comment_at_level(COMMENT_LEVEL_STANDARD,
+      "Include the main file for pre-defined vcproj2cmake helper functions"
+    )
+    write_include('vcproj2cmake_func')
+  end
+  # "export" our internal $v2c_config_dir_local variable (to be able to reference it in CMake scripts as well)
+  def put_var_config_dir_local; write_set_var_quoted('V2C_CONFIG_DIR_LOCAL', $v2c_config_dir_local) end
+end
+
+# This class generates the output of multiple input projects to a text output
+# (usually CMakeLists.txt within a local directory).
+class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
+  def initialize(textOut, local_dir, p_solution_dir, arr_local_project_targets, script_location_relative_to_master)
+    super(textOut)
+    @local_dir = local_dir
+    @p_solution_dir = p_solution_dir
+    @master_project_dir = p_solution_dir.to_s
+    @arr_local_project_targets = arr_local_project_targets
+    @script_location_relative_to_master = script_location_relative_to_master
+    # FIXME: handle arr_config_var_handling appropriately
+    # (place the translated CMake commands somewhere suitable)
+    @arr_config_var_handling = Array.new
+  end
+
+  def generate
+    master_project_dir = @p_solution_dir.to_s
+    generator_base = V2C_BaseGlobalGenerator.new(master_project_dir)
+    map_lib_dirs = Hash.new
+    read_mappings_combined(FILENAME_MAP_LIB_DIRS, map_lib_dirs, master_project_dir)
+    map_lib_dirs_dep = Hash.new
+    read_mappings_combined(FILENAME_MAP_LIB_DIRS_DEP, map_lib_dirs_dep, master_project_dir)
+    map_dependencies = Hash.new
+    read_mappings_combined(FILENAME_MAP_DEP, map_dependencies, master_project_dir)
+    map_defines = Hash.new
+    read_mappings_combined(FILENAME_MAP_DEF, map_defines, master_project_dir)
+
+    generate_it(@local_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
+  end
+  def write_include_directories(arr_includes, map_includes)
+    # Side note: unfortunately CMake as of 2.8.7 probably still does not have
+    # a way of specifying _per-configuration_ syntax of include_directories().
+    # See "[CMake] vcproj2cmake.rb script: announcing new version / hosting questions"
+    #   http://www.cmake.org/pipermail/cmake/2010-June/037538.html
+    #
+    # Side note #2: relative arguments to include_directories() (e.g. "..")
+    # are relative to CMAKE_PROJECT_SOURCE_DIR and _not_ BINARY,
+    # at least on Makefile and .vcproj.
+    # CMake dox currently don't offer such details... (yet!)
+    return if arr_includes.empty?
+    arr_includes_translated = arr_includes.collect { |elem_inc_dir|
+      vs7_create_config_variable_translation(elem_inc_dir, @arr_config_var_handling)
+    }
+    write_build_attributes('include_directories', arr_includes_translated, map_includes, nil)
+  end
+
+  def write_link_directories(arr_lib_dirs, map_lib_dirs)
+    arr_lib_dirs_translated = arr_lib_dirs.collect { |elem_lib_dir|
+      vs7_create_config_variable_translation(elem_lib_dir, @arr_config_var_handling)
+    }
+    arr_lib_dirs_translated.push(get_dereferenced_variable_name('V2C_LIB_DIRS'))
+    write_comment_at_level(COMMENT_LEVEL_VERBOSE,
+      "It is said to be much preferable to be able to use target_link_libraries()\n" \
+      "rather than the very unspecific link_directories()."
+    )
+    write_build_attributes('link_directories', arr_lib_dirs_translated, map_lib_dirs, nil)
+  end
+  def put_directory_property_compile_flags(attr_opts, flag_append)
+    write_command_single_line('set_property', "DIRECTORY APPEND PROPERTY COMPILE_FLAGS #{attr_opts}")
+  end
+  def write_directory_property_compile_flags(attr_opts)
+    next_paragraph()
+    # Query WIN32 instead of MSVC, since AFAICS there's nothing in the
+    # .vcproj to indicate tool specifics, thus these seem to
+    # be settings for ANY PARTICULAR tool that is configured
+    # on the Win32 side (.vcproj in general).
+    str_platform = 'WIN32'
+    write_conditional_if(str_platform)
+      put_directory_property_compile_flags(attr_opts, true)
+    write_conditional_end(str_platform)
+  end
+  def write_build_attributes(cmake_command, arr_defs, map_defs, cmake_command_arg, skip_failed_lookups = false)
+    # the container for the list of _actual_ dependencies as stated by the project
+    all_platform_defs = Hash.new
+    parse_platform_conversions(all_platform_defs, arr_defs, map_defs, skip_failed_lookups)
+    # HACK: yes, we do need to re-sort this Hash _right before_ using it...
+    hash_ensure_sorted_each(all_platform_defs).each { |key, arr_platdefs|
+      #logger.info "arr_platdefs: #{arr_platdefs}"
+      next_paragraph()
+      str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
+      write_conditional_if(str_platform)
+        write_command_list_quoted(cmake_command, cmake_command_arg, arr_platdefs)
+      write_conditional_end(str_platform)
+    }
+  end
+  private
+
+  # FIXME: all these function arguments are temporary crap! - they're supposed to be per-ProjectTarget mostly.
+  def generate_it(local_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
+    local_dir_fqpn = File.expand_path(local_dir)
+    p_local_dir_fqpn = Pathname.new(local_dir_fqpn)
+    p_root = Pathname.new(@master_project_dir)
+    relative_path_to_root = p_root.relative_path_from(p_local_dir_fqpn)
+    put_file_header(relative_path_to_root.to_s)
+
+    @arr_local_project_targets.each { |project_info|
+      project_generator = V2C_CMakeProjectTargetGenerator.new(project_info, local_dir, self, @textOut)
+
+      begin
+        project_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
+      rescue V2C_GeneratorError => e
+        logger.error("project #{project_info.name} generation failed: #{e.message}")
+        # Hohumm, this variable is not really what we should be having here...
+        if ($v2c_validate_vcproj_abort_on_error > 0)
+          raise # escalate the problem
+        end
+      end
+    }
+    write_func_v2c_directory_post_setup
+  end
+  def put_file_header(str_conversion_root_rel)
+    @textOut.put_file_header_temporary_marker()
+    bootstrap_generator =
+      V2C_CMakeGlobalBootstrapCodeGenerator.new(@textOut, str_conversion_root_rel, @script_location_relative_to_master)
+    bootstrap_generator.generate
+    put_include_vcproj2cmake_defs()
+    put_hook_pre()
+  end
+  def write_func_v2c_directory_post_setup
+    write_invoke_v2c_function_quoted('v2c_directory_post_setup', [])
+  end
+
+  private
+
+  def put_include_vcproj2cmake_defs
+    next_paragraph()
+    write_comment_at_level(COMMENT_LEVEL_STANDARD,
+      "Include the globally provided module for re-init of local (per-scope)\n" \
+      "configuration settings definitions (to be customized by user as needed)"
+    )
+    write_include('vcproj2cmake_defs')
+  end
+  def put_hook_pre
+    # this CMakeLists.txt-global optional include could be used e.g.
+    # to skip the entire build of this file on certain platforms:
+    # if(PLATFORM) message(STATUS "not supported") return() ...
+    # (note that we appended CMAKE_MODULE_PATH _prior_ to this include()!)
+    put_customization_hook('${V2C_CONFIG_DIR_LOCAL}/hook_pre.txt')
+  end
+end
+
+# Hrmm, I'm not quite sure yet where to aggregate this function...
+# (missing some proper generator base class or so...)
+def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name, throw_error)
+  file_accessible = false
+  if $v2c_validate_vcproj_ensure_files_ok
+    if file_relative.nil? or file_relative.empty?
+      log_warn "#{project_name}: empty file argument! (#{file_item_description})"
+    else
+      # TODO: perhaps we need to add a permissions check, too?
+      file_location = "#{project_dir}/#{file_relative}"
+      if File.exist?(file_location)
+        file_accessible = true
+      else
+        log_error "File #{file_relative} (#{file_item_description}) as listed by project #{project_name} does not exist!? (perhaps filename with wrong case, or wrong path, ...)"
+        if throw_error
+  	# FIXME: should be throwing an exception, to not exit out
+  	# on entire possibly recursive (global) operation
+          # when a single project is in error...
+          log_fatal "Improper original file - will abort and NOT generate a broken converted project file. Please fix content of the original project file!"
+        end
+      end
+    end
+  else
+    file_accessible = true
+  end
+  return file_accessible
+end
+
+# Detect .vcproj files actually generated by CMake generator itself:
+# This detection is a bit troublesome since
+# - apart from the CMake generator having added its CMakeLists.txt to the source groups -
+# some people may have decided to manually list the CMakeLists.txt in their projects -
+# in which case the file is NOT a generated project file, however.
+VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{CMakeLists.txt}
+def v2c_is_project_file_generated_by_cmake(str_proj_file)
+  generated_file = false
+  cmakelists_text = ''
+  File.open(str_proj_file, 'r') { |f_vcproj|
+    cmakelists_text = f_vcproj.grep(VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ)
+  }
+  if not cmakelists_text.empty?
+    generated_file = true
+  end
+  return generated_file
+end
+
+
+class V2C_CMakeLocalFileGenerator < V2C_LoggerBase
   def initialize(p_v2c_script, p_master_project, p_generator_proj_file, arr_projects)
     @p_master_project = p_master_project
 
@@ -6012,116 +6010,6 @@ class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
 	content_generator.generate
     }
   end
-end
-
-# Writes the final message.
-def v2c_convert_finished()
-  log_info %{\
-Finished. You should make sure to have all important v2c settings includes such as vcproj2cmake_defs.cmake somewhere in your CMAKE_MODULE_PATH}
-end
-
-def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_files, p_generator_proj_file)
-
-  arr_projects = Array.new
-
-  arr_p_parser_proj_files.each { |p_parser_proj_file|
-    log_info "About to parse #{p_parser_proj_file}"
-    parser_project_extension = p_parser_proj_file.extname
-    # Q&D parser switch...
-    parser = nil # IMPORTANT: reset it!
-    case parser_project_extension
-    when '.vcproj'
-      parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
-    when '.vfproj'
-      log_warn 'Detected Fortran .vfproj - parsing is VERY experimental, needs much more work!'
-      parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
-    when '.vcxproj'
-      parser = V2C_VS10ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
-    else
-      parser = nil
-    end
-
-    if not parser.nil?
-      parser.parse
-    else
-      log_implementation_bug "No project parser found for project file #{p_parser_proj_file.to_s}!?"
-    end
-  }
-
-  arr_projects.each { |proj|
-    log_debug "Parsed project #{proj.name}."
-  }
-
-  # FIXME VERY DIRTY interim handling:
-  arr_projects.each { |project_info|
-    next if true == project_info.have_build_units
-    project_info.file_lists.arr_file_lists.each { |file_list|
-      arr_file_infos = file_list.arr_files
-      have_build_units = check_have_build_units_in_file_list(arr_file_infos)
-      if true == have_build_units
-        project_info.have_build_units = have_build_units
-        break
-      end
-    }
-  }
-
-  # Now validate the project...
-  # This validation step should be _separate_ from both parser _and_ generator implementations,
-  # since otherwise each individual parser/generator would have to remember carrying out validation
-  # (they could easily forget about that).
-  # Besides, parsing/generating should be concerned about fast (KISS)
-  # parsing/generating only anyway.
-  arr_projects.delete_if { |project|
-    project_valid = true
-    begin
-      validator = V2C_ProjectValidator.new(project)
-      validator.validate
-    rescue V2C_ValidationError => e
-      project_valid = false
-      error_msg = "project validation failed: #{e.message}"
-      log_error error_msg
-      if ($v2c_validate_vcproj_abort_on_error > 0)
-        raise # escalate the problem
-      end
-    rescue Exception => e
-      logger.unhandled_exception(e, 'project validation')
-      raise
-    end
-    (false == project_valid)
-  }
-
-  begin
-    # TODO: it's probably a valid use case to want to generate
-    # multiple build environments from the parsed projects.
-    # In such case the set of generators should be available
-    # at user configuration side, and the configuration/mappings part
-    # (currently sitting at cmake/vcproj2cmake/ at default setting)
-    # should be distinctly provided for each generator, too.
-    generator = nil
-    if true
-      generator = V2C_CMakeLocalFileGenerator.new(p_script, p_master_project, p_generator_proj_file, arr_projects)
-    end
-
-    if not generator.nil?
-      generator.generate
-    end
-  end
-end
-
-# Treat non-normalized ("raw") input arguments as needed,
-# then pass on to inner function.
-def v2c_convert_project_outer(project_converter_script_filename, master_project_dir, arr_parser_proj_files, generator_proj_file)
-  arr_p_parser_proj_files = arr_parser_proj_files.collect { |parser_proj_file|
-    Pathname.new(parser_proj_file)
-  }
-  p_generator_proj_file = Pathname.new(generator_proj_file)
-  master_project_location = File.expand_path(master_project_dir)
-  p_master_project = Pathname.new(master_project_location)
-
-  script_location = File.expand_path(project_converter_script_filename)
-  p_script = Pathname.new(script_location)
-
-  v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_files, p_generator_proj_file)
 end
 
 
@@ -6242,4 +6130,115 @@ def v2c_source_root_ensure_usable_cmakelists_skeleton_file(project_converter_scr
   else
     log_info "Skipping create of an #{file_descr} (#{skip_skeleton_root_file_reason})."
   end
+end
+
+
+def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_files, p_generator_proj_file)
+
+  arr_projects = Array.new
+
+  arr_p_parser_proj_files.each { |p_parser_proj_file|
+    log_info "About to parse #{p_parser_proj_file}"
+    parser_project_extension = p_parser_proj_file.extname
+    # Q&D parser switch...
+    parser = nil # IMPORTANT: reset it!
+    case parser_project_extension
+    when '.vcproj'
+      parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
+    when '.vfproj'
+      log_warn 'Detected Fortran .vfproj - parsing is VERY experimental, needs much more work!'
+      parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
+    when '.vcxproj'
+      parser = V2C_VS10ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
+    else
+      parser = nil
+    end
+
+    if not parser.nil?
+      parser.parse
+    else
+      log_implementation_bug "No project parser found for project file #{p_parser_proj_file.to_s}!?"
+    end
+  }
+
+  arr_projects.each { |proj|
+    log_debug "Parsed project #{proj.name}."
+  }
+
+  # FIXME VERY DIRTY interim handling:
+  arr_projects.each { |project_info|
+    next if true == project_info.have_build_units
+    project_info.file_lists.arr_file_lists.each { |file_list|
+      arr_file_infos = file_list.arr_files
+      have_build_units = check_have_build_units_in_file_list(arr_file_infos)
+      if true == have_build_units
+        project_info.have_build_units = have_build_units
+        break
+      end
+    }
+  }
+
+  # Now validate the project...
+  # This validation step should be _separate_ from both parser _and_ generator implementations,
+  # since otherwise each individual parser/generator would have to remember carrying out validation
+  # (they could easily forget about that).
+  # Besides, parsing/generating should be concerned about fast (KISS)
+  # parsing/generating only anyway.
+  arr_projects.delete_if { |project|
+    project_valid = true
+    begin
+      validator = V2C_ProjectValidator.new(project)
+      validator.validate
+    rescue V2C_ValidationError => e
+      project_valid = false
+      error_msg = "project validation failed: #{e.message}"
+      log_error error_msg
+      if ($v2c_validate_vcproj_abort_on_error > 0)
+        raise # escalate the problem
+      end
+    rescue Exception => e
+      logger.unhandled_exception(e, 'project validation')
+      raise
+    end
+    (false == project_valid)
+  }
+
+  begin
+    # TODO: it's probably a valid use case to want to generate
+    # multiple build environments from the parsed projects.
+    # In such case the set of generators should be available
+    # at user configuration side, and the configuration/mappings part
+    # (currently sitting at cmake/vcproj2cmake/ at default setting)
+    # should be distinctly provided for each generator, too.
+    generator = nil
+    if true
+      generator = V2C_CMakeLocalFileGenerator.new(p_script, p_master_project, p_generator_proj_file, arr_projects)
+    end
+
+    if not generator.nil?
+      generator.generate
+    end
+  end
+end
+
+# Treat non-normalized ("raw") input arguments as needed,
+# then pass on to inner function.
+def v2c_convert_project_outer(project_converter_script_filename, master_project_dir, arr_parser_proj_files, generator_proj_file)
+  arr_p_parser_proj_files = arr_parser_proj_files.collect { |parser_proj_file|
+    Pathname.new(parser_proj_file)
+  }
+  p_generator_proj_file = Pathname.new(generator_proj_file)
+  master_project_location = File.expand_path(master_project_dir)
+  p_master_project = Pathname.new(master_project_location)
+
+  script_location = File.expand_path(project_converter_script_filename)
+  p_script = Pathname.new(script_location)
+
+  v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_files, p_generator_proj_file)
+end
+
+# Writes the final message.
+def v2c_convert_finished()
+  log_info %{\
+Finished. You should make sure to have all important v2c settings includes such as vcproj2cmake_defs.cmake somewhere in your CMAKE_MODULE_PATH}
 end
