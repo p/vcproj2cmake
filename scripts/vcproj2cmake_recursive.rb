@@ -57,9 +57,11 @@ if File.exist?(excluded_projects)
 end
 
 class ThreadWorkData
-  def initialize(arr_proj_files, str_destination_dir)
+  WORK_FLAG_IS_ROOT_DIR = 1
+  def initialize(arr_proj_files, str_destination_dir, work_flags)
     @arr_proj_files = arr_proj_files
     @str_destination_dir = str_destination_dir
+    @work_flags = work_flags
   end
   attr_accessor :arr_proj_files
   attr_accessor :str_destination_dir
@@ -360,7 +362,9 @@ Find.find('./') do
   # (in the case of it being the CMake source root it better shouldn't!!) -
   # then include the root directory project by placing a CMakeLists_native.txt there
   # and have it include the auto-generated CMakeLists.txt.
-  arr_project_subdirs.push(f) unless f == './'
+  is_root_dir = (f == './')
+
+  arr_project_subdirs.push(f) unless is_root_dir
 
   # For recursive invocation we used to have _external spawning_
   # of a new vcproj2cmake.rb session, but we _really_ don't want to do that
@@ -372,7 +376,7 @@ Find.find('./') do
   # (although threading is said to be VERY slow in Ruby -
   # but still it should provide some sizeable benefit).
   log_debug "Submitting #{arr_proj_files.inspect} to be converted in #{f}."
-  thread_work = ThreadWorkData.new(arr_proj_files, f)
+  thread_work = ThreadWorkData.new(arr_proj_files, f, is_root_dir ? WORK_FLAG_IS_ROOT_DIR : 0)
   arr_thread_work.push(thread_work)
 
   #output.split("\n").each do |line|

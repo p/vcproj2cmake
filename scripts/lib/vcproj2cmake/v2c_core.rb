@@ -5813,24 +5813,26 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     @master_project_dir = p_solution_dir.to_s
     @arr_local_project_targets = arr_local_project_targets
     @script_location_relative_to_master = script_location_relative_to_master
+    local_dir_fqpn = File.expand_path(local_dir)
+    p_local_dir_fqpn = Pathname.new(local_dir_fqpn)
+    p_root = Pathname.new(File.expand_path(@master_project_dir))
+    @p_relative_path_to_root = p_root.relative_path_from(p_local_dir_fqpn)
     # FIXME: handle arr_config_var_handling appropriately
     # (place the translated CMake commands somewhere suitable)
     @arr_config_var_handling = Array.new
+    @generator_base = V2C_BaseGlobalGenerator.new(@master_project_dir)
+    @map_lib_dirs = Hash.new
+    read_mappings_combined(FILENAME_MAP_LIB_DIRS, @map_lib_dirs, @master_project_dir)
+    @map_lib_dirs_dep = Hash.new
+    read_mappings_combined(FILENAME_MAP_LIB_DIRS_DEP, @map_lib_dirs_dep, @master_project_dir)
+    @map_dependencies = Hash.new
+    read_mappings_combined(FILENAME_MAP_DEP, @map_dependencies, @master_project_dir)
+    @map_defines = Hash.new
+    read_mappings_combined(FILENAME_MAP_DEF, @map_defines, @master_project_dir)
   end
 
   def generate
-    master_project_dir = @p_solution_dir.to_s
-    generator_base = V2C_BaseGlobalGenerator.new(master_project_dir)
-    map_lib_dirs = Hash.new
-    read_mappings_combined(FILENAME_MAP_LIB_DIRS, map_lib_dirs, master_project_dir)
-    map_lib_dirs_dep = Hash.new
-    read_mappings_combined(FILENAME_MAP_LIB_DIRS_DEP, map_lib_dirs_dep, master_project_dir)
-    map_dependencies = Hash.new
-    read_mappings_combined(FILENAME_MAP_DEP, map_dependencies, master_project_dir)
-    map_defines = Hash.new
-    read_mappings_combined(FILENAME_MAP_DEF, map_defines, master_project_dir)
-
-    generate_it(@local_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
+    generate_it
   end
   def write_include_directories(arr_includes, map_includes)
     # Side note: unfortunately CMake as of 2.8.7 probably still does not have
@@ -5890,14 +5892,22 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
   end
   private
 
-  # FIXME: all these function arguments are temporary crap! - they're supposed to be per-ProjectTarget mostly.
-  def generate_it(local_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
-    local_dir_fqpn = File.expand_path(local_dir)
-    p_local_dir_fqpn = Pathname.new(local_dir_fqpn)
-    p_root = Pathname.new(@master_project_dir)
-    relative_path_to_root = p_root.relative_path_from(p_local_dir_fqpn)
-    put_file_header(relative_path_to_root.to_s)
-
+  def generate_it
+    generate_header
+    generate_body
+    generate_footer
+  end
+  def generate_header
+    put_file_header(@p_relative_path_to_root.to_s)
+  end
+  def generate_body
+    # FIXME: all these function arguments are temporary crap! - they're supposed to be per-ProjectTarget mostly.
+    generate_projects(@local_dir, @generator_base, @map_lib_dirs, @map_lib_dirs_dep, @map_dependencies, @map_defines)
+  end
+  def generate_footer
+    write_func_v2c_directory_post_setup
+  end
+  def generate_projects(local_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
     @arr_local_project_targets.each { |project_info|
       project_generator = V2C_CMakeProjectTargetGenerator.new(project_info, local_dir, self, @textOut)
 
@@ -5911,8 +5921,8 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
         end
       end
     }
-    write_func_v2c_directory_post_setup
   end
+
   def put_file_header(str_conversion_root_rel)
     @textOut.put_file_header_temporary_marker()
     bootstrap_generator =
@@ -6059,24 +6069,18 @@ def v2c_source_root_write_projects_list_file(output_file_fqpn, output_file_permi
 end
 
 
-class V2C_CMakeSkeletonFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
+# Class extended with root/solution location specific parts
+# in addition to standard handling of content of a local CMakeLists.txt
+# file.
+class V2C_CMakeRootFileContentGenerator < V2C_CMakeLocalFileContentGenerator
   def initialize(textOut, projects_list_file, script_location_relative_to_master)
-    super(textOut)
+    super(textOut, '.', Pathname.new('.'), [ ], script_location_relative_to_master)
     @projects_list_file = projects_list_file
-    @script_location_relative_to_master = script_location_relative_to_master
   end
-  def generate
-    @textOut.put_file_header_temporary_marker
-    write_comment_at_level(COMMENT_LEVEL_MINIMUM, 
-      "vcproj2cmake.sf.net #{V2C_TEXT_FILE_SKELETON_MARKER}.\n" \
-      "Feel free to modify or remove (rename away?) as needed.\n"
-    )
-    next_paragraph()
-    bootstrap_generator =
-      V2C_CMakeGlobalBootstrapCodeGenerator.new(@textOut, '', @script_location_relative_to_master)
-    bootstrap_generator.generate
+  def generate_footer
     next_paragraph()
     put_projects_list_file_include()
+    super
   end
   def put_projects_list_file_include
     write_comment_at_level(COMMENT_LEVEL_MINIMUM,
@@ -6093,7 +6097,7 @@ def v2c_source_root_write_cmakelists_skeleton_file(p_master_project, p_script, p
   generate_skeleton = V2C_GenerateIntoTempFile.new('root skeleton CMakeLists.txt', 'vcproj2cmake_root_skeleton', path_cmakelists_txt)
   generate_skeleton.generate { |textOut|
     script_location_relative_to_master = p_script.relative_path_from(p_master_project)
-    content_generator = V2C_CMakeSkeletonFileContentGenerator.new(textOut, projects_list_file, script_location_relative_to_master)
+    content_generator = V2C_CMakeRootFileContentGenerator.new(textOut, projects_list_file, script_location_relative_to_master)
     content_generator.generate
   }
 end
