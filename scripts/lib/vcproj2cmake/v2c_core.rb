@@ -2058,47 +2058,32 @@ end
 
 # This class generates the output of multiple input projects to a text output
 # (usually CMakeLists.txt within a local directory).
-class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
-  def initialize(textOut, arr_local_project_targets, master_project_dir, script_location_relative_to_master)
+class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
+  def initialize(textOut, local_dir, p_solution_dir, arr_local_project_targets, script_location_relative_to_master)
     super(textOut)
+    @local_dir = local_dir
+    @p_solution_dir = p_solution_dir
+    @master_project_dir = p_solution_dir.to_s
     @arr_local_project_targets = arr_local_project_targets
     @script_location_relative_to_master = script_location_relative_to_master
-    @master_project_dir = master_project_dir
     # FIXME: handle arr_config_var_handling appropriately
     # (place the translated CMake commands somewhere suitable)
     @arr_config_var_handling = Array.new
   end
 
-  # FIXME: all these function arguments are temporary crap! - they're supposed to be per-ProjectTarget mostly.
-  def generate_it(local_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
-    local_dir_fqpn = File.expand_path(local_dir)
-    p_local_dir_fqpn = Pathname.new(local_dir_fqpn)
-    p_root = Pathname.new(@master_project_dir)
-    relative_path_to_root = p_root.relative_path_from(p_local_dir_fqpn)
-    put_file_header(relative_path_to_root.to_s)
+  def generate
+    master_project_dir = @p_solution_dir.to_s
+    generator_base = V2C_BaseGlobalGenerator.new(master_project_dir)
+    map_lib_dirs = Hash.new
+    read_mappings_combined(FILENAME_MAP_LIB_DIRS, map_lib_dirs, master_project_dir)
+    map_lib_dirs_dep = Hash.new
+    read_mappings_combined(FILENAME_MAP_LIB_DIRS_DEP, map_lib_dirs_dep, master_project_dir)
+    map_dependencies = Hash.new
+    read_mappings_combined(FILENAME_MAP_DEP, map_dependencies, master_project_dir)
+    map_defines = Hash.new
+    read_mappings_combined(FILENAME_MAP_DEF, map_defines, master_project_dir)
 
-    @arr_local_project_targets.each { |project_info|
-      project_generator = V2C_CMakeProjectTargetGenerator.new(project_info, local_dir, self, @textOut)
-
-      begin
-        project_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
-      rescue V2C_GeneratorError => e
-        logger.error("project #{project_info.name} generation failed: #{e.message}")
-        # Hohumm, this variable is not really what we should be having here...
-        if ($v2c_validate_vcproj_abort_on_error > 0)
-          raise # escalate the problem
-        end
-      end
-    }
-    write_func_v2c_directory_post_setup
-  end
-  def put_file_header(str_conversion_root_rel)
-    @textOut.put_file_header_temporary_marker()
-    bootstrap_generator =
-      V2C_CMakeGlobalBootstrapCodeGenerator.new(@textOut, str_conversion_root_rel, @script_location_relative_to_master)
-    bootstrap_generator.generate
-    put_include_vcproj2cmake_defs()
-    put_hook_pre()
+    generate_it(@local_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
   end
   def write_include_directories(arr_includes, map_includes)
     # Side note: unfortunately CMake as of 2.8.7 probably still does not have
@@ -2142,7 +2127,6 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
       put_directory_property_compile_flags(attr_opts, true)
     write_conditional_end(str_platform)
   end
-  # FIXME private!
   def write_build_attributes(cmake_command, arr_defs, map_defs, cmake_command_arg, skip_failed_lookups = false)
     # the container for the list of _actual_ dependencies as stated by the project
     all_platform_defs = Hash.new
@@ -2156,6 +2140,39 @@ class V2C_CMakeLocalGenerator < V2C_CMakeV2CSyntaxGenerator
         write_command_list_quoted(cmake_command, cmake_command_arg, arr_platdefs)
       write_conditional_end(str_platform)
     }
+  end
+  private
+
+  # FIXME: all these function arguments are temporary crap! - they're supposed to be per-ProjectTarget mostly.
+  def generate_it(local_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
+    local_dir_fqpn = File.expand_path(local_dir)
+    p_local_dir_fqpn = Pathname.new(local_dir_fqpn)
+    p_root = Pathname.new(@master_project_dir)
+    relative_path_to_root = p_root.relative_path_from(p_local_dir_fqpn)
+    put_file_header(relative_path_to_root.to_s)
+
+    @arr_local_project_targets.each { |project_info|
+      project_generator = V2C_CMakeProjectTargetGenerator.new(project_info, local_dir, self, @textOut)
+
+      begin
+        project_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
+      rescue V2C_GeneratorError => e
+        logger.error("project #{project_info.name} generation failed: #{e.message}")
+        # Hohumm, this variable is not really what we should be having here...
+        if ($v2c_validate_vcproj_abort_on_error > 0)
+          raise # escalate the problem
+        end
+      end
+    }
+    write_func_v2c_directory_post_setup
+  end
+  def put_file_header(str_conversion_root_rel)
+    @textOut.put_file_header_temporary_marker()
+    bootstrap_generator =
+      V2C_CMakeGlobalBootstrapCodeGenerator.new(@textOut, str_conversion_root_rel, @script_location_relative_to_master)
+    bootstrap_generator.generate
+    put_include_vcproj2cmake_defs()
+    put_hook_pre()
   end
   def write_func_v2c_directory_post_setup
     write_invoke_v2c_function_quoted('v2c_directory_post_setup', [])
@@ -5686,7 +5703,7 @@ class V2C_VS10ProjectFileParser < V2C_VSProjectFileParserBase
         success = true
       }
     rescue Exception => e
-      # File probably does not exiѕt...
+      # File probably does not exist...
       logger.unhandled_exception(e, 'project file parsing')
       raise
     end
@@ -5778,7 +5795,7 @@ class V2C_VS10ProjectFiltersFileParser < V2C_ParserBase
         success = true
       }
     rescue Exception => e
-      # File probably does not exiѕt...
+      # File probably does not exist...
       logger.unhandled_exception(e, 'project file parsing')
       raise
     end
@@ -5947,7 +5964,14 @@ class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
     tmpfile_path = nil
     Tempfile.open('vcproj2cmake') { |tmpfile|
       begin
-        projects_generate_cmake(@p_master_project, tmpfile, @arr_projects)
+        textstream_attributes = V2C_TextStream_Attributes.new(
+          $v2c_generator_indent_initial_num_spaces,
+          $v2c_generator_indent_step,
+          $v2c_generator_comments_level
+        )
+        textOut = V2C_TextStreamSyntaxGeneratorBase.new(tmpfile, textstream_attributes)
+	content_generator = V2C_CMakeLocalFileContentGenerator.new(textOut, @p_generator_proj_file.dirname, @p_master_project, @arr_projects, @script_location_relative_to_master)
+	content_generator.generate
 	tmpfile_path = tmpfile.path
       rescue Exception => e
         logger.unhandled_exception(e, 'while generating projects')
@@ -5962,42 +5986,6 @@ class V2C_CMakeLocalFileGenerator < V2C_GeneratorBase
     # on a shared source on NFS mount.
     mover = V2C_CMakeFilePermanentizer.new('local CMakeLists.txt', tmpfile_path, output_file_location, $v2c_generator_file_create_permissions)
     mover.process
-  end
-  def projects_generate_cmake(p_master_project, out, arr_projects)
-    master_project_dir = p_master_project.to_s
-    generator_base = V2C_BaseGlobalGenerator.new(master_project_dir)
-    map_lib_dirs = Hash.new
-    read_mappings_combined(FILENAME_MAP_LIB_DIRS, map_lib_dirs, master_project_dir)
-    map_lib_dirs_dep = Hash.new
-    read_mappings_combined(FILENAME_MAP_LIB_DIRS_DEP, map_lib_dirs_dep, master_project_dir)
-    map_dependencies = Hash.new
-    read_mappings_combined(FILENAME_MAP_DEP, map_dependencies, master_project_dir)
-    map_defines = Hash.new
-    read_mappings_combined(FILENAME_MAP_DEF, map_defines, master_project_dir)
-
-    textstream_attributes = V2C_TextStream_Attributes.new(
-      $v2c_generator_indent_initial_num_spaces,
-      $v2c_generator_indent_step,
-      $v2c_generator_comments_level
-    )
-    textOut = V2C_TextStreamSyntaxGeneratorBase.new(out, textstream_attributes)
-
-    #global_generator = V2C_CMakeGlobalGenerator.new(out)
-
-    # we likely shouldn't declare this, since for single-configuration
-    # generators CMAKE_CONFIGURATION_TYPES shouldn't be set
-    # Also, the configuration_types array should be inferred from arr_config_info.
-    ## configuration types need to be stated _before_ declaring the project()!
-    # TODO: a VS solution (.sln) lists all configuration type names that
-    # are created by any project anywhere within the solution.
-    # So probably we're supposed to list all projects' configuration types
-    # as well...
-    #syntax_generator.next_paragraph()
-    #global_generator.put_configuration_types(configuration_types)
-
-    local_generator = V2C_CMakeLocalGenerator.new(textOut, arr_projects, master_project_dir, @script_location_relative_to_master)
-
-    local_generator.generate_it(@p_generator_proj_file.dirname, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
   end
 end
 
