@@ -56,7 +56,7 @@ if File.exist?(excluded_projects)
   end
 end
 
-class ThreadWorkData
+class UnitWorkData
   WORK_FLAG_IS_ROOT_DIR = 1
   def initialize(arr_proj_files, str_destination_dir, work_flags)
     @arr_proj_files = arr_proj_files
@@ -67,7 +67,7 @@ class ThreadWorkData
   attr_accessor :str_destination_dir
 end
 
-arr_thread_work = Array.new
+arr_unit_work = Array.new
 
 arr_project_subdirs = Array.new
 
@@ -376,8 +376,8 @@ Find.find('./') do
   # (although threading is said to be VERY slow in Ruby -
   # but still it should provide some sizeable benefit).
   log_debug "Submitting #{arr_proj_files.inspect} to be converted in #{f}."
-  thread_work = ThreadWorkData.new(arr_proj_files, f, is_root_dir ? ThreadWorkData::WORK_FLAG_IS_ROOT_DIR : 0)
-  arr_thread_work.push(thread_work)
+  unit_work = UnitWorkData.new(arr_proj_files, f, is_root_dir ? ThreadWorkData::WORK_FLAG_IS_ROOT_DIR : 0)
+  arr_unit_work.push(unit_work)
 
   #output.split("\n").each do |line|
   #  puts "[parent] output: #{line}"
@@ -395,7 +395,7 @@ end
 # in several cases).
 
 # Small helper to hold all settings which are common to all threads.
-class ThreadGlobalData
+class UnitGlobalData
   def initialize(script_location, source_root)
     @script_location = script_location
     @source_root = source_root
@@ -404,16 +404,36 @@ class ThreadGlobalData
   attr_accessor :source_root
 end
 
-def handle_thread_work(threadGlobal, myWork)
+def execute_work_unit(unitGlobal, myWork)
   # FIXME: str_cmakelists_file_location (that CMakeLists.txt naming)
   # should be an implementation detail of inner handling.
   str_cmakelists_file_location = "#{myWork.str_destination_dir}/CMakeLists.txt"
-  v2c_convert_project_outer(threadGlobal.script_location, threadGlobal.source_root, myWork.arr_proj_files, str_cmakelists_file_location)
+  v2c_convert_project_outer(unitGlobal.script_location, unitGlobal.source_root, myWork.arr_proj_files, str_cmakelists_file_location)
 end
 
-threadGlobal = ThreadGlobalData.new("#{script_path}/vcproj2cmake.rb", source_root)
+unitGlobal = UnitGlobalData.new("#{script_path}/vcproj2cmake.rb", source_root)
 
-if ($v2c_enable_threads)
+# Well, what I'd actually like to check is whether Process.fork()
+# is supported or not. But this doesn't seem to be possible,
+# thus we'll have to check for non-Windows (or possibly some
+# check for POSIX might be doable somehow).
+is_hampered_os = (ENV['OS'] == 'Windows_NT')
+
+$v2c_enable_processes = (false == is_hampered_os)
+
+# TODO: should perhaps take into account number of CPU cores, too.
+want_multi_processing = (arr_unit_work.count > 5)
+
+if (want_multi_processing and $v2c_enable_processes)
+  # See also http://stackoverflow.com/a/1076445
+  log_info 'recursively converting projects, multi-process.'
+  arr_unit_work.each { |myWork|
+    fork {
+      execute_work_unit(unitGlobal, myWork)
+    }
+  }
+  Process.waitall
+elsif (want_multi_processing and $v2c_enable_threads)
   log_info 'Recursively converting projects, multi-threaded.'
 
   # "Ruby-Threads erzeugen"
@@ -421,24 +441,24 @@ if ($v2c_enable_threads)
 
   threads = []
 
-  for thread_work in arr_thread_work
-    threads << Thread.new(thread_work) { |myWork|
-      handle_thread_work(threadGlobal, myWork)
+  for unit_work in arr_unit_work
+    threads << Thread.new(unit_work) { |myWork|
+      execute_work_unit(unitGlobal, myWork)
     }
   end
 
   threads.each { |aThread| aThread.join }
 else # non-threaded
   log_info 'Recursively converting projects, NON-threaded.'
-  arr_thread_work.each { |myWork|
-    handle_thread_work(threadGlobal, myWork)
+  arr_unit_work.each { |myWork|
+    execute_work_unit(unitGlobal, myWork)
   }
 end
 
 # Now, write out the file for the projects list (separate from any
-# multi-threaded implementation).
-# FIXME: since the conversion above may end up threaded yet arr_project_subdirs cannot
-# be updated on thread side (and in some cases .vcproj conversion *will* be skipped,
+# multi-processing implementation).
+# FIXME: since the conversion above may end up multi-processed yet arr_project_subdirs cannot
+# be updated on worker side (and in some cases .vcproj conversion *will* be skipped,
 # e.g. in case of CMake-converted .vcproj:s),
 # we should include only those entries where each directory
 # now actually does contain a CMakeLists.txt file.
@@ -448,5 +468,5 @@ projects_list_file = "#{v2c_path_config.get_abs_config_dir_source_root_temp_stor
 v2c_source_root_write_projects_list_file(projects_list_file, $v2c_generator_file_create_permissions, arr_project_subdirs)
 
 # Finally, create a skeleton fallback file if needed.
-v2c_source_root_ensure_usable_cmakelists_skeleton_file(threadGlobal.script_location, source_root, projects_list_file_rel)
+v2c_source_root_ensure_usable_cmakelists_skeleton_file(unitGlobal.script_location, source_root, projects_list_file_rel)
 v2c_convert_finished()
