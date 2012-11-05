@@ -376,7 +376,7 @@ Find.find('./') do
   # (although threading is said to be VERY slow in Ruby -
   # but still it should provide some sizeable benefit).
   log_debug "Submitting #{arr_proj_files.inspect} to be converted in #{f}."
-  unit_work = UnitWorkData.new(arr_proj_files, f, is_root_dir ? ThreadWorkData::WORK_FLAG_IS_ROOT_DIR : 0)
+  unit_work = UnitWorkData.new(arr_proj_files, f, is_root_dir ? UnitWorkData::WORK_FLAG_IS_ROOT_DIR : 0)
   arr_unit_work.push(unit_work)
 
   #output.split("\n").each do |line|
