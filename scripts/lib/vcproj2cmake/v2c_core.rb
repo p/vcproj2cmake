@@ -298,7 +298,7 @@ end
 def normalize_path(p)
   felems = p.tr('\\', '/').split('/')
   # DON'T eradicate single '.' !!
-  felems.shift if felems[0] == '.' and felems.size >= 2
+  felems.shift if felems[0] == '.' and felems.length >= 2
   File.join(felems)
 end
 

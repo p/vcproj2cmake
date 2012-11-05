@@ -422,7 +422,7 @@ is_hampered_os = (ENV['OS'] == 'Windows_NT')
 $v2c_enable_processes = (false == is_hampered_os)
 
 # TODO: should perhaps take into account number of CPU cores, too.
-want_multi_processing = (arr_unit_work.count > 5)
+want_multi_processing = (arr_unit_work.length > 5)
 
 if (want_multi_processing and $v2c_enable_processes)
   # See also http://stackoverflow.com/a/1076445
