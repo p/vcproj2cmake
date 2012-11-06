@@ -573,7 +573,10 @@ function(_v2c_config_do_setup_rebuilder)
       # WARNING: make sure to fetch and always use the binary's full path,
       # since otherwise we'd end up with a simple "false" string
       # which is highly conflict-prone with CMake's "false" boolean evaluation!!
-      find_program(V2C_ABORT_BIN false)
+      find_program(V2C_ABORT_BIN
+        false
+        DOC "A small program whose only purpose is to be suitable to signal failure (i.e. which provides a non-successful execution return value), usually /bin/false on UNIX; may alternatively be set to an invalid program name, too."
+      )
       _v2c_ensure_valid_variables(V2C_ABORT_BIN)
       _v2c_config_set(ABORT_BIN_v1 "${V2C_ABORT_BIN}")
     else(UNIX)
