@@ -1742,6 +1742,36 @@ class V2C_VS7ParserBase < V2C_VSXmlParserBase
   include V2C_VS7Syntax
 end
 
+class V2C_VSProjectSCCParser < V2C_ParserBase
+  def initialize(scc_info)
+    @scc_info = scc_info
+  end
+  def register_scc(setting_key, setting_value)
+    found = be_optimistic()
+    case setting_key
+    # Hrmm, turns out having SccProjectName is no guarantee that both SccLocalPath and SccProvider
+    # exist, too... (one project had SccProvider missing). HOWEVER,
+    # CMake generator does expect all three to exist when available! Hmm.
+    when 'SccProjectName'
+      @scc_info.project_name = setting_value
+    # There's a special SAK (Should Already Know) entry marker
+    # (see e.g. http://stackoverflow.com/a/6356615 ).
+    # Currently I don't believe we need to handle "SAK" in special ways
+    # (such as filling it in in case of missing entries),
+    # transparent handling ought to be sufficient.
+    when 'SccLocalPath'
+      @scc_info.local_path = setting_value
+    when 'SccProvider'
+      @scc_info.provider = setting_value
+    when 'SccAuxPath'
+      @scc_info.aux_path = setting_value
+    else
+      found = FOUND_FALSE
+    end
+    return found
+  end
+end
+
 class V2C_VSProjectParserBase < V2C_VSXmlParserBase
   def initialize(elem_xml, info_elem_out)
     super(elem_xml, info_elem_out)
@@ -2754,6 +2784,10 @@ module V2C_VSProjectDefines
 end
 
 class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
+  def initialize(subelem_xml, project)
+    super(subelem_xml, project)
+    @scc_parser = V2C_VSProjectSCCParser.new(get_project().scc_info)
+  end
   private
   include V2C_VSProjectDefines
   def parse_element(subelem_xml)
@@ -2805,33 +2839,9 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
       get_project().version = setting_value
 
     when VS_SCC_ATTR_REGEX_OBJ
-      found = parse_attributes_scc(setting_key, setting_value, get_project().scc_info)
+      found = @scc_parser.register_scc(setting_key, setting_value)
     else
       found = super
-    end
-    return found
-  end
-  def parse_attributes_scc(setting_key, setting_value, scc_info_out)
-    found = be_optimistic()
-    case setting_key
-    # Hrmm, turns out having SccProjectName is no guarantee that both SccLocalPath and SccProvider
-    # exist, too... (one project had SccProvider missing). HOWEVER,
-    # CMake generator does expect all three to exist when available! Hmm.
-    when 'SccProjectName'
-      scc_info_out.project_name = setting_value
-    # There's a special SAK (Should Already Know) entry marker
-    # (see e.g. http://stackoverflow.com/a/6356615 ).
-    # Currently I don't believe we need to handle "SAK" in special ways
-    # (such as filling it in in case of missing entries),
-    # transparent handling ought to be sufficient.
-    when 'SccLocalPath'
-      scc_info_out.local_path = setting_value
-    when 'SccProvider'
-      scc_info_out.provider = setting_value
-    when 'SccAuxPath'
-      scc_info_out.aux_path = setting_value
-    else
-      found = FOUND_FALSE
     end
     return found
   end
@@ -3569,6 +3579,10 @@ private
 end
 
 class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10BaseElemParser
+  def initialize(elem_xml, project)
+    super(elem_xml, project)
+    @scc_parser = V2C_VSProjectSCCParser.new(get_project().scc_info)
+  end
   private
   include V2C_VSProjectDefines
 
@@ -3582,38 +3596,16 @@ class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10BaseElemParser
       get_project().guid = setting_value
     when 'ProjectName'
       get_project().name = setting_value
+    when 'ProjectTypes'
+      get_project().project_types = setting_value
     when TEXT_ROOTNAMESPACE
       get_project().root_namespace = setting_value
     when VS_SCC_ATTR_REGEX_OBJ
-      found = parse_elements_scc(setting_key, setting_value, get_project().scc_info)
+      found = @scc_parser.register_scc(setting_key, setting_value)
     else
       found = FOUND_FALSE
     end
     if FOUND_FALSE == found; found = super end
-    return found
-  end
-  def parse_elements_scc(setting_key, setting_value, scc_info_out)
-    found = be_optimistic()
-    case setting_key
-    # Hrmm, turns out having SccProjectName is no guarantee that both SccLocalPath and SccProvider
-    # exist, too... (one project had SccProvider missing). HOWEVER,
-    # CMake generator does expect all three to exist when available! Hmm.
-    when 'SccProjectName'
-      scc_info_out.project_name = setting_value
-    # There's a special SAK (Should Already Know) entry marker
-    # (see e.g. http://stackoverflow.com/a/6356615 ).
-    # Currently I don't believe we need to handle "SAK" in special ways
-    # (such as filling it in in case of missing entries),
-    # transparent handling ought to be sufficient.
-    when 'SccLocalPath'
-      scc_info_out.local_path = setting_value
-    when 'SccProvider'
-      scc_info_out.provider = setting_value
-    when 'SccAuxPath'
-      scc_info_out.aux_path = setting_value
-    else
-      found = FOUND_FALSE
-    end
     return found
   end
   def parse_post_hook
