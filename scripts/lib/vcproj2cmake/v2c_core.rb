@@ -1387,12 +1387,19 @@ EOF
 end
 
 class V2C_ParserBase < V2C_LoggerBase
+  FOUND_FALSE = 0
+  FOUND_TRUE = 1
+  FOUND_SKIP = 2
+
   # Hmm, we might want to keep @info_elem in this class,
   # to be able to reference it for logging.
   def initialize(info_elem_out)
     @info_elem = info_elem_out
   end
   attr_accessor :info_elem
+
+  # @brief Descriptively named helper, to save a ton of useless comments :) ("be optimistic :)")
+  def be_optimistic; FOUND_TRUE end
 
   def log_call; logger.error 'CALLED' end
   def log_found(found, label); logger.debug "FOUND: #{found} #{label}" end
@@ -1420,10 +1427,6 @@ end
 require 'rexml/document'
 
 class V2C_XmlParserBase < V2C_ParserBase
-  FOUND_FALSE = 0
-  FOUND_TRUE = 1
-  FOUND_SKIP = 2
-
   def unknown_attribute(key, value); unknown_something_key_value('attribute', key, value) end
   def unknown_element_key(name); unknown_something('element', name) end
   def unknown_element(key, value); unknown_something_key_value('element', key, value) end
@@ -1436,9 +1439,6 @@ class V2C_XmlParserBase < V2C_ParserBase
   def skipped_element_warn(elem_name)
     logger.todo "#{self.class.name}: unhandled less important XML element (#{elem_name})!"
   end
-
-  # @brief Descriptively named helper, to save a ton of useless comments :) ("be optimistic :)")
-  def be_optimistic; FOUND_TRUE end
 
   def parse_attributes
     @elem_xml.attributes.each_attribute { |attr_xml|
