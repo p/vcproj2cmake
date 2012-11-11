@@ -897,7 +897,7 @@ class V2C_Project_Config_Info < V2C_Config_Base_Info
 end
 
 # Carries per-file-specific configuration data
-# (which overrides the project globals).
+# (which overrides the project-global ones).
 class V2C_File_Config_Info < V2C_Config_Base_Info
   def initialize
     super()
@@ -1097,6 +1097,7 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
     @arr_p_original_project_files = nil # (optional) a list of native project files that this project info has been parsed from
     @creator = nil # VS7 "ProjectCreator" setting
     @guid = nil
+    @project_types = nil # VS10 'ProjectTypes' (CMake VS_GLOBAL_PROJECT_TYPES)
     @root_namespace = nil
     @version = nil
 
@@ -1105,6 +1106,7 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
     # (to enable Qt integration, etc.):
     @vs_keyword = nil
     @scc_info = V2C_SCC_Info.new
+    @user_properties = Hash.new # VS7/VS10 user-custom settings (listed in Globals section on VS7)
     @build_platform_configs = V2C_Build_Platform_Configs.new # VS10 only: manages settings such as e.g. Configuration "Release", Platform "Win32", strings "Release|Win32", ...
     @arr_target_config_info = Array.new # V2C_Target_Config_Build_Info
     @arr_config_info = Array.new # V2C_Project_Config_Info
@@ -1130,10 +1132,12 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
   attr_accessor :arr_p_original_project_files 
   attr_accessor :creator
   attr_accessor :guid
+  attr_accessor :project_types
   attr_accessor :root_namespace
   attr_accessor :version
   attr_accessor :vs_keyword
   attr_accessor :scc_info
+  attr_accessor :user_properties
   attr_accessor :build_platform_configs
   attr_accessor :arr_config_info
   attr_accessor :arr_target_config_info
@@ -2719,10 +2723,59 @@ class V2C_VS7FilterParser < V2C_VS7ParserBase
   end
 end
 
-class V2C_VS7PlatformParser < V2C_VS7ParserBase
+class V2C_VS7ProjectGlobalParser < V2C_VS7ParserBase
+  def initialize(elem_xml, info_elem_out)
+    super(elem_xml, info_elem_out)
+    @name = nil
+    @value = nil
+  end
+  private
+  include V2C_VS7ToolSyntax # TEXT_NAME
+  def get_user_properties; @info_elem end
+  def parse_attribute(setting_key, setting_value)
+    found = be_optimistic()
+    case setting_key
+    when TEXT_NAME
+      @name = setting_value
+    when 'Value'
+      @value = setting_value
+    else
+      found = super
+    end
+    return found
+  end
+  def parse_post_hook
+    if nil != @name and nil != @value
+      user_properties = get_user_properties()
+      user_properties[@name] = @value
+    else
+      parser_error_syntax("Hmm, Name or Value attributes not found!? (Name: #{@name}, Value: #{@value})")
+    end
+  end
+end
+
+class V2C_VS7ProjectGlobalsParser < V2C_VS7ParserBase
   def initialize(elem_xml, info_elem_out)
     super(elem_xml, info_elem_out)
   end
+  private
+  def get_user_properties; @info_elem end
+  def parse_element(subelem_xml)
+    found = be_optimistic()
+    elem_parser = nil # IMPORTANT: reset it!
+    case subelem_xml.name
+    when 'Global'
+      prop_name = ''
+      elem_parser = V2C_VS7ProjectGlobalParser.new(subelem_xml, get_user_properties())
+      elem_parser.parse
+    else
+      found = super
+    end
+    return found
+  end
+end
+
+class V2C_VS7PlatformParser < V2C_VS7ParserBase
   private
 
   def parse_attribute(setting_key, setting_value)
@@ -2778,7 +2831,14 @@ class V2C_VS7ToolFilesParser < V2C_VS7ParserBase
   end
 end
 
-module V2C_VSProjectDefines
+# These *official-name* members are registered in "Globals" element in VS10.
+# In VS7, they're project-global attributes.
+# HOWEVER, VS7 used a "Globals" element for *user-custom*
+# elements, which then in VS10 got moved into ProjectExtensions element
+# (sub elements VisualStudio --> UserProperties).
+# Confusing!!
+# For the naming and use of our data structures, we'll decide to adopt the VS10 structure.
+module V2C_VSProjectGlobalsDefines
   TEXT_KEYWORD = 'Keyword'
   TEXT_ROOTNAMESPACE = 'RootNamespace'
 end
@@ -2789,7 +2849,7 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
     @scc_parser = V2C_VSProjectSCCParser.new(get_project().scc_info)
   end
   private
-  include V2C_VSProjectDefines
+  include V2C_VSProjectGlobalsDefines
   def parse_element(subelem_xml)
     found = be_optimistic()
     elem_parser = nil # IMPORTANT: reset it!
@@ -2805,6 +2865,8 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
       # FIXME: we most likely shouldn't pass a rather global "project target" object here! (pass a file info object)
       get_project().main_files = Files_str.new
       elem_parser = V2C_VS7FilterParser.new(subelem_xml, get_project(), get_project().main_files)
+    when 'Globals'
+      elem_parser = V2C_VS7ProjectGlobalsParser.new(subelem_xml, get_project().user_properties)
     when 'Platforms'
       elem_parser = V2C_VS7PlatformsParser.new(subelem_xml, get_project().build_platform_configs)
     when 'ToolFiles'
@@ -2817,6 +2879,9 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
     else
       found = super
     end
+    #get_project().user_properties.each_pair { |key, value|
+    #  puts "USER PROP: #{key}/#{value}"
+    #}
     return found
   end
 
@@ -3584,7 +3649,7 @@ class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10BaseElemParser
     @scc_parser = V2C_VSProjectSCCParser.new(get_project().scc_info)
   end
   private
-  include V2C_VSProjectDefines
+  include V2C_VSProjectGlobalsDefines
 
   def get_project; @info_elem end
   def parse_setting(setting_key, setting_value)
@@ -3619,6 +3684,61 @@ class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10BaseElemParser
       parser_error_syntax('missing project name? Adopting root namespace...')
       get_project().name = get_project().root_namespace
     end
+  end
+end
+
+class V2C_VS10UserPropertiesParser < V2C_VS10BaseElemParser
+  private
+
+  def get_user_properties; @info_elem end
+  def parse_attribute(setting_key, setting_value)
+    found = be_optimistic()
+    @info_elem[setting_key] = setting_value
+    return found
+  end
+end
+
+class V2C_VS10ProjectExtensionsVisualStudioParser < V2C_VS10BaseElemParser
+  private
+
+  def get_project; @info_elem end
+  def parse_element(subelem_xml)
+    found = be_optimistic()
+    setting_key = subelem_xml.name
+    parser = nil # IMPORTANT: reset it!
+    log_debug(setting_key)
+    case setting_key
+    when 'UserProperties'
+      parser = V2C_VS10UserPropertiesParser.new(subelem_xml, get_project().user_properties)
+    else
+      found = super
+    end
+    if not parser.nil?
+      parser.parse
+    end
+    return found
+  end
+end
+
+class V2C_VS10ProjectExtensionsParser < V2C_VS10BaseElemParser
+  private
+
+  def get_project; @info_elem end
+  def parse_element(subelem_xml)
+    found = be_optimistic()
+    setting_key = subelem_xml.name
+    parser = nil # IMPORTANT: reset it!
+    log_debug(setting_key)
+    case setting_key
+    when 'VisualStudio'
+      parser = V2C_VS10ProjectExtensionsVisualStudioParser.new(subelem_xml, get_project())
+    else
+      found = super
+    end
+    if not parser.nil?
+      parser.parse
+    end
+    return found
   end
 end
 
@@ -3669,6 +3789,9 @@ class V2C_VS10ProjectParser < V2C_VSProjectParserBase
       if elem_parser.parse
         get_project().arr_config_info.push(config_info_curr)
       end
+    when 'ProjectExtensions'
+      elem_parser = V2C_VS10ProjectExtensionsParser.new(subelem_xml, get_project())
+      elem_parser.parse
     when 'PropertyGroup'
       elem_parser = V2C_VS10PropertyGroupParser.new(subelem_xml, get_project())
       elem_parser.parse
@@ -5516,6 +5639,16 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     if target_is_valid
       write_func_v2c_target_post_setup(project_info.name, project_info.vs_keyword)
 
+      if project_info.project_types != nil
+        # This one does NOT follow VS_GLOBAL_* i.e. VS_GLOBAL_ProjectTypes.
+        set_property(project_info.name, "#{VS_GLOBAL_PREFIX_NAME}PROJECT_TYPES", project_info.project_types)
+      end
+      if project_info.user_properties.length > 0
+        project_info.user_properties.each_pair { |key, value|
+	  set_property(project_info.name, "#{VS_GLOBAL_PREFIX_NAME}#{key}", value)
+	}
+      end
+
       set_properties_vs_scc(@target.name, project_info.scc_info)
 
       # TODO: might want to set a target's FOLDER property, too...
@@ -5532,6 +5665,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   end
 
   private
+  # CMake issue: VS_GLOBAL is somewhat of a misnomer for the case
+  # of user-custom (i.e. non-official) settings,
+  # since VS7 Globals are not the same thing as VS10 Globals,
+  # yet CMake lumps them together.
+  VS_GLOBAL_PREFIX_NAME = 'VS_GLOBAL_'
 
   def put_project(project_name, arr_progr_languages = nil)
     arr_args_project_name_and_attrs = [ project_name ]
