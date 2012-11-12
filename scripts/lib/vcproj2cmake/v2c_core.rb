@@ -1272,6 +1272,18 @@ end
 # Well, the terminus technicus for such custom $(ZZZZ) variables
 # appears to be "User Macros" (at least in VS10), thus we should
 # probably rename all handling here to reflect that proper name.
+
+# For specialties of CMAKE_CFG_INTDIR, see
+# "CMAKE_CFG_INTDIR docs says it expands to IntDir, but it expands to OutDir"
+#   http://public.kitware.com/Bug/view.php?id=9219
+# Unfortunately it looks like $(IntDir) can be defined Condition'ally in
+# VS10, which probably results in more variety than what CMAKE_CFG_INTDIR
+# offers. And it looks like we possibly might have a "trailing-slash vs. not"
+# issue, too.
+# For things related to CMAKE_CFG_INTDIR, see also
+# add_custom_command()s "generator expressions" such as $<CONFIGURATION>.
+CMAKE_CFG_INTDIR_VAR_DEREF = '${CMAKE_CFG_INTDIR}'
+CMAKE_PROJECT_NAME_VAR_DEREF = '${PROJECT_NAME}'
 def vs7_create_config_variable_translation(str, arr_config_var_handling)
   # http://langref.org/all-languages/pattern-matching/searching/loop-through-a-string-matching-a-regex-and-performing-an-action-for-each-match
   str_scan_copy = str.dup # create a deep copy of string, to avoid "`scan': string modified (RuntimeError)"
@@ -1296,7 +1308,7 @@ def vs7_create_config_variable_translation(str, arr_config_var_handling)
     #
     # Thus both should map to the special ${CMAKE_CFG_INTDIR} mechanism.
     when 'CONFIGURATION', 'CONFIGURATIONNAME'
-      config_var_replacement = '${CMAKE_CFG_INTDIR}'
+      config_var_replacement = CMAKE_CFG_INTDIR_VAR_DEREF
     when 'PLATFORMNAME'
       config_var_emulation_code = <<EOF
   if(NOT v2c_VS_PlatformName)
@@ -1313,13 +1325,13 @@ EOF
       config_var_replacement = '${v2c_VS_PlatformName}'
       # InputName is said to be same as ProjectName in case input is the project.
     when 'INPUTNAME', 'PROJECTNAME'
-      config_var_replacement = '${PROJECT_NAME}'
+      config_var_replacement = CMAKE_PROJECT_NAME_VAR_DEREF
       # See ProjectPath reasoning below.
     when 'INPUTFILENAME', 'PROJECTFILENAME'
-      # config_var_replacement = '${PROJECT_NAME}.vcproj'
+      # config_var_replacement = "#{CMAKE_PROJECT_NAME_VAR_DEREF}.vcproj"
       config_var_replacement = "${v2c_VS_#{config_var}}"
     when 'INTDIR'
-      config_var_replacement = '${CMAKE_CFG_INTDIR}'
+      config_var_replacement = CMAKE_CFG_INTDIR_VAR_DEREF
     when 'OUTDIR'
       # FIXME: should extend code to do executable/library/... checks
       # and assign CMAKE_LIBRARY_OUTPUT_DIRECTORY / CMAKE_RUNTIME_OUTPUT_DIRECTORY
@@ -1350,7 +1362,7 @@ EOF
       # "Visual Studio 2010 - $(TargetName) macro" http://social.msdn.microsoft.com/Forums/en/vcprerelease/thread/3c03e730-6a0e-4ee4-a0d6-6a5c3ce4343c )
       # Might want to have a switch depending on whether input was
       # .vcproj or .vcxproj.
-      config_var_replacement = '${PROJECT_NAME}'
+      config_var_replacement = CMAKE_PROJECT_NAME_VAR_DEREF
     when 'TARGETPATH'
       config_var_emulation_code = ''
       arr_config_var_handling.push(config_var_emulation_code)
@@ -5682,6 +5694,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     else
       arr_args_project_name_and_attrs.concat(arr_progr_languages)
     end
+    # Side note: there's an elegant(?) way to include a file nearby project():
+    # via the CMAKE_PROJECT_<projectName>_INCLUDE var. Might be useful...
     write_command_list_single_line('project', arr_args_project_name_and_attrs)
   end
   def write_project(project_info)
