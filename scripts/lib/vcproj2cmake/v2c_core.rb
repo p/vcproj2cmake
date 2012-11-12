@@ -1031,7 +1031,7 @@ class V2C_File_List_Info
       #puts "#{file_info.path_relative} #{file_info.is_generated}"
       next if not file_info.is_generated
       file_info.path_relative
-    }
+    }.compact!
     return arr_generated
   end
 end
@@ -1848,7 +1848,7 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
     arr_flags = attr_options.split(VS_ADDOPT_VALUE_SEPARATOR_REGEX_OBJ).collect { |opt|
       next if skip_vs10_percent_sign_var(opt)
       opt
-    }
+    }.compact!
   end
   def parse_fs_item_list(attr_fs_items, arr_fs_items)
     return if attr_fs_items.empty?
@@ -4856,7 +4856,7 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
 
         # Ignore all generated files, for now.
         if true == file.is_generated
-          logger.fixme "#{@info_file.path_relative} is a generated file - skipping!"
+          logger.fixme "#{file.path_relative} is a generated file - skipping!"
           next # no complex handling, just skip
         end
 

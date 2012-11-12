@@ -1187,7 +1187,7 @@ else(WIN32)
     _v2c_ensure_valid_variables(_midl_file _description)
     set(comment_ "WARNING: creating dummy MIDL ${_description} file ${_midl_file}")
     add_custom_command(OUTPUT "${_midl_file}"
-      COMMAND "${CMAKE_COMMAND}" -E echo "${comment_}"
+      #COMMAND "${CMAKE_COMMAND}" -E echo "${comment_}"
       COMMAND "${CMAKE_COMMAND}" -E touch "${_midl_file}"
       COMMENT "${comment_}"
     )
