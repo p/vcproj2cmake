@@ -1015,6 +1015,15 @@ class V2C_File_List_Info
   attr_accessor :type
   attr_reader :arr_files
   def append_file(file_info); @arr_files.push(file_info) end
+  def get_file(file_name)
+    @arr_files.each { |info_file|
+      #puts "#{file_name} vs. #{info_file.path_relative}"
+      if file_name.eql?(info_file.path_relative)
+        return info_file
+      end
+    }
+    return nil
+  end
   def get_list_type_name()
     list_types =
      [ 'unknown', # VS10: None
@@ -1045,12 +1054,21 @@ class V2C_File_Lists_Container
     @hash_file_lists = Hash.new # dito, but hashed! (serves to maintain fast lookup)
   end
   attr_reader :arr_file_lists
-  def lookup_from_name(file_list_name)
+  def lookup_from_list_name(file_list_name)
     return @hash_file_lists[file_list_name]
+  end
+  def lookup_from_file_name(file_name)
+    info_file = nil
+    arr_file_lists.each { |file_list|
+      #puts "file_list: #{file_list.name}"
+      info_file = file_list.get_file(file_name)
+      break if not info_file.nil?
+    }
+    return info_file
   end
   def append(file_list)
     name = file_list.name
-    file_list_existing = lookup_from_name(name)
+    file_list_existing = lookup_from_list_name(name)
     file_list_append = file_list_existing
     if file_list_append.nil?
       register(file_list)
@@ -2582,12 +2600,6 @@ class V2C_VS7FileParser < V2C_VS7ParserBase
     case setting_key
     when 'RelativePath'
       @info_file.path_relative = get_filesystem_location(setting_value)
-      # Verbosely catch IDL generated files
-      if VS7_IDL_FILE_TYPES_REGEX_OBJ.match(@info_file.path_relative)
-        # see file_mappings.txt comment above
-        logger.info "#{@info_file.path_relative} is an IDL file! FIXME: handling should be platform-dependent."
-        @info_file.enable_attribute(V2C_Info_File::ATTR_GENERATED)
-      end
     else
       found = super
     end
@@ -3298,7 +3310,7 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
     # item group info, thus make sure to do lookup first.
     file_list_name = setting_key
     #file_list_type = get_file_list_type(file_list_name)
-    #file_list = get_project().file_lists.lookup_from_name(file_list_name)
+    #file_list = get_project().file_lists.lookup_from_list_name(file_list_name)
     file_list_new = V2C_File_List_Info.new(file_list_name, get_file_list_type(file_list_name))
     elem_parser = V2C_VS10ItemGroupElemFileListParser.new(subelem_xml, file_list_new)
     elem_parser.parse
@@ -5115,10 +5127,14 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # in some environments this might happen. Thus we might want to skip adding
     # the resource files list (VS10: ResourceCompile list) to the target.
     file_lists.arr_file_lists.each { |file_list|
+      #puts "file_list.name #{file_list.name}"
       filelist_generator = V2C_CMakeFileListGenerator_VS10.new(@textOut, project_name, @project_dir, file_list, parent_source_group, arr_sub_sources_for_parent)
       filelist_generator.generate
-      #arr_generated = file_list.get_generated_files
-      #puts "arr_generated #{arr_generated}"
+      arr_generated = file_list.get_generated_files
+      if arr_generated.length > 0
+        mark_files_as_generated(file_list.name, arr_generated)
+      end
+      #puts "file_list.name #{file_list.name}, arr_generated #{arr_generated}"
     }
   end
   def put_source_vars(arr_sub_source_list_var_names)
@@ -5168,13 +5184,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       put_v2c_target_midl_specify_files(@target.name, config_info.condition, midl_info)
     end
   end
-  # Currently UNUSED!
-  def mark_files_as_generated(arr_generated_files)
-    if not arr_generated_files.empty?
-      # FIXME: doing correct handling of quoting for these files!?
-      str_cmake_command_args = "SOURCE #{arr_generated_files.join(' ')} PROPERTY GENERATED"
-      @localGenerator.write_command_single_line('set_property', str_cmake_command_args)
-    end
+  def mark_files_as_generated(file_list_description, arr_generated_files)
+    file_list_var = "SOURCES_GENERATED_#{file_list_description}"
+    write_list_quoted(file_list_var, arr_generated_files)
+    str_cmake_command_args = "SOURCE ${#{file_list_var}} PROPERTY GENERATED"
+    @localGenerator.write_command_single_line('set_property', str_cmake_command_args)
   end
   def put_atl_mfc_config(target_config_info)
     # FIXME: should check whether CMAKE_MFC_FLAG is ok with specifying
@@ -6318,6 +6332,20 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
 
   # FIXME VERY DIRTY interim handling:
   arr_projects.each { |project_info|
+    # Mark MIDL files as generated.
+    project_info.arr_config_info.each { |config_info|
+      arr_midl_info = config_info.tools.arr_midl_info
+      arr_midl_info.each { |midl_info|
+        if not midl_info.header_file_name.nil?
+	  info_file = project_info.file_lists.lookup_from_file_name(midl_info.header_file_name)
+	  if not info_file.nil?
+            # logger.info "#{@info_file.path_relative} is an IDL file! FIXME: handling should be platform-dependent."
+	    info_file.enable_attribute(V2C_Info_File::ATTR_GENERATED)
+	  end
+	end
+      }
+    }
+
     next if true == project_info.have_build_units
     project_info.file_lists.arr_file_lists.each { |file_list|
       arr_file_infos = file_list.arr_files
