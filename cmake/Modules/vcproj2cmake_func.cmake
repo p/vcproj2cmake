@@ -67,6 +67,11 @@ if(V2C_FUNC_DEFINED)
 endif(V2C_FUNC_DEFINED)
 set(V2C_FUNC_DEFINED true)
 
+# We definitely should make use of cmake_parse_arguments() wherever possible,
+# since this will relax our V2C function interface stability requirements
+# (optionally available parameters simply would be skipped if not
+# provided, thus a suddenly changed function featureset often would not matter).
+include(CMakeParseArguments) # strong CMake version dependency (>= 2.8.3?)
 
 
 # # # # #   MOST IMPORTANT HELPER FUNCTIONS   # # # # #
@@ -1177,41 +1182,111 @@ function(v2c_target_config_charset_set _target _build_platform _build_type _char
 endfunction(v2c_target_config_charset_set _target _build_platform _build_type _charset)
 
 
+set(v2c_midl_handling_mode_win32 "Win32")
+set(v2c_midl_handling_mode_wine "Wine")
+set(v2c_midl_handling_mode_stubs "EmulatedStubs")
 if(WIN32)
-  function(v2c_target_midl_specify_files _target _build_platform _build_type _header_file_name _iface_id_file_name _type_library_name)
+  set(v2c_midl_handling_mode_default_setting ${v2c_midl_handling_mode_win32})
+else(WIN32)
+  find_program(V2C_WINE_WIDL_BIN widl)
+  if(V2C_WINE_WIDL_BIN)
+    set(v2c_midl_handling_mode_default_setting ${v2c_midl_handling_mode_wine})
+  else(V2C_WINE_WIDL_BIN)
+    _v2c_msg_warning("Could not locate an installed Wine widl IDL compiler binary - falling back to dummy IDL handling emulation!")
+    set(v2c_midl_handling_mode_default_setting ${v2c_midl_handling_mode_stubs})
+  endif(V2C_WINE_WIDL_BIN)
+endif(WIN32)
+set(v2c_midl_doc_string "The mode to use for handling of MIDL files [one of: Win32 - uses builtin Win32 MIDL handling / Wine - uses Wine's widl IDL compiler / EmulatedStubs - tries to come up with a sufficiently complete emulation stub to at least allow a successful project build [Code Coverage!]]")
+set(V2C_MIDL_HANDLING_MODE "${v2c_midl_handling_mode_default_setting}" CACHE STRING "${v2c_midl_doc_string}")
+
+if(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_win32})
+  function(v2c_target_midl_compile _target _build_platform _build_type)
     # DUMMY - WIN32 (Visual Studio) already has its own implicit custom commands for MIDL generation
     # (plus, CMake's Visual Studio generator also already properly passes MIDL-related files to the setup...)
-  endfunction(v2c_target_midl_specify_files _target _build_platform _build_type _header_file_name _iface_id_file_name _type_library_name)
-else(WIN32)
-  function(_v2c_target_midl_create_dummy_file _midl_file _description)
+  endfunction(v2c_target_midl_compile _target _build_platform _build_type)
+else(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_win32})
+  function(_v2c_target_midl_create_dummy_file _target _midl_file _description)
     _v2c_ensure_valid_variables(_midl_file _description)
-    set(comment_ "WARNING: creating dummy MIDL ${_description} file ${_midl_file}")
+    set(comment_ "${_target}: creating dummy MIDL ${_description} file ${_midl_file} - objective is to merely achieve a successful however quite unusable project build [Code Coverage!]")
+    _v2c_msg_warning("${comment_}")
     add_custom_command(OUTPUT "${_midl_file}"
       #COMMAND "${CMAKE_COMMAND}" -E echo "${comment_}"
       COMMAND "${CMAKE_COMMAND}" -E touch "${_midl_file}"
-      COMMENT "${comment_}"
+      COMMENT "WARNING: ${comment_}"
     )
-  endfunction(_v2c_target_midl_create_dummy_file _file _description)
-  function(v2c_target_midl_specify_files _target _build_platform _build_type _header_file_name _iface_id_file_name _type_library_name)
+  endfunction(_v2c_target_midl_create_dummy_file _target _file _description)
+  function(v2c_target_midl_compile _target _build_platform _build_type)
     v2c_buildcfg_check_if_platform_buildtype_active(${_target} "${_build_platform}" "${_build_type}" is_active_)
     if(NOT is_active_)
       return()
     endif(NOT is_active_)
 
-    # For now, all we care about is creating some dummy files to make a target actually build
-    # rather than aborting CMake configuration due to missing source files...
+    set(options VALIDATE_ALL_PARAMETERS)
+    set(oneValueArgs TARGET_ENVIRONMENT IDL_FILE_NAME HEADER_FILE_NAME INTERFACE_IDENTIFIER_FILE_NAME PROXY_FILE_NAME TYPE_LIBRARY_NAME DLL_DATA_FILE_NAME)
+    cmake_parse_arguments(v2c_target_midl_compile "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+    if(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_wine})
+      set(cmd_list_ "${V2C_WINE_WIDL_BIN}")
+      set(v2c_widl_outputs_ "")
+      if(v2c_target_midl_compile_HEADER_FILE_NAME)
+        list(APPEND cmd_list_ "-h")
+	list(APPEND cmd_list_ "-H${v2c_target_midl_compile_HEADER_FILE_NAME}")
+	list(APPEND v2c_widl_outputs_ "${v2c_target_midl_compile_HEADER_FILE_NAME}")
+      endif(v2c_target_midl_compile_HEADER_FILE_NAME)
+      if(v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME)
+        list(APPEND cmd_list_ "-u")
+        list(APPEND cmd_list_ "-U${v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME}")
+	list(APPEND v2c_widl_outputs_ "${v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME}")
+      endif(v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME)
+      if(v2c_target_midl_compile_TYPE_LIBRARY_NAME)
+        list(APPEND cmd_list_ "-t")
+        list(APPEND cmd_list_ "-T${v2c_target_midl_compile_TYPE_LIBRARY_NAME}")
+	list(APPEND v2c_widl_outputs_ "${v2c_target_midl_compile_TYPE_LIBRARY_NAME}")
+      endif(v2c_target_midl_compile_TYPE_LIBRARY_NAME)
+      if(v2c_target_midl_compile_PROXY_FILE_NAME)
+        list(APPEND cmd_list_ "-p")
+        list(APPEND cmd_list_ "-P${v2c_target_midl_compile_PROXY_FILE_NAME}")
+	list(APPEND v2c_widl_outputs_ "${v2c_target_midl_compile_PROXY_FILE_NAME}")
+      endif(v2c_target_midl_compile_PROXY_FILE_NAME)
+      if(v2c_target_midl_compile_DLL_DATA_FILE_NAME)
+        list(APPEND cmd_list_ "--dlldata=${v2c_target_midl_compile_DLL_DATA_FILE_NAME}")
+      endif(v2c_target_midl_compile_DLL_DATA_FILE_NAME)
+      if(v2c_target_midl_compile_VALIDATE_ALL_PARAMETERS)
+        # Not sure at all whether v2c_target_midl_compile_VALIDATE_ALL_PARAMETERS is even
+	# related to "enable pedantic warnings"...
+        list(APPEND cmd_list_ "-W")
+      endif(v2c_target_midl_compile_VALIDATE_ALL_PARAMETERS)
+      list(APPEND cmd_list_ "${CMAKE_CURRENT_SOURCE_DIR}/${v2c_target_midl_compile_IDL_FILE_NAME}")
+      set(v2c_widl_descr_ "Using Wine's ${V2C_WINE_WIDL_BIN} to compile IDL data")
+      _v2c_msg_info("${_target}: ${v2c_widl_descr_} (command line: ${cmd_list_}, output: ${v2c_widl_outputs_}, depends: ${v2c_widl_depends_}).")
+      add_custom_command(OUTPUT ${v2c_widl_outputs_}
+        COMMAND ${cmd_list_}
+	DEPENDS ${v2c_widl_depends_}
+        COMMENT "${v2c_widl_descr_}"
+      )
+      add_custom_target(${_target}_midl_compile DEPENDS ${v2c_widl_outputs_})
+      add_dependencies(${_target} ${_target}_midl_compile)
+    else(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_wine})
+      # The last-ditch fallback else branch selects the emulated stubs mode
+      # (reason: this mode is always supportable everywhere)
 
-    # TODO: query all the other MIDL-related target properties
-    # which possibly were configured prior to invoking this function.
+      # For now, all we care about is creating some dummy files to make a target actually build
+      # rather than aborting CMake configuration due to missing source files...
+      # This allows us to keep this project within the active set of
+      # projects, thereby increasing the amount of compiled/error-checked code
+      # (Code Coverage!).
 
-    if(_header_file_name)
-      _v2c_target_midl_create_dummy_file("${_header_file_name}" "header")
-    endif(_header_file_name)
-    if(_iface_id_file_name)
-      _v2c_target_midl_create_dummy_file("${_iface_id_file_name}" "interface identifier")
-    endif(_iface_id_file_name)
-  endfunction(v2c_target_midl_specify_files _target _build_platform _build_type _header_file_name _iface_id_file_name _type_library_name)
-endif(WIN32)
+      # TODO: query all the other MIDL-related target properties
+      # which possibly were configured prior to invoking this function.
+
+      if(v2c_target_midl_compile_HEADER_FILE_NAME)
+        _v2c_target_midl_create_dummy_file(${_target} "${v2c_target_midl_compile_HEADER_FILE_NAME}" "header")
+      endif(v2c_target_midl_compile_HEADER_FILE_NAME)
+      if(v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME)
+        _v2c_target_midl_create_dummy_file(${_target} "${v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME}" "interface identifier")
+      endif(v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME)
+    endif(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_wine})
+  endfunction(v2c_target_midl_compile _target _build_platform _build_type)
+endif(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_win32})
 
 
 # This function will set up target properties gathered from

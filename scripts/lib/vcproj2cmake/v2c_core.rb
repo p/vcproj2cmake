@@ -813,15 +813,23 @@ end
 class V2C_Tool_MIDL_Info < V2C_Tool_Define_Base_Info
   def initialize(tool_variant_specific_info = nil)
     super(tool_variant_specific_info)
+    @dll_data_file_name = nil
     @header_file_name = nil
     @iface_id_file_name = nil
     @mktyplib_compatible = false
+    @proxy_file_name = nil
+    @target_environment = 'Win32'
     @type_library_name = nil
+    @validate_all_parameters = false
   end
+  attr_accessor :dll_data_file_name
   attr_accessor :header_file_name
   attr_accessor :iface_id_file_name
   attr_accessor :mktyplib_compatible
+  attr_accessor :proxy_file_name
+  attr_accessor :target_environment
   attr_accessor :type_library_name
+  attr_accessor :validate_all_parameters
 end
 
 module V2C_TargetConfig_Defines
@@ -1298,6 +1306,7 @@ end
 # VS10, which probably results in more variety than what CMAKE_CFG_INTDIR
 # offers. And it looks like we possibly might have a "trailing-slash vs. not"
 # issue, too.
+# Indeed: a Makefile build showed that CMAKE_CFG_INTDIR contains '.' only!
 # For things related to CMAKE_CFG_INTDIR, see also
 # add_custom_command()s "generator expressions" such as $<CONFIGURATION>.
 CMAKE_CFG_INTDIR_VAR_DEREF = '${CMAKE_CFG_INTDIR}'
@@ -1349,7 +1358,7 @@ EOF
       # config_var_replacement = "#{CMAKE_PROJECT_NAME_VAR_DEREF}.vcproj"
       config_var_replacement = "${v2c_VS_#{config_var}}"
     when 'INTDIR'
-      config_var_replacement = CMAKE_CFG_INTDIR_VAR_DEREF
+      config_var_replacement = "#{CMAKE_CFG_INTDIR_VAR_DEREF}/"
     when 'OUTDIR'
       # FIXME: should extend code to do executable/library/... checks
       # and assign CMAKE_LIBRARY_OUTPUT_DIRECTORY / CMAKE_RUNTIME_OUTPUT_DIRECTORY
@@ -2274,10 +2283,14 @@ end
 
 module V2C_VSToolMIDLDefines
   include V2C_VSToolDefineDefines
+  TEXT_DLLDATAFILENAME = 'DllDataFileName'
   TEXT_HEADERFILENAME = 'HeaderFileName'
   TEXT_INTERFACEIDENTIFIERFILENAME = 'InterfaceIdentifierFileName'
   TEXT_MKTYPLIBCOMPATIBLE = 'MkTypLibCompatible'
+  TEXT_PROXYFILENAME = 'ProxyFileName'
+  TEXT_TARGETENVIRONMENT = 'TargetEnvironment'
   TEXT_TYPELIBRARYNAME = 'TypeLibraryName'
+  TEXT_VALIDATEALLPARAMETERS = 'ValidateAllParameters'
 end
 
 class V2C_VSToolMIDLParser < V2C_VSToolDefineParserBase
@@ -2288,14 +2301,22 @@ class V2C_VSToolMIDLParser < V2C_VSToolDefineParserBase
   def parse_setting(setting_key, setting_value)
     found = be_optimistic()
     case setting_key
+    when TEXT_DLLDATAFILENAME
+      get_midl_info().dll_data_file_name = get_filesystem_location(setting_value)
     when TEXT_HEADERFILENAME
       get_midl_info().header_file_name = get_filesystem_location(setting_value)
     when TEXT_INTERFACEIDENTIFIERFILENAME
       get_midl_info().iface_id_file_name = get_filesystem_location(setting_value)
     when TEXT_MKTYPLIBCOMPATIBLE
       get_midl_info().mktyplib_compatible = get_boolean_value(setting_value)
+    when TEXT_PROXYFILENAME
+      get_midl_info().proxy_file_name = get_filesystem_location(setting_value)
+    when TEXT_TARGETENVIRONMENT
+      get_midl_info().target_environment = setting_value
     when TEXT_TYPELIBRARYNAME
       get_midl_info().type_library_name = get_filesystem_location(setting_value)
+    when TEXT_TYPELIBRARYNAME
+      get_midl_info().validate_all_parameters = get_boolean_value(setting_value)
     else
       found = super
     end
@@ -4866,11 +4887,11 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
 
 	v2c_generator_check_file_accessible(@project_dir, f, 'file item in project', @project_name, ($v2c_validate_vcproj_abort_on_error > 0))
 
-        # Ignore all generated files, for now.
-        if true == file.is_generated
-          logger.fixme "#{file.path_relative} is a generated file - skipping!"
-          next # no complex handling, just skip
-        end
+        ## Ignore all generated files, for now.
+        #if true == file.is_generated
+        #  logger.fixme "#{file.path_relative} is a generated file - skipping!"
+        #  next # no complex handling, just skip
+        #end
 
         ## Ignore header files
         #return if f =~ /\.(h|H|lex|y|ico|bmp|txt)$/
@@ -5131,7 +5152,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       filelist_generator = V2C_CMakeFileListGenerator_VS10.new(@textOut, project_name, @project_dir, file_list, parent_source_group, arr_sub_sources_for_parent)
       filelist_generator.generate
       arr_generated = file_list.get_generated_files
-      if arr_generated.length > 0
+      if not arr_generated.nil? and arr_generated.length > 0
         mark_files_as_generated(file_list.name, arr_generated)
       end
       #puts "file_list.name #{file_list.name}, arr_generated #{arr_generated}"
@@ -5154,15 +5175,36 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       "(but _before_ target is created using the source list!)"
     )
   end
-  def put_v2c_target_midl_specify_files(target_name, condition, midl_info)
+  def put_v2c_target_midl_compile(target_name, condition, midl_info)
     # TODO: should use condition to alternatively open-code the conditional variable
     # here in case self-contained mode is requested.
     # ... = get_buildcfg_var_name_of_condition(condition)
 
     # For an MIDL discussion, see
     #   http://cmake.3232098.n2.nabble.com/CMake-with-IDL-file-generation-td7581589.html
-    arr_args_midl = [ midl_info.header_file_name, midl_info.iface_id_file_name, midl_info.type_library_name ]
-    write_invoke_object_conditional_v2c_function('v2c_target_midl_specify_files', target_name, condition, arr_args_midl)
+    arr_args_midl = Array.new
+    # TODO: write helper method to reduce this semi-duplicated handling:
+    arr_args_midl.concat(['TARGET_ENVIRONMENT', midl_info.target_environment])
+    # FIXME: should fetch IDL filename from Midl filelist rather than
+    # hard-coding it like that.
+    arr_args_midl.concat(['IDL_FILE_NAME', "#{target_name}.idl"])
+    if not midl_info.header_file_name.nil?
+      arr_args_midl.concat(['HEADER_FILE_NAME', midl_info.header_file_name])
+    end
+    if not midl_info.iface_id_file_name.nil?
+      arr_args_midl.concat(['INTERFACE_IDENTIFIER_FILE_NAME', midl_info.iface_id_file_name])
+    end
+    if not midl_info.proxy_file_name.nil?
+      arr_args_midl.concat(['PROXY_FILE_NAME', midl_info.proxy_file_name])
+    end
+    if not midl_info.type_library_name.nil?
+      arr_args_midl.concat(['TYPE_LIBRARY_NAME', midl_info.type_library_name])
+    end
+    if not midl_info.dll_data_file_name.nil?
+      arr_args_midl.concat(['DLL_DATA_FILE_NAME', midl_info.dll_data_file_name])
+    end
+    arr_args_midl.concat(['VALIDATE_ALL_PARAMETERS', midl_info.validate_all_parameters.to_s])
+    write_invoke_object_conditional_v2c_function('v2c_target_midl_compile', target_name, condition, arr_args_midl)
   end
   def hook_up_midl_files(file_lists, config_info)
     # VERY Q&D way to mark MIDL-related files as GENERATED,
@@ -5176,18 +5218,18 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       midl_info = arr_midl_info[0]
       #put_v2c_target_midl_preprocessor_definitions(...)
       #put_v2c_target_midl_options(GENERATESTUBLESSPROXIES ... MKTYPLIBCOMPATIBLE ... VALIDATEALLPARAMETERS ...)
-      # put_v2c_target_midl_specify_files() will be the last line to be generated - the invoked function
+      # put_v2c_target_midl_compile() will be the last line to be generated - the invoked function
       # will then implement the MIDL custom command using all previously configured MIDL target properties settings.
       # FIXME: the .idl file is currently missing (contained within the file list called "Midl")
-      # - possibly we'd need it here, too (at least if we _can_ do something useful with MIDL information
-      # on Non-Win32 platforms...).
-      put_v2c_target_midl_specify_files(@target.name, config_info.condition, midl_info)
+      # - we probably need it here, too (since we _can_ do something useful with MIDL information
+      # on Non-Win32 platforms, via Wine's widl...).
+      put_v2c_target_midl_compile(@target.name, config_info.condition, midl_info)
     end
   end
   def mark_files_as_generated(file_list_description, arr_generated_files)
     file_list_var = "SOURCES_GENERATED_#{file_list_description}"
     write_list_quoted(file_list_var, arr_generated_files)
-    str_cmake_command_args = "SOURCE ${#{file_list_var}} PROPERTY GENERATED"
+    str_cmake_command_args = "SOURCE ${#{file_list_var}} PROPERTY GENERATED TRUE"
     @localGenerator.write_command_single_line('set_property', str_cmake_command_args)
   end
   def put_atl_mfc_config(target_config_info)
@@ -5529,11 +5571,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_config_info.each { |config_info_curr|
       next_paragraph()
 
-      # Generate all functions which already have their own conditional
-      # platform / build type handling here, prior to generating the
-      # var_v2c_want_buildcfg_curr below...
-      hook_up_midl_files(project_info.file_lists, config_info_curr)
-
       condition = config_info_curr.condition
       var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
       write_conditional_if(var_v2c_want_buildcfg_curr)
@@ -5582,6 +5619,13 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       end # target.have_build_units
 
       write_conditional_end(var_v2c_want_buildcfg_curr)
+
+      # Generate all functions which already have their own conditional
+      # platform / build type handling here, outside of the
+      # var_v2c_want_buildcfg_curr handling...
+      # Note that some may be dependent on the target already having
+      # been established!
+      hook_up_midl_files(project_info.file_lists, config_info_curr)
     } # [END per-config handling]
 
     # Now that we likely _do_ have a valid target
@@ -5884,9 +5928,15 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
       "please see http://www.cmake.org/Wiki/CMake_Released_Versions\n" \
       "(and page CMake_Version_Compatibility_Matrix)."
     )
-    str_cmake_minimum_version = '2.6'
+    #str_cmake_minimum_version = '2.6'
+    #str_cmake_minimum_version_reason = 'set_property(... COMPILE_DEFINITIONS_* ...)'
+    # FIXME: find an on-demand solution for this
+    # (such as providing that code in our own module file),
+    # to get the requirement down to a suitably older CMake version.
+    str_cmake_minimum_version = '2.8.3'
+    str_cmake_minimum_version_reason = 'CMakeParseArguments module'
     write_comment_at_level(COMMENT_LEVEL_MINIMUM,
-      ">= #{str_cmake_minimum_version} due to crucial set_property(... COMPILE_DEFINITIONS_* ...)"
+      ">= #{str_cmake_minimum_version} due to crucial #{str_cmake_minimum_version_reason}"
     )
     write_cmake_minimum_version(str_cmake_minimum_version)
   end
@@ -6332,18 +6382,20 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
 
   # FIXME VERY DIRTY interim handling:
   arr_projects.each { |project_info|
-    # Mark MIDL files as generated.
+    # Mark some files as generated (MIDL etc.).
+    arr_generated_files = Array.new
     project_info.arr_config_info.each { |config_info|
       arr_midl_info = config_info.tools.arr_midl_info
       arr_midl_info.each { |midl_info|
-        if not midl_info.header_file_name.nil?
-	  info_file = project_info.file_lists.lookup_from_file_name(midl_info.header_file_name)
-	  if not info_file.nil?
-            # logger.info "#{@info_file.path_relative} is an IDL file! FIXME: handling should be platform-dependent."
-	    info_file.enable_attribute(V2C_Info_File::ATTR_GENERATED)
-	  end
-	end
+        arr_generated_files.concat([ midl_info.header_file_name, midl_info.iface_id_file_name, midl_info.proxy_file_name, midl_info.type_library_name ])
       }
+    }
+    arr_generated_files.compact!
+    arr_generated_files.each { |candidate|
+      info_file = project_info.file_lists.lookup_from_file_name(candidate)
+      if not info_file.nil?
+        info_file.enable_attribute(V2C_Info_File::ATTR_GENERATED)
+      end
     }
 
     next if true == project_info.have_build_units
