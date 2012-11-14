@@ -6347,6 +6347,48 @@ def v2c_source_root_ensure_usable_cmakelists_skeleton_file(project_converter_scr
   end
 end
 
+# This class is tasked with doing important analysis work on *generic* V2C-side project data
+# (e.g. marking files created by MIDL instructions as generated, etc.)
+# It should carry out all post-processing steps
+# which are to be *INDEPENDENT* from actual *specific* per-parser handling.
+class V2C_ProjectPostProcess
+  def initialize(project_info)
+    @project_info = project_info
+  end
+  def process
+    process_it(@project_info)
+  end
+  private
+  def process_it(project_info)
+    # Mark some files as generated (MIDL etc.).
+    arr_generated_files = Array.new
+    project_info.arr_config_info.each { |config_info|
+      arr_midl_info = config_info.tools.arr_midl_info
+      arr_midl_info.each { |midl_info|
+        arr_generated_files.concat([ midl_info.header_file_name, midl_info.iface_id_file_name, midl_info.proxy_file_name, midl_info.type_library_name ])
+      }
+    }
+    arr_generated_files.compact!
+    arr_generated_files.each { |candidate|
+      info_file = project_info.file_lists.lookup_from_file_name(candidate)
+      if not info_file.nil?
+        info_file.enable_attribute(V2C_Info_File::ATTR_GENERATED)
+      end
+    }
+
+    if not true == project_info.have_build_units
+      project_info.file_lists.arr_file_lists.each { |file_list|
+        arr_file_infos = file_list.arr_files
+        have_build_units = check_have_build_units_in_file_list(arr_file_infos)
+        if true == have_build_units
+          project_info.have_build_units = have_build_units
+          break
+        end
+      }
+    end
+    return true
+  end
+end
 
 def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_files, p_generator_proj_file)
 
@@ -6376,41 +6418,24 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
     end
   }
 
-  arr_projects.each { |proj|
-    log_debug "Parsed project #{proj.name}."
-  }
+  # Post-process all projects.
+  arr_projects.delete_if { |project_info|
+    log_debug "Parsed project #{project_info.name}."
 
-  # FIXME VERY DIRTY interim handling:
-  arr_projects.each { |project_info|
-    # Mark some files as generated (MIDL etc.).
-    arr_generated_files = Array.new
-    project_info.arr_config_info.each { |config_info|
-      arr_midl_info = config_info.tools.arr_midl_info
-      arr_midl_info.each { |midl_info|
-        arr_generated_files.concat([ midl_info.header_file_name, midl_info.iface_id_file_name, midl_info.proxy_file_name, midl_info.type_library_name ])
-      }
-    }
-    arr_generated_files.compact!
-    arr_generated_files.each { |candidate|
-      info_file = project_info.file_lists.lookup_from_file_name(candidate)
-      if not info_file.nil?
-        info_file.enable_attribute(V2C_Info_File::ATTR_GENERATED)
-      end
-    }
-
-    next if true == project_info.have_build_units
-    project_info.file_lists.arr_file_lists.each { |file_list|
-      arr_file_infos = file_list.arr_files
-      have_build_units = check_have_build_units_in_file_list(arr_file_infos)
-      if true == have_build_units
-        project_info.have_build_units = have_build_units
-        break
-      end
-    }
+    project_processed = false
+    begin
+      post_processor = V2C_ProjectPostProcess.new(project_info)
+      project_processed = post_processor.process
+    rescue Exception => e
+      logger.unhandled_exception(e, 'project post-processing')
+      raise
+    end
+    (false == project_processed)
   }
 
   # Now validate the project...
-  # This validation step should be _separate_ from both parser _and_ generator implementations,
+  # This validation should be a step that's _separate_
+  # from parser, processor _and_ generator implementations,
   # since otherwise each individual parser/generator would have to remember carrying out validation
   # (they could easily forget about that).
   # Besides, parsing/generating should be concerned about fast (KISS)
