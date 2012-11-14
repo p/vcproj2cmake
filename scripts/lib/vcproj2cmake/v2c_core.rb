@@ -1358,7 +1358,7 @@ EOF
       # config_var_replacement = "#{CMAKE_PROJECT_NAME_VAR_DEREF}.vcproj"
       config_var_replacement = "${v2c_VS_#{config_var}}"
     when 'INTDIR'
-      config_var_replacement = "#{CMAKE_CFG_INTDIR_VAR_DEREF}/"
+      config_var_replacement = "${CMAKE_CURRENT_BINARY_DIR}/#{CMAKE_CFG_INTDIR_VAR_DEREF}/"
     when 'OUTDIR'
       # FIXME: should extend code to do executable/library/... checks
       # and assign CMAKE_LIBRARY_OUTPUT_DIRECTORY / CMAKE_RUNTIME_OUTPUT_DIRECTORY
