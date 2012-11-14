@@ -1230,6 +1230,11 @@ else(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_win32})
     set(options VALIDATE_ALL_PARAMETERS)
     set(oneValueArgs TARGET_ENVIRONMENT IDL_FILE_NAME HEADER_FILE_NAME INTERFACE_IDENTIFIER_FILE_NAME PROXY_FILE_NAME TYPE_LIBRARY_NAME DLL_DATA_FILE_NAME)
     cmake_parse_arguments(v2c_target_midl_compile "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+    set(idl_file_location_ "${CMAKE_CURRENT_SOURCE_DIR}/${v2c_target_midl_compile_IDL_FILE_NAME}")
+    if(NOT EXISTS "${idl_file_location_}")
+      _v2c_msg_warning("IDL file ${idl_file_location_} not found - bailing out...")
+      return()
+    endif(NOT EXISTS "${idl_file_location_}")
     if(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_wine})
       set(cmd_list_ "${V2C_WINE_WIDL_BIN}")
       set(v2c_widl_outputs_ "")
@@ -1261,16 +1266,20 @@ else(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_win32})
 	# related to "enable pedantic warnings"...
         list(APPEND cmd_list_ "-W")
       endif(v2c_target_midl_compile_VALIDATE_ALL_PARAMETERS)
-      list(APPEND cmd_list_ "${CMAKE_CURRENT_SOURCE_DIR}/${v2c_target_midl_compile_IDL_FILE_NAME}")
+      list(APPEND cmd_list_ "${idl_file_location_}")
       set(v2c_widl_descr_ "Using Wine's ${V2C_WINE_WIDL_BIN} to compile IDL data")
       _v2c_msg_info("${_target}: ${v2c_widl_descr_} (command line: ${cmd_list_}, output: ${v2c_widl_outputs_}, depends: ${v2c_widl_depends_}).")
-      add_custom_command(OUTPUT ${v2c_widl_outputs_}
-        COMMAND ${cmd_list_}
-	DEPENDS ${v2c_widl_depends_}
-        COMMENT "${v2c_widl_descr_}"
-      )
-      add_custom_target(${_target}_midl_compile DEPENDS ${v2c_widl_outputs_})
-      add_dependencies(${_target} ${_target}_midl_compile)
+      if(v2c_widl_outputs_)
+        add_custom_command(OUTPUT ${v2c_widl_outputs_}
+          COMMAND ${cmd_list_}
+          DEPENDS ${v2c_widl_depends_}
+          COMMENT "${v2c_widl_descr_}"
+        )
+        add_custom_target(${_target}_midl_compile DEPENDS ${v2c_widl_outputs_})
+        add_dependencies(${_target} ${_target}_midl_compile)
+      else(v2c_widl_outputs_)
+        _v2c_msg_warning("${_target}: MIDL implementation problem - no outputs!? Bailing out...")
+      endif(v2c_widl_outputs_)
     else(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_wine})
       # The last-ditch fallback else branch selects the emulated stubs mode
       # (reason: this mode is always supportable everywhere)
