@@ -111,6 +111,12 @@ macro(_v2c_msg_fatal_error_please_report _msg)
   _v2c_msg_fatal_error("${_msg} - please report!")
 endmacro(_v2c_msg_fatal_error_please_report _msg)
 
+# Does a file(WRITE) followed by a configure_file(),
+# to avoid continuous rebuilds due to continually rewriting a file with actually unchanged content.
+function(_v2c_create_build_decoupled_adhoc_file _template_name _file_location _content)
+  file(WRITE "${_template_name}" "${_content}")
+  configure_file("${_template_name}" "${_file_location}" COPYONLY)
+endfunction(_v2c_create_build_decoupled_adhoc_file _template_name _file_location _content)
 
 # Validate CMAKE_BUILD_TYPE setting:
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
@@ -1279,7 +1285,21 @@ else(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_win32})
       # which possibly were configured prior to invoking this function.
 
       if(v2c_target_midl_compile_HEADER_FILE_NAME)
-        _v2c_target_midl_create_dummy_file(${_target} "${v2c_target_midl_compile_HEADER_FILE_NAME}" "header")
+        set(midl_header_template_ "${CMAKE_CURRENT_BINARY_DIR}/midl_header_${_target}.h.in")
+	set(midl_header_lib_name_ "${_target}Lib")
+	# FIXME: most certainly this include guard name does not match
+	# the one usually used by MIDL compilers.
+	set(midl_header_include_guard_ "DEFINED_${midl_header_lib_name_}")
+	set(midl_header_leadin_ "/* Awful dummy IID, to at least try to make Typelib projects build (increase Code Coverage!) */")
+	set(midl_header_iid_ "{0x0, 0x0, 0x0, {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0} }")
+	set(midl_header_content_
+"\#ifndef ${midl_header_include_guard_}
+\#define ${midl_header_include_guard_}
+${midl_header_leadin_}
+const IID LIBID_${midl_header_lib_name_} = ${midl_header_iid_};
+\#endif /* ${midl_header_include_guard_} */
+")
+        _v2c_create_build_decoupled_adhoc_file("${midl_header_template_}" "${v2c_target_midl_compile_HEADER_FILE_NAME}" "${midl_header_content_}")
       endif(v2c_target_midl_compile_HEADER_FILE_NAME)
       if(v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME)
         _v2c_target_midl_create_dummy_file(${_target} "${v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME}" "interface identifier")
