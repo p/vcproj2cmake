@@ -2317,7 +2317,7 @@ class V2C_VSToolMIDLParser < V2C_VSToolDefineParserBase
       get_midl_info().target_environment = setting_value
     when TEXT_TYPELIBRARYNAME
       get_midl_info().type_library_name = get_filesystem_location(setting_value)
-    when TEXT_TYPELIBRARYNAME
+    when TEXT_VALIDATEALLPARAMETERS
       get_midl_info().validate_all_parameters = get_boolean_value(setting_value)
     else
       found = super
@@ -2812,7 +2812,6 @@ class V2C_VS7ProjectGlobalsParser < V2C_VS7ParserBase
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
     when 'Global'
-      prop_name = ''
       elem_parser = V2C_VS7ProjectGlobalParser.new(subelem_xml, get_user_properties())
       elem_parser.parse
     else
