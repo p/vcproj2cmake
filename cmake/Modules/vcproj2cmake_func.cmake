@@ -1320,16 +1320,27 @@ else(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_win32})
 	set(midl_header_lib_name_ "${_target}Lib")
 	# FIXME: most certainly this include guard name does not match
 	# the one usually used by MIDL compilers.
-	set(midl_header_include_guard_ "DEFINED_${midl_header_lib_name_}")
-	set(midl_header_leadin_ "/* Awful dummy IID, to at least try to make Typelib projects build (increase Code Coverage!) */")
-	set(midl_header_iid_ "{0x0, 0x0, 0x0, {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0} }")
+	set(midl_header_include_guard_ "MIDL_STUB_${midl_header_lib_name_}")
+	set(midl_header_iid_ "0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0")
 	set(midl_header_content_
 "\#ifndef ${midl_header_include_guard_}
 \#define ${midl_header_include_guard_}
-${midl_header_leadin_}
-const IID LIBID_${midl_header_lib_name_} = ${midl_header_iid_};
-\#endif /* ${midl_header_include_guard_} */
-")
+
+\#include <rpc.h>
+\#include <rpcndr.h>
+
+\#ifdef __cplusplus
+extern \"C\" {
+\#endif
+
+/* Awful dummy IID, to at least try to make Typelib projects build (increase Code Coverage!) */
+DEFINE_GUID(LIBID_${midl_header_lib_name_}, ${midl_header_iid_});
+
+\#ifdef __cplusplus
+}
+\#endif
+
+\#endif /* ${midl_header_include_guard_} */")
         _v2c_create_build_decoupled_adhoc_file("${midl_header_template_}" "${v2c_target_midl_compile_HEADER_FILE_NAME}" "${midl_header_content_}")
       endif(v2c_target_midl_compile_HEADER_FILE_NAME)
       if(v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME)
