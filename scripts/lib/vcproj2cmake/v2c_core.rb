@@ -1048,7 +1048,8 @@ class V2C_File_List_Info
       #puts "#{file_info.path_relative} #{file_info.is_generated}"
       next if not file_info.is_generated
       file_info.path_relative
-    }.compact!
+    }
+    arr_generated.compact!
     return arr_generated
   end
 end
@@ -1875,7 +1876,8 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
     arr_flags = attr_options.split(VS_ADDOPT_VALUE_SEPARATOR_REGEX_OBJ).collect { |opt|
       next if skip_vs10_percent_sign_var(opt)
       opt
-    }.compact!
+    }
+    arr_flags.compact!
   end
   def parse_fs_item_list(attr_fs_items, arr_fs_items)
     return if attr_fs_items.empty?
@@ -6368,8 +6370,7 @@ class V2C_ProjectPostProcess
         arr_generated_files.concat([ midl_info.header_file_name, midl_info.iface_id_file_name, midl_info.proxy_file_name, midl_info.type_library_name ])
       }
     }
-    arr_generated_files.compact!
-    arr_generated_files.each { |candidate|
+    arr_generated_files.compact.each { |candidate|
       info_file = project_info.file_lists.lookup_from_file_name(candidate)
       if not info_file.nil?
         info_file.enable_attribute(V2C_Info_File::ATTR_GENERATED)
