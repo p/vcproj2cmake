@@ -173,6 +173,24 @@ mark_as_advanced(V2C_STAMP_FILES_DIR)
 file(MAKE_DIRECTORY "${V2C_STAMP_FILES_DIR}")
 
 
+function(_v2c_fs_item_make_relative_to_path _in _path _out)
+  # Hmm, I don't think we have a use for file(RELATIVE_PATH) here, right?
+  _v2c_var_set_empty(out_)
+  if(_in)
+    string(SUBSTRING "${_in}" 0 1 in_leadchar_)
+    set(absolute_ FALSE)
+    if(in_leadchar_ STREQUAL "/" OR in_leadchar_ STREQUAL "\\")
+      set(absolute_ TRUE)
+    endif(in_leadchar_ STREQUAL "/" OR in_leadchar_ STREQUAL "\\")
+    if(absolute_)
+      set(${out_} "${_in}")
+    else(absolute_)
+      set(${out_} "${_path}/${_in}")
+    endif(absolute_)
+  endif(_in)
+  set(${_out} "${out_}" PARENT_SCOPE)
+endfunction(_v2c_fs_item_make_relative_to_path _in _path _out)
+
 # A current SCC (Source Control Management) integration test on VS2010
 # finally worked as expected, thus it can be enabled now;
 # for gory details, see main doc (README).
@@ -1242,18 +1260,24 @@ else(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_win32})
     set(options VALIDATE_ALL_PARAMETERS)
     set(oneValueArgs TARGET_ENVIRONMENT IDL_FILE_NAME HEADER_FILE_NAME INTERFACE_IDENTIFIER_FILE_NAME PROXY_FILE_NAME TYPE_LIBRARY_NAME DLL_DATA_FILE_NAME)
     cmake_parse_arguments(v2c_target_midl_compile "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-    set(idl_file_location_ "${CMAKE_CURRENT_SOURCE_DIR}/${v2c_target_midl_compile_IDL_FILE_NAME}")
+    _v2c_fs_item_make_relative_to_path("${v2c_target_midl_compile_IDL_FILE_NAME}" "${PROJECT_SOURCE_DIR}" idl_file_location_)
     if(NOT EXISTS "${idl_file_location_}")
       _v2c_msg_warning("IDL file ${idl_file_location_} not found - bailing out...")
       return()
     endif(NOT EXISTS "${idl_file_location_}")
+    # Hrmpf, unfortunately this *generated* item is relative to project
+    # *source* dir. Eventually we might want to offer a config option to
+    # relocate such things to a build tree directory.
+    # However this would require implicitly adding this directory
+    # to a project's default include path.
+    _v2c_fs_item_make_relative_to_path("${v2c_target_midl_compile_HEADER_FILE_NAME}" "${PROJECT_SOURCE_DIR}" header_file_location_)
     if(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_wine})
       set(cmd_list_ "${V2C_WINE_WIDL_BIN}")
-      set(v2c_widl_outputs_ "")
-      if(v2c_target_midl_compile_HEADER_FILE_NAME)
-	list(APPEND cmd_list_ "-h" "-H${v2c_target_midl_compile_HEADER_FILE_NAME}")
-	list(APPEND v2c_widl_outputs_ "${v2c_target_midl_compile_HEADER_FILE_NAME}")
-      endif(v2c_target_midl_compile_HEADER_FILE_NAME)
+      _v2c_var_set_empty(v2c_widl_outputs_)
+      if(header_file_location_)
+	list(APPEND cmd_list_ "-h" "-H${header_file_location_}")
+	list(APPEND v2c_widl_outputs_ "${header_file_location_}")
+      endif(header_file_location_)
       if(EXISTS "${V2C_WINE_WINDOWS_INCLUDE_DIR}")
         list(APPEND cmd_list_ "-I" "${V2C_WINE_WINDOWS_INCLUDE_DIR}")
       else(EXISTS "${V2C_WINE_WINDOWS_INCLUDE_DIR}")
@@ -1315,7 +1339,7 @@ else(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_win32})
       # TODO: query all the other MIDL-related target properties
       # which possibly were configured prior to invoking this function.
 
-      if(v2c_target_midl_compile_HEADER_FILE_NAME)
+      if(header_file_location_)
         set(midl_header_template_ "${CMAKE_CURRENT_BINARY_DIR}/midl_header_${_target}.h.in")
 	set(midl_header_lib_name_ "${_target}Lib")
 	# FIXME: most certainly this include guard name does not match
@@ -1341,8 +1365,8 @@ DEFINE_GUID(LIBID_${midl_header_lib_name_}, ${midl_header_iid_});
 \#endif
 
 \#endif /* ${midl_header_include_guard_} */")
-        _v2c_create_build_decoupled_adhoc_file("${midl_header_template_}" "${v2c_target_midl_compile_HEADER_FILE_NAME}" "${midl_header_content_}")
-      endif(v2c_target_midl_compile_HEADER_FILE_NAME)
+        _v2c_create_build_decoupled_adhoc_file("${midl_header_template_}" "${header_file_location_}" "${midl_header_content_}")
+      endif(header_file_location_)
       if(v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME)
         _v2c_target_midl_create_dummy_file(${_target} "${v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME}" "interface identifier")
       endif(v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME)

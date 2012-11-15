@@ -810,11 +810,17 @@ class V2C_Tool_MIDL_Specific_Info_MSVC10 < V2C_Tool_MIDL_Specific_Info
   end
 end
 
+# CONVENTION_VS_PROJECT_RELATIVE_PATH:
+# In the case of this filesystem item value, our convention is following Visual
+# Studio's convention: the value is evaluated as *relative* to the project's
+# *source* directory. This quite likely applies to many other filesystem items in
+# a project, too.
+
 class V2C_Tool_MIDL_Info < V2C_Tool_Define_Base_Info
   def initialize(tool_variant_specific_info = nil)
     super(tool_variant_specific_info)
     @dll_data_file_name = nil
-    @header_file_name = nil
+    @header_file_name = nil # path to generated MIDL header file; !CONVENTION_VS_PROJECT_RELATIVE_PATH!
     @iface_id_file_name = nil
     @mktyplib_compatible = false
     @proxy_file_name = nil
