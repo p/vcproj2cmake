@@ -1052,7 +1052,7 @@ class V2C_File_List_Info
   def get_generated_files
     arr_generated = @arr_files.collect { |file_info|
       #puts "#{file_info.path_relative} #{file_info.is_generated}"
-      next if not file_info.is_generated
+      next if false == file_info.is_generated
       file_info.path_relative
     }
     arr_generated.compact!
@@ -1130,7 +1130,7 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
     @arr_p_original_project_files = nil # (optional) a list of native project files that this project info has been parsed from
     @creator = nil # VS7 "ProjectCreator" setting
     @guid = nil
-    @project_types = nil # VS10 'ProjectTypes' (CMake VS_GLOBAL_PROJECT_TYPES)
+    @project_types = nil # VS10 'ProjectTypes' (CMake VS_GLOBAL_PROJECT_TYPES); see also "INFO: List of known project type Guids" http://www.mztools.com/articles/2008/mz2008017.aspx
     @root_namespace = nil
     @version = nil
 
@@ -2027,11 +2027,11 @@ class V2C_VSToolCompilerParser < V2C_VSToolDefineParserBase
   def parse_additional_include_directories(arr_include_dirs_out, attr_incdir)
     split_values_list_preserve_ws_discard_empty(attr_incdir).each { |elem_inc_dir|
       next if skip_vs10_percent_sign_var(elem_inc_dir)
-      elem_inc_dir = get_filesystem_location(elem_inc_dir)
-      next if elem_inc_dir.nil?
+      elem_inc_dir_fs = get_filesystem_location(elem_inc_dir)
+      next if elem_inc_dir_fs.nil?
       #logger.info "include is '#{elem_inc_dir}'"
       info_inc_dir = V2C_Info_Include_Dir.new
-      info_inc_dir.dir = elem_inc_dir
+      info_inc_dir.dir = elem_inc_dir_fs
       arr_include_dirs_out.push(info_inc_dir)
     }
   end
@@ -2199,9 +2199,9 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
     split_values_list_discard_empty(attr_deps).each { |elem_lib_dep|
       logger.debug "!!!!! elem_lib_dep #{elem_lib_dep}"
       next if skip_vs10_percent_sign_var(elem_lib_dep)
-      elem_lib_dep = get_filesystem_location(elem_lib_dep)
-      next if elem_lib_dep.nil?
-      dependency_name = File.basename(elem_lib_dep, '.lib')
+      elem_lib_dep_fs = get_filesystem_location(elem_lib_dep)
+      next if elem_lib_dep_fs.nil?
+      dependency_name = File.basename(elem_lib_dep_fs, '.lib')
       arr_dependencies.push(V2C_Dependency_Info.new(dependency_name))
     }
   end
@@ -2289,6 +2289,8 @@ class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
   end
 end
 
+# A detailed list of Midl section elements can be found at
+# http://stackoverflow.com/questions/3287885/source-parameter-of-the-midl-task-multiple-items-cannot-be-passed-into-a-pa
 module V2C_VSToolMIDLDefines
   include V2C_VSToolDefineDefines
   TEXT_DLLDATAFILENAME = 'DllDataFileName'
@@ -2558,7 +2560,7 @@ class V2C_Info_File
 
   def enable_attribute(attr); @attr |= attr end
   def disable_attribute(attr); @attr &= ~attr end
-  def is_generated; return (@attr & ATTR_GENERATED) > 0 end
+  def is_generated; (@attr & ATTR_GENERATED) > 0 end
 end
 
 class V2C_VS7FileParser < V2C_VS7ParserBase
@@ -5155,10 +5157,10 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # in some environments this might happen. Thus we might want to skip adding
     # the resource files list (VS10: ResourceCompile list) to the target.
     file_lists.arr_file_lists.each { |file_list|
-      #puts "file_list.name #{file_list.name}"
       filelist_generator = V2C_CMakeFileListGenerator_VS10.new(@textOut, project_name, @project_dir, file_list, parent_source_group, arr_sub_sources_for_parent)
       filelist_generator.generate
       arr_generated = file_list.get_generated_files
+      #puts "file_list.name #{file_list.name} arr_generated #{arr_generated.inspect}"
       if not arr_generated.nil? and arr_generated.length > 0
         mark_files_as_generated(file_list.name, arr_generated)
       end
@@ -5191,26 +5193,26 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     #   http://cmake.3232098.n2.nabble.com/CMake-with-IDL-file-generation-td7581589.html
     arr_args_midl = Array.new
     # TODO: write helper method to reduce this semi-duplicated handling:
-    arr_args_midl.concat(['TARGET_ENVIRONMENT', midl_info.target_environment])
+    arr_args_midl.push('TARGET_ENVIRONMENT', midl_info.target_environment)
     # FIXME: should fetch IDL filename from Midl filelist rather than
     # hard-coding it like that.
-    arr_args_midl.concat(['IDL_FILE_NAME', "#{target_name}.idl"])
+    arr_args_midl.push('IDL_FILE_NAME', "#{target_name}.idl")
     if not midl_info.header_file_name.nil?
-      arr_args_midl.concat(['HEADER_FILE_NAME', midl_info.header_file_name])
+      arr_args_midl.push('HEADER_FILE_NAME', midl_info.header_file_name)
     end
     if not midl_info.iface_id_file_name.nil?
-      arr_args_midl.concat(['INTERFACE_IDENTIFIER_FILE_NAME', midl_info.iface_id_file_name])
+      arr_args_midl.push('INTERFACE_IDENTIFIER_FILE_NAME', midl_info.iface_id_file_name)
     end
     if not midl_info.proxy_file_name.nil?
-      arr_args_midl.concat(['PROXY_FILE_NAME', midl_info.proxy_file_name])
+      arr_args_midl.push('PROXY_FILE_NAME', midl_info.proxy_file_name)
     end
     if not midl_info.type_library_name.nil?
-      arr_args_midl.concat(['TYPE_LIBRARY_NAME', midl_info.type_library_name])
+      arr_args_midl.push('TYPE_LIBRARY_NAME', midl_info.type_library_name)
     end
     if not midl_info.dll_data_file_name.nil?
-      arr_args_midl.concat(['DLL_DATA_FILE_NAME', midl_info.dll_data_file_name])
+      arr_args_midl.push('DLL_DATA_FILE_NAME', midl_info.dll_data_file_name)
     end
-    arr_args_midl.concat(['VALIDATE_ALL_PARAMETERS', midl_info.validate_all_parameters.to_s])
+    arr_args_midl.push('VALIDATE_ALL_PARAMETERS', midl_info.validate_all_parameters.to_s)
     write_invoke_object_conditional_v2c_function('v2c_target_midl_compile', target_name, condition, arr_args_midl)
   end
   def hook_up_midl_files(file_lists, config_info)
@@ -6372,7 +6374,7 @@ class V2C_ProjectPostProcess
     project_info.arr_config_info.each { |config_info|
       arr_midl_info = config_info.tools.arr_midl_info
       arr_midl_info.each { |midl_info|
-        arr_generated_files.concat([ midl_info.header_file_name, midl_info.iface_id_file_name, midl_info.proxy_file_name, midl_info.type_library_name ])
+        arr_generated_files.push(midl_info.header_file_name, midl_info.iface_id_file_name, midl_info.proxy_file_name, midl_info.type_library_name)
       }
     }
     arr_generated_files.compact.each { |candidate|
@@ -6380,6 +6382,7 @@ class V2C_ProjectPostProcess
       if not info_file.nil?
         info_file.enable_attribute(V2C_Info_File::ATTR_GENERATED)
       end
+      #puts "candidate #{candidate} info_file #{info_file.inspect}"
     }
 
     if not true == project_info.have_build_units

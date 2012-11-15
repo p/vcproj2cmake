@@ -533,18 +533,19 @@ else(_v2c_generator_has_dynamic_platform_switching)
 
   function(_v2c_buildcfg_determine_platform_var _target)
     _v2c_project_platform_get_list(${_target} platform_names_list_)
-    if(NOT V2C_BUILD_PLATFORM) # avoid rerun
-      _v2c_platform_determine_default("${platform_names_list_}" platform_default_setting_ platform_reason_)
-      set(platform_doc_string_ "The TARGET (not necessarily identical to this build HOST!) platform to create the build for [possible values: [${platform_names_list_}]]")
-      # Offer the main configuration cache variable to the user:
-      set(V2C_BUILD_PLATFORM "${platform_default_setting_}" CACHE STRING ${platform_doc_string_})
-    else(NOT V2C_BUILD_PLATFORM)
+    # Check var definition (avoid rerun):
+    if(V2C_BUILD_PLATFORM)
       # Hmm... preserving the reason variable content is a bit difficult
       # in light of V2C_BUILD_PLATFORM being a CACHE variable
       # (unless we make this CACHE as well).
       # Thus simply pretend it to be user-selected whenever it's read from cache.
       set(platform_reason_ "user-selected entry")
-    endif(NOT V2C_BUILD_PLATFORM)
+    else(V2C_BUILD_PLATFORM)
+      _v2c_platform_determine_default("${platform_names_list_}" platform_default_setting_ platform_reason_)
+      set(platform_doc_string_ "The TARGET (not necessarily identical to this build HOST!) platform to create the build for [possible values: [${platform_names_list_}]]")
+      # Offer the main configuration cache variable to the user:
+      set(V2C_BUILD_PLATFORM "${platform_default_setting_}" CACHE STRING ${platform_doc_string_})
+    endif(V2C_BUILD_PLATFORM)
     _v2c_list_check_item_contained_exact("${V2C_BUILD_PLATFORM}" "${platform_names_list_}" platform_ok_)
     if(platform_ok_)
       _v2c_msg_important_once("build_platform" "${_target}: vcproj2cmake chose to adopt the following project-defined build platform setting: ${V2C_BUILD_PLATFORM} (reason: ${platform_reason_}).")
