@@ -3334,31 +3334,6 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
   private
 
   def get_project; @info_elem end
-  def parse_element_DEPRECATED(subelem_xml)
-    found = be_optimistic()
-    setting_key = subelem_xml.name
-    filter = V2C_Info_Filter.new
-    elem_parser = V2C_VS10ItemGroupElemFilterParser.new(subelem_xml, filter)
-    elem_parser.parse
-    get_project().filters.append(filter)
-    # Due to split between .vcxproj and .vcxproj.filters,
-    # need to possibly _enhance_ an _existing_ (added by the prior file)
-    # item group info, thus make sure to do lookup first.
-    file_list_name = setting_key
-    #file_list_type = get_file_list_type(file_list_name)
-    #file_list = get_project().file_lists.lookup_from_list_name(file_list_name)
-    file_list_new = V2C_File_List_Info.new(file_list_name, get_file_list_type(file_list_name))
-    elem_parser = V2C_VS10ItemGroupElemFileListParser.new(subelem_xml, file_list_new)
-    elem_parser.parse
-    get_project().file_lists.append(file_list_new)
-    # TODO:
-    #if not @itemgroup.label.nil?
-    #  if not setting_key == @itemgroup.label
-    #    parser_error_syntax("item label #{setting_key} does not match group's label #{@itemgroup.label}!?")
-    #  end
-    #end
-    return found
-  end
   def get_file_list_type(file_list_name)
     type = V2C_File_List_Types::TYPE_NONE
     case file_list_name
@@ -6356,7 +6331,7 @@ def v2c_source_root_ensure_usable_cmakelists_skeleton_file(project_converter_scr
   end
 
   file_descr = 'initially usable skeleton file'
-  if nil == skip_skeleton_root_file_reason
+  if skip_skeleton_root_file_reason.nil?
     begin
       log_info "Creating/updating an #{file_descr} at #{root_cmakelists_txt_file}"
       script_location = File.expand_path(project_converter_script_filename)
