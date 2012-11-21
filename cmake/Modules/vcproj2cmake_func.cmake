@@ -1353,7 +1353,10 @@ ${c_section_end_}
       endif(v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME)
       if(v2c_target_midl_compile_TYPE_LIBRARY_NAME)
         list(APPEND cmd_list_ "-t" "-T${v2c_target_midl_compile_TYPE_LIBRARY_NAME}")
-	list(APPEND v2c_widl_outputs_ "${v2c_target_midl_compile_TYPE_LIBRARY_NAME}")
+	# Hmm, it appears that (at least certain older versions of) widl
+	# does NOT generate .tlb files, thus don't add it to output list
+	# since otherwise the target would keep trying to build the ghost file.
+	#list(APPEND v2c_widl_outputs_ "${v2c_target_midl_compile_TYPE_LIBRARY_NAME}")
       endif(v2c_target_midl_compile_TYPE_LIBRARY_NAME)
       if(v2c_target_midl_compile_PROXY_FILE_NAME)
         list(APPEND cmd_list_ "-p" "-P${v2c_target_midl_compile_PROXY_FILE_NAME}")
