@@ -1213,7 +1213,9 @@ set(v2c_midl_handling_mode_stubs "EmulatedStubs")
 if(WIN32)
   set(v2c_midl_handling_mode_default_setting ${v2c_midl_handling_mode_win32})
 else(WIN32)
-  find_program(V2C_WINE_WIDL_BIN widl)
+  find_program(V2C_WINE_WIDL_BIN widl
+    DOC "Path to Wine's MIDL compiler binary (widl)."
+  )
   if(V2C_WINE_WIDL_BIN)
     set(v2c_midl_handling_mode_default_setting ${v2c_midl_handling_mode_wine})
     # Use a nice if rather manual trick
@@ -1222,10 +1224,10 @@ else(WIN32)
     # provided by wine-devel package) is installed at.
     # This path is required by widl to locate e.g. the oaidl.idl,
     # ocidl.idl files that user-side .idl files may include.
-    set(wine_widl_standard_sub_prefix_location_ "/bin/widl")
-    string(REGEX REPLACE "^(.*)${wine_widl_standard_sub_prefix_location_}$" "\\1" wine_prefix_ "${V2C_WINE_WIDL_BIN}")
+    set(wine_widl_standard_sub_prefix_location_ "bin/widl")
+    string(REGEX REPLACE "^(.*)/${wine_widl_standard_sub_prefix_location_}$" "\\1" wine_prefix_ "${V2C_WINE_WIDL_BIN}")
     find_path(V2C_WINE_WINDOWS_INCLUDE_DIR "oaidl.idl"
-      PATHS "${wine_prefix_}/include/wine/windows"
+      HINTS "${wine_prefix_}/include/wine/windows"
       DOC "Path to the Windows include header file directory of a Wine installation"
     )
   else(V2C_WINE_WIDL_BIN)
@@ -1233,7 +1235,7 @@ else(WIN32)
     set(v2c_midl_handling_mode_default_setting ${v2c_midl_handling_mode_stubs})
   endif(V2C_WINE_WIDL_BIN)
 endif(WIN32)
-set(v2c_midl_doc_string "The mode to use for handling of MIDL files [one of: Win32 - uses builtin Win32 MIDL handling / Wine - uses Wine's widl IDL compiler / EmulatedStubs - tries to come up with a sufficiently complete emulation stub to at least allow a successful project build [Code Coverage!]]")
+set(v2c_midl_doc_string "The mode to use for handling of IDL files [one of: ${v2c_midl_handling_mode_win32} - uses builtin Win32 MIDL handling / ${v2c_midl_handling_mode_wine} - uses Wine's widl IDL compiler / ${v2c_midl_handling_mode_stubs} - tries to come up with a sufficiently complete emulation stub to at least allow a successful project build [Code Coverage!]]")
 set(V2C_MIDL_HANDLING_MODE "${v2c_midl_handling_mode_default_setting}" CACHE STRING "${v2c_midl_doc_string}")
 
 if(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_win32})
@@ -1375,9 +1377,9 @@ ${c_section_end_}
         endif(v2c_target_midl_compile_TARGET_ENVIRONMENT STREQUAL "X64")
       endif(v2c_target_midl_compile_TARGET_ENVIRONMENT)
       list(APPEND cmd_list_ "${idl_file_location_}")
-      set(v2c_widl_descr_ "Using Wine's ${V2C_WINE_WIDL_BIN} to compile IDL data")
       _v2c_msg_info("${_target}: ${v2c_widl_descr_} (command line: ${cmd_list_}, output: ${v2c_widl_outputs_}, depends: ${v2c_widl_depends_}).")
       if(v2c_widl_outputs_)
+        set(v2c_widl_descr_ "${_target} (${_build_platform} ${_build_type}): using Wine's ${V2C_WINE_WIDL_BIN} to compile IDL data files (${v2c_widl_outputs_})")
         add_custom_command(OUTPUT ${v2c_widl_outputs_}
           COMMAND ${cmd_list_}
           DEPENDS ${v2c_widl_depends_}
