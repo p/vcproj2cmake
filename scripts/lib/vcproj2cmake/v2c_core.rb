@@ -4900,7 +4900,10 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
       arr_file_infos.each { |file|
         f = file.path_relative
 
-	v2c_generator_check_file_accessible(@project_dir, f, 'file item in project', @project_name, ($v2c_validate_vcproj_abort_on_error > 0))
+	# We fully expect ALL non-generated files to already be available!
+	if false == file.is_generated
+	  v2c_generator_check_file_accessible(@project_dir, f, 'file item in project', @project_name, ($v2c_validate_vcproj_abort_on_error > 0))
+	end
 
         ## Ignore all generated files, for now.
         #if true == file.is_generated
