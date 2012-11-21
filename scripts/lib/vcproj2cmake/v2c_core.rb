@@ -1300,6 +1300,15 @@ def is_known_environment_variable_convention(config_var, config_var_type_descr)
   return is_wellknown
 end
 
+# (Almost-)comment-only helper function:
+# The following variables are said to implicitly include
+# the trailing backslash ('\'), too:
+# SolutionDir, TargetDir, DevEnvDir, InputDir, ProjectDir.
+# (and IntDir too, it seems?)
+def vs7_config_var_trailing_slash(cfg_var_translation)
+  "#{cfg_var_translation}/"
+end
+
 # See also
 # "How to: Use Environment Variables in a Build"
 #   http://msdn.microsoft.com/en-us/library/ms171459.aspx
@@ -1371,7 +1380,7 @@ EOF
       # config_var_replacement = "#{CMAKE_PROJECT_NAME_VAR_DEREF}.vcproj"
       config_var_replacement = "${v2c_VS_#{config_var}}"
     when 'INTDIR'
-      config_var_replacement = "${CMAKE_CURRENT_BINARY_DIR}/#{CMAKE_CFG_INTDIR_VAR_DEREF}/"
+      config_var_replacement = vs7_config_var_trailing_slash("${CMAKE_CURRENT_BINARY_DIR}/#{CMAKE_CFG_INTDIR_VAR_DEREF}")
     when 'OUTDIR'
       # FIXME: should extend code to do executable/library/... checks
       # and assign CMAKE_LIBRARY_OUTPUT_DIRECTORY / CMAKE_RUNTIME_OUTPUT_DIRECTORY
@@ -1381,7 +1390,7 @@ EOF
 EOF
       config_var_replacement = '${v2c_VS_OutDir}'
     when 'PROJECTDIR'
-      config_var_replacement = '${PROJECT_SOURCE_DIR}'
+      config_var_replacement = vs7_config_var_trailing_slash('${PROJECT_SOURCE_DIR}')
     when 'PROJECTPATH'
       # ProjectPath emulation probably doesn't make much sense,
       # since it's a direct path to the MSVS-specific .vcproj file
@@ -1395,7 +1404,7 @@ EOF
       # (BTW, this variable can of course end up with different values -
       # depending on which of the possibly *multiple* solution sub dir hierarchies
       # it's being defined by).
-      config_var_replacement = '${V2C_MASTER_PROJECT_SOURCE_DIR}'
+      config_var_replacement = vs7_config_var_trailing_slash('${V2C_MASTER_PROJECT_SOURCE_DIR}')
     when 'TARGETNAME'
       # NOTE: $(TargetName) is available in both VS7/VS10,
       # however it changed its content (see
