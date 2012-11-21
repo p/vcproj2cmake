@@ -1348,8 +1348,13 @@ ${c_section_end_}
         _v2c_msg_warning("Path to Wine's Windows headers (${V2C_WINE_WINDOWS_INCLUDE_DIR}) does not exist - expect MIDL compiler build-time trouble!")
       endif(EXISTS "${V2C_WINE_WINDOWS_INCLUDE_DIR}")
       if(v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME)
-        list(APPEND cmd_list_ "-u" "-U${v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME}")
-	list(APPEND v2c_widl_outputs_ "${v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME}")
+        # Despite VS probably actually generating into source tree,
+	# we'll use binary dir anyway since for our build
+	# we definitely want to avoid fumbling the source tree
+	# (TODO make this user-configurable!).
+        _v2c_fs_item_make_relative_to_path("${v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME}" "${PROJECT_BINARY_DIR}" iid_file_location_)
+        list(APPEND cmd_list_ "-u" "-U${iid_file_location_}")
+	list(APPEND v2c_widl_outputs_ "${iid_file_location_}")
       endif(v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME)
       if(v2c_target_midl_compile_TYPE_LIBRARY_NAME)
         list(APPEND cmd_list_ "-t" "-T${v2c_target_midl_compile_TYPE_LIBRARY_NAME}")
