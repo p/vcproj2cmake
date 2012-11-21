@@ -1072,6 +1072,12 @@ class V2C_File_Lists_Container
   def lookup_from_list_name(file_list_name)
     return @hash_file_lists[file_list_name]
   end
+  def lookup_from_list_type(file_list_type)
+    @arr_file_lists.each { |list|
+      return list if file_list_type == list.type
+    }
+    return nil
+  end
   def lookup_from_file_name(file_name)
     info_file = nil
     arr_file_lists.each { |file_list|
@@ -5184,7 +5190,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       "(but _before_ target is created using the source list!)"
     )
   end
-  def put_v2c_target_midl_compile(target_name, condition, midl_info)
+  def put_v2c_target_midl_compile(target_name, condition, midl_info, idl_file)
     # TODO: should use condition to alternatively open-code the conditional variable
     # here in case self-contained mode is requested.
     # ... = get_buildcfg_var_name_of_condition(condition)
@@ -5196,7 +5202,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_args_midl.push('TARGET_ENVIRONMENT', midl_info.target_environment)
     # FIXME: should fetch IDL filename from Midl filelist rather than
     # hard-coding it like that.
-    arr_args_midl.push('IDL_FILE_NAME', "#{target_name}.idl")
+    arr_args_midl.push('IDL_FILE_NAME', idl_file)
     if not midl_info.header_file_name.nil?
       arr_args_midl.push('HEADER_FILE_NAME', midl_info.header_file_name)
     end
@@ -5223,17 +5229,23 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # Instead, we do need to have an add_custom_command()
     # which generates them (or suitable dummy files if needed).
     arr_midl_info = config_info.tools.arr_midl_info
-    if not arr_midl_info.empty?
-      midl_info = arr_midl_info[0]
+
+    # Hmm, perhaps it's actually incorrect to skip IDL files
+    # when no MIDL config info provided (--> assume defaults??).
+    return if arr_midl_info.empty?
+
+    file_list_midl = file_lists.lookup_from_list_type(V2C_File_List_Info::TYPE_MIDL)
+    return if file_list_midl.nil?
+
+    midl_info = arr_midl_info[0]
+
+    file_list_midl.arr_files.each { | idl_file|
       #put_v2c_target_midl_preprocessor_definitions(...)
       #put_v2c_target_midl_options(GENERATESTUBLESSPROXIES ... MKTYPLIBCOMPATIBLE ... VALIDATEALLPARAMETERS ...)
       # put_v2c_target_midl_compile() will be the last line to be generated - the invoked function
       # will then implement the MIDL custom command using all previously configured MIDL target properties settings.
-      # FIXME: the .idl file is currently missing (contained within the file list called "Midl")
-      # - we probably need it here, too (since we _can_ do something useful with MIDL information
-      # on Non-Win32 platforms, via Wine's widl...).
-      put_v2c_target_midl_compile(@target.name, config_info.condition, midl_info)
-    end
+      put_v2c_target_midl_compile(@target.name, config_info.condition, midl_info, idl_file.path_relative)
+    }
   end
   def mark_files_as_generated(file_list_description, arr_generated_files)
     file_list_var = "SOURCES_GENERATED_#{file_list_description}"
