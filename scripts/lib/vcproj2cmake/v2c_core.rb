@@ -294,12 +294,20 @@ class V2C_LoggerBase < Logger
   end
 end
 
-# Change \ to /, and remove leading ./
+# Change '\' to '/', and remove leading "./",
+# and retain a trailing path separator.
 def normalize_path(p)
-  felems = p.tr('\\', '/').split('/')
+  p_slash = p.tr('\\', '/')
+  felems = p_slash.split('/')
+  # "Getting last character from a string" http://www.ruby-forum.com/topic/54374
+  trailing_slash_status = p_slash[-1,1]
+  trailing_slash_status = '' if trailing_slash_status != '/'
   # DON'T eradicate single '.' !!
   felems.shift if felems[0] == '.' and felems.length >= 2
-  File.join(felems)
+  # And use special invocation to NOT swallow a special trailing slash
+  # if existing (http://stackoverflow.com/a/12393692 was interesting,
+  # but ultimately did not help since it unconditionally adds it):
+  File.join(felems).concat(trailing_slash_status)
 end
 
 def escape_char(in_string, esc_char)
@@ -591,6 +599,15 @@ class V2C_Precompiled_Header_Info
   attr_accessor :header_binary_name
 end
 
+class V2C_PDB_Info
+  def initialize
+    @output_dir = nil
+    @filename = nil
+  end
+  attr_accessor :output_dir
+  attr_accessor :filename
+end
+
 module V2C_Compiler_Defines
   BASIC_RUNTIME_CHECKS_DEFAULT = 0
   BASIC_RUNTIME_CHECKS_STACKFRAME = 1
@@ -624,13 +641,13 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Define_Base_Info
     @compile_as = COMPILE_AS_DEFAULT
     @debug_information_format = DEBUG_INFO_FORMAT_DISABLED
     @rtti = true
-    @precompiled_header_info = nil
+    @precompiled_header_info = nil # V2C_Precompiled_Header_Info
     @detect_64bit_porting_problems_enable = true # TODO: translate into MSVC /Wp64 flag; Enabled by default is preferable, right?
     @exception_handling = 1 # we do want it enabled, right? (and as Sync?)
     @inline_function_expansion = INLINE_FUNCTION_EXPANSION_DEFAULT
     @minimal_rebuild_enable = false
     @multi_core_compilation_enable = false # TODO: translate into MSVC10 /MP flag...; Disabled by default is preferable (some builds might not have clean target dependencies...)
-    @pdb_filename = nil
+    @pdb_info = nil # V2C_PDB_Info
     @warnings_are_errors_enable = false # TODO: translate into MSVC /WX flag
     @show_includes_enable = false # Whether to show the filenames of included header files. TODO: translate into MSVC /showIncludes flag
     @function_level_linking_enable = false
@@ -653,7 +670,7 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Define_Base_Info
   attr_accessor :inline_function_expansion
   attr_accessor :minimal_rebuild_enable
   attr_accessor :multi_core_compilation_enable
-  attr_accessor :pdb_filename
+  attr_accessor :pdb_info
   attr_accessor :warnings_are_errors_enable
   attr_accessor :show_includes_enable
   attr_accessor :function_level_linking_enable
@@ -1716,7 +1733,8 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
 
     # TODO: should think of a way to do central verification
     # of existence of the file system paths found here near this helper.
-    path_cooked = normalize_path(path_translated).strip
+    path_cooked = normalize_path(path_translated.strip)
+    logger.debug "path_translated #{path_translated}, path_cooked #{path_cooked}"
     return path_cooked.empty? ? nil : path_cooked
   end
   def split_values_list(str_value)
@@ -1962,7 +1980,9 @@ module V2C_VSToolCompilerDefines
   TEXT_MINIMALREBUILD = 'MinimalRebuild'
   VS_DEFAULT_SETTING_MINIMALREBUILD = false # VS10 default: "No (/Gm-)"
   TEXT_OPTIMIZATION = 'Optimization'
-  TEXT_PROGRAMDATABASEFILENAME = 'ProgramDatabaseFileName'
+  # Note that ObjectFileName and ProgramDataBaseFileName (and others?)
+  # are probably handled (split) the same way (--> use common helper!).
+  TEXT_PROGRAMDATABASEFILENAME = 'ProgramDataBaseFileName'
   TEXT_RUNTIMELIBRARY = 'RuntimeLibrary'
   VS_DEFAULT_SETTING_RUNTIMELIBRARY = V2C_Compiler_Defines::CRT_MULTITHREADED
   TEXT_RUNTIMETYPEINFO = 'RuntimeTypeInfo'
@@ -2018,7 +2038,27 @@ class V2C_VSToolCompilerParser < V2C_VSToolDefineParserBase
     when TEXT_OPTIMIZATION
       get_compiler_info().optimization = parse_optimization(setting_value)
     when TEXT_PROGRAMDATABASEFILENAME
-      get_compiler_info().pdb_filename = get_filesystem_location(setting_value)
+      pdb_filename_path_combo = get_filesystem_location(setting_value)
+      pdb_info = V2C_PDB_Info.new
+      # Hmm, seems the trailing slash behaviour of
+      # Pathname.dirname/basename is exactly what we DON'T want -
+      # for trailing-slash args in (some?) VS config content we probably
+      # want it to end up as dirname, with basename *empty*.
+      # IOW,
+      # "./testdir/" --> "./testdir/" | ""
+      # as opposed to Pathname's
+      # "./testdir/" --> "." | "testdir"
+      trailing_char = pdb_filename_path_combo[-1, 1]
+      if '/' == trailing_char
+        pdb_info.output_dir = pdb_filename_path_combo
+	pdb_info.filename = ''
+      else
+        p_pdb_filename_path_combo = Pathname.new(pdb_filename_path_combo)
+        pdb_info.output_dir = p_pdb_filename_path_combo.dirname.to_s
+        pdb_info.filename = p_pdb_filename_path_combo.basename.to_s
+      end
+      logger.debug "pdb_filename_path_combo #{pdb_filename_path_combo}, pdb_info.output_dir #{pdb_info.output_dir} pdb_info.filename #{pdb_info.filename}"
+      get_compiler_info().pdb_info = pdb_info
     when TEXT_RUNTIMELIBRARY
       get_compiler_info().runtime_library_variant = parse_runtime_library(setting_value)
     when TEXT_RUNTIMETYPEINFO
@@ -5235,6 +5275,15 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       put_v2c_target_midl_compile(@target.name, config_info.condition, midl_info, idl_file.path_relative)
     }
   end
+  def put_v2c_target_pdb_configure(target_name, condition, pdb_info)
+    args_generator = ParameterArrayGenerator.new
+    args_generator.add('PDB_OUTPUT_DIRECTORY', pdb_info.output_dir)
+    args_generator.add('PDB_NAME', pdb_info.filename)
+    write_invoke_object_conditional_v2c_function('v2c_target_pdb_configure', target_name, condition, args_generator.array)
+  end
+  def configure_pdb(pdb_info, condition)
+    put_v2c_target_pdb_configure(@target.name, condition, pdb_info)
+  end
   def mark_files_as_generated(file_list_description, arr_generated_files)
     file_list_var = "SOURCES_GENERATED_#{file_list_description}"
     write_list_quoted(file_list_var, arr_generated_files)
@@ -5681,6 +5730,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
               arr_defs_assignments.push(str_define)
             }
             write_property_compile_definitions(condition, arr_defs_assignments, map_defines)
+	    if not compiler_info_curr.pdb_info.nil?
+	      configure_pdb(compiler_info_curr.pdb_info, condition)
+	    end
             # Original compiler flags are MSVC-only, of course. TODO: provide an automatic conversion towards gcc?
             compiler_info_curr.arr_tool_variant_specific_info.each { |compiler_specific|
   	      str_conditional_compiler_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.compiler_name)

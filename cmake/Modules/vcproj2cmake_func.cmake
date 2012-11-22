@@ -1175,6 +1175,15 @@ else(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
   endfunction(v2c_target_add_precompiled_header _target _build_platform _build_type _use _header_file _pch_file)
 endif(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
 
+# Creates the upper-case name required for per-configuration
+# properties.
+# Note: will NOT return content in a result variable,
+# but rather update a fixed-named *common* variable used for this purpose.
+macro(_v2c_buildcfg_buildtype_determine_upper _build_type)
+    # FIXME: for property names, possibly we need to convert
+    # space to underscore, too.
+    string(TOUPPER "${_build_type}" _v2c_buildcfg_build_type_upper)
+endmacro(_v2c_buildcfg_buildtype_determine_upper _build_type)
 
 function(v2c_target_config_charset_set _target _build_platform _build_type _charset)
   v2c_buildcfg_check_if_platform_buildtype_active(${_target} "${_build_platform}" "${_build_type}" is_active_)
@@ -1199,10 +1208,8 @@ function(v2c_target_config_charset_set _target _build_platform _build_type _char
     # SBCS (e.g. ASCII, old standard configuration, no defines here)
   endif("${_charset}" STREQUAL "UNICODE")
   if(charset_defines_list_)
-    # FIXME: for property names, possibly we need to convert
-    # space to underscore, too.
-    string(TOUPPER "${_build_type}" build_type_upper_)
-    set_property(TARGET ${_target} APPEND PROPERTY COMPILE_DEFINITIONS_"${build_type_upper_}" ${charset_defines_list_})
+    _v2c_buildcfg_buildtype_determine_upper("${_build_type}")
+    set_property(TARGET ${_target} APPEND PROPERTY COMPILE_DEFINITIONS_${_v2c_buildcfg_build_type_upper} ${charset_defines_list_})
   endif(charset_defines_list_)
 endfunction(v2c_target_config_charset_set _target _build_platform _build_type _charset)
 
@@ -1438,6 +1445,29 @@ extern \"C\" {
     endif(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_wine})
   endfunction(v2c_target_midl_compile _target _build_platform _build_type)
 endif(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_win32})
+
+function(v2c_target_pdb_configure _target _build_platform _build_type)
+  v2c_buildcfg_check_if_platform_buildtype_active(${_target} "${_build_platform}" "${_build_type}" is_active_)
+  if(is_active_)
+    _v2c_var_set_empty(options)
+    set(oneValueArgs PDB_OUTPUT_DIRECTORY PDB_NAME)
+    cmake_parse_arguments(v2c_target_pdb_configure "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    # These target properties are said to be CMake >= 2.8.10 only.
+    # No version check added here since setting them in vain
+    # at least doesn't hurt.
+    _v2c_buildcfg_buildtype_determine_upper("${_build_type}")
+    if(v2c_target_pdb_configure_PDB_NAME)
+      set_property(TARGET ${_target} PROPERTY PDB_NAME_${_v2c_buildcfg_build_type_upper} "${v2c_target_pdb_configure_PDB_NAME}")
+    endif(v2c_target_pdb_configure_PDB_NAME)
+    if(v2c_target_pdb_configure_PDB_OUTPUT_DIRECTORY)
+      # AFAICT as of CMake master 20121120
+      # CMake source, while *setting* PDB_OUTPUT_DIRECTORY defaults,
+      # does NOT actually *get* a custom one. Doh.
+      set_property(TARGET ${_target} PROPERTY PDB_OUTPUT_DIRECTORY_${_v2c_buildcfg_build_type_upper} ${_pdb_output_dir})
+    endif(_pdb_output_dir)
+  endif(is_active_)
+endfunction(v2c_target_pdb_configure _target _build_platform _build_type)
 
 
 # This function will set up target properties gathered from
