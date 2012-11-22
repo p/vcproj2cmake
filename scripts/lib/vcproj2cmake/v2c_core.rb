@@ -4189,6 +4189,20 @@ class V2C_GenerateIntoTempFile
   end
 end
 
+# Nice helper class, e.g. to be used as the counterpart
+# for CMakeParseArguments functionality.
+class ParameterArrayGenerator
+  def initialize
+    @array = Array.new
+  end
+  attr_reader :array
+  def add(key, value)
+    if not value.nil?
+      @array.push(key, value)
+    end
+  end
+end
+
 class V2C_BaseGlobalGenerator
   def initialize(master_project_dir)
     @filename_map_inc = "#{$v2c_config_dir_local}/include_mappings.txt"
@@ -5184,29 +5198,16 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
     # For an MIDL discussion, see
     #   http://cmake.3232098.n2.nabble.com/CMake-with-IDL-file-generation-td7581589.html
-    arr_args_midl = Array.new
-    # TODO: write helper method to reduce this semi-duplicated handling:
-    arr_args_midl.push('TARGET_ENVIRONMENT', midl_info.target_environment)
-    # FIXME: should fetch IDL filename from Midl filelist rather than
-    # hard-coding it like that.
-    arr_args_midl.push('IDL_FILE_NAME', idl_file)
-    if not midl_info.header_file_name.nil?
-      arr_args_midl.push('HEADER_FILE_NAME', midl_info.header_file_name)
-    end
-    if not midl_info.iface_id_file_name.nil?
-      arr_args_midl.push('INTERFACE_IDENTIFIER_FILE_NAME', midl_info.iface_id_file_name)
-    end
-    if not midl_info.proxy_file_name.nil?
-      arr_args_midl.push('PROXY_FILE_NAME', midl_info.proxy_file_name)
-    end
-    if not midl_info.type_library_name.nil?
-      arr_args_midl.push('TYPE_LIBRARY_NAME', midl_info.type_library_name)
-    end
-    if not midl_info.dll_data_file_name.nil?
-      arr_args_midl.push('DLL_DATA_FILE_NAME', midl_info.dll_data_file_name)
-    end
-    arr_args_midl.push('VALIDATE_ALL_PARAMETERS', midl_info.validate_all_parameters.to_s)
-    write_invoke_object_conditional_v2c_function('v2c_target_midl_compile', target_name, condition, arr_args_midl)
+    args_generator = ParameterArrayGenerator.new
+    args_generator.add('TARGET_ENVIRONMENT', midl_info.target_environment)
+    args_generator.add('IDL_FILE_NAME', idl_file)
+    args_generator.add('HEADER_FILE_NAME', midl_info.header_file_name)
+    args_generator.add('INTERFACE_IDENTIFIER_FILE_NAME', midl_info.iface_id_file_name)
+    args_generator.add('PROXY_FILE_NAME', midl_info.proxy_file_name)
+    args_generator.add('TYPE_LIBRARY_NAME', midl_info.type_library_name)
+    args_generator.add('DLL_DATA_FILE_NAME', midl_info.dll_data_file_name)
+    args_generator.add('VALIDATE_ALL_PARAMETERS', midl_info.validate_all_parameters.to_s)
+    write_invoke_object_conditional_v2c_function('v2c_target_midl_compile', target_name, condition, args_generator.array)
   end
   def hook_up_midl_files(file_lists, config_info)
     # VERY Q&D way to mark MIDL-related files as GENERATED,
