@@ -1185,7 +1185,7 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
   attr_accessor :type
   attr_accessor :name
   attr_accessor :orig_environment_shortname
-  attr_accessor :arr_p_original_project_files 
+  attr_accessor :arr_p_original_project_files
   attr_accessor :creator
   attr_accessor :guid
   attr_accessor :project_types
@@ -1722,7 +1722,7 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
   def skip_vs10_percent_sign_var(str_var)
     # shortcut :)
     return false if not str_var.include?('%')
-  
+
     return false if not VS10_ITEM_METADATA_MACRO_MATCH_REGEX_OBJ.match(str_var)
     logger.fixme("skipping unhandled VS10 variable (#{str_var})")
     return true
@@ -5735,7 +5735,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 	    end
             # Original compiler flags are MSVC-only, of course. TODO: provide an automatic conversion towards gcc?
             compiler_info_curr.arr_tool_variant_specific_info.each { |compiler_specific|
-  	      str_conditional_compiler_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.compiler_name)
+	      str_conditional_compiler_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.compiler_name)
               # I don't think we need this (we have per-target properties), thus we'll NOT write it!
               #if not attr_opts.nil?
               #  local_generator.write_directory_property_compile_flags(attr_options)
@@ -6241,8 +6241,8 @@ def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_de
       else
         log_error "File #{file_relative} (#{file_item_description}) as listed by project #{project_name} does not exist!? (perhaps filename with wrong case, or wrong path, ...)"
         if throw_error
-  	# FIXME: should be throwing an exception, to not exit out
-  	# on entire possibly recursive (global) operation
+	# FIXME: should be throwing an exception, to not exit out
+	# on entire possibly recursive (global) operation
           # when a single project is in error...
           log_fatal "Improper original file - will abort and NOT generate a broken converted project file. Please fix content of the original project file!"
         end

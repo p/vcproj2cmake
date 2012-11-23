@@ -109,7 +109,7 @@ else
         # If the local directory contains file "ARGV[0].<project_extension>" then use it, else error.
         # (Note:  Only '+' works here for concatenation, not '<<'.)
         vcproj_filename_test += parser_extension
-  
+
         #puts "Looking for #{vcproj_filename}"
         if FileTest.exist?(vcproj_filename_test)
           vcproj_filename = vcproj_filename_test

@@ -244,7 +244,7 @@ MACRO(_PCH_GET_COMPILE_FLAGS_PCH_CREATE _out_cflags _header _pch _pch_creator_cx
 
 	IF(CMAKE_COMPILER_IS_GNUCXX)
 	  # gcc does not build the PCH via a .cpp builder file,
-	  # thus this argument is not used... right!? 
+	  # thus this argument is not used... right!?
 	  SET(cflags_pch_create_ -x c++-header -o ${_pch} ${_header})
 	ELSE(CMAKE_COMPILER_IS_GNUCXX)
 		SET(cflags_pch_create_ /c /Fp${_pch} /Yc${_header} ${_pch_creator_cxx}
@@ -280,7 +280,7 @@ MACRO(_PCH_GET_COMPILE_FLAGS_PCH_USE _out_cflags _header_name _pch_path_arg _dow
     # Unfortunately the compile flags variable is a *string*
     # (due to COMPILE_FLAGS property string-only limitation),
     # thus we need to use explicit manual quoting rather than possibly
-    # relying on CMake-side quoting mechanisms of individual list elements. 
+    # relying on CMake-side quoting mechanisms of individual list elements.
     _pch_quote_manually_if_needed(pch_header_location_)
     SET(cflags_pch_use_ "${PCH_ADDITIONAL_COMPILER_FLAGS} -include ${pch_header_location_} ${pch_gcc_pch_warn_flag_} " )
 
@@ -513,10 +513,10 @@ macro(_pch_write_pch_creator_cxx _pch_creator_cxx _variant)
   endif("${_variant}" EQUAL "1")
 
   if(EXISTS ${_pch_creator_cxx})
-  	# Check if contents is the same, if not rewrite
-  	# todo
+	# Check if contents is the same, if not rewrite
+	# todo
   else(EXISTS ${_pch_creator_cxx})
-  	FILE(WRITE ${_pch_creator_cxx} ${dummy_file_content_})
+	FILE(WRITE ${_pch_creator_cxx} ${dummy_file_content_})
   endif(EXISTS ${_pch_creator_cxx})
 endmacro(_pch_write_pch_creator_cxx _pch_creator_cxx _variant)
 
@@ -551,14 +551,14 @@ ENDMACRO(GET_NATIVE_PRECOMPILED_HEADER)
 
 MACRO(ADD_NATIVE_PRECOMPILED_HEADER _targetName _input)
 
-  	# BUG FIX: a non-option invocation will cause ARGN def to be skipped!!
-  	set(dowarn_ 0)
-  	if(${ARGN})
-    	  IF( "${ARGN}" STREQUAL "0")
-    	  ELSE( "${ARGN}" STREQUAL "0")
-      	    SET(dowarn_ 1)
-    	  ENDIF("${ARGN}" STREQUAL "0")
-  	endif(${ARGN})
+	# BUG FIX: a non-option invocation will cause ARGN def to be skipped!!
+	set(dowarn_ 0)
+	if(${ARGN})
+	  IF( "${ARGN}" STREQUAL "0")
+	  ELSE( "${ARGN}" STREQUAL "0")
+	    SET(dowarn_ 1)
+	  ENDIF("${ARGN}" STREQUAL "0")
+	endif(${ARGN})
 
 	if(CMAKE_GENERATOR MATCHES Visual*)
 		# Auto include the precompile (useful for moc processing,

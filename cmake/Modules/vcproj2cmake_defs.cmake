@@ -11,14 +11,14 @@ set(V2C_SOURCES "")
 macro(_v2cd_add_deprecated_standard_variable_mapping _old_var _new_var _todo_feature_removal_time)
   # Add another dummy function param, to enforce stating feature removal time :)
   # (TODO_FEATURE_REMOVAL_TIME_20xx).
-  # 
+  #
   set(${_old_var} "${${_new_var}}")
 endmacro(_v2cd_add_deprecated_standard_variable_mapping _old_var _new_var _todo_feature_removal_time)
 
 macro(_v2cd_add_deprecated_cache_variable_mapping _old_var _new_var _todo_feature_removal_time)
   # Add another dummy function param, to enforce stating feature removal time :)
   # (TODO_FEATURE_REMOVAL_TIME_20xx).
-  # 
+  #
   set(${_old_var} "${${_new_var}}" CACHE STRING "Automated mapping to deprecated old-style variable - please always use ${_new_var} instead." FORCE)
   # We'll NOT mark deprecated CACHE vars as advanced since a user is supposed to visibly realize that there's a problem.
   #mark_as_advanced(${_old_var})
