@@ -1152,7 +1152,7 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
     @orig_environment_shortname = nil
     @arr_p_original_project_files = nil # (optional) a list of native project files that this project info has been parsed from
     @creator = nil # VS7 "ProjectCreator" setting
-    @guid = nil
+    @guid = nil # String - the project's GUID (number/dash format only, with curly brackets *removed*)
     @project_types = nil # VS10 'ProjectTypes' (CMake VS_GLOBAL_PROJECT_TYPES); see also "INFO: List of known project type Guids" http://www.mztools.com/articles/2008/mz2008017.aspx
     @root_namespace = nil
     @version = nil
@@ -1736,6 +1736,20 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
     path_cooked = normalize_path(path_translated.strip)
     logger.debug "path_translated #{path_translated}, path_cooked #{path_cooked}"
     return path_cooked.empty? ? nil : path_cooked
+  end
+  GUID_DIG = '[[:digit:][A-Fa-f]]'
+  GUID_PART = "#{GUID_DIG}#{GUID_DIG}#{GUID_DIG}#{GUID_DIG}"
+  VS_GUID_MATCH_REGEX_OBJ = %r{{(#{GUID_PART}#{GUID_PART}-#{GUID_PART}-#{GUID_PART}-#{GUID_PART}-#{GUID_PART}#{GUID_PART}#{GUID_PART})}}
+  # Returns a Visual Studio GUID value with leading, trailing curly
+  # brackets removed
+  def strip_guid(guid)
+    guid_match = VS_GUID_MATCH_REGEX_OBJ.match(guid)
+    if guid_match.nil?
+      parser_error("Could not match against project GUID value #{guid}, please report!", false)
+      return nil
+    end
+    #puts "guid_match #{guid_match.inspect} #{guid_match[1]}"
+    return guid_match[1]
   end
   def split_values_list(str_value)
     arr_str = str_value.split(VS_VALUE_SEPARATOR_REGEX_OBJ)
@@ -3004,7 +3018,7 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
     when 'ProjectCreator' # used by Fortran .vfproj ("Intel Fortran")
       get_project().creator = setting_value
     when 'ProjectGUID', 'ProjectIdGuid' # used by Visual C++ .vcproj, Fortran .vfproj
-      get_project().guid = setting_value
+      get_project().guid = strip_guid(setting_value)
     when 'ProjectType'
       get_project().type = setting_value
     when TEXT_ROOTNAMESPACE
@@ -3742,7 +3756,7 @@ class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10BaseElemParser
     when TEXT_KEYWORD
       get_project().vs_keyword = setting_value
     when 'ProjectGuid'
-      get_project().guid = setting_value
+      get_project().guid = strip_guid(setting_value)
     when 'ProjectName'
       get_project().name = setting_value
     when 'ProjectTypes'
@@ -5840,6 +5854,14 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     )
     write_invoke_v2c_function_quoted('v2c_project_conversion_info_set', [ project_name, str_time, str_from_buildtool_version ])
   end
+  def put_guid(project_name, project_guid)
+    return if project_guid.nil?
+    write_comment_at_level(COMMENT_LEVEL_VERBOSE,
+      "Indicates the GUID that the project of the original environment carried.\n" \
+      "May or may not be adopted by the newly generated project target as well,\n" \
+      "depending on user choice.\n")
+    write_invoke_v2c_function_quoted('v2c_project_indicate_original_guid', [ project_name, project_guid ])
+  end
   def detect_programming_languages(project_info)
     language_detector = V2C_CMakeProjectLanguageDetector.new(project_info)
     language_detector.detect
@@ -5898,6 +5920,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def generate_project_leadin(project_info)
     write_project(project_info)
     put_conversion_info(project_info.name, project_info.orig_environment_shortname)
+    put_guid(project_info.name, project_info.guid)
     put_include_MasterProjectDefaults_vcproj2cmake()
     write_funcs_v2c_project_platform_define_build_types(project_info.name, project_info.build_platform_configs)
     put_hook_project()

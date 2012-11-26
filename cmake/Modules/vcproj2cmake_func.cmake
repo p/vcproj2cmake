@@ -191,6 +191,9 @@ function(_v2c_fs_item_make_relative_to_path _in _path _out)
   set(${_out} "${out_}" PARENT_SCOPE)
 endfunction(_v2c_fs_item_make_relative_to_path _in _path _out)
 
+set(v2c_want_original_guid_default_setting OFF)
+option(V2C_WANT_PROJECT_ORIGINAL_GUID_ASSIGNED "Activate re-use of the original GUID of a project rather than having CMake assign a newly generated random one. This can easily turn out to be a bad idea however, since one could judge an original project and its corresponding re-generated project to NOT be identical (think out-of-tree-build differences, missing attribute translations, ...)" ${v2c_want_original_guid_default_setting})
+
 # A current SCC (Source Control Management) integration test on VS2010
 # finally worked as expected, thus it can be enabled now;
 # for gory details, see main doc (README).
@@ -374,6 +377,21 @@ macro(v2c_project_conversion_info_set _target _timestamp_utc _orig_environment)
   set(${_target}_v2c_converted_at_utc "${_timestamp_utc}")
   set(${_target}_v2c_converted_from "${_orig_environment}")
 endmacro(v2c_project_conversion_info_set _target _timestamp_utc _orig_environment)
+
+# Assigns the original project GUID to a project
+# if desired (rather than having a newly generated random GUID
+# assigned by CMake).
+macro(v2c_project_indicate_original_guid _target _guid)
+  # TODO!! should try to establish *common* helper with *consistent* naming
+  # and handling for checking target-specific enable/disable of certain
+  # optional features (install, GUID, MIDL, PDB, SCC, etc.),
+  # rather than doing it manually each time.
+  if(V2C_WANT_PROJECT_ORIGINAL_GUID_ASSIGNED)
+    set(guid_with_brackets "{${_guid}}")
+    message(STATUS "${_target}: re-using its original project GUID (${guid_with_brackets}).")
+    set(${_target}_GUID_CMAKE "${guid_with_brackets}" CACHE INTERNAL "Stored GUID")
+  endif(V2C_WANT_PROJECT_ORIGINAL_GUID_ASSIGNED)
+endmacro(v2c_project_indicate_original_guid _target _guid)
 
 
 # # # # #   BUILD PLATFORM SETUP   # # # # #
