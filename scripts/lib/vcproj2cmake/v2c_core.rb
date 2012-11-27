@@ -1737,9 +1737,9 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
     logger.debug "path_translated #{path_translated}, path_cooked #{path_cooked}"
     return path_cooked.empty? ? nil : path_cooked
   end
-  GUID_DIG = '[[:digit:][A-Fa-f]]'
+  GUID_DIG = '[[:digit:]A-Fa-f]'
   GUID_PART = "#{GUID_DIG}#{GUID_DIG}#{GUID_DIG}#{GUID_DIG}"
-  VS_GUID_MATCH_REGEX_OBJ = %r{{(#{GUID_PART}#{GUID_PART}-#{GUID_PART}-#{GUID_PART}-#{GUID_PART}-#{GUID_PART}#{GUID_PART}#{GUID_PART})}}
+  VS_GUID_MATCH_REGEX_OBJ = %r{\{(#{GUID_PART}#{GUID_PART}-#{GUID_PART}-#{GUID_PART}-#{GUID_PART}-#{GUID_PART}#{GUID_PART}#{GUID_PART})\}}
   # Returns a Visual Studio GUID value with leading, trailing curly
   # brackets removed
   def strip_guid(guid)
