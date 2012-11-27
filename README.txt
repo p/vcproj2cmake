@@ -236,6 +236,9 @@ Visual Studio project tree.
 This is to be done by mentioning the names of the projects to be excluded
 in the file $v2c_config_dir_local/project_exclude_list.txt
 
+Any CACHE variables or option()s provided by our vcproj2cmake CMake code
+can have an initial successful preset override by imposing their initial
+value via cmake -D.
 
 === Automatic re-conversion upon .vcproj changes ===
 
@@ -390,6 +393,11 @@ despite only needing a tiny subset of that functionality each.
 Admittedly this is the worst case (which should be avoidable),
 but it does happen and it's not pretty.
 
+Not to mention that PCH frequently shadow proper dependency tracking of
+the headers that they include (to show that this is a more prominent
+problem: none of the 3 assorted-mixed-up public CMake PCH support modules
+currently offers proper rebuilds on include change!).
+
 Note that on VS2010, for /MP (multi-processor) builds in combination with
 using #import directives, using PCH appears to be necessary
 since using #import in standalone header files instead
@@ -403,6 +411,10 @@ to ensure that nobody else will process the #import parts in parallel.
 
 
 === Related projects, alternative setups ===
+
+CMake's builtin command: include_external_msproject().
+This one is MSVC-only, quite obviously.
+
 
 sln2mak (.sln to Makefile converter), http://www.codeproject.com/KB/cross-platform/sln2mak.aspx
 
@@ -451,6 +463,10 @@ and single compilation unit builds for C and C++.
 Possibly useful project to normalize file content
 of the rather volatile .vcproj file format ("herding cats"):
 http://www.codeproject.com/Articles/133604/Visual-C-version-7-9-vcproj-project-file-formatter
+
+
+https://github.com/Vairn/vcxproj2cmake (or other related forks at github)
+Perl-based converter. Unfortunately not very powerful yet as of end-2012.
 
 
 === Cross-platform development hints ===
@@ -515,8 +531,8 @@ shortcomings, among these:
     probably hasn't seen much use yet (TODO: determine actual status)
   - also, OpenTF hasn't seen a commit since 2008
 - astonishing stability issues
-  a work item tracking exception occurring in server layers
-  that was caused by one client will cause (TFS2008):
+  - a work item tracking exception occurring in server layers
+    that was caused by one client will cause (TFS2008):
     a) the server to not handle the NullPtrException in a benign way
        (no client input whatsoever should ever cause a server to croak, ideally ["INPUT VALIDATION"])
     b) several *other*, *unrelated* VS clients which happen to have ongoing TFS transmissions to be affected by this single-client server session failure (WTH?)
@@ -526,13 +542,20 @@ shortcomings, among these:
     --> whoa, triple FAIL!! This behaviour is surely being acerbated
         by the fact that TFS is a centralized (non-disconnected operation)
         lock-in type infrastructure
+  - a merge operation of two almost identical text-only header files
+    on TFS2008 sometimes causes the result to end up with embedded NULs
+    (read: corrupted, for many purposes - type changed from text to binary!),
+    despite both original blobs emphatically NOT containing any embedded NUL
+    [quite likely the root cause is a string handling off-by-1 in
+    TFS's merge code!]
 
 For a very revealing discussion with lots of experienced SCM/ALM people,
 you may look at
 http://jamesmckay.net/2011/02/team-foundation-server-is-the-lotus-notes-of-version-control-tools/
 
 In short, it is strongly advisable to also check out other (possibly much more
-transparently developed) ALMs such as Trac before committing to a specific product
+transparently developed) ALM solutions such as Trac, Jira, Polarion
+before committing to a specific product
 (these environments make up a large part of your development inner loop,
 thus a wrong choice will cost dearly in wasted time and inefficiency).
 http://almatters.wordpress.com/2010/08/19/alm-open-source-tools-eclipse-mylyn-subclipse-trac-subversion/
