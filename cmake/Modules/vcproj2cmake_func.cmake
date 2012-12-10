@@ -142,7 +142,13 @@ if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
     # at least on MSVS 2005 generator. I suppose that this initial error is ok,
     # since CMake probably still needs to make up its mind as to which
     # configuration types (MinSizeRel, Debug etc.) are available.
-    _v2c_msg_fatal_error("Important CMAKE_BUILD_TYPE variable was not specified - should be properly set, or actively ignored by setting V2C_WANT_SKIP_CMAKE_BUILD_TYPE_CHECK (not recommended).")
+    # Nope, turns out that this special case is more problematic than expected:
+    # e.g. for ExternalProject_Add() uses,
+    # a FATAL_ERROR (as opposed to SEND_ERROR!) will cause CACHE vars to
+    # not get written - it will never succeed, due to infinite failure.
+    # And since even one initial failure might be undesired,
+    # decide to downgrade it to a warning only.
+    _v2c_msg_warning("A single-configuration generator appears to have been chosen (currently selected: ${CMAKE_GENERATOR}) yet subsequently the corresponding important CMAKE_BUILD_TYPE variable has not been specified - should be properly set, or actively ignored by setting V2C_WANT_SKIP_CMAKE_BUILD_TYPE_CHECK (not recommended).")
   endif(NOT V2C_WANT_SKIP_CMAKE_BUILD_TYPE_CHECK) # user might not want this to happen...
 endif(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 
