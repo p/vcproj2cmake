@@ -38,10 +38,13 @@ Details for manual usage (very rough summary), with Linux/Makefile generator:
   (not recommended - the non-user file will be overwritten on each repository update,
   thus restoring all settings to default)
 - in the project source tree, run ruby [PATH_TO_VCPROJ2CMAKE]/scripts/vcproj2cmake.rb PROJECT.vcproj
-  (alternatively, execute vcproj2cmake_recursive.rb to convert an entire hierarchy of .vcproj sub projects)
+  (alternatively, execute vcproj2cmake_recursive.rb to convert an entire
+  hierarchy of .vcproj sub projects [parsing of .sln solution files is
+  unfortunately not supported yet])
 - copy all required cmake/Modules, cmake/vcproj2cmake and samples (provided by the vcproj2cmake source tree!)
   to their respective paths in your project source tree
-- after successfully converting the .vcproj file to a CMakeLists.txt, start your out-of-tree CMake builds:
+- after successfully having converted the .vcproj file to a CMakeLists.txt,
+  start your out-of-tree CMake builds:
   - mkdir ../[PROJECT_NAME].build_toolkit1_v1.2.3_unicode_debug
   - cd ../[PROJECT_NAME].build_toolkit1_v1.2.3_unicode_debug
   - ccmake -DCMAKE_BUILD_TYPE=Debug ../[PROJECT_NAME] (alternatively: cmake ../[PROJECT_NAME])
@@ -77,7 +80,7 @@ run _all_ related developers on a CMake-based setup.
 
 For more volatile vcproj2cmake parts (those which get updated frequently
 by the vcproj2cmake project, such as vcproj2cmake_func.cmake
-and generated CMakeLists.txt),
+and generated CMakeLists.txt files),
 it is recommended to *not* add them to Source Control Management (SCM).
 Reasons:
 - version of vcproj2cmake_func.cmake etc. should remain synchronized
@@ -85,11 +88,24 @@ Reasons:
   by always-installing vcproj2cmake_func.cmake etc.
 - a large number of generated CMakeLists.txt files
   will needlessly clutter the source tree for non-CMake developers
-Mappings files and hook files, OTOH, contain custom project-specific
+Mappings files and hook files, OTOH, do contain custom project-specific
 persistent information and thus should find their way into SCM.
 
 ===============================================================================
 Explanation of core concepts:
+
+
+=== Directory hierarchy ===
+
+I strongly recommend having the root directory (the one
+where the solution [.sln] file is usually placed) of a Visual Studio
+source tree kept as an otherwise almost empty directory,
+with all application and library projects then placed in *child* directories.
+Not following this good convention may (will?) cause V2C conversion to break.
+You might e.g. decide to aggregate this entire auto-converted
+V2C sub scope from a parent-level native CMakeLists.txt infrastructure,
+via add_subdirectory()).
+
 
 
 === Hook script includes ===
@@ -118,7 +134,7 @@ For the rather exotic case of a single CMakeLists.txt
 converted from *several* project files within a *single* directory,
 each hook file will be invoked for all projects.
 Since it's not obvious which project() code is the one that's
-currently calling the hook, it's advisable to implement
+currently calling the hook, it's advisable to implement manual
 if(${PROJECT_NAME} STREQUAL foobar_project)
 checks in such hook scripts.
 
@@ -189,9 +205,11 @@ then the ensuing replacement expression.
 Then an '|' (pipe, "or") for an optional series of additional platform conditionals.
 
 
-Note that ideally you merely need to centrally maintain all mappings in your root project part
-(ROOT_PROJECT/cmake/vcproj2cmake/*_mappings.txt), since sub projects will also
-collect information from the root project in addition to their (optional) local mappings files.
+Note that ideally you merely need to centrally maintain all mappings
+in your root directory (solution file?) part
+(ROOT_PROJECT/cmake/vcproj2cmake/*_mappings.txt),
+since sub projects will also collect information from the root project
+in addition to their (optional) local mappings files.
 
 
 lib_dirs_dep_mappings.txt is a bit special in that it will translate
@@ -397,6 +415,10 @@ Not to mention that PCH frequently shadow proper dependency tracking of
 the headers that they include (to show that this is a more prominent
 problem: none of the 3 assorted-mixed-up public CMake PCH support modules
 currently offers proper rebuilds on include change!).
+See e.g.
+http://connect.microsoft.com/VisualStudio/feedback/details/704753/visual-studio-does-not-rebuild-precompiled-file-when-headers-change
+"MSBuild Does Not Detect Changes in Precompiled Headers"
+http://social.msdn.microsoft.com/Forums/en-US/msbuild/thread/1adbe5a0-88de-4b33-ba39-6e4d1e33502c/
 
 Note that on VS2010, for /MP (multi-processor) builds in combination with
 using #import directives, using PCH appears to be necessary
