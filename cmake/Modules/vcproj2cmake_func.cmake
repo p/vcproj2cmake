@@ -1483,7 +1483,7 @@ function(v2c_target_pdb_configure _target _build_platform _build_type)
       # CMake source, while *setting* PDB_OUTPUT_DIRECTORY defaults,
       # does NOT actually *get* a custom one. Doh.
       set_property(TARGET ${_target} PROPERTY PDB_OUTPUT_DIRECTORY_${_v2c_buildcfg_build_type_upper} ${_pdb_output_dir})
-    endif(_pdb_output_dir)
+    endif(v2c_target_pdb_configure_PDB_OUTPUT_DIRECTORY)
   endif(is_active_)
 endfunction(v2c_target_pdb_configure _target _build_platform _build_type)
 
