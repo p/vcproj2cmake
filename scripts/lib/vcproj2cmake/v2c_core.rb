@@ -4534,7 +4534,8 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     ensure_string_nonempty(str_cmake_minimum_version)
     write_command_single_line('cmake_minimum_required', "VERSION #{str_cmake_minimum_version}")
   end
-  def write_cmake_policy(policy_num, set_to_new, comment) # comment parm better not default-nil (enforce commenting)
+  def write_cmake_policy(policy_num, set_to_new)
+    comment = get_cmake_policy_docstring(policy_num)
     str_policy = '%s%04d' % [ 'CMP', policy_num ]
     str_conditional = "POLICY #{str_policy}"
     write_conditional_if(str_conditional)
@@ -4576,6 +4577,37 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   end
   private
 
+  PC_TODO = 'TODO_POLICY_DOCUMENTATION'
+  # For details, see cmake --help-policies or cmakepolicies(1).
+  CMAKE_POLICY_DOCSTRINGS = [
+    PC_TODO, # 0
+    PC_TODO,
+    PC_TODO,
+    PC_TODO,
+    PC_TODO,
+    'automatic quoting of brackets', # 5
+    PC_TODO,
+    PC_TODO,
+    PC_TODO,
+    PC_TODO,
+    PC_TODO, # 10
+    "we do want the includer to be affected by our updates,\n" \
+    "since it might define project-global settings.\n",
+    PC_TODO,
+    PC_TODO,
+    PC_TODO,
+    ".vcproj contains relative paths to additional library directories,\n" \
+    "thus we need to be able to cope with that", # 15
+    PC_TODO,
+    PC_TODO,
+  ]
+  def get_cmake_policy_docstring(policy_num)
+    if policy_num < CMAKE_POLICY_DOCSTRINGS.length
+      CMAKE_POLICY_DOCSTRINGS.fetch(policy_num)
+    else
+      PC_TODO
+    end
+  end
   def element_manual_quoting(elem)
     return "\"#{elem}\""
   end
@@ -6041,15 +6073,9 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
       # but this would be less compatible (it is conceivable
       # that certain policy numbers get withdrawn completely in future,
       # in which case hierarchic conditionals would fail).
-      write_cmake_policy(5, true, "automatic quoting of brackets")
-      write_cmake_policy(11, false, \
-	"we do want the includer to be affected by our updates,\n" \
-        "since it might define project-global settings.\n" \
-      )
-      write_cmake_policy(15, true, \
-        ".vcproj contains relative paths to additional library directories,\n" \
-        "thus we need to be able to cope with that" \
-      )
+      write_cmake_policy(5, true)
+      write_cmake_policy(11, false)
+      write_cmake_policy(15, true)
     write_conditional_end(str_conditional)
   end
   def put_cmake_module_path(str_conversion_root_rel)
