@@ -538,6 +538,10 @@ else(_v2c_generator_has_dynamic_platform_switching)
       # In such pathological cases, it might be a good idea to fall back
       # to some other kind of system introspection
       # (perhaps try_compile(), execute_process()).
+      # An alternative way to check it might be
+      # "[CMake] CMake Visual Studio 64bit flag?"
+      #   http://www.cmake.org/pipermail/cmake/2010-October/040150.html
+      # "if(CMAKE_CL_64 OR CMAKE_GENERATOR MATCHES Win64)"
       _v2c_msg_fixme("CMAKE_SIZEOF_VOID_P not available - currently assuming 32bit!")
       set(platform_key_ "32")
       set(platform_reason_ "unknown platform bitwidth - fallback to 32bit")

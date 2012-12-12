@@ -5959,6 +5959,10 @@ end
 
 # Generates the CMake code required to bootstrap V2C operation
 # (provided by each scope which may still need to execute this init code)
+# TODO: either this generator or a "solution-global" generator class
+# ought to be the one to generate setting the CMake GLOBAL PROPERTY
+# DEBUG_CONFIGURATIONS, originally parsed from all projects and/or the entire
+# solution configuration.
 class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
   def initialize(textOut, relative_path_to_root, script_location_relative_to_master)
     super(textOut)
@@ -6029,6 +6033,8 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     write_conditional_if(str_conditional)
       # CMP0005: manual quoting of brackets in definitions doesn't seem to work otherwise,
       # in cmake 2.6.4-7.el5 with "OLD".
+      # For policy tweaking, use of cmake_policy(PUSH/POP) might be
+      # potentially useful, too.
       # We'll decide to write the policies one after another -
       # we could be embedding all higher-numbered policies
       # within the conditionals of the lower ones,
@@ -6084,6 +6090,11 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     # Whatever we do here - make sure we don't stomp out any potential prior CMAKE_MODULE_PATH definition!!
     # (for details, see "CMake coding guide"
     #    http://www.aldebaran-robotics.com/documentation/qibuild/contrib/cmake/coding_guide.html )
+    # Note that referencing the previous CMAKE_MODULE_PATH setting
+    # may cause a --warn-uninitialized warning if it did not exist.
+    # However implementing cautious querying to prevent the warning
+    # yields quite some overhead compared to current implementation,
+    # thus we'll keep it as is for now (TODO?).
     arr_args_func = [ "${V2C_MASTER_PROJECT_SOURCE_DIR}/#{$v2c_module_path_local}", "${CMAKE_SOURCE_DIR}/#{$v2c_module_path_local}", get_dereferenced_variable_name('CMAKE_MODULE_PATH') ]
     write_list_quoted('CMAKE_MODULE_PATH', arr_args_func)
   end
