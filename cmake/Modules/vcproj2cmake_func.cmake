@@ -177,6 +177,11 @@ endif(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 # (querying deprecated variables - missing result).
 
 
+# Provide an internal helper variable
+# to be able to add VERBATIM to custom commands/targets as recommended,
+# but with backwards compat for older non-supporting CMake versions.
+set(_V2C_CMAKE_VERBATIM "VERBATIM")
+
 _v2c_var_set_default_if_not_set(V2C_STAMP_FILES_SUBDIR "stamps")
 # Enable customization (via cache entry), someone might need it.
 set(V2C_STAMP_FILES_DIR "${CMAKE_BINARY_DIR}/${V2C_GLOBAL_CONFIG_RELPATH}/${V2C_STAMP_FILES_SUBDIR}" CACHE PATH "The directory to place any stamp files used by vcproj2cmake in.")
@@ -811,6 +816,7 @@ if(v2c_cmakelists_rebuilder_available)
     #add_custom_command(OUTPUT "${cmakelists_update_recursively_updated_observer_stamp_file_}"
     #  COMMAND "${CMAKE_COMMAND}" -E touch "${cmakelists_update_recursively_updated_observer_stamp_file_}"
     #  DEPENDS "${project_exclude_list_file_location_v1_}"
+    #  ${_V2C_CMAKE_VERBATIM}
     #)
     #add_custom_target(update_cmakelists_rebuild_recursive_ALL_observer ALL DEPENDS "${cmakelists_update_recursively_updated_observer_stamp_file_}")
     #add_dependencies(update_cmakelists_rebuild_recursive_ALL_observer ${cmakelists_target_rebuild_all_name_})
@@ -914,6 +920,7 @@ if(v2c_cmakelists_rebuilder_available)
       COMMAND "${CMAKE_COMMAND}" -E touch "${cmakelists_update_this_cmakelists_updated_stamp_file_}"
       DEPENDS ${cmakelists_rebuilder_deps_list_}
       COMMENT "VS project settings changed, rebuilding ${_cmakelists_file}"
+      ${_V2C_CMAKE_VERBATIM}
     )
     # TODO: do we have to set_source_files_properties(GENERATED) on ${_cmakelists_file}?
 
@@ -994,6 +1001,7 @@ if(v2c_cmakelists_rebuilder_available)
 #          DEPENDS "${rebuild_occurred_marker_file}"
 	  # Mention that this is about V2C targets only (we obviously cannot exert influence on any targets created in non-V2C areas).
           COMMENT ">>> === Detected a rebuild of CMakeLists.txt files - forcefully aborting the current outdated build run of V2C targets [force new updated-settings configure run]! <<< ==="
+          ${_V2C_CMAKE_VERBATIM}
         )
         add_custom_target(update_cmakelists_abort_build_after_update DEPENDS "${cmakelists_update_check_stamp_file_v1_}")
 
@@ -1001,6 +1009,7 @@ if(v2c_cmakelists_rebuilder_available)
           COMMAND "${CMAKE_COMMAND}" -E remove -f "${cmakelists_update_check_did_abort_public_marker_file_v1_}"
           COMMAND "${CMAKE_COMMAND}" -E touch "${update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1_}"
           COMMENT "removed public marker file (for newly converted CMakeLists.txt signalling)!"
+          ${_V2C_CMAKE_VERBATIM}
         )
         # Mark this target as ALL since it's VERY important that it gets
         # executed ASAP.
@@ -1429,6 +1438,7 @@ ${c_section_end_}
           COMMAND ${cmd_list_}
           DEPENDS ${v2c_widl_depends_}
           COMMENT "${v2c_widl_descr_}"
+          ${_V2C_CMAKE_VERBATIM}
         )
         add_custom_target(${_target}_midl_compile DEPENDS ${v2c_widl_outputs_})
         add_dependencies(${_target} ${_target}_midl_compile)
