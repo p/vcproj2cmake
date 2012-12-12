@@ -29,6 +29,9 @@
 #   with frequent signature and content changes
 #   (--> vcproj2cmake.rb and vcproj2cmake_func.cmake versions
 #   should always be kept in sync)
+# - all variable accesses should be wrapped by accessor functions
+#   (access to non-existent CMake functions/variables will be signalled/ignored!)
+# - content should not cause any --warn-uninitialized output
 
 # Policy descriptions:
 # *V2C_DOCS_POLICY_MACRO*:
@@ -80,11 +83,13 @@ include(CMakeParseArguments) # strong CMake version dependency (>= 2.8.3?)
 set(V2C_CMAKE_CONFIGURE_PROMPT "[V2C] " CACHE STRING "The prompt prefix to show for any vcproj2cmake messages occurring during CMake configure time." FORCE)
 mark_as_advanced(V2C_CMAKE_CONFIGURE_PROMPT)
 
-# Zero out a variable.
-macro(_v2c_var_set_empty _var_name)
-  # A "set(var )" does NOT unset it - it needs an empty string literal!
-  set(${_var_name} "")
-endmacro(_v2c_var_set_empty _var_name)
+# Zero out a variable (or several).
+macro(_v2c_var_set_empty)
+  foreach(var_name_ ${ARGV})
+    # A "set(var )" does NOT unset it - it needs an empty string literal!
+    set(${var_name_} "")
+  endforeach(var_name_ ${ARGV})
+endmacro(_v2c_var_set_empty)
 
 macro(_v2c_var_set_default_if_not_set _var_name _v2c_default_setting)
   if(NOT DEFINED ${_var_name})
@@ -1354,6 +1359,7 @@ ${c_section_end_}
 
     set(options VALIDATE_ALL_PARAMETERS)
     set(oneValueArgs TARGET_ENVIRONMENT IDL_FILE_NAME HEADER_FILE_NAME INTERFACE_IDENTIFIER_FILE_NAME PROXY_FILE_NAME TYPE_LIBRARY_NAME DLL_DATA_FILE_NAME)
+    _v2c_var_set_empty(multiValueArgs)
     cmake_parse_arguments(v2c_target_midl_compile "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
     _v2c_fs_item_make_relative_to_path("${v2c_target_midl_compile_IDL_FILE_NAME}" "${PROJECT_SOURCE_DIR}" idl_file_location_)
     if(NOT EXISTS "${idl_file_location_}")
@@ -1473,7 +1479,7 @@ endif(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_win32})
 function(v2c_target_pdb_configure _target _build_platform _build_type)
   v2c_buildcfg_check_if_platform_buildtype_active(${_target} "${_build_platform}" "${_build_type}" is_active_)
   if(is_active_)
-    _v2c_var_set_empty(options)
+    _v2c_var_set_empty(options multiValueArgs)
     set(oneValueArgs PDB_OUTPUT_DIRECTORY PDB_NAME)
     cmake_parse_arguments(v2c_target_pdb_configure "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -1488,7 +1494,7 @@ function(v2c_target_pdb_configure _target _build_platform _build_type)
       # AFAICT as of CMake master 20121120
       # CMake source, while *setting* PDB_OUTPUT_DIRECTORY defaults,
       # does NOT actually *get* a custom one. Doh.
-      set_property(TARGET ${_target} PROPERTY PDB_OUTPUT_DIRECTORY_${_v2c_buildcfg_build_type_upper} ${_pdb_output_dir})
+      set_property(TARGET ${_target} PROPERTY PDB_OUTPUT_DIRECTORY_${_v2c_buildcfg_build_type_upper} ${v2c_target_pdb_configure_PDB_OUTPUT_DIRECTORY})
     endif(v2c_target_pdb_configure_PDB_OUTPUT_DIRECTORY)
   endif(is_active_)
 endfunction(v2c_target_pdb_configure _target _build_platform _build_type)

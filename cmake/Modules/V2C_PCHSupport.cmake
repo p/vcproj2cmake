@@ -257,6 +257,19 @@ MACRO(_PCH_GET_COMPILE_FLAGS_PCH_CREATE _out_cflags _header _pch _pch_creator_cx
 
 ENDMACRO(_PCH_GET_COMPILE_FLAGS_PCH_CREATE _out_cflags _header _pch _pch_creator_cxx)
 
+# Fetches a user-specified PCH_ADDITIONAL_COMPILER_FLAGS.
+# If preprocessed files are accessible on all remote machines,
+# set PCH_ADDITIONAL_COMPILER_FLAGS to -fpch-preprocess.
+function(_pch_compiler_flags_additional_get _out_flags)
+  set(out_flags_ "")
+  # Since PCH_ADDITIONAL_COMPILER_FLAGS is an *optional* variable,
+  # we need explicit validation (avoid causing --warn-uninitialized noise).
+  if(PCH_ADDITIONAL_COMPILER_FLAGS)
+    set(out_flags_ "${PCH_ADDITIONAL_COMPILER_FLAGS}")
+  endif(PCH_ADDITIONAL_COMPILER_FLAGS)
+  set(${_out_flags} "${out_flags_}" PARENT_SCOPE)
+endfunction(_pch_compiler_flags_additional_get _out_flags)
+
 # Returns the compile flags required to *Use* a PCH, and only those.
 MACRO(_PCH_GET_COMPILE_FLAGS_PCH_USE _out_cflags _header_name _pch_path_arg _dowarn )
 
@@ -266,8 +279,6 @@ MACRO(_PCH_GET_COMPILE_FLAGS_PCH_USE _out_cflags _header_name _pch_path_arg _dow
     # gcc does not seem to need/use _pch_path arg.
 
     # For use with distcc and gcc >4.0.1.
-    # If preprocessed files are accessible on all remote machines,
-    # set PCH_ADDITIONAL_COMPILER_FLAGS to -fpch-preprocess.
     # If you want warnings for invalid header files (which is very inconvenient
     # if you have different versions of the headers for different build types)
     # you may set _dowarn.
@@ -282,7 +293,9 @@ MACRO(_PCH_GET_COMPILE_FLAGS_PCH_USE _out_cflags _header_name _pch_path_arg _dow
     # thus we need to use explicit manual quoting rather than possibly
     # relying on CMake-side quoting mechanisms of individual list elements.
     _pch_quote_manually_if_needed(pch_header_location_)
-    SET(cflags_pch_use_ "${PCH_ADDITIONAL_COMPILER_FLAGS} -include ${pch_header_location_} ${pch_gcc_pch_warn_flag_} " )
+    set(additional_flags_ "") # pre-init required (CMake bug #13786)
+    _pch_compiler_flags_additional_get(additional_flags_)
+    set(cflags_pch_use_ "${additional_flags_} -include ${pch_header_location_} ${pch_gcc_pch_warn_flag_} " )
 
     # Currently there seems to be an annoyance on gcc side where headers
     # without include guards lead to duplicate inclusion, whereas on MSVC
