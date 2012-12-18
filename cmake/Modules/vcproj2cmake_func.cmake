@@ -109,6 +109,9 @@ endmacro(_v2c_msg_warning _msg)
 macro(_v2c_msg_fixme _msg)
   message("${V2C_CMAKE_CONFIGURE_PROMPT}FIXME: ${_msg}")
 endmacro(_v2c_msg_fixme _msg)
+macro(_v2c_msg_send_error _msg)
+  message(SEND_ERROR "${V2C_CMAKE_CONFIGURE_PROMPT}${_msg}")
+endmacro(_v2c_msg_send_error _msg)
 macro(_v2c_msg_fatal_error _msg)
   message(FATAL_ERROR "${V2C_CMAKE_CONFIGURE_PROMPT}${_msg}")
 endmacro(_v2c_msg_fatal_error _msg)
@@ -153,7 +156,9 @@ if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
     # not get written - it will never succeed, due to infinite failure.
     # And since even one initial failure might be undesired,
     # decide to downgrade it to a warning only.
-    _v2c_msg_warning("A single-configuration generator appears to have been chosen (currently selected: ${CMAKE_GENERATOR}) yet subsequently the corresponding important CMAKE_BUILD_TYPE variable has not been specified - should be properly set, or actively ignored by setting V2C_WANT_SKIP_CMAKE_BUILD_TYPE_CHECK (not recommended).")
+    # Nope - our build platform/type infrastructure does need it to be
+    # correct, thus do send an error (a warning may easily get missed).
+    _v2c_msg_send_error("A single-configuration generator appears to have been chosen (currently selected: ${CMAKE_GENERATOR}) yet subsequently the corresponding important CMAKE_BUILD_TYPE variable has not been specified - needs to be set properly, or actively ignored by setting V2C_WANT_SKIP_CMAKE_BUILD_TYPE_CHECK (not recommended).")
   endif(NOT V2C_WANT_SKIP_CMAKE_BUILD_TYPE_CHECK) # user might not want this to happen...
 endif(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 
