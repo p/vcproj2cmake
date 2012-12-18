@@ -375,6 +375,7 @@ endfunction(_v2c_msg_important_once _magic _msg)
 
 
 _v2c_var_set_default_if_not_set(V2C_STAMP_FILES_SUBDIR "stamps")
+_v2c_ensure_valid_variables(V2C_GLOBAL_CONFIG_RELPATH)
 # Enable customization (via cache entry), someone might need it.
 set(V2C_STAMP_FILES_DIR "${CMAKE_BINARY_DIR}/${V2C_GLOBAL_CONFIG_RELPATH}/${V2C_STAMP_FILES_SUBDIR}" CACHE PATH "The directory to place any stamp files used by vcproj2cmake in.")
 mark_as_advanced(V2C_STAMP_FILES_DIR)
@@ -398,12 +399,17 @@ function(_v2c_fs_item_make_relative_to_path _in _path _out)
   set(${_out} "${out_}" PARENT_SCOPE)
 endfunction(_v2c_fs_item_make_relative_to_path _in _path _out)
 
-function(_v2c_stamp_file_make_location _out_stamp_location)
-  _v2c_ensure_valid_variables(_out_stamp_location)
+function(_v2c_stamp_file_location_assign _stamp_file_name _out_stamp_file_location)
+  _v2c_ensure_valid_variables(_out_stamp_file_location)
   _v2c_var_verified_get(STAMP_FILES_DIR stamp_files_dir_)
-  set(location_ "${stamp_files_dir_}/${_out_stamp_location}")
-  set(${_out_stamp_location} "${location_}" PARENT_SCOPE)
-endfunction(_v2c_stamp_file_make_location _out_stamp_location)
+  set(location_ "${stamp_files_dir_}/${_stamp_file_name}")
+  set(${_out_stamp_file_location} "${location_}" PARENT_SCOPE)
+endfunction(_v2c_stamp_file_location_assign _stamp_file_name _out_stamp_file_location)
+
+function(_v2c_stamp_file_location_config_assign _config_name _stamp_file_name)
+  _v2c_stamp_file_location_assign("${_stamp_file_name}" stamp_file_location_)
+  _v2c_config_set(${_config_name} "${stamp_file_location_}")
+endfunction(_v2c_stamp_file_location_config_assign _config_name _stamp_file_name)
 
 # # # # #   FEATURE CHECKS   # # # # #
 
@@ -665,7 +671,7 @@ function(_v2c_config_do_setup_rebuilder)
     "${cmakelists_rebuilder_deps_static_list_}"
   )
 
-  _v2c_config_set(cmakelists_update_check_stamp_file_v1 "${V2C_STAMP_FILES_DIR}/v2c_cmakelists_update_check_done.stamp")
+  _v2c_stamp_file_location_config_assign(cmakelists_update_check_stamp_file_v1 "v2c_cmakelists_update_check_done.stamp")
 
   if(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD)
     # See also
@@ -688,10 +694,10 @@ function(_v2c_config_do_setup_rebuilder)
     # to determine whether a (supposedly entire) build
     # was aborted due to CMakeLists.txt conversion and thus they
     # should immediately resume with a new build...
-    _v2c_config_set(cmakelists_update_check_did_abort_public_marker_file_v1 "${V2C_STAMP_FILES_DIR}/v2c_cmakelists_update_check_did_abort.marker")
+    _v2c_stamp_file_location_config_assign(cmakelists_update_check_did_abort_public_marker_file_v1 "v2c_cmakelists_update_check_did_abort.marker")
     # This is the stamp file for the subsequent "cleanup" target
     # (oh yay, we even need to have the marker file removed on next build launch again).
-    _v2c_config_set(update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1 "${V2C_STAMP_FILES_DIR}/v2c_cmakelists_update_abort_cleanup_done.stamp")
+    _v2c_stamp_file_location_config_assign(update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1 "v2c_cmakelists_update_abort_cleanup_done.stamp")
 
      # Provide API helper, for user-side build scripts to know how to detect
      # that a build abort occured.
