@@ -19,7 +19,8 @@
 # - this will enable having huge functions within this module
 #   yet merely tiny amounts of syntax within the repeatedly generated
 #   converted CMakeLists.txt files
-# - implement many flexible base helper functions (list manipulation, ...)
+# - implement many flexible base helper functions (list manipulation, ...),
+#   ordered from most basic to most complex (depending on basic helpers)
 # - function prefix: _v2c_* indicates internal functions, whereas v2c_* are
 #   relatively public ones
 # - prefer _upper-case_ V2C prefix for _cache variables_ such as V2C_BUILD_PLATFORM,
@@ -187,37 +188,24 @@ endif(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 # but with backwards compat for older non-supporting CMake versions.
 set(_V2C_CMAKE_VERBATIM "VERBATIM")
 
-_v2c_var_set_default_if_not_set(V2C_STAMP_FILES_SUBDIR "stamps")
-# Enable customization (via cache entry), someone might need it.
-set(V2C_STAMP_FILES_DIR "${CMAKE_BINARY_DIR}/${V2C_GLOBAL_CONFIG_RELPATH}/${V2C_STAMP_FILES_SUBDIR}" CACHE PATH "The directory to place any stamp files used by vcproj2cmake in.")
-mark_as_advanced(V2C_STAMP_FILES_DIR)
-file(MAKE_DIRECTORY "${V2C_STAMP_FILES_DIR}")
-
-
-function(_v2c_fs_item_make_relative_to_path _in _path _out)
-  # Hmm, I don't think we have a use for file(RELATIVE_PATH) here, right?
-  _v2c_var_set_empty(out_)
-  if(_in)
-    string(SUBSTRING "${_in}" 0 1 in_leadchar_)
-    set(absolute_ FALSE)
-    if(in_leadchar_ STREQUAL "/" OR in_leadchar_ STREQUAL "\\")
-      set(absolute_ TRUE)
-    endif(in_leadchar_ STREQUAL "/" OR in_leadchar_ STREQUAL "\\")
-    if(absolute_)
-      set(out_ "${_in}")
-    else(absolute_)
-      set(out_ "${_path}/${_in}")
-    endif(absolute_)
-  endif(_in)
-  set(${_out} "${out_}" PARENT_SCOPE)
-endfunction(_v2c_fs_item_make_relative_to_path _in _path _out)
+# Helper for nicely verified fetching of a CACHE variable :)
+function(_v2c_var_verified_get _var_name _out_value)
+  set(var_name_ V2C_${_var_name})
+  _v2c_ensure_valid_variables(${var_name_})
+  set(${_out_value} "${${var_name_}}" PARENT_SCOPE)
+endfunction(_v2c_var_verified_get _var_name _out_value)
 
 set(v2c_want_original_guid_default_setting OFF)
 option(V2C_WANT_PROJECT_ORIGINAL_GUID_ASSIGNED "Activate re-use of the original GUID of a project rather than having CMake assign a newly generated random one. This can easily turn out to be a bad idea however, since one could judge an original project and its corresponding re-generated project to NOT be identical (think out-of-tree-build differences, missing attribute translations, ...)" ${v2c_want_original_guid_default_setting})
 
-# A current SCC (Source Control Management) integration test on VS2010
-# finally worked as expected, thus it can be enabled now;
-# for gory details, see main doc (README).
+function(v2c_project_original_guid_desired_get _target _out_flag)
+  # _target currently unused...
+  _v2c_ensure_valid_variables(_target)
+  _v2c_var_verified_get(WANT_PROJECT_ORIGINAL_GUID_ASSIGNED want_orig_guid_assigned_)
+  set(${_out_flag} ${want_orig_guid_assigned_} PARENT_SCOPE)
+endfunction(v2c_project_original_guid_desired_get _target _out_flag)
+
+# For gory VS2010 SCM details, see main doc (README).
 function(_v2c_scc_do_setup)
   set(v2c_want_scc_default_setting_ ON)
   # Have a check for TUI-only (most uses of Ninja, Makefile) builds.
@@ -228,7 +216,7 @@ function(_v2c_scc_do_setup)
       break()
     endif("${CMAKE_GENERATOR}" STREQUAL "${gen_}")
   endforeach(gen_ ${generator_no_scc_wanted_list_})
-  set(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION ${v2c_want_scc_default_setting_} CACHE BOOL "Enable re-use of any existing SCC (source control management) integration/binding info for projects (e.g. on Visual Studio)")
+  option(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION "Enable re-use of any existing SCC (source control management) integration/binding info for projects (e.g. on Visual Studio)" {v2c_want_scc_default_setting_})
   if(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION)
     string(LENGTH "${CMAKE_SOURCE_DIR}/" src_len_)
     string(SUBSTRING "${CMAKE_BINARY_DIR}/" 0 ${src_len_} bin_test_)
@@ -247,6 +235,11 @@ function(_v2c_scc_do_setup)
 endfunction(_v2c_scc_do_setup)
 
 _v2c_scc_do_setup()
+
+function(_v2c_scc_ide_integration_desired_get _out_flag)
+  _v2c_ensure_valid_variables(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION)
+  set(${_out_flag} ${V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION} PARENT_SCOPE)
+endfunction(_v2c_scc_ide_integration_desired_get _out_flag)
 
 function(_v2c_pch_do_setup)
   set(v2c_want_pch_default_setting_ ON)
@@ -380,6 +373,38 @@ function(_v2c_msg_important_once _magic _msg)
   endif(NOT _already_logged)
 endfunction(_v2c_msg_important_once _magic _msg)
 
+
+_v2c_var_set_default_if_not_set(V2C_STAMP_FILES_SUBDIR "stamps")
+# Enable customization (via cache entry), someone might need it.
+set(V2C_STAMP_FILES_DIR "${CMAKE_BINARY_DIR}/${V2C_GLOBAL_CONFIG_RELPATH}/${V2C_STAMP_FILES_SUBDIR}" CACHE PATH "The directory to place any stamp files used by vcproj2cmake in.")
+mark_as_advanced(V2C_STAMP_FILES_DIR)
+file(MAKE_DIRECTORY "${V2C_STAMP_FILES_DIR}")
+
+function(_v2c_fs_item_make_relative_to_path _in _path _out)
+  # Hmm, I don't think we have a use for file(RELATIVE_PATH) here, right?
+  _v2c_var_set_empty(out_)
+  if(_in)
+    string(SUBSTRING "${_in}" 0 1 in_leadchar_)
+    set(absolute_ FALSE)
+    if(in_leadchar_ STREQUAL "/" OR in_leadchar_ STREQUAL "\\")
+      set(absolute_ TRUE)
+    endif(in_leadchar_ STREQUAL "/" OR in_leadchar_ STREQUAL "\\")
+    if(absolute_)
+      set(out_ "${_in}")
+    else(absolute_)
+      set(out_ "${_path}/${_in}")
+    endif(absolute_)
+  endif(_in)
+  set(${_out} "${out_}" PARENT_SCOPE)
+endfunction(_v2c_fs_item_make_relative_to_path _in _path _out)
+
+function(_v2c_stamp_file_make_location _out_stamp_location)
+  _v2c_ensure_valid_variables(_out_stamp_location)
+  _v2c_var_verified_get(STAMP_FILES_DIR stamp_files_dir_)
+  set(location_ "${stamp_files_dir_}/${_out_stamp_location}")
+  set(${_out_stamp_location} "${location_}" PARENT_SCOPE)
+endfunction(_v2c_stamp_file_make_location _out_stamp_location)
+
 # # # # #   FEATURE CHECKS   # # # # #
 
 # Add helper variable [non-readonly (i.e., configurable) INCLUDE_DIRECTORIES target property supported by >= 2.8.8 only]
@@ -407,11 +432,12 @@ macro(v2c_project_indicate_original_guid _target _guid)
   # and handling for checking target-specific enable/disable of certain
   # optional features (install, GUID, MIDL, PDB, SCC, etc.),
   # rather than doing it manually each time.
-  if(V2C_WANT_PROJECT_ORIGINAL_GUID_ASSIGNED)
-    set(guid_with_brackets "{${_guid}}")
-    message(STATUS "${_target}: re-using its original project GUID (${guid_with_brackets}).")
-    set(${_target}_GUID_CMAKE "${guid_with_brackets}" CACHE INTERNAL "Stored GUID")
-  endif(V2C_WANT_PROJECT_ORIGINAL_GUID_ASSIGNED)
+  v2c_project_original_guid_desired_get(${_target} want_original_)
+  if(want_original_)
+    set(guid_with_brackets_ "{${_guid}}")
+    message(STATUS "${_target}: re-using its original project GUID (${guid_with_brackets_}).")
+    set(${_target}_GUID_CMAKE "${guid_with_brackets_}" CACHE INTERNAL "Stored GUID")
+  endif(want_original_)
 endmacro(v2c_project_indicate_original_guid _target _guid)
 
 
@@ -463,19 +489,21 @@ endfunction(_v2c_buildcfg_get_magic_conditional_name _target _build_platform _bu
 if(CMAKE_CONFIGURATION_TYPES)
   function(_v2c_buildcfg_define_magic_conditional _target _build_platform _build_type _var_out)
     set(val_ FALSE)
-    if(V2C_BUILD_PLATFORM STREQUAL "${_build_platform}")
+    _v2c_var_verified_get(BUILD_PLATFORM build_platform_)
+    if("${build_platform_}" STREQUAL "${_build_platform}")
       set(val_ TRUE)
-    endif(V2C_BUILD_PLATFORM STREQUAL "${_build_platform}")
+    endif("${build_platform_}" STREQUAL "${_build_platform}")
     set(${_var_out} ${val_} PARENT_SCOPE)
   endfunction(_v2c_buildcfg_define_magic_conditional _target _build_platform _build_type _var_out)
 else(CMAKE_CONFIGURATION_TYPES)
   function(_v2c_buildcfg_define_magic_conditional _target _build_platform _build_type _var_out)
     set(val_ FALSE)
-    if(V2C_BUILD_PLATFORM STREQUAL "${_build_platform}")
+    _v2c_var_verified_get(BUILD_PLATFORM build_platform_)
+    if("${build_platform_}" STREQUAL "${_build_platform}")
       if(CMAKE_BUILD_TYPE STREQUAL "${_build_type}")
         set(val_ TRUE)
       endif(CMAKE_BUILD_TYPE STREQUAL "${_build_type}")
-    endif(V2C_BUILD_PLATFORM STREQUAL "${_build_platform}")
+    endif("${build_platform_}" STREQUAL "${_build_platform}")
     set(${_var_out} ${val_} PARENT_SCOPE)
   endfunction(_v2c_buildcfg_define_magic_conditional _target _build_platform _build_type _var_out)
 endif(CMAKE_CONFIGURATION_TYPES)
@@ -577,23 +605,24 @@ else(_v2c_generator_has_dynamic_platform_switching)
   function(_v2c_buildcfg_determine_platform_var _target)
     _v2c_project_platform_get_list(${_target} platform_names_list_)
     # Check var definition (avoid rerun):
-    if(V2C_BUILD_PLATFORM)
+    _v2c_var_verified_get(BUILD_PLATFORM build_platform_)
+    if(build_platform_)
       # Hmm... preserving the reason variable content is a bit difficult
       # in light of V2C_BUILD_PLATFORM being a CACHE variable
       # (unless we make this CACHE as well).
       # Thus simply pretend it to be user-selected whenever it's read from cache.
       set(platform_reason_ "user-selected entry")
-    else(V2C_BUILD_PLATFORM)
+    else(build_platform_)
       _v2c_platform_determine_default("${platform_names_list_}" platform_default_setting_ platform_reason_)
       set(platform_doc_string_ "The TARGET (not necessarily identical to this build HOST!) platform to create the build for [possible values: [${platform_names_list_}]]")
       # Offer the main configuration cache variable to the user:
       set(V2C_BUILD_PLATFORM "${platform_default_setting_}" CACHE STRING ${platform_doc_string_})
-    endif(V2C_BUILD_PLATFORM)
+    endif(build_platform_)
     _v2c_list_check_item_contained_exact("${V2C_BUILD_PLATFORM}" "${platform_names_list_}" platform_ok_)
     if(platform_ok_)
       _v2c_msg_important_once("build_platform" "${_target}: vcproj2cmake chose to adopt the following project-defined build platform setting: ${V2C_BUILD_PLATFORM} (reason: ${platform_reason_}).")
     else(platform_ok_)
-      _v2c_msg_fatal_error("V2C_BUILD_PLATFORM contains invalid build platform setting (${V2C_BUILD_PLATFORM}), please correct! (valid candidates: ${platform_names_list_})")
+      _v2c_msg_fatal_error("V2C_BUILD_PLATFORM contains invalid build platform setting (${build_platform_}), please correct! (valid candidates: ${platform_names_list_})")
     endif(platform_ok_)
   endfunction(_v2c_buildcfg_determine_platform_var _target)
 
@@ -672,15 +701,16 @@ function(_v2c_config_do_setup_rebuilder)
      endfunction(v2c_rebuilder_build_abort_get_marker_file _res_out)
   endif(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD)
   # Provide API helper for user-side query.
-  macro(v2c_rebuilder_build_abort_is_enabled _res_out)
-    set(${_res_out} ${V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD})
-  endmacro(v2c_rebuilder_build_abort_is_enabled _res_out)
+  function(v2c_rebuilder_build_abort_is_enabled _res_out)
+    _v2c_var_verified_get(CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD v2c_abort_after_rebuild_)
+    set(${_res_out} ${v2c_abort_after_rebuild_} PARENT_SCOPE)
+  endfunction(v2c_rebuilder_build_abort_is_enabled _res_out)
 endfunction(_v2c_config_do_setup_rebuilder)
 
 function(_v2c_config_do_setup)
   # FIXME: should obey V2C_LOCAL_CONFIG_RELPATH setting!! Nope, this is a
   # reference to the _global_ one here...
-  set(global_config_subdir_ "${V2C_GLOBAL_CONFIG_RELPATH}")
+  _v2c_var_verified_get(GLOBAL_CONFIG_RELPATH global_config_subdir_)
 
   # These files are OPTIONAL elements of the source tree!
   # (thus we shouldn't carelessly list them as target file dependencies etc.)
@@ -701,18 +731,19 @@ function(_v2c_config_do_setup)
   file(GLOB root_mappings_files_list_ "${CMAKE_SOURCE_DIR}/${mappings_files_expr_}")
   _v2c_config_set(root_mappings_files_list_v1 "${root_mappings_files_list_}")
 
-
-  # Now do rebuilder setup within this function, too,
-  # to have direct access to parent scope's important configuration variables.
-  if(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
-    _v2c_config_do_setup_rebuilder()
-  endif(V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER)
-
   # Provide API helper for user-side query of rebuilder activation status.
   # Once active, further rebuilder APIs may be called.
   macro(v2c_rebuilder_enabled _res_out)
-    set(${_res_out} ${V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER})
+    _v2c_var_verified_get(USE_AUTOMATIC_CMAKELISTS_REBUILDER v2c_use_rebuilder_)
+    set(${_res_out} ${v2c_use_rebuilder_})
   endmacro(v2c_rebuilder_enabled _res_out)
+
+  # Now do rebuilder setup within this function, too,
+  # to have direct access to parent scope's important configuration variables.
+  v2c_rebuilder_enabled(v2c_use_rebuilder_)
+  if(v2c_use_rebuilder_)
+    _v2c_config_do_setup_rebuilder()
+  endif(v2c_use_rebuilder_)
 endfunction(_v2c_config_do_setup)
 
 _v2c_config_do_setup()
@@ -986,7 +1017,8 @@ if(v2c_cmakelists_rebuilder_available)
 
     # FIXME: should use that V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD conditional
     # to establish (during one-time setup) a _dummy/non-dummy_ _function_ for rebuild abort handling.
-    if(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD)
+    _v2c_var_verified_get(CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD v2c_abort_after_rebuild_)
+    if(v2c_abort_after_rebuild_)
       if(need_init_main_targets_this_time_)
         _v2c_config_get(cmakelists_update_check_did_abort_public_marker_file_v1 cmakelists_update_check_did_abort_public_marker_file_v1_)
         _v2c_config_get(update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1 update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1_)
@@ -1031,12 +1063,12 @@ if(v2c_cmakelists_rebuilder_available)
       endif(need_init_main_targets_this_time_)
       add_dependencies(update_cmakelists_abort_build_after_update ${target_cmakelists_update_this_projdir_name_})
       set(target_cmakelists_ensure_rebuilt_name_ update_cmakelists_ALL)
-    else(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD)
+    else(v2c_abort_after_rebuild_)
       if(need_init_main_targets_this_time_)
         add_dependencies(update_cmakelists_ALL update_cmakelists_ALL__internal_collector)
       endif(need_init_main_targets_this_time_)
       set(target_cmakelists_ensure_rebuilt_name_ ${target_cmakelists_update_this_projdir_name_})
-    endif(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD)
+    endif(v2c_abort_after_rebuild_)
 
     # in the list of project(s) of a directory an actual project target
     # might not be available (i.e. all are header-only project(s)).
@@ -1124,7 +1156,8 @@ else(_v2c_feat_cmake_include_dirs_prop)
 endif(_v2c_feat_cmake_include_dirs_prop)
 
 
-if(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
+_v2c_var_verified_get(WANT_PCH_PRECOMPILED_HEADER_SUPPORT v2c_want_pch_support)
+if(v2c_want_pch_support)
   function(_v2c_pch_log_setup_status _target _header_file _pch_mode _dowarn)
     _v2c_bool_get_status_string(V2C_WANT_PCH_PRECOMPILED_HEADER_WARNINGS warnings_status_)
     _v2c_msg_info("v2c_target_add_precompiled_header: configured target ${_target} to *${_pch_mode}* ${_header_file} as PCH (compiler warnings: ${warnings_status_}).")
@@ -1202,25 +1235,26 @@ if(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
       set(do_use_ FALSE)
       set(do_create_ TRUE)
     endif(do_use_)
+    _v2c_var_verified_get(WANT_PCH_PRECOMPILED_HEADER_WARNINGS want_pch_warnings_)
     _v2c_var_set_empty(do_warn_)
-    if(V2C_WANT_PCH_PRECOMPILED_HEADER_WARNINGS)
+    if(want_pch_warnings_)
       set(do_warn_ 1)
-    endif(V2C_WANT_PCH_PRECOMPILED_HEADER_WARNINGS)
+    endif(want_pch_warnings_)
     if(do_create_)
       add_precompiled_header(${_target} "${header_file_location_}" "${do_warn_}")
-      _v2c_pch_log_setup_status(${_target} "${_header_file}" "Create" ${V2C_WANT_PCH_PRECOMPILED_HEADER_WARNINGS})
+      _v2c_pch_log_setup_status(${_target} "${_header_file}" "Create" ${want_pch_warnings_})
     endif(do_create_)
     if(do_use_)
       add_precompiled_header_to_target(${_target} "${header_file_location_}" "${_pch_file}" "${do_warn_}")
-      _v2c_pch_log_setup_status(${_target} "${_header_file}" "Use" ${V2C_WANT_PCH_PRECOMPILED_HEADER_WARNINGS})
+      _v2c_pch_log_setup_status(${_target} "${_header_file}" "Use" ${want_pch_warnings_})
     endif(do_use_)
   endfunction(v2c_target_add_precompiled_header _target _build_platform _build_type _use _header_file _pch_file)
-else(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
+else(v2c_want_pch_support)
   function(v2c_target_add_precompiled_header _target _build_platform _build_type _use _header_file _pch_file)
     # DUMMY
     _v2c_msg_important("${_target}: not configuring PCH support for header file ${_header_file} (disabled/missing support/...).")
   endfunction(v2c_target_add_precompiled_header _target _build_platform _build_type _use _header_file _pch_file)
-endif(V2C_WANT_PCH_PRECOMPILED_HEADER_SUPPORT)
+endif(v2c_want_pch_support)
 
 # Creates the upper-case name required for per-configuration
 # properties.
@@ -1390,7 +1424,8 @@ ${c_section_end_}
     # However this would require implicitly adding this directory
     # to a project's default include path.
     _v2c_fs_item_make_relative_to_path("${v2c_target_midl_compile_HEADER_FILE_NAME}" "${PROJECT_SOURCE_DIR}" header_file_location_)
-    if(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_wine})
+    _v2c_var_verified_get(MIDL_HANDLING_MODE v2c_midl_mode_)
+    if(${v2c_midl_mode_} STREQUAL ${v2c_midl_handling_mode_wine})
       set(cmd_list_ "${V2C_WINE_WIDL_BIN}")
       _v2c_var_set_empty(v2c_widl_outputs_)
       if(header_file_location_)
@@ -1454,7 +1489,7 @@ ${c_section_end_}
       else(v2c_widl_outputs_)
         _v2c_msg_warning("${_target}: MIDL implementation problem - no outputs!? Bailing out...")
       endif(v2c_widl_outputs_)
-    else(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_wine})
+    else(${v2c_midl_mode_} STREQUAL ${v2c_midl_handling_mode_wine})
       # The last-ditch fallback else branch selects the emulated stubs mode
       # (reason: this mode is always supportable everywhere)
 
@@ -1491,7 +1526,7 @@ extern \"C\" {
       if(v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME)
         _v2c_target_midl_create_dummy_iid_file(${_target} "${v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME}")
       endif(v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME)
-    endif(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_wine})
+    endif(${v2c_midl_mode_} STREQUAL ${v2c_midl_handling_mode_wine})
   endfunction(v2c_target_midl_compile _target _build_platform _build_type)
 endif(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_win32})
 
@@ -1519,9 +1554,10 @@ function(v2c_target_pdb_configure _target _build_platform _build_type)
 endfunction(v2c_target_pdb_configure _target _build_platform _build_type)
 
 
+_v2c_scc_ide_integration_desired_get(v2c_flag_scc_integration_)
 # This function will set up target properties gathered from
 # Visual Studio Source Control Management (SCM) elements.
-if(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION)
+if(v2c_flag_scc_integration_)
   function(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_localpath _vs_scc_provider _vs_scc_auxpath)
     #_v2c_msg_info(
     #  "v2c_target_set_properties_vs_scc: target ${_target}"
@@ -1555,11 +1591,11 @@ if(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION)
       endif(_vs_scc_auxpath)
     endif(_vs_scc_projectname)
   endfunction(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_localpath _vs_scc_provider _vs_scc_auxpath)
-else(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION)
+else(v2c_flag_scc_integration_)
   function(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_localpath _vs_scc_provider _vs_scc_auxpath)
     # DUMMY
   endfunction(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_localpath _vs_scc_provider _vs_scc_auxpath)
-endif(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION)
+endif(v2c_flag_scc_integration_)
 
 
 if(NOT V2C_INSTALL_ENABLE)
