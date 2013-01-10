@@ -64,6 +64,14 @@
 #   to then be used by several of our functions here
 
 
+#!! EMERGENCY FIX: reinclude vcproj2cmake_defs since v2c_func currently
+#!! needs it (V2C_GLOBAL_CONFIG_RELPATH) *prior* to it getting included
+#!! by generated files.
+# First, include main file (to be customized by user as needed),
+# to have important vcproj2cmake configuration settings
+# re-defined per each new vcproj-converted project.
+include(vcproj2cmake_defs)
+
 
 # Avoid useless repeated parsing of static-data function definitions
 if(V2C_FUNC_DEFINED)
