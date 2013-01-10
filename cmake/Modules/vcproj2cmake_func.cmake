@@ -98,6 +98,19 @@ macro(_v2c_var_set_default_if_not_set _var_name _v2c_default_setting)
   endif(NOT DEFINED ${_var_name})
 endmacro(_v2c_var_set_default_if_not_set _var_name _v2c_default_setting)
 
+# Helper for nicely verified fetching of a CACHE variable :)
+function(_v2c_var_verified_get _var_name _out_value)
+  set(var_name_ V2C_${_var_name})
+  _v2c_ensure_valid_variables(${var_name_})
+  set(${_out_value} "${${var_name_}}" PARENT_SCOPE)
+endfunction(_v2c_var_verified_get _var_name _out_value)
+
+# Helper to fetch a CACHE variable, unverified.
+function(_v2c_var_get _var_name _out_value)
+  set(var_name_ V2C_${_var_name})
+  set(${_out_value} "${${var_name_}}" PARENT_SCOPE)
+endfunction(_v2c_var_get _var_name _out_value)
+
 macro(_v2c_msg_info _msg)
   message(STATUS "${V2C_CMAKE_CONFIGURE_PROMPT}${_msg}")
 endmacro(_v2c_msg_info _msg)
@@ -187,13 +200,6 @@ endif(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 # to be able to add VERBATIM to custom commands/targets as recommended,
 # but with backwards compat for older non-supporting CMake versions.
 set(_V2C_CMAKE_VERBATIM "VERBATIM")
-
-# Helper for nicely verified fetching of a CACHE variable :)
-function(_v2c_var_verified_get _var_name _out_value)
-  set(var_name_ V2C_${_var_name})
-  _v2c_ensure_valid_variables(${var_name_})
-  set(${_out_value} "${${var_name_}}" PARENT_SCOPE)
-endfunction(_v2c_var_verified_get _var_name _out_value)
 
 set(v2c_want_original_guid_default_setting OFF)
 option(V2C_WANT_PROJECT_ORIGINAL_GUID_ASSIGNED "Activate re-use of the original GUID of a project rather than having CMake assign a newly generated random one. This can easily turn out to be a bad idea however, since one could judge an original project and its corresponding re-generated project to NOT be identical (think out-of-tree-build differences, missing attribute translations, ...)" ${v2c_want_original_guid_default_setting})
@@ -610,8 +616,8 @@ else(_v2c_generator_has_dynamic_platform_switching)
 
   function(_v2c_buildcfg_determine_platform_var _target)
     _v2c_project_platform_get_list(${_target} platform_names_list_)
-    # Check var definition (avoid rerun):
-    _v2c_var_verified_get(BUILD_PLATFORM build_platform_)
+    # Query possibly existing var definition.
+    _v2c_var_get(BUILD_PLATFORM build_platform_)
     if(build_platform_)
       # Hmm... preserving the reason variable content is a bit difficult
       # in light of V2C_BUILD_PLATFORM being a CACHE variable

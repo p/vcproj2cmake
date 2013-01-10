@@ -6257,10 +6257,13 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
 
   def put_file_header(str_conversion_root_rel)
     @textOut.put_file_header_temporary_marker()
+    # EMERGENCY FIX: need to have defs included
+    # prior to use of its content by vcproj2cmake_func.cmake.
+    put_include_vcproj2cmake_defs()
+
     bootstrap_generator =
       V2C_CMakeGlobalBootstrapCodeGenerator.new(@textOut, str_conversion_root_rel, @script_location_relative_to_master)
     bootstrap_generator.generate
-    put_include_vcproj2cmake_defs()
     put_hook_pre()
   end
   def write_func_v2c_directory_post_setup
