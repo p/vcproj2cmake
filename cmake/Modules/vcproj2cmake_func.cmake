@@ -100,20 +100,26 @@ macro(_v2c_var_set_empty)
   endforeach(var_name_ ${ARGV})
 endmacro(_v2c_var_set_empty)
 
+# Assign the default setting of a variable.
+# Comment-by-naming-only helper.
+macro(_v2c_var_set_default _var_name _default)
+  set(${_var_name} "${_default}")
+endmacro(_v2c_var_set_default _var_name _default)
+
 macro(_v2c_var_set_default_if_not_set _var_name _v2c_default_setting)
   if(NOT DEFINED ${_var_name})
-    set(${_var_name} "${_v2c_default_setting}")
+    _v2c_var_set_default(${_var_name} "${_v2c_default_setting}")
   endif(NOT DEFINED ${_var_name})
 endmacro(_v2c_var_set_default_if_not_set _var_name _v2c_default_setting)
 
-# Helper for nicely verified fetching of a CACHE variable :)
+# Helper for nicely verified fetching of a variable (usually CACHE) :)
 function(_v2c_var_verified_get _var_name _out_value)
   set(var_name_ V2C_${_var_name})
-  _v2c_ensure_valid_variables(${var_name_})
+  _v2c_var_ensure_defined(${var_name_})
   set(${_out_value} "${${var_name_}}" PARENT_SCOPE)
 endfunction(_v2c_var_verified_get _var_name _out_value)
 
-# Helper to fetch a CACHE variable, unverified.
+# Helper to fetch a variable (usually CACHE), unverified.
 function(_v2c_var_get _var_name _out_value)
   set(var_name_ V2C_${_var_name})
   set(${_out_value} "${${var_name_}}" PARENT_SCOPE)
@@ -214,7 +220,7 @@ option(V2C_WANT_PROJECT_ORIGINAL_GUID_ASSIGNED "Activate re-use of the original 
 
 function(v2c_project_original_guid_desired_get _target _out_flag)
   # _target currently unused...
-  _v2c_ensure_valid_variables(_target)
+  _v2c_var_ensure_defined(_target)
   _v2c_var_verified_get(WANT_PROJECT_ORIGINAL_GUID_ASSIGNED want_orig_guid_assigned_)
   set(${_out_flag} ${want_orig_guid_assigned_} PARENT_SCOPE)
 endfunction(v2c_project_original_guid_desired_get _target _out_flag)
@@ -251,7 +257,7 @@ endfunction(_v2c_scc_do_setup)
 _v2c_scc_do_setup()
 
 function(_v2c_scc_ide_integration_desired_get _out_flag)
-  _v2c_ensure_valid_variables(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION)
+  _v2c_var_ensure_defined(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION)
   set(${_out_flag} ${V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION} PARENT_SCOPE)
 endfunction(_v2c_scc_ide_integration_desired_get _out_flag)
 
@@ -270,13 +276,24 @@ _v2c_pch_do_setup()
 # Helper to yell loudly in case of unset variables.
 # The input string should _not_ be the dereferenced form,
 # but rather list simple _names_ of the variables.
-function(_v2c_ensure_valid_variables)
+# Try to keep invocation of this validation helper
+# as close to actual same-name use of these variables
+# as possible (i.e., possibly next line).
+function(_v2c_var_ensure_defined)
   foreach(var_name_ ${ARGV})
     if(NOT DEFINED ${var_name_})
-      _v2c_msg_fatal_error("important vcproj2cmake variable ${var_name_} not valid/available!?")
+      _v2c_msg_fatal_error("important vcproj2cmake variable ${var_name_} not defined!?")
     endif(NOT DEFINED ${var_name_})
   endforeach(var_name_ ${ARGV})
-endfunction(_v2c_ensure_valid_variables)
+endfunction(_v2c_var_ensure_defined)
+
+function(_v2c_var_ensure_valid)
+  foreach(var_name_ ${ARGV})
+    if(NOT ${var_name_})
+      _v2c_msg_fatal_error("important vcproj2cmake variable ${var_name_} not valid/available!?")
+    endif(NOT ${var_name_})
+  endforeach(var_name_ ${ARGV})
+endfunction(_v2c_var_ensure_valid)
 
 # Provides ON/OFF strings for the case of a non-FALSE/FALSE variable.
 macro(_v2c_bool_get_status_string _var_name _out_status)
@@ -389,7 +406,7 @@ endfunction(_v2c_msg_important_once _magic _msg)
 
 
 _v2c_var_set_default_if_not_set(V2C_STAMP_FILES_SUBDIR "stamps")
-_v2c_ensure_valid_variables(V2C_GLOBAL_CONFIG_RELPATH)
+_v2c_var_ensure_defined(V2C_GLOBAL_CONFIG_RELPATH)
 # Enable customization (via cache entry), someone might need it.
 set(V2C_STAMP_FILES_DIR "${CMAKE_BINARY_DIR}/${V2C_GLOBAL_CONFIG_RELPATH}/${V2C_STAMP_FILES_SUBDIR}" CACHE PATH "The directory to place any stamp files used by vcproj2cmake in.")
 mark_as_advanced(V2C_STAMP_FILES_DIR)
@@ -414,7 +431,7 @@ function(_v2c_fs_item_make_relative_to_path _in _path _out)
 endfunction(_v2c_fs_item_make_relative_to_path _in _path _out)
 
 function(_v2c_stamp_file_location_assign _stamp_file_name _out_stamp_file_location)
-  _v2c_ensure_valid_variables(_out_stamp_file_location)
+  _v2c_var_ensure_defined(_out_stamp_file_location)
   _v2c_var_verified_get(STAMP_FILES_DIR stamp_files_dir_)
   set(location_ "${stamp_files_dir_}/${_stamp_file_name}")
   set(${_out_stamp_file_location} "${location_}" PARENT_SCOPE)
@@ -699,7 +716,7 @@ function(_v2c_config_do_setup_rebuilder)
         false
         DOC "A small program whose only purpose is to be suitable to signal failure (i.e. which provides a non-successful execution return value), usually /bin/false on UNIX; may alternatively be set to an invalid program name, too."
       )
-      _v2c_ensure_valid_variables(V2C_ABORT_BIN)
+      _v2c_var_ensure_defined(V2C_ABORT_BIN)
       _v2c_config_set(ABORT_BIN_v1 "${V2C_ABORT_BIN}")
     else(UNIX)
       _v2c_config_set(ABORT_BIN_v1 v2c_invoked_non_existing_command_simply_to_force_build_abort)
@@ -885,14 +902,14 @@ if(v2c_cmakelists_rebuilder_available)
   # Function to automagically rebuild our converted CMakeLists.txt
   # by the original converter script in case any relevant files changed.
   function(_v2c_project_rebuild_on_update _directory_projects_list _dir_orig_proj_files_list _cmakelists_file _script _master_proj_dir)
-    _v2c_ensure_valid_variables(_directory_projects_list)
+    _v2c_var_ensure_defined(_directory_projects_list)
     _v2c_projects_find_valid_target("${_directory_projects_list}" dependent_target_main_)
     if(NOT dependent_target_main_)
       # Oh well... we didn't manage to find a valid target,
       # but at least resort to choosing the first entry in the list.
       list(GET _directory_projects_list 0 dependent_target_main_)
     endif(NOT dependent_target_main_)
-    _v2c_ensure_valid_variables(dependent_target_main_)
+    _v2c_var_ensure_defined(dependent_target_main_)
 
     _v2c_msg_info("${dependent_target_main_}: providing ${_cmakelists_file} rebuilder (watching ${_dir_orig_proj_files_list})")
 
@@ -1355,7 +1372,7 @@ else(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_win32})
 
   # Note that these functions make use of some implicitly passed variables.
   function(_v2c_target_midl_create_dummy_header_file _target _header_file_location)
-    _v2c_ensure_valid_variables(_header_file_location midl_autogenerated_text_header_ rpc_includes_ c_section_begin_ c_section_end_ midl_lib_name_ midl_iid_)
+    _v2c_var_ensure_defined(_header_file_location midl_autogenerated_text_header_ rpc_includes_ c_section_begin_ c_section_end_ midl_lib_name_ midl_iid_)
     set(header_template_ "${CMAKE_CURRENT_BINARY_DIR}/midl_header_${_target}.h.in")
     # FIXME: most certainly this include guard name does not match
     # the one usually used by MIDL compilers.
@@ -1377,7 +1394,7 @@ ${c_section_end_}
     _v2c_create_build_decoupled_adhoc_file("${header_template_}" "${_header_file_location}" "${header_content_}")
   endfunction(_v2c_target_midl_create_dummy_header_file _target _header_file_location)
   function(_v2c_target_midl_create_dummy_iid_file _target _iid_file)
-    _v2c_ensure_valid_variables(_iid_file midl_autogenerated_text_header_ rpc_includes_ c_section_begin_ c_section_end_ midl_lib_name_ midl_iid_)
+    _v2c_var_ensure_defined(_iid_file midl_autogenerated_text_header_ rpc_includes_ c_section_begin_ c_section_end_ midl_lib_name_ midl_iid_)
     set(iidfile_template_ "${CMAKE_CURRENT_BINARY_DIR}/midl_iidfile_${_target}_i.c.in")
     set(iidfile_content_
 "${midl_autogenerated_text_header_}
@@ -1822,7 +1839,7 @@ endfunction(v2c_project_post_setup _project _orig_proj_files_list)
 
 function(v2c_directory_post_setup)
   _v2c_directory_get_projects_list(directory_projects_list_)
-  _v2c_ensure_valid_variables(directory_projects_list_)
+  _v2c_var_ensure_defined(directory_projects_list_)
   foreach(proj_ ${directory_projects_list_})
     # Implement this to be a _list_ variable of possibly multiple
     # original converted-from files (.vcproj or .vcxproj or some such).
