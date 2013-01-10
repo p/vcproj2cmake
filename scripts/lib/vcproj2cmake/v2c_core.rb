@@ -756,7 +756,18 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
   include V2C_Linker_Defines
   def initialize(tool_variant_specific_info = nil)
     super(tool_variant_specific_info)
-    @arr_dependencies = Array.new # V2C_Dependency_Info (we need an attribute which indicates whether this dependency is a library _file_ or a target name, since we should be reliably able to decide whether we can add "debug"/"optimized" keywords to CMake variables or target_link_library() parms)
+    # @arr_dependencies TODO: we need an attribute which indicates
+    # whether this dependency is a library _file_ or a target name,
+    # since we should be reliably able to decide whether we can add
+    # "debug"/"optimized" keywords to CMake variables or
+    # target_link_library() parms.
+    # An alternative way of handling this (rather than the somewhat
+    # special debug/optimized markup mechanism) might be to
+    # create an IMPORTED target for those VS-side dependencies.
+    # But the problem here would be that an imported target cannot be
+    # APPENDed - it would have to be created in full, with any use of it
+    # happening *subsequently*.
+    @arr_dependencies = Array.new # V2C_Dependency_Info
     @base_address = BASE_ADDRESS_NOT_SET
     @comdat_folding = COMDAT_FOLDING_DEFAULT
     @data_execution_prevention_enable = true # Suitable default?
@@ -3849,6 +3860,9 @@ class V2C_VS10PropertyGroupParser < V2C_VS10BaseElemParser
     propgroup_label = @elem_xml.attributes['Label']
     logger.debug("Label #{propgroup_label}!")
     case propgroup_label
+    # Future comment for anonymous PropertyGroup:
+    # the TargetName element could be helpful to determine the required
+    # value of the <CONFIG>_POSTFIX target property.
     when 'Configuration'
       target_config_info = V2C_Target_Config_Build_Info.new
       propgroup_parser = V2C_VS10PropertyGroupConfigurationParser.new(@elem_xml, target_config_info)
@@ -6016,6 +6030,10 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
       "But there's a nice trick: if a guard variable is already defined,\n" \
       "then some other (parent?) scope already did all that setup work for us." \
     )
+    # Decide to have both conditional var and block
+    # generated inline from within the same function,
+    # since they're deeply related (block should always be used
+    # in combination with the conditional).
     str_per_scope_definition_guard = '_v2c_global_defs_per_scope_defined'
     str_condition_inverse = get_conditional_inverted(str_per_scope_definition_guard)
     write_conditional_if(str_condition_inverse)
