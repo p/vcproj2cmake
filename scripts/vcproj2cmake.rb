@@ -97,6 +97,7 @@ else
    # http://redmine.ruby-lang.org/issues/show/3882
    # TODO: add a version check to conditionally skip this cleanup effort?
    vcproj_filename_full = Pathname.new(str_vcproj_filename).cleanpath
+   vcproj_filename_full = vcproj_filename_full.expand_path
 
    $arr_plugin_parser.each { |plugin_parser_curr|
      vcproj_filename_test = vcproj_filename_full.clone
@@ -147,13 +148,24 @@ end
 
 # Process the optional command-line arguments
 # -------------------------------------------
-# FIXME:  Variables 'output_file' and 'master_project_dir' are position-dependent on the
+# FIXME:  Variables 'output_file_location' and 'master_project_dir' are position-dependent on the
 # command-line, if they are entered.  The script does not have a way to distinguish whether they
 # were input in the wrong order.  A potential fix is to associate flags with the arguments, like
 # '-i <input.vcproj> [-o <output CMakeLists.txt>] [-d <master project directory>]' and then parse
 # them accordingly.  This lets them be entered in any order and removes ambiguity.
 # -------------------------------------------
-output_file = ARGV.shift or output_file = File.join(File.dirname(vcproj_filename), 'CMakeLists.txt')
+output_file_location = ARGV.shift
+
+output_dir = nil
+output_filename = nil
+if output_file_location
+  p_output_file_location = Pathname.new(output_file_location)
+  output_dir = p_output_file_location.dirname
+  output_filename = p_output_file_location.basename
+else
+  output_dir = File.dirname(vcproj_filename)
+  output_filename = CMAKELISTS_FILE_NAME
+end
 
 # Master (root) project dir defaults to current dir--useful for simple, single-.vcproj conversions.
 master_project_dir = ARGV.shift
@@ -162,5 +174,5 @@ if not master_project_dir
 end
 
 arr_parser_proj_files = [ vcproj_filename ]
-v2c_convert_project_outer(script_name, master_project_dir, arr_parser_proj_files, output_file)
+v2c_convert_local_projects_outer(script_name, master_project_dir, arr_parser_proj_files, output_dir, output_filename)
 v2c_convert_finished()

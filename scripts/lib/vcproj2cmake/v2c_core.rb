@@ -4415,6 +4415,10 @@ class V2C_SyntaxGeneratorBase < V2C_GeneratorBase
   end
 end
 
+# FIXME: rework implementation to be able to move this
+# into CMake generator base class!
+CMAKELISTS_FILE_NAME = 'CMakeLists.txt'
+
 # @brief CMake syntax generator base class.
 #        Strictly about converting requests into specific CMake syntax,
 #        no build-specific generator knowledge at this level!
@@ -6369,7 +6373,7 @@ end
 # - apart from the CMake generator having added its CMakeLists.txt to the source groups -
 # some people may have decided to manually list the CMakeLists.txt in their projects -
 # in which case the file is NOT a generated project file, however.
-VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{CMakeLists.txt}
+VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{#{CMAKELISTS_FILE_NAME}}
 def v2c_is_project_file_generated_by_cmake(str_proj_file)
   generated_file = false
   cmakelists_text = ''
@@ -6396,7 +6400,7 @@ class V2C_CMakeLocalFileGenerator < V2C_LoggerBase
   def generate
     output_file_location = @p_generator_proj_file.to_s
     logger.info "Generating project(s) in #{logger.escape_item(@p_generator_proj_file.dirname)} into #{logger.escape_item(output_file_location)}"
-    generate_local = V2C_GenerateIntoTempFile.new('local CMakeLists.txt', 'vcproj2cmake', output_file_location)
+    generate_local = V2C_GenerateIntoTempFile.new("local #{CMAKELISTS_FILE_NAME}", 'vcproj2cmake', output_file_location)
     generate_local.generate { |textOut|
 	content_generator = V2C_CMakeLocalFileContentGenerator.new(textOut, @p_generator_proj_file.dirname, @p_master_project, @arr_projects, @script_location_relative_to_master)
 	content_generator.generate
@@ -6433,7 +6437,7 @@ def v2c_want_cmakelists_rewritten(str_cmakelists_file)
     # which we can overwrite.
     log_info "existing #{str_cmakelists_file} is our own auto-generated file --> replacing!"
   else
-    error_unknown_case_value('CMakeLists.txt type', cmakelists_type)
+    error_unknown_case_value("#{CMAKELISTS_FILE_NAME} type", cmakelists_type)
     want_cmakelists_rewritten = false # keep it safe - encode a skip instruction anyway
   end
   return want_cmakelists_rewritten
@@ -6476,7 +6480,7 @@ class V2C_CMakeRootFileContentGenerator < V2C_CMakeLocalFileContentGenerator
 end
 
 def v2c_source_root_write_cmakelists_skeleton_file(p_master_project, p_script, path_cmakelists_txt, projects_list_file)
-  generate_skeleton = V2C_GenerateIntoTempFile.new('root skeleton CMakeLists.txt', 'vcproj2cmake_root_skeleton', path_cmakelists_txt)
+  generate_skeleton = V2C_GenerateIntoTempFile.new("root skeleton #{CMAKELISTS_FILE_NAME}", 'vcproj2cmake_root_skeleton', path_cmakelists_txt)
   generate_skeleton.generate { |textOut|
     script_location_relative_to_master = p_script.relative_path_from(p_master_project)
     content_generator = V2C_CMakeRootFileContentGenerator.new(textOut, projects_list_file, script_location_relative_to_master)
@@ -6489,7 +6493,7 @@ end
 # pre-existing:
 # FIXME: conflicts with the "V2C-generated project file" case, will overwrite!!!
 def v2c_source_root_ensure_usable_cmakelists_skeleton_file(project_converter_script_filename, source_root, projects_list_file)
-  root_cmakelists_txt_file = "#{source_root}/CMakeLists.txt"
+  root_cmakelists_txt_file = File.join(source_root, CMAKELISTS_FILE_NAME)
   root_cmakelists_txt_type = check_cmakelists_txt_type(root_cmakelists_txt_file)
   skip_skeleton_root_file_reason = nil
   case root_cmakelists_txt_type
@@ -6497,9 +6501,9 @@ def v2c_source_root_ensure_usable_cmakelists_skeleton_file(project_converter_scr
   when CMAKELISTS_FILE_TYPE_CUSTOM
     skip_skeleton_root_file_reason = 'custom/modified file content'
   when CMAKELISTS_FILE_TYPE_V2C_LOCAL
-    skip_skeleton_root_file_reason = 'local project sub dir type CMakeLists.txt file'
+    skip_skeleton_root_file_reason = "local project sub dir type #{CMAKELISTS_FILE_NAME} file"
   else
-    raise V2C_GeneratorError, 'unknown/unsupported/corrupt CMakeLists.txt type value!'
+    raise V2C_GeneratorError, "unknown/unsupported/corrupt #{CMAKELISTS_FILE_NAME} type value!"
   end
 
   file_descr = 'initially usable skeleton file'
@@ -6650,18 +6654,22 @@ end
 
 # Treat non-normalized ("raw") input arguments as needed,
 # then pass on to inner function.
-def v2c_convert_project_outer(project_converter_script_filename, master_project_dir, arr_parser_proj_files, generator_proj_file)
+def v2c_convert_local_projects_outer(project_converter_script_filename, master_project_dir, arr_parser_proj_files, generator_proj_dir, generator_proj_filename)
   arr_p_parser_proj_files = arr_parser_proj_files.collect { |parser_proj_file|
     Pathname.new(parser_proj_file)
   }
-  p_generator_proj_file = Pathname.new(generator_proj_file)
+  if generator_proj_filename.nil?
+    generator_proj_filename = CMAKELISTS_FILE_NAME
+  end
+  generator_proj_file_location = File.join(generator_proj_dir, generator_proj_filename)
+  p_generator_proj_file_location = Pathname.new(generator_proj_file_location)
   master_project_location = File.expand_path(master_project_dir)
   p_master_project = Pathname.new(master_project_location)
 
   script_location = File.expand_path(project_converter_script_filename)
   p_script = Pathname.new(script_location)
 
-  v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_files, p_generator_proj_file)
+  v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_files, p_generator_proj_file_location)
 end
 
 # Writes the final message.

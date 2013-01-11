@@ -297,15 +297,15 @@ Find.find('./') do
   # No project file at all? Skip directory.
   next if arr_dir_proj_files.nil?
 
-  str_cmakelists_file = "#{f}/CMakeLists.txt"
+  str_cmakelists_file = File.join(f, CMAKELISTS_FILE_NAME)
 
   # Check whether the directory already contains a CMakeLists.txt,
   # and if so, whether it can be safely rewritten.
   # These checks arguably perhaps shouldn't be done in the recursive handler,
   # but directly in the main conversion handler instead. TODO?
-  if (!dir_entries.grep(/^CMakeLists.txt$/i).empty?)
+  if (!dir_entries.grep(/^#{CMAKELISTS_FILE_NAME}$/i).empty?)
     log_debug dir_entries
-    log_debug "CMakeLists.txt exists in #{f}, checking!"
+    log_debug "#{CMAKELISTS_FILE_NAME} exists in #{f}, checking!"
     want_new_cmakelists_file = v2c_want_cmakelists_rewritten(str_cmakelists_file)
     next if false == want_new_cmakelists_file
   end
@@ -372,7 +372,8 @@ Find.find('./') do
   # (3 seconds startup vs. 0.3 seconds payload compute time with our script!)
 
   # Collect the list of projects to convert,
-  # then call v2c_convert_project_outer() multi-threaded!
+  # then attempt to call v2c_convert_local_projects_outer()
+  # in some parallel execution mode!
   # (although threading is said to be VERY slow in Ruby -
   # but still it should provide some sizeable benefit).
   log_debug "Submitting #{arr_proj_files.inspect} to be converted in #{f}."
@@ -405,10 +406,7 @@ class UnitGlobalData
 end
 
 def execute_work_unit(unitGlobal, myWork)
-  # FIXME: str_cmakelists_file_location (that CMakeLists.txt naming)
-  # should be an implementation detail of inner handling.
-  str_cmakelists_file_location = "#{myWork.str_destination_dir}/CMakeLists.txt"
-  v2c_convert_project_outer(unitGlobal.script_location, unitGlobal.source_root, myWork.arr_proj_files, str_cmakelists_file_location)
+  v2c_convert_local_projects_outer(unitGlobal.script_location, unitGlobal.source_root, myWork.arr_proj_files, myWork.str_destination_dir, nil)
 end
 
 unitGlobal = UnitGlobalData.new("#{script_path}/vcproj2cmake.rb", source_root)
