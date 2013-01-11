@@ -4628,6 +4628,19 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def array_to_cmake_list(arr_elems)
     return element_manual_quoting(arr_elems.join(';'))
   end
+  # Escapes payload content passed in
+  # as needed to enable subsequent use as a CMake string
+  # by the CMake generators.
+  SEMICOLON_REGEX_OBJ = %r{;}
+  def escape_content_for_cmake_string(in_string)
+    # Hmm, any other special chars to be escaped here?
+    escape_backslash(in_string)
+    # Note that CMake currently does not properly handle an escaped
+    # semi-colon (CMake list separator). See CMake bug #13806.
+    in_string.gsub!(SEMICOLON_REGEX_OBJ, '\\;')
+    # Do NOT return gsub!() (may return nil)
+    return in_string
+  end
   # (un)quote strings as needed
   #
   # Once we added a variable in the string,
@@ -4740,6 +4753,13 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
   VCPROJ2CMAKE_FUNC_CMAKE = 'vcproj2cmake_func.cmake'
   V2C_ATTRIBUTE_NOT_PROVIDED_MARKER = 'V2C_NOT_PROVIDED' # WARNING KEEP IN SYNC: that exact string literal is being checked by vcproj2cmake_func.cmake!
   V2C_ALL_PLATFORMS_MARKER = 'ALL'
+  # CMake issue: VS_GLOBAL is somewhat of a misnomer for the case
+  # of user-custom (i.e. non-official) settings,
+  # since VS7 Globals are not the same thing as VS10 Globals,
+  # yet CMake lumps them together.
+  # VS_GLOBAL_PREFIX_NAME is located in generator base since it's used
+  # for at least both TARGET and DIRECTORY property scopes.
+  VS_GLOBAL_PREFIX_NAME = 'VS_GLOBAL_'
   def write_vcproj2cmake_func_comment()
     write_comment_at_level(COMMENT_LEVEL_STANDARD, "See function implementation/docs in #{$v2c_module_path_root}/#{VCPROJ2CMAKE_FUNC_CMAKE}")
   end
@@ -5587,6 +5607,23 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_args_func = [ project_name, project_keyword ]
     write_invoke_config_object_v2c_function_quoted('v2c_target_post_setup', @target.name, arr_args_func)
   end
+  def set_property_project_types(target_name, project_types)
+    # This one does NOT follow VS_GLOBAL_* pattern i.e.
+    # VS_GLOBAL_ProjectTypes (property does not use same case as VS side).
+    set_property(target_name, "#{VS_GLOBAL_PREFIX_NAME}PROJECT_TYPES", project_types)
+  end
+  def set_properties_user_properties(target_name, user_properties)
+    user_properties.each_pair { |key, value|
+      # Need escaping (happened e.g. for the case of a
+      # RESOURCE_FILE user property located within a sub dir).
+      # Need to choose escaping rather than filesystem item treatment
+      # since user properties are *opaque* values
+      # i.e. they are NOT to be treated in the knowledge
+      # of some of them happening to be filesystem items.
+      cmake_value = escape_content_for_cmake_string(value)
+      set_property(target_name, "#{VS_GLOBAL_PREFIX_NAME}#{key}", cmake_value)
+    }
+  end
   def set_properties_vs_scc(target_name, scc_info_in)
     # Keep source control integration in our conversion!
     # FIXME: does it really work? Then reply to
@@ -5831,13 +5868,10 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       write_func_v2c_target_post_setup(project_info.name, project_info.vs_keyword)
 
       if project_info.project_types != nil
-        # This one does NOT follow VS_GLOBAL_* i.e. VS_GLOBAL_ProjectTypes.
-        set_property(project_info.name, "#{VS_GLOBAL_PREFIX_NAME}PROJECT_TYPES", project_info.project_types)
+	set_property_project_types(project_info.name, project_info.project_types)
       end
       if project_info.user_properties.length > 0
-        project_info.user_properties.each_pair { |key, value|
-	  set_property(project_info.name, "#{VS_GLOBAL_PREFIX_NAME}#{key}", value)
-	}
+        set_properties_user_properties(project_info.name, project_info.user_properties)
       end
 
       set_properties_vs_scc(@target.name, project_info.scc_info)
@@ -5856,12 +5890,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   end
 
   private
-  # CMake issue: VS_GLOBAL is somewhat of a misnomer for the case
-  # of user-custom (i.e. non-official) settings,
-  # since VS7 Globals are not the same thing as VS10 Globals,
-  # yet CMake lumps them together.
-  VS_GLOBAL_PREFIX_NAME = 'VS_GLOBAL_'
-
   def put_project(project_name, arr_progr_languages = nil)
     arr_args_project_name_and_attrs = [ project_name ]
     if arr_progr_languages.nil? or arr_progr_languages.empty?
