@@ -494,8 +494,7 @@ endfunction(_v2c_project_platform_get_list _target _platform_list_out)
 
 function(_v2c_buildcfg_get_build_types_config_key _target _build_platform _cfg_key_out)
   _v2c_flatten_name("${_build_platform}" build_platform_flattened_)
-  set(${_cfg_key_out}
-  "${_target}_platform_${build_platform_flattened_}_configuration_types" PARENT_SCOPE)
+  set(${_cfg_key_out} "${_target}_platform_${build_platform_flattened_}_configuration_types" PARENT_SCOPE)
 endfunction(_v2c_buildcfg_get_build_types_config_key _target _build_platform _cfg_key_out)
 
 # For a certain target (project), adds a supported platform configuration
@@ -518,9 +517,11 @@ function(_v2c_buildcfg_get_magic_conditional_name _target _build_platform _build
   else(_build_platform AND _build_type)
     _v2c_msg_warning("v2c_buildcfg_check_if_platform_buildtype_active: empty platform [${_build_platform}] or build type [${_build_type}]!?")
   endif(_build_platform AND _build_type)
-  _v2c_flatten_name("${_build_platform}" build_platform_flattened_)
-  _v2c_flatten_name("${_build_type}" build_type_flattened_)
-  set(${_var_name_out} v2c_want_buildcfg_platform_${build_platform_flattened_}_build_type_${build_type_flattened_} PARENT_SCOPE)
+  # Nice performance trick: since we need to flatten both _build_platform and _build_type,
+  # preassemble to combined string, _then_ flatten:
+  set(build_platform_type_raw_ "platform_${_build_platform}_build_type_${_build_type}")
+  _v2c_flatten_name("${build_platform_type_raw_}" build_platform_type_flattened_)
+  set(${_var_name_out} "v2c_want_buildcfg_${build_platform_type_flattened_}" PARENT_SCOPE)
 endfunction(_v2c_buildcfg_get_magic_conditional_name _target _build_platform _build_type _var_name_out)
 
 if(CMAKE_CONFIGURATION_TYPES)
@@ -1017,6 +1018,9 @@ if(v2c_cmakelists_rebuilder_available)
     # (but see also TARGET property "FOLDER"). TODO: add a clever fully compatible
     # add_custom_target() wrapper which already does the required FOLDER sorting, too.
     set(target_cmakelists_update_this_projdir_name_ update_cmakelists_DIR_${dependent_target_main_})
+    if(TARGET ${target_cmakelists_update_this_projdir_name_})
+      _v2c_msg_fatal_error("Already existing target ${target_cmakelists_update_this_projdir_name_}!? This might be due to the project target (${dependent_target_main_}) already having been defined by a similar project file in another directory. If so, I'd recommend moving some duplicate project files to where the sun don't shine. If the problem isn't clear-cut, please report.")
+    endif(TARGET ${target_cmakelists_update_this_projdir_name_})
     #add_custom_target(${target_cmakelists_update_this_projdir_name_} DEPENDS "${_cmakelists_file}")
     add_custom_target(${target_cmakelists_update_this_projdir_name_} ALL DEPENDS "${cmakelists_update_this_cmakelists_updated_stamp_file_}")
 #    add_dependencies(${target_cmakelists_update_this_projdir_name_} update_cmakelists_rebuild_happened)
