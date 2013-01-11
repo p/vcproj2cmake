@@ -66,13 +66,13 @@ class V2C_Path_Config
   def initialize(master_project_source_dir)
     @source_root = master_project_source_dir
     @rel_config_dir_source_root = $v2c_config_dir_local
-    @config_dir_source_root = "#{@source_root}/#{@rel_config_dir_source_root}"
+    @config_dir_source_root = File.join(@source_root, @rel_config_dir_source_root)
     # Provide a special directory for temporary/generated content that's not
     # supposed to be added to SCM (entire content can be ignored easily,
     # by mentioning this directory in SCM config files such as .gitignore)
     temp_store_dir_name = "generated_temporary_content"
-    @rel_config_dir_source_root_temp_store = "#{@rel_config_dir_source_root}/#{temp_store_dir_name}"
-    @config_dir_source_root_temp_store = "#{@config_dir_source_root}/#{temp_store_dir_name}"
+    @rel_config_dir_source_root_temp_store = File.join(@rel_config_dir_source_root, temp_store_dir_name)
+    @config_dir_source_root_temp_store = File.join(@config_dir_source_root, temp_store_dir_name)
     if not File.exist?(@config_dir_source_root_temp_store)
       V2C_Util_File.mkdir_p @config_dir_source_root_temp_store
     end
@@ -133,7 +133,7 @@ end
 
 # Use specially named "v2c_plugins" dir to avoid any resemblance/clash
 # with standard Ruby on Rails plugins mechanism.
-v2c_plugin_dir = "#{$script_dir}/v2c_plugins"
+v2c_plugin_dir = File.join($script_dir, 'v2c_plugins')
 
 PLUGIN_FILE_REGEX_OBJ = %r{v2c_(parser|generator)_.*\.rb$}
 Find.find(v2c_plugin_dir) { |f_plugin|
@@ -174,10 +174,10 @@ V2C_Core_Add_Plugin_Parser(plugin_parser_vs7_vfproj)
 # these settings taken from.
 $config_multi_authoritative = ''
 
-FILENAME_MAP_DEF = "#{$v2c_config_dir_local}/define_mappings.txt"
-FILENAME_MAP_DEP = "#{$v2c_config_dir_local}/dependency_mappings.txt"
-FILENAME_MAP_LIB_DIRS = "#{$v2c_config_dir_local}/lib_dirs_mappings.txt"
-FILENAME_MAP_LIB_DIRS_DEP = "#{$v2c_config_dir_local}/lib_dirs_dep_mappings.txt"
+FILENAME_MAP_DEF = File.join($v2c_config_dir_local, 'define_mappings.txt')
+FILENAME_MAP_DEP = File.join($v2c_config_dir_local, 'dependency_mappings.txt')
+FILENAME_MAP_LIB_DIRS = File.join($v2c_config_dir_local, 'lib_dirs_mappings.txt')
+FILENAME_MAP_LIB_DIRS_DEP = File.join($v2c_config_dir_local, 'lib_dirs_dep_mappings.txt')
 
 
 # Additionally enable Ruby's $DEBUG in case we want at least debug level.
@@ -393,7 +393,7 @@ def read_mappings_combined(filename_mappings, mappings, master_project_dir)
   # read common mappings (in source root) to be used by all sub projects
   # FIXME: in case of global recursive operation, this data part is _constant_,
   # thus we should avoid reading it anew for each project!
-  read_mappings("#{master_project_dir}/#{filename_mappings}", mappings)
+  read_mappings(File.join(master_project_dir, filename_mappings), mappings)
   #log_hash(mappings)
   #hash_ensure_sorted(mappings)
 end
@@ -4277,7 +4277,7 @@ end
 
 class V2C_BaseGlobalGenerator
   def initialize(master_project_dir)
-    @filename_map_inc = "#{$v2c_config_dir_local}/include_mappings.txt"
+    @filename_map_inc = File.join($v2c_config_dir_local, 'include_mappings.txt')
     @master_project_dir = master_project_dir
     @map_includes = Hash.new
     read_mappings_includes()
@@ -5964,10 +5964,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # (one local directory - i.e. one single CMakeLists.txt - may contain _multiple_
       # project files - i.e. project()s -!). I.e., they need to be reset
       # per-project()!
+      hook_project_location = File.join($v2c_config_dir_local, 'hook_project.txt')
       @textOut.write_block( \
 	"# MasterProjectDefaults_vcproj2cmake is supposed to define generic settings\n" \
         "# (such as V2C_HOOK_PROJECT, defined as e.g.\n" \
-        "# #{$v2c_config_dir_local}/hook_project.txt,\n" \
+        "# #{hook_project_location},\n" \
         "# and other hook include variables below).\n" \
         "# NOTE: it usually should also reset variables\n" \
         "# V2C_LIBS, V2C_SOURCES etc. as used below since they should contain\n" \
@@ -6349,7 +6350,7 @@ def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_de
       log_warn "#{project_name}: empty file argument! (#{file_item_description})"
     else
       # TODO: perhaps we need to add a permissions check, too?
-      file_location = "#{project_dir}/#{file_relative}"
+      file_location = File.join(project_dir, file_relative)
       if File.exist?(file_location)
         file_accessible = true
       else

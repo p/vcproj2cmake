@@ -39,7 +39,7 @@ v2c_config_dir_source_root = v2c_path_config.get_abs_config_dir_source_root()
 time_cmake_root_folder = 0
 arr_excl_proj_expr = Array.new()
 time_cmake_root_folder = File.stat(v2c_config_dir_source_root).mtime.to_i
-excluded_projects = "#{v2c_config_dir_source_root}/project_exclude_list.txt"
+excluded_projects = File.join(v2c_config_dir_source_root, 'project_exclude_list.txt')
 if File.exist?(excluded_projects)
   begin
     f_excl = File.new(excluded_projects, 'r')
@@ -197,7 +197,7 @@ end
 def command_file_dependencies_changed(command_output_file, arr_file_deps)
   time_proj = File.stat(str_proj_file).mtime.to_i
   time_cmake_folder = 0
-  config_dir_local = "#{f}/#{$v2c_config_dir_local}"
+  config_dir_local = File.join(f, $v2c_config_dir_local)
   if File.exist?(config_dir_local)
     time_cmake_folder = File.stat(config_dir_local).mtime.to_i
   end
@@ -287,7 +287,8 @@ Find.find('./') do
     arr_dir_proj_files.delete_if { |proj_file_candidate|
       delete_element = false
       if DETECT_MAC_OS_RESOURCE_FORK_FILES_REGEX_OBJ.match(proj_file_candidate)
-        log_info "Deleting unrelated Mac OS resource fork file #{f}/#{proj_file_candidate}"
+        proj_file_candidate_location = File.join(f, proj_file_candidate)
+        log_info "Deleting element containing unrelated Mac OS resource fork file #{proj_file_candidate_location}"
         delete_element = true
       end
       delete_element
@@ -320,7 +321,7 @@ Find.find('./') do
         end
       end
     end
-    str_proj_file = "#{f}/#{projfile}"
+    str_proj_file = File.join(f, projfile)
     log_debug "Checking CMake-side generation possibility of #{str_proj_file}"
     if true == v2c_is_project_file_generated_by_cmake(str_proj_file)
       log_info "Skipping CMake-generated MSVS file #{str_proj_file}"
@@ -409,7 +410,7 @@ def execute_work_unit(unitGlobal, myWork)
   v2c_convert_local_projects_outer(unitGlobal.script_location, unitGlobal.source_root, myWork.arr_proj_files, myWork.str_destination_dir, nil)
 end
 
-unitGlobal = UnitGlobalData.new("#{script_path}/vcproj2cmake.rb", source_root)
+unitGlobal = UnitGlobalData.new(File.join(script_path, 'vcproj2cmake.rb'), source_root)
 
 # Well, what I'd actually like to check is whether Process.fork()
 # is supported or not. But this doesn't seem to be possible,
@@ -461,8 +462,8 @@ end
 # we should include only those entries where each directory
 # now actually does contain a CMakeLists.txt file.
 projects_list_file_name = 'all_sub_projects.txt'
-projects_list_file_rel = "#{v2c_path_config.get_rel_config_dir_source_root_temp_store()}/#{projects_list_file_name}"
-projects_list_file = "#{v2c_path_config.get_abs_config_dir_source_root_temp_store()}/#{projects_list_file_name}"
+projects_list_file_rel = File.join(v2c_path_config.get_rel_config_dir_source_root_temp_store(), projects_list_file_name)
+projects_list_file = File.join(v2c_path_config.get_abs_config_dir_source_root_temp_store(), projects_list_file_name)
 v2c_source_root_write_projects_list_file(projects_list_file, $v2c_generator_file_create_permissions, arr_project_subdirs)
 
 # Finally, create a skeleton fallback file if needed.
