@@ -1332,6 +1332,13 @@ def is_known_environment_variable_convention(config_var, config_var_type_descr)
   return is_wellknown
 end
 
+# FIXME: we shouldn't need such a helper in global namespace...
+# (keep in CMake generator base)
+def cmake_path_join(a, b)
+  # CMake path string expressions always use '/' as separator, right?
+  [ a, b ].join('/')
+end
+
 # (Almost-)comment-only helper function:
 # The following variables are said to implicitly include
 # the trailing backslash ('\'), too:
@@ -1412,7 +1419,7 @@ EOF
       # config_var_replacement = "#{CMAKE_PROJECT_NAME_VAR_DEREF}.vcproj"
       config_var_replacement = "${v2c_VS_#{config_var}}"
     when 'INTDIR'
-      config_var_replacement = vs7_config_var_trailing_slash("${CMAKE_CURRENT_BINARY_DIR}/#{CMAKE_CFG_INTDIR_VAR_DEREF}")
+      config_var_replacement = vs7_config_var_trailing_slash(cmake_path_join('${CMAKE_CURRENT_BINARY_DIR}', CMAKE_CFG_INTDIR_VAR_DEREF))
     when 'OUTDIR'
       # FIXME: should extend code to do executable/library/... checks
       # and assign CMAKE_LIBRARY_OUTPUT_DIRECTORY / CMAKE_RUNTIME_OUTPUT_DIRECTORY
@@ -4426,6 +4433,12 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   CMAKE_IS_LIST_VAR_CONTENT_REGEX_OBJ = %r{^".*;.*"$}
   CMAKE_VAR_MATCH_REGEX_STR = '\\$\\{[[:alnum:]_]+\\}'
   CMAKE_ENV_VAR_MATCH_REGEX_STR = '\\$ENV\\{[[:alnum:]_]+\\}'
+  # Some helper vars to cut down on string misspelling (provide one central
+  # location where breakage will be quickly discovered)
+  NAME_CMAKE_CURRENT_SOURCE_DIR = 'CMAKE_CURRENT_SOURCE_DIR'
+  NAME_CMAKE_CURRENT_BINARY_DIR = 'CMAKE_CURRENT_BINARY_DIR'
+  NAME_CMAKE_MODULE_PATH = 'CMAKE_MODULE_PATH'
+  NAME_CMAKE_SOURCE_DIR = 'CMAKE_SOURCE_DIR'
   WHITESPACE_REGEX_OBJ = %r{\s}
 
   def next_paragraph()
@@ -4597,6 +4610,8 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def prepare_string_literal(str_in)
     return element_handle_quoting(str_in)
   end
+
+  def path_join(a, b); cmake_path_join(a, b) end
   private
 
   PC_TODO = 'TODO_POLICY_DOCUMENTATION'
@@ -4759,8 +4774,12 @@ end
 # (i.e., some build-specific configuration content).
 class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
   VCPROJ2CMAKE_FUNC_CMAKE = 'vcproj2cmake_func.cmake'
+  VCPROJ2CMAKE_FUNC_CMAKE_LOCATION = File.join($v2c_module_path_root, VCPROJ2CMAKE_FUNC_CMAKE)
   V2C_ATTRIBUTE_NOT_PROVIDED_MARKER = 'V2C_NOT_PROVIDED' # WARNING KEEP IN SYNC: that exact string literal is being checked by vcproj2cmake_func.cmake!
   V2C_ALL_PLATFORMS_MARKER = 'ALL'
+  NAME_V2C_CONFIG_DIR_LOCAL = 'V2C_CONFIG_DIR_LOCAL'
+  NAME_V2C_MASTER_PROJECT_SOURCE_DIR = 'V2C_MASTER_PROJECT_SOURCE_DIR'
+  NAME_V2C_MASTER_PROJECT_BINARY_DIR = 'V2C_MASTER_PROJECT_BINARY_DIR'
   # CMake issue: VS_GLOBAL is somewhat of a misnomer for the case
   # of user-custom (i.e. non-official) settings,
   # since VS7 Globals are not the same thing as VS10 Globals,
@@ -4769,7 +4788,7 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
   # for at least both TARGET and DIRECTORY property scopes.
   VS_GLOBAL_PREFIX_NAME = 'VS_GLOBAL_'
   def write_vcproj2cmake_func_comment()
-    write_comment_at_level(COMMENT_LEVEL_STANDARD, "See function implementation/docs in #{$v2c_module_path_root}/#{VCPROJ2CMAKE_FUNC_CMAKE}")
+    write_comment_at_level(COMMENT_LEVEL_STANDARD, "See function implementation/docs in #{VCPROJ2CMAKE_FUNC_CMAKE_LOCATION}")
   end
   def put_converter_script_location(script_location_relative_to_master)
     return if $v2c_generator_one_time_conversion_only
@@ -4787,7 +4806,7 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     # and _not_ CMAKE_CURRENT_SOURCE_DIR,
     # (this provision should even enable people to manually relocate
     # an entire sub project within the source tree).
-    v2c_converter_script_location = "${V2C_MASTER_PROJECT_SOURCE_DIR}/#{script_location_relative_to_master}"
+    v2c_converter_script_location = path_join(get_dereferenced_variable_name(NAME_V2C_MASTER_PROJECT_SOURCE_DIR), script_location_relative_to_master)
     gen_put_converter_script_location(v2c_converter_script_location)
   end
   def put_include_dir_project_source_dir(target_name)
@@ -6156,10 +6175,10 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     if not str_conversion_root_rel.empty?
       str_conversion_root_rel_cooked = "/#{str_conversion_root_rel}"
     end
-    str_master_proj_source_dir = "#{get_dereferenced_variable_name('CMAKE_CURRENT_SOURCE_DIR')}#{str_conversion_root_rel_cooked}"
-    write_set_var_quoted('V2C_MASTER_PROJECT_SOURCE_DIR', str_master_proj_source_dir)
-    str_master_proj_binary_dir = "#{get_dereferenced_variable_name('CMAKE_CURRENT_BINARY_DIR')}#{str_conversion_root_rel_cooked}"
-    write_set_var_quoted('V2C_MASTER_PROJECT_BINARY_DIR', str_master_proj_binary_dir)
+    str_master_proj_source_dir = "#{get_dereferenced_variable_name(NAME_CMAKE_CURRENT_SOURCE_DIR)}#{str_conversion_root_rel_cooked}"
+    write_set_var_quoted(NAME_V2C_MASTER_PROJECT_SOURCE_DIR, str_master_proj_source_dir)
+    str_master_proj_binary_dir = "#{get_dereferenced_variable_name(NAME_CMAKE_CURRENT_BINARY_DIR)}#{str_conversion_root_rel_cooked}"
+    write_set_var_quoted(NAME_V2C_MASTER_PROJECT_BINARY_DIR, str_master_proj_binary_dir)
     # NOTE: use set() instead of list(APPEND...) to _prepend_ path
     # (otherwise not able to provide proper _overrides_)
     write_comment_at_level(COMMENT_LEVEL_STANDARD,
@@ -6176,8 +6195,16 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     # However implementing cautious querying to prevent the warning
     # yields quite some overhead compared to current implementation,
     # thus we'll keep it as is for now (TODO?).
-    arr_args_func = [ "${V2C_MASTER_PROJECT_SOURCE_DIR}/#{$v2c_module_path_local}", "${CMAKE_SOURCE_DIR}/#{$v2c_module_path_local}", get_dereferenced_variable_name('CMAKE_MODULE_PATH') ]
-    write_list_quoted('CMAKE_MODULE_PATH', arr_args_func)
+    arr_args_func = [ path_join(
+			get_dereferenced_variable_name(NAME_V2C_MASTER_PROJECT_SOURCE_DIR),
+			$v2c_module_path_local
+		      ),
+		      path_join(
+			get_dereferenced_variable_name(NAME_CMAKE_SOURCE_DIR),
+			$v2c_module_path_local
+		      ),
+		      get_dereferenced_variable_name(NAME_CMAKE_MODULE_PATH) ]
+    write_list_quoted(NAME_CMAKE_MODULE_PATH, arr_args_func)
   end
   def put_include_vcproj2cmake_func
     next_paragraph()
@@ -6337,7 +6364,9 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     # to skip the entire build of this file on certain platforms:
     # if(PLATFORM) message(STATUS "not supported") return() ...
     # (note that we appended CMAKE_MODULE_PATH _prior_ to this include()!)
-    put_customization_hook('${V2C_CONFIG_DIR_LOCAL}/hook_pre.txt')
+    put_customization_hook(
+	path_join(get_dereferenced_variable_name(NAME_V2C_CONFIG_DIR_LOCAL), 'hook_pre.txt')
+    )
   end
 end
 
