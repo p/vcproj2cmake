@@ -273,7 +273,7 @@ Find.find('./') do
   # In each directory, find the .vc[x]proj files to use.
   # In case of .vcproj type files, prefer xxx_vc8.vcproj,
   # but in cases of directories where this is not available, use a non-_vc8 file.
-  # WARNING: ensure comma separation between entries!
+  # WARNING: ensure comma separation between array elements!
   arr_proj_file_regex = [ \
     "_vc10\.#{vcxproj_extension}$",
     "\.#{vcxproj_extension}$",
@@ -391,8 +391,8 @@ end
 # implementing _cooperative_ (non-parallel) threading.
 # Perhaps there's a flag to query whether a particular Ruby Thread
 # implementation has cooperative or real (multi-core) threading.
-# Otherwise we should probably just use Process.fork() (TODO)
-# (I hate all those dirty thread implementations anyway,
+# Otherwise we should probably just prefer to use Process.fork()
+# (I hate all those dirty global-addressspace thread implementations anyway,
 # real separate-process handling with clean IPC is a much better idea
 # in several cases).
 
@@ -425,7 +425,7 @@ want_multi_processing = (arr_unit_work.length > 5)
 
 if (want_multi_processing and $v2c_enable_processes)
   # See also http://stackoverflow.com/a/1076445
-  log_info 'recursively converting projects, multi-process.'
+  log_info 'Recursively converting projects, multi-process.'
   arr_unit_work.each { |myWork|
     fork {
       execute_work_unit(unitGlobal, myWork)

@@ -5551,8 +5551,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # and should derive the header from that - but we could grep the
     # .cpp file for the similarly named include......).
     return if pch_source_name.nil? or pch_source_name.empty?
-    str_pch_use_mode = "#{pch_use_mode}" # stringify integer
-    arr_args_precomp_header = [ str_pch_use_mode, pch_source_name, pch_binary_name ]
+    arr_args_precomp_header = [ pch_use_mode.to_s, pch_source_name, pch_binary_name ]
     write_invoke_object_conditional_v2c_function('v2c_target_add_precompiled_header',
     target_name, condition, arr_args_precomp_header)
   end
