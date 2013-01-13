@@ -472,7 +472,7 @@ class V2C_Info_Condition
     return if build_config_fully_qualified()
 
     # For now, prefer raw build_type (VS7) only in case no complex condition string is available.
-    if not str_condition.nil?
+    if not @str_condition.nil?
       log_debug "str_condition: #{@str_condition}"
       build_type = nil
       platform = nil
@@ -482,7 +482,7 @@ class V2C_Info_Condition
       }
       if build_type.nil? or build_type.empty?
         # TODO!!
-        log_fatal "could not parse build type from condition #{str_condition}"
+        log_fatal "could not parse build type from condition #{@str_condition}"
       end
       @build_type = build_type
       @platform = platform
