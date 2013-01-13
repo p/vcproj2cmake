@@ -476,13 +476,17 @@ class V2C_Info_Condition
       log_debug "str_condition: #{@str_condition}"
       build_type = nil
       platform = nil
-      @str_condition.scan(BUILD_TYPE_SCAN_QD_REGEX_OBJ) {
+      # Do some condition post-processing
+      # since some files contain leading/trailing whitespace, e.g.:
+      # <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+      str_condition_cooked = @str_condition.strip
+      str_condition_cooked.scan(BUILD_TYPE_SCAN_QD_REGEX_OBJ) {
         build_type = $1
         platform = $2
       }
       if build_type.nil? or build_type.empty?
         # TODO!!
-        log_fatal "could not parse build type from condition #{@str_condition}"
+        log_fatal "could not parse build type from condition #{str_condition_cooked}"
       end
       @build_type = build_type
       @platform = platform
