@@ -3172,6 +3172,7 @@ module V2C_VS10Defines
   TEXT_CONDITION = 'Condition'
   TEXT_DEFAULT = 'Default'
   TEXT_DISABLED = 'Disabled'
+  TEXT_FALSE_LOWER = 'false' # Perhaps move to a common VS module
 end
 
 module V2C_VS10Syntax
@@ -3470,6 +3471,10 @@ class V2C_VS10ItemGroupParser < V2C_VS10ParserBase
   def get_project; @info_elem end
 end
 
+module V2C_VS10Defines
+  TEXT_VS10_NOTSET = 'NotSet'
+end
+
 module V2C_VS10ToolSyntax
   include V2C_VSToolDefines
   include V2C_VS10Syntax
@@ -3517,82 +3522,87 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
 
   private
 
+  ARR_BASIC_RUNTIME_CHECKS = [
+    TEXT_DEFAULT, # 0
+    'StackFrameRuntimeCheck', # 1, /RTCs
+    'UninitializedLocalUsageCheck', # 2, /RTCu
+    'EnableFastChecks' # 3, /RTC1
+  ]
   def parse_basic_runtime_checks(str_basic_runtime_checks)
-    arr_basic_runtime_checks = [
-      TEXT_DEFAULT, # 0
-      'StackFrameRuntimeCheck', # 1, /RTCs
-      'UninitializedLocalUsageCheck', # 2, /RTCu
-      'EnableFastChecks' # 3, /RTC1
-    ]
-    return string_to_index(arr_basic_runtime_checks, str_basic_runtime_checks, 0)
+    return string_to_index(ARR_BASIC_RUNTIME_CHECKS, str_basic_runtime_checks, 0)
   end
+  ARR_COMPILE_AS = [
+    TEXT_DEFAULT, # 0
+    'CompileAsC', # 1 (MSVC /TC)
+    'CompileAsCpp' # 2 (MSVC /TP)
+  ]
   def parse_compile_as(str_compile_as)
-    arr_compile_as = [
-      TEXT_DEFAULT, # 0
-      'C', # 1 (FIXME: might be incorrect)
-      'CPlusPlus' # 2 (FIXME: might be incorrect)
-    ]
-    return string_to_index(arr_compile_as, str_compile_as, 0)
+    return string_to_index(ARR_COMPILE_AS, str_compile_as, 0)
   end
+  ARR_DEBUG_INFORMATION_FORMAT = [
+    '', # Disabled
+    'OldStyle', # 1, /Z7
+    'None', # 2
+    'ProgramDatabase', # 3, /Zi
+    'EditAndContinue' # 4, /ZI
+  ]
   def parse_debug_information_format(str_debug_information_format)
-    arr_debug_information_format = [
-      '', # Disabled
-      'OldStyle', # 1, /Z7
-      'None', # 2
-      'ProgramDatabase', # 3, /Zi
-      'EditAndContinue' # 4, /ZI
-    ]
-    return string_to_index(arr_debug_information_format, str_debug_information_format, 0)
+    return string_to_index(ARR_DEBUG_INFORMATION_FORMAT, str_debug_information_format, 0)
   end
+  ARR_EXCEPT = [
+    TEXT_FALSE_LOWER, # 0, false
+    'Sync', # 1, Sync, /EHsc
+    'Async', # 2, Async, /EHa
+    'SyncCThrow' # 3, SyncCThrow, /EHs
+  ]
   def parse_exception_handling(str_exception_handling)
-    arr_except = [
-      'false', # 0, false
-      'Sync', # 1, Sync, /EHsc
-      'Async', # 2, Async, /EHa
-      'SyncCThrow' # 3, SyncCThrow, /EHs
-    ]
-    return string_to_index(arr_except, str_exception_handling, 0)
+    return string_to_index(ARR_EXCEPT, str_exception_handling, 0)
   end
+  ARR_INLINE_FUNC = [
+    TEXT_DISABLED, # 0, /Ob0
+    'OnlyExplicitInline', # 1, /Ob1
+    'AnySuitable' # 2, /Ob2
+  ]
   def parse_inline_function_expansion(str_inline_func_expand)
-    arr_inline_func = [
-      TEXT_DISABLED, # 0, /Ob0
-      'OnlyExplicitInline', # 1, /Ob1
-      'AnySuitable' # 2, /Ob2
-    ]
-    return string_to_index(arr_inline_func, str_inline_func_expand, INLINE_FUNCTION_EXPANSION_DEFAULT)
+    return string_to_index(ARR_INLINE_FUNC, str_inline_func_expand, INLINE_FUNCTION_EXPANSION_DEFAULT)
   end
+  ARR_OPTIMIZATION = [
+    TEXT_DISABLED, # 0, /Od
+    'MinSpace', # 1, /O1
+    'MaxSpeed', # 2, /O2
+    'Full' # 3, /Ox
+  ]
   def parse_optimization(str_optimization)
-    arr_optimization = [
-      TEXT_DISABLED, # 0, /Od
-      'MinSpace', # 1, /O1
-      'MaxSpeed', # 2, /O2
-      'Full' # 3, /Ox
-    ]
-    return string_to_index(arr_optimization, str_optimization, 0)
+    return string_to_index(ARR_OPTIMIZATION, str_optimization, 0)
   end
+  ARR_CRT = [
+    '', # 0, None (?)
+    'MultiThreaded', # 1, /MT
+    'MultiThreadedDebug', # 2, /MTd
+    'MultiThreadedDLL', # 3, /MD
+    'MultiThreadedDebugDLL', # 4, /MDd
+  ]
   def parse_runtime_library(str_crt)
-    arr_crt = [
-      '', # 0, None (?)
-      'MultiThreaded', # 1, /MT
-      'MultiThreadedDebug', # 2, /MTd
-      'MultiThreadedDLL', # 3, /MD
-      'MultiThreadedDebugDLL', # 4, /MDd
-    ]
-    return string_to_index(arr_crt, str_crt, 1)
+    return string_to_index(ARR_CRT, str_crt, 1)
   end
+  ARR_USE_PCH = [
+    'NotUsing',
+    'Create',
+    'Use'
+  ]
   def parse_use_precompiled_header(str_use_precompiled_header)
-    return string_to_index([ 'NotUsing', 'Create', 'Use' ], str_use_precompiled_header.strip, 0)
+    return string_to_index(ARR_USE_PCH, str_use_precompiled_header.strip, 0)
   end
+  ARR_WARN_LEVEL = [
+    'TurnOffAllWarnings', # /W0
+    'Level1', # /W1
+    'Level2', # /W2
+    'Level3', # /W3
+    'Level4', # /W4
+    'EnableAllWarnings' # /Wall
+  ]
   def parse_warning_level(str_warning_level)
-    arr_warn_level = [
-      'TurnOffAllWarnings', # /W0
-      'Level1', # /W1
-      'Level2', # /W2
-      'Level3', # /W3
-      'Level4', # /W4
-      'EnableAllWarnings' # /Wall
-    ]
-    return string_to_index(arr_warn_level, str_warning_level, VS_DEFAULT_SETTING_WARNINGLEVEL)
+    return string_to_index(ARR_WARN_LEVEL, str_warning_level, VS_DEFAULT_SETTING_WARNINGLEVEL)
   end
 end
 
@@ -3635,20 +3645,20 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
      end
      return machine
   end
+  ARR_SUBSYSTEM = [
+    TEXT_VS10_NOTSET, # VS7: 0
+    'Console', # VS7: 1
+    'Windows', # VS7: 2
+    'Native', # VS7: 3
+    'EFIApplication', # VS7: 4
+    'EFIBootService', # VS7: 5
+    'EFIROM', # VS7: 6
+    'EFIRuntime', # VS7: 7
+    'Posix', # VS7: 8
+    'WindowsCE' # VS7: 9
+  ]
   def parse_subsystem(str_subsystem)
-    arr_subsystem = [
-      TEXT_VS10_NOTSET, # VS7: 0
-      'Console', # VS7: 1
-      'Windows', # VS7: 2
-      'Native', # VS7: 3
-      'EFIApplication', # VS7: 4
-      'EFIBootService', # VS7: 5
-      'EFIROM', # VS7: 6
-      'EFIRuntime', # VS7: 7
-      'Posix', # VS7: 8
-      'WindowsCE' # VS7: 9
-    ]
-    return string_to_index(arr_subsystem, str_subsystem, VS_DEFAULT_SETTING_SUBSYSTEM)
+    return string_to_index(ARR_SUBSYSTEM, str_subsystem, VS_DEFAULT_SETTING_SUBSYSTEM)
   end
 end
 
@@ -3693,10 +3703,6 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
   end
 end
 
-module V2C_VS10Defines
-  TEXT_VS10_NOTSET = 'NotSet'
-end
-
 module V2C_VS10ConfigurationDefines
   include V2C_VSConfigurationDefines
   include V2C_VS10Defines
@@ -3737,28 +3743,33 @@ private
     return found
   end
 
+  ARR_CHARSET = [
+    TEXT_VS10_NOTSET,  # 0 (SBCS [ASCII etc.])
+    'Unicode', # 1 (The Healthy Choice)
+    'MultiByte' # 2 (MBCS)
+  ]
   def parse_charset(str_charset)
     # Possibly useful related link: "[CMake] Bug #12189"
     #   http://www.cmake.org/pipermail/cmake/2011-June/045002.html
-    arr_charset = [
-      TEXT_VS10_NOTSET,  # 0 (ASCII i.e. SBCS)
-      'Unicode', # 1 (The Healthy Choice)
-      'MultiByte' # 2 (MBCS)
-    ]
-    return string_to_index(arr_charset, str_charset, VS_DEFAULT_SETTING_CHARSET)
+    return string_to_index(ARR_CHARSET, str_charset, VS_DEFAULT_SETTING_CHARSET)
   end
+  ARR_CONFIG_TYPE = [
+    'Unknown', # 0, typeUnknown (utility)
+    'Application', # 1, typeApplication (.exe)
+    'DynamicLibrary', # 2, typeDynamicLibrary (.dll)
+    'UNKNOWN_FIXME', # 3
+    'StaticLibrary' # 4, typeStaticLibrary
+  ]
   def parse_configuration_type(str_configuration_type)
-    arr_config_type = [
-      'Unknown', # 0, typeUnknown (utility)
-      'Application', # 1, typeApplication (.exe)
-      'DynamicLibrary', # 2, typeDynamicLibrary (.dll)
-      'UNKNOWN_FIXME', # 3
-      'StaticLibrary' # 4, typeStaticLibrary
-    ]
-    return string_to_index(arr_config_type, str_configuration_type, VS_DEFAULT_SETTING_CONFIGURATIONTYPE)
+    return string_to_index(ARR_CONFIG_TYPE, str_configuration_type, VS_DEFAULT_SETTING_CONFIGURATIONTYPE)
   end
+  ARR_USE_OF_ATL_MFC = [
+    TEXT_FALSE_LOWER,
+    'Static',
+    'Dynamic'
+  ]
   def parse_use_of_atl_mfc(str_use_of_atl_mfc)
-    return string_to_index([ 'false', 'Static', 'Dynamic' ], str_use_of_atl_mfc, VS_DEFAULT_SETTING_MFC)
+    return string_to_index(ARR_USE_OF_ATL_MFC, str_use_of_atl_mfc, VS_DEFAULT_SETTING_MFC)
   end
   def parse_wp_optimization(str_opt); get_boolean_value(str_opt) end
 end
