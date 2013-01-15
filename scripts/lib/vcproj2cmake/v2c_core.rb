@@ -4650,11 +4650,14 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     PC_TODO,
   ]
   def get_cmake_policy_docstring(policy_num)
+    doc_policy = PC_TODO
     if policy_num < CMAKE_POLICY_DOCSTRINGS.length
-      CMAKE_POLICY_DOCSTRINGS.fetch(policy_num)
-    else
-      PC_TODO
+      doc_policy = CMAKE_POLICY_DOCSTRINGS.fetch(policy_num)
     end
+    if PC_TODO == doc_policy
+      raise V2C_GeneratorError, 'Missing CMake policy docstring!'
+    end
+    doc_policy
   end
   def element_manual_quoting(elem)
     return "\"#{elem}\""
