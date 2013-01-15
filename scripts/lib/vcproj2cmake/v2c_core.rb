@@ -4665,13 +4665,17 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   # Escapes payload content passed in
   # as needed to enable subsequent use as a CMake string
   # by the CMake generators.
-  SEMICOLON_REGEX_OBJ = %r{;}
+  REGEX_OBJ_SEMICOLON = %r{;}
+  REGEX_OBJ_DOUBLEQUOTE = %r{"}
+  REGEX_OBJ_DOLLAR_SIGN = %r{\$}
   def escape_content_for_cmake_string(in_string)
     # Hmm, any other special chars to be escaped here?
     escape_backslash(in_string)
     # Note that CMake currently does not properly handle an escaped
     # semi-colon (CMake list separator). See CMake bug #13806.
-    in_string.gsub!(SEMICOLON_REGEX_OBJ, '\\;')
+    in_string.gsub!(REGEX_OBJ_SEMICOLON, '\\;')
+    in_string.gsub!(REGEX_OBJ_DOUBLEQUOTE, '\\"')
+    in_string.gsub!(REGEX_OBJ_DOLLAR_SIGN, '\\$')
     # Do NOT return gsub!() (may return nil)
     return in_string
   end
