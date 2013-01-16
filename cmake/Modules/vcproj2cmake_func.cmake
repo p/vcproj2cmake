@@ -1843,17 +1843,23 @@ endfunction(v2c_project_post_setup _project _orig_proj_files_list)
 
 function(v2c_directory_post_setup)
   _v2c_directory_get_projects_list(directory_projects_list_)
-  _v2c_var_ensure_defined(directory_projects_list_)
-  foreach(proj_ ${directory_projects_list_})
-    # Implement this to be a _list_ variable of possibly multiple
-    # original converted-from files (.vcproj or .vcxproj or some such).
-    get_property(orig_proj_files_list_ DIRECTORY PROPERTY V2C_PROJECT_${proj_}_ORIG_PROJ_FILES_LIST)
-    list(APPEND dir_orig_proj_files_list_ ${orig_proj_files_list_})
-  endforeach(proj_ ${directory_projects_list_})
-  # Implementation note: the last argument to
-  # _v2c_project_rebuild_on_update() should be as much of a 1:1 passthrough of
-  # the input argument to the CMakeLists.txt converter ruby script execution as possible/suitable,
-  # since invocation arguments of this script on rebuild should be (roughly) identical.
-  _v2c_project_rebuild_on_update("${directory_projects_list_}" "${dir_orig_proj_files_list_}" "${CMAKE_CURRENT_LIST_FILE}" "${V2C_SCRIPT_LOCATION}" "${V2C_MASTER_PROJECT_SOURCE_DIR}")
+  # v2c_directory_post_setup() will be invoked by both regular local
+  # CMakeLists.txt (created for any directory which contains VS project
+  # files) *and* other ones (currently the root directory CMakeLists.txt).
+  # This means that directory_projects_list_ will obviously be
+  # available for "real" converted-projects CMakeLists.txt only.
+  if(directory_projects_list_)
+    foreach(proj_ ${directory_projects_list_})
+      # Implement this to be a _list_ variable of possibly multiple
+      # original converted-from files (.vcproj or .vcxproj or some such).
+      get_property(orig_proj_files_list_ DIRECTORY PROPERTY V2C_PROJECT_${proj_}_ORIG_PROJ_FILES_LIST)
+      list(APPEND dir_orig_proj_files_list_ ${orig_proj_files_list_})
+    endforeach(proj_ ${directory_projects_list_})
+    # Implementation note: the last argument to
+    # _v2c_project_rebuild_on_update() should be as much of a 1:1 passthrough of
+    # the input argument to the CMakeLists.txt converter ruby script execution as possible/suitable,
+    # since invocation arguments of this script on rebuild should be (roughly) identical.
+    _v2c_project_rebuild_on_update("${directory_projects_list_}" "${dir_orig_proj_files_list_}" "${CMAKE_CURRENT_LIST_FILE}" "${V2C_SCRIPT_LOCATION}" "${V2C_MASTER_PROJECT_SOURCE_DIR}")
+  endif(directory_projects_list_)
   v2c_hook_invoke("${V2C_HOOK_DIRECTORY_POST}")
 endfunction(v2c_directory_post_setup)
