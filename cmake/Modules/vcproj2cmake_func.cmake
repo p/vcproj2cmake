@@ -1816,16 +1816,20 @@ endfunction(v2c_target_post_setup _target _project_label _vs_keyword)
 # project()s defined within a dir, thus we have to keep track of
 # this information on our own. OTOH we wouldn't be able to discern
 # V2C-side project()s from non-V2C ones anyway...
-function(_v2c_directory_get_projects_list _projects_list_out)
+function(_v2c_directory_projects_list_get _projects_list_out)
   get_property(directory_projects_list_ DIRECTORY PROPERTY V2C_PROJECTS_LIST)
   set(${_projects_list_out} "${directory_projects_list_}" PARENT_SCOPE)
-endfunction(_v2c_directory_get_projects_list _projects_list_out)
+endfunction(_v2c_directory_projects_list_get _projects_list_out)
+
+function(_v2c_directory_projects_list_set _projects_list)
+  set_property(DIRECTORY PROPERTY V2C_PROJECTS_LIST "${_projects_list}")
+endfunction(_v2c_directory_projects_list_set _projects_list)
 
 function(_v2c_directory_register_project _target)
-  _v2c_directory_get_projects_list(projects_list_)
+  _v2c_directory_projects_list_get(projects_list_)
   list(APPEND projects_list_ ${_target})
-  set_property(DIRECTORY PROPERTY V2C_PROJECTS_LIST "${projects_list_}")
-  #_v2c_directory_get_projects_list(projects_list_)
+  _v2c_directory_projects_list_set(${projects_list_})
+  #_v2c_directory_projects_list_get(projects_list_)
   #message("projects list now: ${projects_list_}")
 endfunction(_v2c_directory_register_project _target)
 
@@ -1848,7 +1852,7 @@ function(v2c_project_post_setup _project _orig_proj_files_list)
 endfunction(v2c_project_post_setup _project _orig_proj_files_list)
 
 function(v2c_directory_post_setup)
-  _v2c_directory_get_projects_list(directory_projects_list_)
+  _v2c_directory_projects_list_get(directory_projects_list_)
   # v2c_directory_post_setup() will be invoked by both regular local
   # CMakeLists.txt (created for any directory which contains VS project
   # files) *and* other ones (currently the root directory CMakeLists.txt).
