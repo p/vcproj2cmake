@@ -4593,6 +4593,24 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
       write_command_list_single_line('cmake_policy', arr_args_set_policy)
     write_conditional_end(str_conditional)
   end
+  PROP_SET = false
+  PROP_APPEND = true
+  def put_property(prop_type_string, flag_append, prop_key, arr_prop_vals)
+    str_append = flag_append ? 'APPEND ' : ''
+    write_command_list('set_property', "#{prop_type_string} #{str_append}PROPERTY #{prop_key}", arr_prop_vals)
+  end
+  def put_property_source(source_list_expr, prop_key, arr_prop_vals)
+    put_property("SOURCE #{source_list_expr}", PROP_SET, prop_key, arr_prop_vals)
+  end
+  def put_property_directory__compile_flags(attr_opts, flag_append)
+    put_property('DIRECTORY', flag_append, 'COMPILE_FLAGS', [ attr_opts ])
+  end
+  def mark_files_as_generated(file_list_description, arr_generated_files, is_generated)
+    file_list_var = "SOURCES_GENERATED_#{file_list_description}"
+    write_list_quoted(file_list_var, arr_generated_files)
+    str_generated = get_keyword_bool(is_generated)
+    put_property_source(get_dereferenced_variable_name(file_list_var), 'GENERATED', [ str_generated ])
+  end
   def put_source_group(source_group_name, arr_filters, source_files_variable)
     arr_elems = Array.new
     if not arr_filters.nil?
@@ -5334,7 +5352,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       arr_generated = file_list.get_generated_files
       #puts "file_list.name #{file_list.name} arr_generated #{arr_generated.inspect}"
       if not arr_generated.nil? and arr_generated.length > 0
-        mark_files_as_generated(file_list.name, arr_generated)
+        mark_files_as_generated(file_list.name, arr_generated, true)
       end
       #puts "file_list.name #{file_list.name}, arr_generated #{arr_generated}"
     }
@@ -5408,12 +5426,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   end
   def configure_pdb(pdb_info, condition)
     put_v2c_target_pdb_configure(@target.name, condition, pdb_info)
-  end
-  def mark_files_as_generated(file_list_description, arr_generated_files)
-    file_list_var = "SOURCES_GENERATED_#{file_list_description}"
-    write_list_quoted(file_list_var, arr_generated_files)
-    str_cmake_command_args = "SOURCE ${#{file_list_var}} PROPERTY GENERATED TRUE"
-    @localGenerator.write_command_single_line('set_property', str_cmake_command_args)
   end
   def put_atl_mfc_config(target_config_info)
     # FIXME: should check whether CMAKE_MFC_FLAG is ok with specifying
@@ -5554,8 +5566,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_compile_defn_cooked = cmake_escape_compile_definitions(arr_compile_defn)
     property_name = get_name_of_per_config_type_property('COMPILE_DEFINITIONS', config_name)
     # make sure to specify APPEND for greater flexibility (hooks etc.)
-    cmake_command_arg = "TARGET #{@target.name} APPEND PROPERTY #{property_name}"
-    write_command_list('set_property', cmake_command_arg, arr_compile_defn_cooked)
+    put_property("TARGET #{@target.name}", PROP_APPEND, property_name, arr_compile_defn_cooked)
   end
   def generate_property_compile_definitions_per_platform(config_name, arr_platdefs, str_platform)
     write_conditional_if(str_platform)
@@ -5617,8 +5628,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         str_target_expr = get_target_syntax_expression(@target.name)
         build_type = condition.get_build_type()
         property_name = get_name_of_per_config_type_property('COMPILE_FLAGS', build_type)
-        cmake_command_arg = "#{str_target_expr} APPEND PROPERTY #{property_name}"
-        write_command_list('set_property', cmake_command_arg, arr_flags)
+        put_property(str_target_expr, PROP_APPEND, property_name, arr_flags)
       write_conditional_end(str_conditional)
     write_conditional_end(var_v2c_want_buildcfg_curr)
   end
@@ -5631,8 +5641,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         str_target_expr = get_target_syntax_expression(@target.name)
         build_type = condition.get_build_type()
         property_name = get_name_of_per_config_type_property('LINK_FLAGS', build_type)
-        cmake_command_arg = "#{str_target_expr} APPEND PROPERTY #{property_name}"
-        write_command_list('set_property', cmake_command_arg, arr_flags)
+        put_property(str_target_expr, PROP_APPEND, property_name, arr_flags)
       write_conditional_end(str_conditional)
     write_conditional_end(var_v2c_want_buildcfg_curr)
   end
@@ -5654,7 +5663,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def set_property_project_types(target_name, project_types)
     # This one does NOT follow VS_GLOBAL_* pattern i.e.
     # VS_GLOBAL_ProjectTypes (property does not use same case as VS side).
-    set_property(target_name, "#{VS_GLOBAL_PREFIX_NAME}PROJECT_TYPES", project_types)
+    set_property(target_name, PROP_SET, "#{VS_GLOBAL_PREFIX_NAME}PROJECT_TYPES", [ project_types ])
   end
   def set_properties_user_properties(target_name, user_properties)
     user_properties.each_pair { |key, value|
@@ -5665,7 +5674,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # i.e. they are NOT to be treated in the knowledge
       # of some of them happening to be filesystem items.
       cmake_value = escape_content_for_cmake_string(value)
-      set_property(target_name, "#{VS_GLOBAL_PREFIX_NAME}#{key}", cmake_value)
+      set_property(target_name, PROP_SET, "#{VS_GLOBAL_PREFIX_NAME}#{key}", [ cmake_value ])
     }
   end
   def set_properties_vs_scc(target_name, scc_info_in)
@@ -6045,9 +6054,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     put_hook_project()
   end
   # _target_ generator specific method.
-  def set_property(target_name, property, value)
-    arr_args_func = [ 'TARGET', target_name, 'PROPERTY', property, value ]
-    write_command_list_quoted('set_property', nil, arr_args_func)
+  def set_property(target_name, flag_append, property, arr_values)
+    put_property(get_target_syntax_expression(target_name), flag_append, property, arr_values)
   end
   def write_func_v2c_project_post_setup(project_name, arr_proj_files)
     # This function invokes CMakeLists.txt rebuilder only
@@ -6293,9 +6301,6 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     )
     write_build_attributes('link_directories', arr_lib_dirs_translated, map_lib_dirs, nil)
   end
-  def put_directory_property_compile_flags(attr_opts, flag_append)
-    write_command_single_line('set_property', "DIRECTORY APPEND PROPERTY COMPILE_FLAGS #{attr_opts}")
-  end
   def write_directory_property_compile_flags(attr_opts)
     next_paragraph()
     # Query WIN32 instead of MSVC, since AFAICS there's nothing in the
@@ -6304,7 +6309,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     # on the Win32 side (.vcproj in general).
     str_platform = 'WIN32'
     write_conditional_if(str_platform)
-      put_directory_property_compile_flags(attr_opts, true)
+      put_property_directory__compile_flags(attr_opts, true)
     write_conditional_end(str_platform)
   end
   def write_build_attributes(cmake_command, arr_defs, map_defs, cmake_command_arg, skip_failed_lookups = false)
