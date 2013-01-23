@@ -589,7 +589,7 @@ class V2C_Tool_Compiler_Specific_Info_MSVC10 < V2C_Tool_Compiler_Specific_Info_M
   end
 end
 
-class V2C_Precompiled_Header_Info
+class V2C_Precompiled_Header_Info < V2C_Info_Elem_Base
   def initialize
     # @use_mode: known VS10 content is "NotUsing" / "Create" / "Use"
     # (corresponding VS8 values are 0 / 1 / 2)
@@ -2037,8 +2037,7 @@ class V2C_VSToolCompilerParser < V2C_VSToolDefineParserBase
   include V2C_VSToolCompilerDefines
   def get_compiler_info; @info_elem end
   def allocate_precompiled_header_info(compiler_info)
-    return if not get_compiler_info().precompiled_header_info.nil?
-    get_compiler_info().precompiled_header_info = V2C_Precompiled_Header_Info.new
+    get_compiler_info().precompiled_header_info ||= V2C_Precompiled_Header_Info.new
   end
   def parse_setting(setting_key, setting_value)
     found = be_optimistic()
@@ -4263,7 +4262,7 @@ class V2C_GenerateIntoTempFile
         textOut = V2C_TextStreamSyntaxGeneratorBase.new(tmpfile, @textstream_attributes)
         yield textOut
       rescue Exception => e
-        logger.unhandled_exception(e, "while generating #{@file_description}")
+        logger.unhandled_exception(e, "generating #{@file_description}")
         raise
       end
       tmpfile_path = tmpfile.path
@@ -4374,6 +4373,7 @@ class V2C_TextStreamSyntaxGeneratorBase
 end
 
 def string_storage_contains(string_storage, regex)
+  #puts "string_storage: #{string_storage}"
   return string_storage.grep(regex).any?
 end
 
@@ -4383,9 +4383,11 @@ CMAKELISTS_FILE_TYPE_CUSTOM = 2
 CMAKELISTS_FILE_TYPE_V2C_ROOT = 3
 CMAKELISTS_FILE_TYPE_V2C_LOCAL = 4
 
-CMAKELISTS_AUTO_GENERATED_REGEX_OBJ = /#{V2C_TEXT_FILE_AUTO_GENERATED_MARKER}/
-CMAKELISTS_SKELETON_REGEX_OBJ = /#{V2C_TEXT_FILE_SKELETON_MARKER}/
+CMAKELISTS_AUTO_GENERATED_REGEX_OBJ = %r{#{V2C_TEXT_FILE_AUTO_GENERATED_MARKER}}
+CMAKELISTS_SKELETON_REGEX_OBJ = %r{#{V2C_TEXT_FILE_SKELETON_MARKER}}
 def check_cmakelists_txt_type(str_cmakelists_file_fqpn)
+
+  #puts "str_cmakelists_file_fqpn: #{str_cmakelists_file_fqpn}"
 
   return CMAKELISTS_FILE_TYPE_NONE if not File.exist?(str_cmakelists_file_fqpn)
 
@@ -4452,6 +4454,13 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   NAME_CMAKE_SOURCE_DIR = 'CMAKE_SOURCE_DIR'
   WHITESPACE_REGEX_OBJ = %r{\s}
 
+  # Separate logical paragraphs from each other.
+  # This should only be called by implementation scopes which call
+  # Ruby-var-parameterized CMake generator functions,
+  # i.e. NOT at the lower hierarchy level where we have open-coded
+  # CMake statement strings
+  # (functions doing generation of CMake statements should be minimalistic,
+  # i.e. free from any higher-level paragraph management).
   def next_paragraph()
     @textOut.write_empty_line()
   end
@@ -5038,6 +5047,8 @@ end
 # class variant which is supposed to create a self-contained file
 # (i.e. one which does not rely on our V2C functions module).
 # Currently this most certainly does not work fully.
+# And I'm afraid we'll eventually get rid of "self-contained generation" mode
+# since we now have way too many of our own V2C-specific helper functions.
 class V2C_CMakeV2CSyntaxGeneratorSelfContained < V2C_CMakeV2CSyntaxGeneratorBase
   private
   def gen_put_customization_hook(include_file)
@@ -5759,7 +5770,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
     generate_project_leadin(project_info)
 
-    # arr_sub_source_list_var_names will receive the names of the individual source list variables:
+    # arr_sub_source_list_var_names will receive
+    # the names of the individual source list variables:
     arr_sub_source_list_var_names = Array.new
 
     put_file_list(project_info, arr_sub_source_list_var_names)
@@ -5915,7 +5927,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         } # arr_linker_info.each
       } # config_info_curr
       write_conditional_target_valid_end()
-    end
+    end # target_is_valid
 
     if target_is_valid
       write_func_v2c_target_post_setup(project_info.name, project_info.vs_keyword)
@@ -6158,6 +6170,7 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
       ">= #{str_cmake_minimum_version} due to crucial #{str_cmake_minimum_version_reason}"
     )
     write_cmake_minimum_version(str_cmake_minimum_version)
+    next_paragraph()
   end
   def put_per_scope_cmake_policies
     str_conditional = get_var_conditional_command('cmake_policy')
@@ -6443,7 +6456,6 @@ class V2C_CMakeLocalFileGenerator < V2C_LoggerBase
   def initialize(p_v2c_script, p_master_project, p_generator_proj_file, arr_projects)
     @p_master_project = p_master_project
 
-    # figure out a project_dir variable from the generated project file location
     @p_generator_proj_file = p_generator_proj_file
     @arr_projects = arr_projects
     @script_location_relative_to_master = p_v2c_script.relative_path_from(p_master_project)

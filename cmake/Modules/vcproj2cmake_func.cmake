@@ -772,7 +772,7 @@ function(_v2c_config_do_setup)
   # reference to the _global_ one here...
   _v2c_var_verified_get(GLOBAL_CONFIG_RELPATH global_config_subdir_)
 
-  # These files are OPTIONAL elements of the source tree!
+  # These files are *optional* elements of the source tree!
   # (thus we shouldn't carelessly list them as target file dependencies etc.)
   # To ensure their availability (might be useful),
   # we could have touched any non-existing files,

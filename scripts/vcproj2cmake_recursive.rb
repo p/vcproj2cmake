@@ -428,7 +428,15 @@ if (want_multi_processing and $v2c_enable_processes)
   log_info 'Recursively converting projects, multi-process.'
   arr_unit_work.each { |myWork|
     fork {
-      execute_work_unit(unitGlobal, myWork)
+      # Nope, does not seem to be true - anyway,
+      # we'll keep this code since I'm not entirely sure...
+      #begin
+        execute_work_unit(unitGlobal, myWork)
+      #rescue Exception => e
+      #  # Need to add an open-coded exception logging line
+      #  # since foreign-process exceptions will be swallowed silently!
+      #  puts "EXCEPTION!! #{e.inspect} #{e.backtrace}"
+      #end
     }
   }
   Process.waitall
