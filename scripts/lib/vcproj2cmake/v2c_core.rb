@@ -4549,6 +4549,33 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     @textOut.indent_less()
     write_command_single_line('endif', str_conditional)
   end
+  def write_conditional_block(str_conditional)
+    write_conditional_if(str_conditional)
+    yield
+    write_conditional_end(str_conditional)
+  end
+  def put_function(name, arr_params)
+    arr_func = [ name ]
+    arr_func.concat(arr_params)
+    write_command_list_single_line('function', arr_func)
+      @textOut.indent_more()
+      yield
+      @textOut.indent_less()
+    write_command_list_single_line('endfunction', arr_func)
+  end
+  # Hides some CMake processing within an artificial function scope
+  # (cuts down on variable definitions remaining beyond their actual use).
+  def hide_within_function_scope(str_function_name)
+    write_comment_at_level(COMMENT_LEVEL_STANDARD, 'Dummy function to keep extended variable activity in a throw-away scope')
+    put_function(str_function_name, nil) do
+      yield
+    end
+    next_paragraph()
+    # Since this is for hide-only purposes, now immediately
+    # invoke that interim function:
+    write_command_list_single_line(str_function_name, nil)
+    next_paragraph()
+  end
   # http://www.cmake.org/Wiki/CMake/Language_Syntax says
   # one can use any of TRUE/FALSE, ON/OFF, YES/NO,
   # thus we'll obviously choose the shortest solution.
@@ -4568,9 +4595,9 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   end
   def write_set_var_if_unset(var_name, setting)
     str_conditional = get_conditional_inverted(var_name)
-    write_conditional_if(str_conditional)
+    write_conditional_block(str_conditional) do
       write_set_var(var_name, setting)
-    write_conditional_end(str_conditional)
+    end
   end
   # Hrmm, I'm currently unsure whether there _should_ in fact
   # be any difference between write_set_var() and write_set_var_quoted()...
@@ -4593,14 +4620,14 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     comment = get_cmake_policy_docstring(policy_num)
     str_policy = '%s%04d' % [ 'CMP', policy_num ]
     str_conditional = "POLICY #{str_policy}"
-    write_conditional_if(str_conditional)
+    write_conditional_block(str_conditional) do
       if not comment.nil?
         write_comment_at_level(COMMENT_LEVEL_VERBOSE, comment)
       end
       str_OLD_NEW = set_to_new ? 'NEW' : 'OLD'
       arr_args_set_policy = [ 'SET', str_policy, str_OLD_NEW ]
       write_command_list_single_line('cmake_policy', arr_args_set_policy)
-    write_conditional_end(str_conditional)
+    end
   end
   PROP_SET = false
   PROP_APPEND = true
@@ -4805,6 +4832,13 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
       compile_defn
     end
   end
+  def get_target_syntax_expression(target_name); 'TARGET ' + target_name end
+  def when_target_valid_scriptlet_block(target_name)
+    target_conditional = get_target_syntax_expression(target_name)
+    write_conditional_block(target_conditional) do
+      yield
+    end
+  end
 end
 
 # @brief V2C_CMakeV2CSyntaxGenerator isn't supposed to be a base class
@@ -4914,6 +4948,12 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     end
     return var_name
   end
+  def write_buildcfg_condition_block(condition)
+    var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
+    write_conditional_block(var_v2c_want_buildcfg_curr) do
+      yield
+    end
+  end
   def parse_platform_conversions_internal(platform_defs, arr_defs, map_defs, skip_failed_lookups)
     arr_defs.each { |curr_defn|
       #log_debug map_defs[curr_defn]
@@ -4998,8 +5038,7 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     #   http://www.mail-archive.com/cmake@cmake.org/msg38677.html
 
     if 1 == $v2c_generate_self_contained_file
-      var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
-      write_conditional_if(var_v2c_want_buildcfg_curr)
+      write_buildcfg_condition_block(condition) do
         #if use_of_mfc > V2C_TargetConfig_Defines::MFC_FALSE
           write_set_var('CMAKE_MFC_FLAG', use_of_mfc)
         #end
@@ -5012,7 +5051,7 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
           # TODO: should also set the per-configuration-type variable variant
           write_set_var('CMAKE_ATL_FLAG', use_of_atl)
         #end
-      write_conditional_end(var_v2c_want_buildcfg_curr)
+      end
     else
       arr_args_func = [ use_of_atl.to_s(), use_of_mfc.to_s() ]
       write_invoke_object_conditional_v2c_function('v2c_local_set_cmake_atl_mfc_flags', target_name, condition, arr_args_func)
@@ -5449,18 +5488,10 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   #def evaluate_precompiled_header_config(target, files_str)
   #end
   #
-  def write_conditional_target_valid_begin
-    write_conditional_if(get_target_syntax_expression(@target.name))
-  end
-  def write_conditional_target_valid_end
-    write_conditional_end(get_target_syntax_expression(@target.name))
-  end
-
-  def get_target_syntax_expression(target_name); "TARGET #{target_name}" end
 
   # FIXME: not sure whether map_lib_dirs etc. should be passed in in such a raw way -
   # probably mapping should already have been done at that stage...
-  def put_target(target, arr_sub_source_list_var_names, map_lib_dirs, map_lib_dirs_dep, map_dependencies, config_info_curr, target_config_info_curr)
+  def put_target_and_stuff(target, arr_sub_source_list_var_names, map_lib_dirs, map_lib_dirs_dep, map_dependencies, config_info_curr, target_config_info_curr)
     target_is_valid = false
 
     # first add source reference, then do linker setup, then create target
@@ -5488,26 +5519,55 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     target_is_valid = false
 
     str_condition_no_target = get_conditional_inverted(get_target_syntax_expression(target.name))
-    write_conditional_if(str_condition_no_target)
-          # FIXME: should use a macro like rosbuild_add_executable(),
-          # http://www.ros.org/wiki/rosbuild/CMakeLists ,
-          # https://kermit.cse.wustl.edu/project/robotics/browser/trunk/vendor/ros/core/rosbuild/rosbuild.cmake?rev=3
-          # to be able to detect non-C++ file types within a source file list
-          # and add a hook to handle them specially.
+    write_conditional_block(str_condition_no_target) do
+      target_is_valid = write_target_type(target_config_info_curr.cfg_type)
+    end
 
-          # see VCProjectEngine ConfigurationTypes enumeration
-    case target_config_info_curr.cfg_type
+    # write target_link_libraries() in case there's a valid target
+    if target_is_valid
+      target_info_curr.tools.arr_linker_info.each { |linker_info_curr|
+        arr_dependencies = linker_info_curr.arr_dependencies.collect { |dep| dep.dependency }
+        write_link_libraries(arr_dependencies, map_dependencies)
+      }
+    end # target_is_valid
+    return target_is_valid
+  end
+  def write_target_executable(target_name, string_sources_list)
+    write_command_list_single_line('add_executable', [ target_name, 'WIN32', string_sources_list ])
+  end
+
+  def write_target_library_dynamic(target_name, string_sources_list)
+    write_command_list_single_line('add_library', [ target_name, 'SHARED', string_sources_list ])
+  end
+
+  def write_target_library_static(target_name, string_sources_list)
+    write_command_list_single_line('add_library', [ target_name, 'STATIC', string_sources_list ])
+  end
+  def write_target_type(cfg_type)
+    target_is_valid = false
+
+    # FIXME: should use a macro like rosbuild_add_executable(),
+    # http://www.ros.org/wiki/rosbuild/CMakeLists ,
+    # https://kermit.cse.wustl.edu/project/robotics/browser/trunk/vendor/ros/core/rosbuild/rosbuild.cmake?rev=3
+    # to be able to detect non-C++ file types within a source file list
+    # and add a hook to handle them specially.
+
+    target_name = @target.name
+    string_sources_list = '${SOURCES}'
+
+    # see VCProjectEngine ConfigurationTypes enumeration
+    case cfg_type
     when V2C_TargetConfig_Defines::CFG_TYPE_APP
       target_is_valid = true
-      #syntax_generator.write_line("add_executable_vcproj2cmake( #{target.name} WIN32 ${SOURCES} )")
+      #syntax_generator.write_line("add_executable_vcproj2cmake( #{target_name} WIN32 ${SOURCES} )")
       # TODO: perhaps for real cross-platform binaries (i.e.
       # console apps not needing a WinMain()), we should detect
       # this and not use WIN32 in this case...
       # Well, this toggle probably is related to the .vcproj Keyword attribute...
-      write_target_executable()
+      write_target_executable(target_name, string_sources_list)
     when V2C_TargetConfig_Defines::CFG_TYPE_DLL
       target_is_valid = true
-      #syntax_generator.write_line("add_library_vcproj2cmake( #{target.name} SHARED ${SOURCES} )")
+      #syntax_generator.write_line("add_library_vcproj2cmake( #{target_name} SHARED ${SOURCES} )")
       # add_library() docs: "If no type is given explicitly the type is STATIC or  SHARED
       #                      based on whether the current value of the variable
       #                      BUILD_SHARED_LIBS is true."
@@ -5517,17 +5577,17 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # this is a backwards-incompatible change, thus leave it for now.
       # Or perhaps make use of new V2C_TARGET_LINKAGE_{SHARED|STATIC}_LIB
       # variables here, to be able to define "SHARED"/"STATIC" externally?
-      write_target_library_dynamic()
+      write_target_library_dynamic(target_name, string_sources_list)
     when V2C_TargetConfig_Defines::CFG_TYPE_STATIC_LIB
       target_is_valid = true
-      write_target_library_static()
+      write_target_library_static(target_name, string_sources_list)
     when V2C_TargetConfig_Defines::CFG_TYPE_UNKNOWN
-      logger.warn "Project type 0 (typeUnknown - utility, configured for target #{target.name}) is a _custom command_ type and thus probably cannot be supported easily. We will not abort and thus do write out a file, but it probably needs fixup (hook scripts?) to work properly. If this project type happens to use VCNMakeTool tool, then I would suggest to examine BuildCommandLine/ReBuildCommandLine/CleanCommandLine attributes for clues on how to proceed."
+      logger.warn "Project type 0 (typeUnknown - utility, configured for target #{target_name}) is a _custom command_ type and thus probably cannot be supported easily. We will not abort and thus do write out a file, but it probably needs fixup (hook scripts?) to work properly. If this project type happens to use VCNMakeTool tool, then I would suggest to examine BuildCommandLine/ReBuildCommandLine/CleanCommandLine attributes for clues on how to proceed."
     when V2C_TargetConfig_Defines::CFG_TYPE_GENERIC
-      logger.unhandled_functionality "#{@target.name}: project type #{target_config_info_curr.cfg_type} almost non-supported."
+      logger.unhandled_functionality "#{target_name}: project type #{cfg_type} almost non-supported."
       # Certain .vcproj:s do contain a list of source/header files,
       # thus do try to establish a normal library/executable target - maybe we're in luck.
-      write_target_library_dynamic()
+      write_target_library_dynamic(target_name, string_sources_list)
     else
     #when 10    # typeGeneric (Makefile) [and possibly other things...]
       # TODO: we _should_ somehow support these project types...
@@ -5539,32 +5599,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # flexible cross-platform translation of any system-specific commands
       # that are executed by the command.
       log_debug "#{@target.inspect}"
-      raise V2C_GeneratorError, "#{@target.name}: project type #{target_config_info_curr.cfg_type} not supported."
+      raise V2C_GeneratorError, "#{target_name}: project type #{cfg_type} not supported."
     end
-    write_conditional_end(str_condition_no_target)
-
-    # write target_link_libraries() in case there's a valid target
-    if target_is_valid
-      target_info_curr.tools.arr_linker_info.each { |linker_info_curr|
-        arr_dependencies = linker_info_curr.arr_dependencies.collect { |dep| dep.dependency }
-        write_link_libraries(arr_dependencies, map_dependencies)
-      }
-    end # target_is_valid
     return target_is_valid
   end
-  def write_target_executable
-    write_command_single_line('add_executable', "#{@target.name} WIN32 ${SOURCES}")
-  end
 
-  def write_target_library_dynamic
-    next_paragraph()
-    write_command_single_line('add_library', "#{@target.name} SHARED ${SOURCES}")
-  end
-
-  def write_target_library_static
-    next_paragraph()
-    write_command_single_line('add_library', "#{@target.name} STATIC ${SOURCES}")
-  end
   def put_hook_post_target
     next_paragraph()
     @localGenerator.put_customization_hook_commented_from_cmake_var(
@@ -5577,12 +5616,12 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_compile_defn_cooked = cmake_escape_compile_definitions(arr_compile_defn)
     property_name = get_name_of_per_config_type_property('COMPILE_DEFINITIONS', config_name)
     # make sure to specify APPEND for greater flexibility (hooks etc.)
-    put_property("TARGET #{@target.name}", PROP_APPEND, property_name, arr_compile_defn_cooked)
+    set_property(@target.name, PROP_APPEND, property_name, arr_compile_defn_cooked)
   end
   def generate_property_compile_definitions_per_platform(config_name, arr_platdefs, str_platform)
-    write_conditional_if(str_platform)
+    write_conditional_block(str_platform) do
       put_property_compile_definitions(config_name, arr_platdefs)
-    write_conditional_end(str_platform)
+    end
   end
   def put_precompiled_header(target_name, condition, pch_use_mode, pch_source_name, pch_binary_name)
     # FIXME: empty filename may happen in case of precompiled file
@@ -5615,8 +5654,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # the container for the list of _actual_ dependencies as stated by the project
     all_platform_defs = Hash.new
     parse_platform_conversions(all_platform_defs, arr_defs_assignments, map_defs, false)
-    var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
-    write_conditional_if(var_v2c_want_buildcfg_curr)
+    write_buildcfg_condition_block(condition) do
       build_type = condition.get_build_type()
       hash_ensure_sorted_each(all_platform_defs).each { |key, arr_platdefs|
         #logger.info "arr_platdefs: #{arr_platdefs}"
@@ -5624,14 +5662,13 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
         generate_property_compile_definitions_per_platform(build_type, arr_platdefs, str_platform)
       }
-    write_conditional_end(var_v2c_want_buildcfg_curr)
+    end
   end
   def write_property_compile_flags(condition, arr_flags, str_conditional)
     return if arr_flags.empty?
     next_paragraph()
-    var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
-    write_conditional_if(var_v2c_want_buildcfg_curr)
-      write_conditional_if(str_conditional)
+    write_buildcfg_condition_block(condition) do
+      write_conditional_block(str_conditional) do
         # FIXME!!! It appears that while CMake source has COMPILE_DEFINITIONS_<CONFIG>,
         # it does NOT provide a per-config COMPILE_FLAGS property! Need to verify ASAP
         # whether compile flags do get passed properly in debug / release.
@@ -5640,21 +5677,20 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         build_type = condition.get_build_type()
         property_name = get_name_of_per_config_type_property('COMPILE_FLAGS', build_type)
         put_property(str_target_expr, PROP_APPEND, property_name, arr_flags)
-      write_conditional_end(str_conditional)
-    write_conditional_end(var_v2c_want_buildcfg_curr)
+      end
+    end
   end
   def write_property_link_flags(condition, arr_flags, str_conditional)
     return if arr_flags.empty?
     next_paragraph()
-    var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
-    write_conditional_if(var_v2c_want_buildcfg_curr)
-      write_conditional_if(str_conditional)
+    write_buildcfg_condition_block(condition) do
+      write_conditional_block(str_conditional) do
         str_target_expr = get_target_syntax_expression(@target.name)
         build_type = condition.get_build_type()
         property_name = get_name_of_per_config_type_property('LINK_FLAGS', build_type)
         put_property(str_target_expr, PROP_APPEND, property_name, arr_flags)
-      write_conditional_end(str_conditional)
-    write_conditional_end(var_v2c_want_buildcfg_curr)
+      end
+    end
   end
   def write_link_libraries(arr_dependencies, map_dependencies)
     arr_dependencies_augmented = arr_dependencies.clone
@@ -5792,57 +5828,54 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       next_paragraph()
 
       condition = config_info_curr.condition
-      var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
-      write_conditional_if(var_v2c_want_buildcfg_curr)
+      write_buildcfg_condition_block(condition) do
+        config_info_curr.tools.arr_compiler_info.each { |compiler_info_curr|
+          arr_includes = compiler_info_curr.get_include_dirs(false, false)
+          @localGenerator.write_include_directories(arr_includes, generator_base.map_includes)
+        }
 
-      config_info_curr.tools.arr_compiler_info.each { |compiler_info_curr|
-        arr_includes = compiler_info_curr.get_include_dirs(false, false)
-        @localGenerator.write_include_directories(arr_includes, generator_base.map_includes)
-      }
-
-      # At this point (before target creation - much earlier than we
-      # would want to), we'll have to iterate through target configs
-      # for all settings which are target related but are (stupidly)
-      # NOT being applied as target properties (i.e. post-target-setup).
-      arr_target_config_info.each { |target_config_info_curr|
-	next if not condition.entails(target_config_info_curr.condition)
-	# FIXME: put_atl_mfc_config() does not need
-	# var_v2c_want_buildcfg_curr i.e. should be outside of it
-	# (already does own condition handling) - how to resolve this?
-        put_atl_mfc_config(target_config_info_curr)
-      }
-
-      # FIXME: hohumm, the position of this hook include is outdated, need to update it
-      # Well, there's a distinction between
-      # ("dirty") global settings (defined _prior_ to adding a target)
-      # and target-aggregated settings (properties),
-      # thus maybe we need different hooks for these two mechanisms.
-      # Well, but for now at least MAKE SURE TO ALWAYS KEEP IT RIGHT BEFORE
-      # adding the target! (to be able to manipulate _all_ prior settings
-      # if needed).
-      put_hook_post_definitions()
-
-      # Technical note: target type (library, executable, ...) in .vcproj can be configured per-config
-      # (or, in other words, different configs are capable of generating _different_ target _types_
-      # for the _same_ target), but in CMake this isn't possible since _one_ target name
-      # maps to _one_ target type and we _need_ to restrict ourselves to using the project name
-      # as the exact target name (we are unable to define separate PROJ_lib and PROJ_exe target names,
-      # since other .vcproj file contents always link to our target via the main project name only!!).
-      # Thus we need to declare the target _outside_ the scope of per-config handling :(
-
-      # create a target only in case we do have any meat at all
-      if project_info.have_build_units
+        # At this point (before target creation - much earlier than we
+        # would want to), we'll have to iterate through target configs
+        # for all settings which are target related but are (stupidly)
+        # NOT being applied as target properties (i.e. post-target-setup).
         arr_target_config_info.each { |target_config_info_curr|
           next if not condition.entails(target_config_info_curr.condition)
-          target_is_valid = put_target(project_info, arr_sub_source_list_var_names, map_lib_dirs, map_lib_dirs_dep, map_dependencies, config_info_curr, target_config_info_curr)
+        # FIXME: put_atl_mfc_config() does not need
+        # buildcfg condition i.e. should be outside of that block
+        # (already does own condition handling) - how to resolve this?
+          put_atl_mfc_config(target_config_info_curr)
         }
-      end # target.have_build_units
 
-      write_conditional_end(var_v2c_want_buildcfg_curr)
+        # FIXME: hohumm, the position of this hook include is outdated, need to update it
+        # Well, there's a distinction between
+        # ("dirty") global settings (defined _prior_ to adding a target)
+        # and target-aggregated settings (properties),
+        # thus maybe we need different hooks for these two mechanisms.
+        # Well, but for now at least MAKE SURE TO ALWAYS KEEP IT RIGHT BEFORE
+        # adding the target! (to be able to manipulate _all_ prior settings
+        # if needed).
+        put_hook_post_definitions()
+
+        # Technical note: target type (library, executable, ...) in .vcproj can be configured per-config
+        # (or, in other words, different configs are capable of generating _different_ target _types_
+        # for the _same_ target), but in CMake this isn't possible since _one_ target name
+        # maps to _one_ target type and we _need_ to restrict ourselves to using the project name
+        # as the exact target name (we are unable to define separate PROJ_lib and PROJ_exe target names,
+        # since other .vcproj file contents always link to our target via the main project name only!!).
+        # Thus we need to declare the target _outside_ the scope of per-config handling :(
+
+        # create a target only in case we do have any meat at all
+        if project_info.have_build_units
+          arr_target_config_info.each { |target_config_info_curr|
+            next if not condition.entails(target_config_info_curr.condition)
+            target_is_valid = put_target_and_stuff(project_info, arr_sub_source_list_var_names, map_lib_dirs, map_lib_dirs_dep, map_dependencies, config_info_curr, target_config_info_curr)
+          }
+        end # target.have_build_units
+      end
 
       # Generate all functions which already have their own conditional
       # platform / build type handling here, outside of the
-      # var_v2c_want_buildcfg_curr handling...
+      # buildcfg condition block handling...
       # Note that some may be dependent on the target already having
       # been established!
       hook_up_midl_files(project_info.file_lists, config_info_curr)
@@ -5858,75 +5891,75 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # FIXME This is getting waaaaay too messy, need to refactor it to have a
     # clean hierarchy.
     if target_is_valid
-      write_conditional_target_valid_begin()
-      arr_config_info.each { |config_info_curr|
-        condition = config_info_curr.condition
+      when_target_valid_scriptlet_block(@target.name) {
+        arr_config_info.each { |config_info_curr|
+          condition = config_info_curr.condition
 
-        tools = config_info_curr.tools
+          tools = config_info_curr.tools
 
-        # NOTE: the commands below can stay in the general section (outside of
-        # var_v2c_want_buildcfg_curr above), but only since they define properties
-        # which are clearly named as being configuration-_specific_ already!
-        #
-        # I don't know WhyTH we're iterating over a compiler_info here,
-        # but let's just do it like that for now since it's required
-        # by our current data model:
-        tools.arr_compiler_info.each { |compiler_info_curr|
+          # NOTE: the commands below can stay in the general section (outside of
+          # the buildcfg condition above), but only since they define properties
+          # which are clearly named as being configuration-_specific_ already!
+          #
+          # I don't know WhyTH we're iterating over a compiler_info here,
+          # but let's just do it like that for now since it's required
+          # by our current data model:
+          tools.arr_compiler_info.each { |compiler_info_curr|
 
-          print_marker_line('per-compiler_info')
+            print_marker_line('per-compiler_info')
 
-          arr_target_config_info.each { |target_config_info_curr|
-	    next if not condition.entails(target_config_info_curr.condition)
+            arr_target_config_info.each { |target_config_info_curr|
+              next if not condition.entails(target_config_info_curr.condition)
 
-	    hash_defines_augmented = compiler_info_curr.hash_defines.clone
+              hash_defines_augmented = compiler_info_curr.hash_defines.clone
 
-	    add_target_config_specific_definitions(condition, target_config_info_curr, hash_defines_augmented)
-            # Convert hash into array as required by the definitions helper function
-            # (it's probably a good idea to provide "cooked" "key=value" entries
-            # for more complete matching possibilities
-            # within the regex matching parts done by it).
-            # TODO: this might be relocatable to a common generator base helper method.
-            arr_defs_assignments = Array.new
-            hash_ensure_sorted_each(hash_defines_augmented).each { |key, value|
-              str_define = value.empty? ? key : key + '=' + value
-              arr_defs_assignments.push(str_define)
-            }
-            write_property_compile_definitions(condition, arr_defs_assignments, map_defines)
-	    if not compiler_info_curr.pdb_info.nil?
-	      configure_pdb(compiler_info_curr.pdb_info, condition)
-	    end
-            # Original compiler flags are MSVC-only, of course. TODO: provide an automatic conversion towards gcc?
-            compiler_info_curr.arr_tool_variant_specific_info.each { |compiler_specific|
+              add_target_config_specific_definitions(condition, target_config_info_curr, hash_defines_augmented)
+              # Convert hash into array as required by the definitions helper function
+              # (it's probably a good idea to provide "cooked" "key=value" entries
+              # for more complete matching possibilities
+              # within the regex matching parts done by it).
+              # TODO: this might be relocatable to a common generator base helper method.
+              arr_defs_assignments = Array.new
+              hash_ensure_sorted_each(hash_defines_augmented).each { |key, value|
+                str_define = value.empty? ? key : "#{key}=#{value}"
+                arr_defs_assignments.push(str_define)
+              }
+              write_property_compile_definitions(condition, arr_defs_assignments, map_defines)
+              if not compiler_info_curr.pdb_info.nil?
+                configure_pdb(compiler_info_curr.pdb_info, condition)
+              end
+              # Original compiler flags are MSVC-only, of course. TODO: provide an automatic conversion towards gcc?
+              compiler_info_curr.arr_tool_variant_specific_info.each { |compiler_specific|
 	      str_conditional_compiler_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.compiler_name)
-              # I don't think we need this (we have per-target properties), thus we'll NOT write it!
-              #if not attr_opts.nil?
-              #  local_generator.write_directory_property_compile_flags(attr_options)
-              #end
-              write_property_compile_flags(condition, compiler_specific.arr_flags, str_conditional_compiler_platform)
-            } # compiler.tool_specific.each
-          } # arr_target_config_info.each
+                # I don't think we need this (we have per-target properties), thus we'll NOT write it!
+                #if not attr_opts.nil?
+                #  local_generator.write_directory_property_compile_flags(attr_options)
+                #end
+                write_property_compile_flags(condition, compiler_specific.arr_flags, str_conditional_compiler_platform)
+              } # compiler.tool_specific.each
+            } # arr_target_config_info.each
 
-          # Since the precompiled header CMake module currently
-          # _resets_ a target's COMPILE_FLAGS property,
-          # make sure to generate it _before_ specifying any COMPILE_FLAGS:
-          # UPDATE: nope, it's now fixed, thus move it *after* the target
+            # Since the precompiled header CMake module currently
+            # _resets_ a target's COMPILE_FLAGS property,
+            # make sure to generate it _before_ specifying any COMPILE_FLAGS:
+            # UPDATE: nope, it's now fixed, thus move it *after* the target
 	  # is fully configured (it needs to be able to correctly gather
 	  # all settings of the target it is supposed to be used for).
-          write_precompiled_header(condition, compiler_info_curr.precompiled_header_info)
+            write_precompiled_header(condition, compiler_info_curr.precompiled_header_info)
 
-        } # config_info_curr.tools.arr_compiler_info.each
-        tools.arr_linker_info.each { |linker_info_curr|
-          linker_info_curr.arr_tool_variant_specific_info.each { |linker_specific|
+          } # config_info_curr.tools.arr_compiler_info.each
+          tools.arr_linker_info.each { |linker_info_curr|
+            linker_info_curr.arr_tool_variant_specific_info.each { |linker_specific|
 	    str_conditional_linker_platform = map_linker_name_to_cmake_platform_conditional(linker_specific.linker_name)
-            # Probably more linker flags support needed? (mention via
-            # CMAKE_SHARED_LINKER_FLAGS / CMAKE_MODULE_LINKER_FLAGS / CMAKE_EXE_LINKER_FLAGS
-            # depending on target type, and make sure to filter out options pre-defined by CMake platform
-            # setup modules)
-            write_property_link_flags(condition, linker_specific.arr_flags, str_conditional_linker_platform)
-          } # linker.tool_specific.each
-        } # arr_linker_info.each
-      } # config_info_curr
-      write_conditional_target_valid_end()
+              # Probably more linker flags support needed? (mention via
+              # CMAKE_SHARED_LINKER_FLAGS / CMAKE_MODULE_LINKER_FLAGS / CMAKE_EXE_LINKER_FLAGS
+              # depending on target type, and make sure to filter out options pre-defined by CMake platform
+              # setup modules)
+              write_property_link_flags(condition, linker_specific.arr_flags, str_conditional_linker_platform)
+            } # linker.tool_specific.each
+          } # arr_linker_info.each
+        } # config_info_curr
+      }
     end # target_is_valid
 
     if target_is_valid
@@ -6129,7 +6162,7 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     # in combination with the conditional).
     str_per_scope_definition_guard = '_v2c_global_defs_per_scope_defined'
     str_condition_inverse = get_conditional_inverted(str_per_scope_definition_guard)
-    write_conditional_if(str_condition_inverse)
+    write_conditional_block(str_condition_inverse) do
       put_per_scope_cmake_minimum_version()
       put_per_scope_cmake_policies()
 
@@ -6142,7 +6175,7 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
       # sufficiently pathological, thus we will not support it.
       put_converter_script_location(@script_location_relative_to_master)
       write_set_var_bool(str_per_scope_definition_guard, true)
-    write_conditional_end(str_condition_inverse)
+    end
   end
 
   # cmake_minimum_required() is required to be mentioned open-coded
@@ -6174,7 +6207,7 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
   end
   def put_per_scope_cmake_policies
     str_conditional = get_var_conditional_command('cmake_policy')
-    write_conditional_if(str_conditional)
+    write_conditional_block(str_conditional) do
       # CMP0005: manual quoting of brackets in definitions doesn't seem to work otherwise,
       # in cmake 2.6.4-7.el5 with "OLD".
       # For policy tweaking, use of cmake_policy(PUSH/POP) might be
@@ -6188,7 +6221,7 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
       write_cmake_policy(5, true)
       write_cmake_policy(11, false)
       write_cmake_policy(15, true)
-    write_conditional_end(str_conditional)
+    end
   end
   def put_cmake_module_path(str_conversion_root_rel)
     # try to point to cmake/Modules of the topmost directory of the vcproj2cmake conversion tree.
@@ -6321,9 +6354,9 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     # be settings for ANY PARTICULAR tool that is configured
     # on the Win32 side (.vcproj in general).
     str_platform = 'WIN32'
-    write_conditional_if(str_platform)
+    write_conditional_block(str_platform) do
       put_property_directory__compile_flags(attr_opts, true)
-    write_conditional_end(str_platform)
+    end
   end
   def write_build_attributes(cmake_command, arr_defs, map_defs, cmake_command_arg, skip_failed_lookups = false)
     # the container for the list of _actual_ dependencies as stated by the project
@@ -6334,9 +6367,9 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
       #logger.info "arr_platdefs: #{arr_platdefs}"
       next_paragraph()
       str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
-      write_conditional_if(str_platform)
+      write_conditional_block(str_platform) do
         write_command_list_quoted(cmake_command, cmake_command_arg, arr_platdefs)
-      write_conditional_end(str_platform)
+      end
     }
   end
   private
