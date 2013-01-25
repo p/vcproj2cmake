@@ -56,19 +56,24 @@ end
 load_configuration()
 
 class V2C_Path_Config
+  # Provide a special directory for temporary/generated content that's not
+  # supposed to be added to SCM (entire content can be ignored easily,
+  # by mentioning this directory in SCM config files such as .gitignore)
+  TEMP_STORE_DIR_NAME = 'generated_temporary_content'
   def initialize(master_project_source_dir)
     @source_root = master_project_source_dir
     @rel_config_dir_source_root = $v2c_config_dir_local
     @config_dir_source_root = File.join(@source_root, @rel_config_dir_source_root)
-    # Provide a special directory for temporary/generated content that's not
-    # supposed to be added to SCM (entire content can be ignored easily,
-    # by mentioning this directory in SCM config files such as .gitignore)
-    temp_store_dir_name = "generated_temporary_content"
-    @rel_config_dir_source_root_temp_store = File.join(@rel_config_dir_source_root, temp_store_dir_name)
-    @config_dir_source_root_temp_store = File.join(@config_dir_source_root, temp_store_dir_name)
-    if not File.exist?(@config_dir_source_root_temp_store)
-      V2C_Util_File.mkdir_p @config_dir_source_root_temp_store
+    @rel_config_dir_temp_store = File.join(@rel_config_dir_source_root, TEMP_STORE_DIR_NAME)
+    @config_dir_source_root_temp_store = get_abs_temp_store_dir(@source_root)
+  end
+  def get_rel_temp_store_dir; @rel_config_dir_temp_store end
+  def get_abs_temp_store_dir(proj_dir)
+    proj_temp_store_dir = File.join(proj_dir, get_rel_temp_store_dir())
+    if not File.exist?(proj_temp_store_dir)
+      V2C_Util_File.mkdir_p(proj_temp_store_dir)
     end
+    proj_temp_store_dir
   end
   def get_abs_source_root; @source_root end
   # Returns the location of the V2C config dir located below V2C's source root
@@ -77,7 +82,7 @@ class V2C_Path_Config
   def get_abs_config_dir_source_root(); @config_dir_source_root end
   # Returns a suitable location for *temporary* storage purposes
   # (this content should not be committed to SCM).
-  def get_rel_config_dir_source_root_temp_store(); @rel_config_dir_source_root_temp_store end
+  def get_rel_config_dir_temp_store(); @rel_config_dir_temp_store end
   def get_abs_config_dir_source_root_temp_store(); @config_dir_source_root_temp_store end
 end
 
