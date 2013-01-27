@@ -101,6 +101,11 @@ $v2c_generator_one_time_conversion_only = false
 # since it needs a bit more testing.
 $v2c_target_precompiled_header_enable = false
 
+# Enables generation of IDE file filters (CMake source_group() command).
+# These definitions will be placed in a file separate from the generated
+# CMakeLists.txt, to allow for more flexibility.
+$v2c_generator_source_groups_enable = true
+
 # Whether we would like to have multi-threaded operation
 # for project conversion (vcproj2cmake_recursive.rb).
 # Not very useful since several Ruby implementations

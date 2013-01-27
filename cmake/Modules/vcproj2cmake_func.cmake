@@ -826,6 +826,41 @@ function(_v2c_target_mark_as_internal _target)
   _v2c_target_file_under("${_target}" "INTERNAL")
 endfunction(_v2c_target_mark_as_internal _target)
 
+# Determines whether a particular generator can make use of
+# source_group() information. E.g. for bare Makefiles providing GUI
+# file filters information obviously would be of no use,
+# and would simply cause sizeable overhead.
+function(_v2c_source_groups_do_setup)
+  # TODO: add a version check here, to determine whether source_group()
+  # is supported by this CMake version at all...
+  if(MSVC_IDE)
+    # MSVS supports file filters (hmm, but perhaps newer versions only?)
+    set(v2c_source_groups_enabled_introspection_ ON)
+  elseif(XCODE_VERSION)
+    # Let's assume Xcode also supports that.
+    set(v2c_source_groups_enabled_introspection_ ON)
+  else()
+    # Have a check for TUI-only (most uses of Ninja, Makefile) builds.
+    set(generator_no_sg_wanted_list_ "Ninja" "Unix Makefiles")
+    foreach(gen_ ${generator_no_sg_wanted_list_})
+      if("${CMAKE_GENERATOR}" STREQUAL "${gen_}")
+        set(v2c_source_groups_enabled_introspection_ OFF)
+        break()
+      endif("${CMAKE_GENERATOR}" STREQUAL "${gen_}")
+    endforeach(gen_ ${generator_no_sg_wanted_list_})
+  endif(MSVC_IDE)
+  if(DEFINED v2c_source_groups_enabled_introspection_)
+    set(v2c_source_groups_enabled_default_setting_ ${v2c_source_groups_enabled_introspection_})
+  else(DEFINED v2c_source_groups_enabled_introspection_)
+    set(v2c_source_groups_enabled_default_setting_ OFF)
+    _v2c_msg_warning("Missing detection of the default source groups support setting for this build environment (CMAKE_GENERATOR ${CMAKE_GENERATOR}, CMAKE_EXTRA_GENERATOR ${CMAKE_EXTRA_GENERATOR}), please add the correct setting! Resorting to ${v2c_source_groups_enabled_default_setting_}.")
+  endif(DEFINED v2c_source_groups_enabled_introspection_)
+  option(V2C_SOURCE_GROUPS_ENABLED "Whether to enable source groups (IDE file filter list trees) in this build environment. Default setting is automatically determined based on environment capabilities." ${v2c_source_groups_enabled_default_setting_})
+  _v2c_msg_info("Support for project source file groups (file filters): ${V2C_SOURCE_GROUPS_ENABLED}.")
+endfunction(_v2c_source_groups_do_setup)
+
+_v2c_source_groups_do_setup()
+
 # Debug-only helper!
 function(_v2c_target_log_configuration _target)
   if(TARGET ${_target})
@@ -836,6 +871,61 @@ function(_v2c_target_log_configuration _target)
     _v2c_msg_fatal_error("Properties/settings target ${_target}:\n\tvs_scc_projectname_ ${vs_scc_projectname_}\n\tvs_scc_localpath_ ${vs_scc_localpath_}\n\tvs_scc_provider_ ${vs_scc_provider_}\n\tvs_scc_auxpath_ ${vs_scc_auxpath_}")
   endif(TARGET ${_target})
 endfunction(_v2c_target_log_configuration _target)
+
+function(_v2c_project_local_config_dir_relpath_get _out_local_config_dir_relpath)
+  _v2c_var_verified_get(LOCAL_CONFIG_RELPATH local_config_relpath_)
+  set(${_out_local_config_dir_relpath} "${local_config_relpath_}" PARENT_SCOPE)
+endfunction(_v2c_project_local_config_dir_relpath_get _out_local_config_dir_relpath)
+
+function(_v2c_temp_store_dir_relpath_get _out_temp_store_dir_relpath)
+  _v2c_project_local_config_dir_relpath_get(cfg_dir_)
+  set(temp_dir_ "${cfg_dir_}/generated_temporary_content")
+  set(${_out_temp_store_dir_relpath} "${temp_dir_}" PARENT_SCOPE)
+endfunction(_v2c_temp_store_dir_relpath_get _out_temp_store_dir_relpath)
+
+# Indicates whether source groups for a project target ought to be
+# provided.
+# Naming clearly lumped into *_target_*() scope-wise
+# since source groups are provided by a project file i.e. a project *target*.
+function(_v2c_target_source_groups_is_enabled _target _out_is_enabled)
+  _v2c_var_verified_get(SOURCE_GROUPS_ENABLED is_enabled_)
+  # Could add a per-target evaluation of source group setting here,
+  # but a per-project-target decision is not too useful anyway...
+  set(${_out_is_enabled} ${is_enabled_} PARENT_SCOPE)
+endfunction(_v2c_target_source_groups_is_enabled _target _out_is_enabled)
+
+# Includes the generated per-target file which defines source_group() data.
+function(_v2c_target_source_groups_definitions_include _target)
+  _v2c_target_source_groups_is_enabled(${_target} sg_enabled_)
+  if(NOT sg_enabled_)
+    return()
+  endif(NOT sg_enabled_)
+
+  _v2c_temp_store_dir_relpath_get(temp_store_dir_)
+  # Although at this point we have the knowledge that we do want source groups,
+  # we'll still do an *optional* include()
+  # since some users might have decided to delete unwanted source group files.
+  _v2c_include_optional_invoke("${temp_store_dir_}/source_groups_${_target}.cmake")
+endfunction(_v2c_target_source_groups_definitions_include _target)
+
+function(_v2c_target_source_group_define _target _sg_name _sg_regex _sg_files)
+  _v2c_var_set_empty(parms_)
+  # FIXME: older CMake versions have different source_group() signature -
+  # add support for it (probably best done by conditionally enabling
+  # an entirely *separate* variant of this function).
+  list(APPEND parms_list_ "${_sg_name}")
+  # Regex is *optional*.
+  if(_sg_regex)
+    list(APPEND parms_list_ REGULAR_EXPRESSION "${_sg_regex}")
+  endif(_sg_regex)
+  # Files also seems to be *optional*.
+  if (_sg_files)
+    list(APPEND parms_list_ FILES "${_sg_files}")
+  endif (_sg_files)
+  # This might be a place to include() an optional user hook
+  # for source list evaluation/modification.
+  source_group(${parms_list_})
+endfunction(_v2c_target_source_group_define _target _sg_name _sg_regex _sg_files)
 
 function(_v2c_pre_touch_output_file _target_pseudo_output_file _actual_output_file _file_dependencies_list)
   # Don't inhibit a rebuild if the output file does not even exist yet:

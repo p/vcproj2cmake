@@ -4844,15 +4844,19 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   end
   # Hides some CMake processing within an artificial function scope
   # (cuts down on variable definitions remaining beyond their actual use).
-  def hide_within_function_scope(str_function_name)
+  def hide_within_function_scope(str_function_name_raw)
+    # We'll internally make use of a _v2cg ("generated") prefix.
+    # This is a good idea since such functions are always generated
+    # and invoked by us, thus the prefix should indicate our ownership scope.
+    str_function_name_prefixed = '_v2cg_' + str_function_name_raw
     write_comment_at_level(COMMENT_LEVEL_STANDARD, 'Dummy function to keep extended variable activity in a throw-away scope')
-    put_function(str_function_name, nil) do
+    put_function(str_function_name_prefixed, nil) do
       yield
     end
     next_paragraph()
     # Since this is for hide-only purposes, now immediately
     # invoke that interim function:
-    write_command_list_single_line(str_function_name, nil)
+    write_command_list_single_line(str_function_name_prefixed, nil)
     next_paragraph()
   end
   # http://www.cmake.org/Wiki/CMake/Language_Syntax says
@@ -4931,7 +4935,11 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     str_generated = get_keyword_bool(is_generated)
     put_property_source(get_dereferenced_variable_name(file_list_var), 'GENERATED', [ str_generated ])
   end
-  def put_source_group(source_group_name, arr_filters, source_files_variable)
+  # We'll enforce generating source_group() with a source list var _name_
+  # parameter (since in many cases there are *many* files grouped here,
+  # enforcing use of a CMake helper variable makes sense - especially
+  # since that var might already have been established for other purposes, too).
+  def put_source_group(source_group_name, arr_filters, source_files_list_var_name)
     arr_elems = Array.new
     if not arr_filters.nil?
       # WARNING: need to keep as separate array elements (whitespace separator would lead to bogus quoting!)
@@ -4940,7 +4948,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
       str_regex_list = array_to_cmake_list(arr_filters)
       arr_elems.push('REGULAR_EXPRESSION', str_regex_list)
     end
-    arr_elems.push('FILES', get_dereferenced_variable_name(source_files_variable))
+    arr_elems.push('FILES', get_dereferenced_variable_name(source_files_list_var_name))
     # Use multi-line method since source_group() arguments can be very long.
     write_command_list_quoted('source_group', source_group_name, arr_elems)
   end
@@ -5361,6 +5369,16 @@ class V2C_CMakeV2CSyntaxGeneratorV2CFunc < V2C_CMakeV2CSyntaxGeneratorBase
   def gen_put_converter_script_location(script_location)
     write_invoke_v2c_function_quoted('v2c_converter_script_set_location', [ script_location ])
   end
+  def put_v2c_target_source_groups_definitions_include(target_name)
+    write_comment_at_level(COMMENT_LEVEL_STANDARD,
+      "Optionally include()s a generated file which contains source_group() defs\n" \
+      "for this project target."
+    )
+    write_command_single_line('_v2c_target_source_groups_definitions_include', target_name)
+  end
+  def gen_message_info(msg)
+    write_command_list_quoted('_v2c_msg_info', msg, nil)
+  end
 end
 
 # class variant which is supposed to create a self-contained file
@@ -5559,9 +5577,9 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
     return arr_local_sources
   end
   def write_sources_list(source_list_name, arr_sources, var_prefix = 'SOURCES_files_')
-    source_files_variable = var_prefix + source_list_name
-    write_list_quoted(source_files_variable, arr_sources)
-    return source_files_variable
+    source_files_list_var_name = var_prefix + source_list_name
+    write_list_quoted(source_files_list_var_name, arr_sources)
+    return source_files_list_var_name
   end
   # Side note: we will NOT prefix source variables within a newly
   # generated CMakeLists.txt with V2C_[TARGET NAME],
@@ -5630,7 +5648,7 @@ class V2C_CMakeFileListsGenerator_VS7 < V2C_CMakeFileListGeneratorBase
 
     # process our hierarchy's own files
     if not arr_local_sources.nil?
-      source_files_variable = write_sources_list(source_group_var_suffix, arr_local_sources)
+      source_files_list_var_name = write_sources_list(source_group_var_suffix, arr_local_sources)
       # create source_group() of our local files
       if not parent_source_group.nil?
         # use list of filters if available: have it generated as source_group(REGULAR_EXPRESSION "regex" ...).
@@ -5638,18 +5656,18 @@ class V2C_CMakeFileListsGenerator_VS7 < V2C_CMakeFileListGeneratorBase
         if not filter_info.nil?
           arr_filters = filter_info.arr_scfilter
         end
-        put_source_group(this_source_group, arr_filters, source_files_variable)
+        put_source_group(this_source_group, arr_filters, source_files_list_var_name)
       end
     end
-    if not source_files_variable.nil? or not arr_my_sub_sources.empty?
+    if not source_files_list_var_name.nil? or not arr_my_sub_sources.empty?
       sources_variable = "SOURCES_#{source_group_var_suffix}"
       # dump sub filters...
       arr_source_vars = arr_my_sub_sources.collect { |sources_elem|
         get_dereferenced_variable_name(sources_elem)
       }
       # ...then our own files
-      if not source_files_variable.nil?
-        arr_source_vars.push(get_dereferenced_variable_name(source_files_variable))
+      if not source_files_list_var_name.nil?
+        arr_source_vars.push(get_dereferenced_variable_name(source_files_list_var_name))
       end
       next_paragraph()
       write_list_quoted(sources_variable, arr_source_vars)
@@ -6223,6 +6241,12 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       hook_up_midl_files(project_info.file_lists, config_info_curr)
     } # [END per-config handling]
 
+    # Best add source_group() information only *after* quite likely
+    # having a valid target, since our helper function has a target argument
+    # which should best be an established target rather than being "name only".
+    put_v2c_target_source_groups_definitions_include(project_info.name)
+    next_paragraph()
+
     # Now that we likely _do_ have a valid target
     # (created by at least one of the Debug/Release/... build configs),
     # _iterate through the configs again_ and add config-specific
@@ -6783,6 +6807,75 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
   end
 end
 
+class V2C_CMakeLocalSourceGroupFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
+  def initialize(textOut, target_name, arr_filtered_file_lists)
+    super(textOut)
+    @target_name = target_name
+    @arr_filtered_file_lists = arr_filtered_file_lists
+  end
+  def generate
+    @textOut.put_file_header_temporary_marker()
+
+    generate_project_source_groups(@target_name, @arr_filtered_file_lists)
+  end
+  private
+  def generate_project_source_groups(target_name, arr_group_info)
+    logger.debug "SOURCEGROUPS: #{arr_group_info.inspect}"
+    hide_within_function_scope("source_groups_setup_#{target_name}") {
+      sg_var_prefix = "#{target_name}_sg_"
+      sg_name = sg_var_prefix + 'name_'
+      sg_regex = sg_var_prefix + 'regex_'
+      sg_files = sg_var_prefix + 'files_'
+
+      arr_source_group_names_flattened = Array.new
+      arr_group_info.each { |group_info|
+        name_flattened = util_flatten_string(group_info.name)
+        write_set_var_quoted(sg_name + name_flattened, group_info.name)
+        write_list_quoted(sg_regex + name_flattened, group_info.arr_filters)
+        arr_files = group_info.arr_files.collect { |file_info|
+          file_info.path_relative
+        }
+        write_list_quoted(sg_files + name_flattened, arr_files)
+        arr_source_group_names_flattened.push(name_flattened)
+      }
+      gen_message_info("#{target_name}: defining source groups #{arr_source_group_names_flattened.join(", ")}.")
+      sg_names_flattened = sg_var_prefix + 'names_flattened_'
+      write_list(sg_names_flattened, arr_source_group_names_flattened)
+      gen_foreach([ 'sg_name_flattened_', get_dereferenced_variable_name(sg_names_flattened) ]) do
+        sg_name_flat_deref = get_dereferenced_variable_name('sg_name_flattened_')
+        arr_func_parms = nil
+        generate_helper_vars = false
+        if false != generate_helper_vars
+          name = 'name_'
+          regex = 'regex_'
+          files = 'files_'
+          write_set_var(name, element_manual_quoting(sg_name + sg_name_flat_deref))
+          write_set_var(regex, element_manual_quoting(sg_regex + sg_name_flat_deref))
+          write_set_var(files, element_manual_quoting(sg_files + sg_name_flat_deref))
+          # name may contain spaces --> needs quoting.
+          # List variables need to be quoted
+          # when intending to pass them as a single function parameter:
+          arr_func_parms = [
+            element_manual_quoting(get_dereferenced_variable_name(name)),
+            element_manual_quoting(get_dereferenced_variable_name(regex)),
+            element_manual_quoting(get_dereferenced_variable_name(files))
+          ]
+        else
+          arr_func_parms = [
+            element_manual_quoting(sg_name + sg_name_flat_deref),
+            element_manual_quoting(sg_regex + sg_name_flat_deref),
+            element_manual_quoting(sg_files + sg_name_flat_deref)
+          ]
+        end
+        write_command_list(
+          '_v2c_target_source_group_define', target_name, arr_func_parms
+        )
+      end
+    }
+    next_paragraph()
+  end
+end
+
 # Hrmm, I'm not quite sure yet where to aggregate this function...
 # (missing some proper generator base class or so...)
 def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name, throw_error)
@@ -6831,21 +6924,53 @@ end
 
 
 class V2C_CMakeLocalFileGenerator < V2C_LoggerBase
-  def initialize(p_v2c_script, p_master_project, p_generator_proj_file, arr_projects)
+  def initialize(p_v2c_script, p_master_project, p_generator_proj_file, arr_projects, flag_source_groups_enabled)
     @p_master_project = p_master_project
 
     @p_generator_proj_file = p_generator_proj_file
+    @p_local_dir = @p_generator_proj_file.dirname
     @arr_projects = arr_projects
     @script_location_relative_to_master = p_v2c_script.relative_path_from(p_master_project)
+    @flag_source_groups_enabled = flag_source_groups_enabled
     #logger.debug "p_v2c_script #{p_v2c_script} | p_master_project #{p_master_project} | @script_location_relative_to_master #{@script_location_relative_to_master}"
   end
   def generate
     output_file_location = @p_generator_proj_file.to_s
-    logger.info "Generating project(s) in #{logger.escape_item(@p_generator_proj_file.dirname)} into #{logger.escape_item(output_file_location)}"
-    generate_local = V2C_GenerateIntoTempFile.new("local #{CMAKELISTS_FILE_NAME}", 'vcproj2cmake', output_file_location)
-    generate_local.generate { |textOut|
-	content_generator = V2C_CMakeLocalFileContentGenerator.new(textOut, @p_generator_proj_file.dirname, @p_master_project, @arr_projects, @script_location_relative_to_master)
-	content_generator.generate
+    logger.info "Generating project(s) in #{logger.escape_item(@p_local_dir)} into #{logger.escape_item(output_file_location)}"
+    generate_local_projects(output_file_location)
+  end
+  private
+  def generate_local_projects(output_file_location)
+    temp_generator_local = V2C_GenerateIntoTempFile.new("local #{CMAKELISTS_FILE_NAME}", 'vcproj2cmake', output_file_location)
+    temp_generator_local.generate { |textOutLocal|
+      content_generator = V2C_CMakeLocalFileContentGenerator.new(textOutLocal, @p_local_dir, @p_master_project, @arr_projects, @script_location_relative_to_master)
+      content_generator.generate
+      # Keep per-project source group generation as close together
+      # with local file generation as possible scope-wise
+      # (we might want to change things into keeping file handling completely
+      # outside, passing proper textOut params to a generator which
+      # generates both local file content *and* source group stuff)
+      if source_groups_enabled()
+        path_config = v2c_get_path_config(@p_master_project.to_s)
+        temp_store_dir = path_config.get_abs_temp_store_dir(@p_local_dir.to_s)
+        generate_source_groups(temp_store_dir)
+      end
+    }
+  end
+  def source_groups_enabled; true == @flag_source_groups_enabled end
+  def generate_per_project_source_groups(dest_dir, target_name, arr_filtered_file_lists)
+    return if arr_filtered_file_lists.nil?
+    sg_file_name = "source_groups_#{target_name}.cmake"
+    output_file_location = File.join(dest_dir, sg_file_name)
+    temp_generator_sg = V2C_GenerateIntoTempFile.new("Source groups file for project #{target_name}", 'vcproj2cmake', output_file_location)
+    temp_generator_sg.generate { |textOutSG|
+      content_generator = V2C_CMakeLocalSourceGroupFileContentGenerator.new(textOutSG, target_name, arr_filtered_file_lists)
+      content_generator.generate
+    }
+  end
+  def generate_source_groups(dest_dir)
+    @arr_projects.each { |project_info|
+      generate_per_project_source_groups(dest_dir, project_info.name, project_info.arr_filtered_file_lists)
     }
   end
 end
@@ -7123,7 +7248,7 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
     # should be distinctly provided for each generator, too.
     generator = nil
     if true
-      generator = V2C_CMakeLocalFileGenerator.new(p_script, p_master_project, p_generator_proj_file, arr_projects)
+      generator = V2C_CMakeLocalFileGenerator.new(p_script, p_master_project, p_generator_proj_file, arr_projects, $v2c_generator_source_groups_enable)
     end
 
     if not generator.nil?
