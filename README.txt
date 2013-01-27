@@ -11,13 +11,25 @@ if things break, then you certainly get to keep both parts.
 
 === Environment dependencies / installation requirements  ===
 
-- working CMake installation ( http://www.cmake.org )
+On UNIX platforms (Linux, *BSD, Mac OS X, Solaris etc.) at least,
+installing required dependencies via the standard package manager mechanism
+conventions of your system/distribution is recommended.
+On Mac OS X, that would mean using e.g. one of Homebrew, nix, rudix, MacPorts.
+
+- git (for vcproj2cmake project source download)
+  [once you managed to read this README this item likely is history already,
+  unless you viewed this file in the SF web repository browser]
+  For Windows (less recommended -  CMake support issues
+  on generated VS project configurations, and less testing),
+  manually installing msysgit ( Official site: http://msysgit.github.com )
+  is a good choice (I successfully used it)
+- CMake ( Upstream: http://www.cmake.org )
   CMake 2.6.x to 2.8.x recommended (vcproj2cmake has been tested
-  with CMake versions in the ranges of 2.6.x to 2.8.8 only)
-- Ruby ( http://www.ruby-lang.org )
-  Ruby 1.8.x to 1.9.x recommended (while some efforts have been done
+  with CMake versions in the ranges of 2.6.x to 2.8.10 only)
+- Ruby ( Upstream: http://www.ruby-lang.org )
+  Ruby 1.8.x to 1.9.x recommended: while some efforts have been done
   to frantically retain compatibility with older Ruby versions
-  [e.g. those found on RHEL3], such support may easily be spotty)
+  (e.g. those found on RHEL3), such support may easily be spotty
 
 
 ===========================================================================
@@ -87,7 +99,7 @@ Reasons:
   with the main conversion scripts, which can only be guaranteed
   by always-installing vcproj2cmake_func.cmake etc.
 - a large number of generated CMakeLists.txt files
-  will needlessly clutter the source tree for non-CMake developers
+  will needlessly clutter the SCM working copy of non-CMake developers
 Mappings files and hook files, OTOH, do contain custom project-specific
 persistent information and thus should find their way into SCM.
 
@@ -106,6 +118,25 @@ You might e.g. decide to aggregate this entire auto-converted
 V2C sub scope from a parent-level native CMakeLists.txt infrastructure,
 via add_subdirectory()).
 
+
+Side note, to broaden understanding about project layout:
+rather than having an overly plain project directory hierarchy
+(e.g. worst case: all source files in root dir),
+a useful and common in-project hierarchy looks something like this
+(as used by e.g. CMake and various TFS projects):
+/ [root dir]
+  Build/ [project-specific build configuration files/scripts]
+  Docs/
+  Example/
+  Source/
+  Tests/ [unit tests etc.]
+  Utilities/ [scripts and stuff required for this project]
+
+(the solution file would probably be placed into the root dir)
+
+For TFS Team Projects ($/SomeTeamProj), each such project hierarchy would
+be shoved into one _sub_ directory within the Team Project
+(one team may manage *multiple* projects).
 
 
 === Hook script includes ===
@@ -194,21 +225,23 @@ This is what vcproj2cmake's mappings file mechanism is meant to solve
 
 Basic syntax of mappings files is:
 
-Original expression as used by the static Windows side (.vcproj content)
-- note case sensitivity! -,
+First original expression as used by the static Windows side (.vcproj content)
+  - note case sensitivity! -,
 then ':' as separator between original content and CMake-side mappings,
-then a platform-specific identifier (WIN32, APPLE, ...) which is used
-  in a CMake "if(...)" conditional (or no identifier in case the mapping
-  is supposed to be platform-universal),
-then a '=' to assign the replacement expression to be used on that platform,
+then a platform-specific conditional identifier (WIN32, APPLE, ...)
+  which is used in a CMake "if(...)" conditional
+  (or no identifier in case the mapping is supposed to apply for all
+  platforms),
+then a '=' to assign the replacement expression which is to be used
+  on that platform,
 then the ensuing replacement expression.
 Then an '|' (pipe, "or") for an optional series of additional platform conditionals.
 
 
 Note that ideally you merely need to centrally maintain all mappings
 in your root directory (solution file?) part
-(ROOT_PROJECT/cmake/vcproj2cmake/*_mappings.txt),
-since sub projects will also collect information from the root project
+(ROOT_DIR/cmake/vcproj2cmake/*_mappings.txt),
+since sub projects will also collect information from the root dir settings
 in addition to their (optional) local mappings files.
 
 
@@ -220,7 +253,9 @@ iff(!) a matching entry can be found.
 This mechanism can easily be required on Non-Windows platforms since
 on Windows MSVC supports "auto-linking" (i.e., auto-discovery)
 of required library dependencies via
+
 #pragma comment(lib, ...)
+
 lines in header files (thus it's only a library directory which needs to be specified),
 whereas on Non-Windows each library needs to be explicitly listed.
 See also
@@ -238,7 +273,7 @@ E.g. in case of Boost, it will cause linking of a target
 to the _full_ list of libraries contained within ${Boost_LIBRARIES}.
 If you don't want to pay this link and bloat penalty, then you will have to add each
 dependency to the AdditionalDependencies (library dependency) elements in your Visual Studio
-projects, mentioning the _full_, _versioned_ library name.
+projects, mentioning the _full_, _correctly versioned_ library name.
 This specific semi-redundant information, of course,
 is something that Windows-side VS projects possibly don't want to have to maintain
 (or, as happened in my case, are happy to unknowingly remove on a whim
@@ -255,21 +290,22 @@ This is to be done by mentioning the names of the projects to be excluded
 in the file $v2c_config_dir_local/project_exclude_list.txt
 
 Any CACHE variables or option()s provided by our vcproj2cmake CMake code
-can have an initial successful preset override by imposing their initial
-value via cmake -D.
+can have an successful preset override during the initial CMake configure run
+(by imposing their initial value via cmake -D).
 
 === Automatic re-conversion upon .vcproj changes ===
 
 vcproj2cmake now contains a mechanism (added as targets to the build environment)
 for _automatically_ triggered re-conversion of files
-whenever the backing .vc[x]proj file received some updates.
+whenever the backing .vc[x]proj file changed (received some updates).
 This is implemented in function
 cmake/Modules/vcproj2cmake_func.cmake/v2c_rebuild_on_update()
-This internal mechanism is enabled by default - you may modify the CMake cache variable
-V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER to disable it.
+This internal mechanism is enabled by default - you may modify the user-side
+CMake CACHE variable V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER to disable it.
 NOTE: in order to have the automatic re-conversion mechanism work properly,
 this currently needs the initial (manual) converter invocation
-to be done from root project, _not_ any other directory (FIXME get rid of this limitation).
+to be done from root dir, _not_ any other directory
+(FIXME get rid of this limitation).
 
 Since the converter will be re-executed from within the generated files
 (Makefile etc.), it will convert the CMakeLists.txt that these are based on
@@ -299,18 +335,30 @@ needs to resort to manually re-running the converter script
 (e.g. vcproj2cmake_recursive.rb) again.
 
 
+
 === Troubleshooting ===
 
-== CMake configure run ==
+== vcproj2cmake conversion run issues ==
+
+Filesystem case differences: this converter expects file statements
+as listed in the VS project files to have correct case vs. the actual file
+as stored in an SCM, since many platforms use case sensitive filesystems.
+Thus, if there is such a problematic case difference, it needs to be corrected.
+Usually that means correcting a wrong file entry in the project file,
+but in some cases one will resort to fixing filename case in SCM (file rename),
+and/or correcting improperly cased #include statements in source code.
+
+
+== CMake configure run issues ==
 
 - use CMake's message(FATAL_ERROR "DBG: xxx") command
 - add_custom_command(... COMMENT="DBG: we are doing ${THIS} and failing ${THAT}")
 - cmake --debug-output --trace
 
 
-== Build run ==
+== Build run issues ==
 
-If there's compile failure due to missing includes, then this probably means that
+If there's compile failure due to missing includes, then it probably means that
 a newly converted CMakeLists.txt still contains an include_directories() command
 which lists some paths in their raw, original, Windows-specific form.
 What should have happened is automatic replacement of such path strings
@@ -491,6 +539,30 @@ https://github.com/Vairn/vcxproj2cmake (or other related forks at github)
 Perl-based converter. Unfortunately not very powerful yet as of end-2012.
 
 
+=== Project development notes ===
+
+Important/useful git settings include:
+
+$ git config --global user.name "John Doe"
+$ git config --global user.email johndoe@example.com
+$ git config --global color.ui true
+$ git config --global core.editor vim
+Windows: $ git config core.autocrlf true
+Non-Windows: $ git config core.autocrlf input
+I think we want NON-tab indenting in any case
+(even though an argument could be made for doing tab-based development,
+since *one* tab would directly translate into *one* indent step,
+with actual representation in number of spaces per tab
+dynamically configurable in editors),
+since Ruby indenting conventions definitely seem to be two spaces,
+and indenting for a new scope while allowing/requesting
+tab as replacement of 8-ws parts would lead to problems:
+$ git config core.whitespace trailing-space,space-before-tab,tab-in-indent,cr-at-eol [not yet entirely sure about this one]
+(and preferably do a git diff --check prior to committing/pushing)
+$ git config --global rebase.autosquash true
+$ git config receive.fsckObjects true
+
+
 === Cross-platform development hints ===
 
 == Toolkit dependency management/reduction ==
@@ -571,14 +643,14 @@ shortcomings, among these:
     [quite likely the root cause is a string handling off-by-1 in
     TFS's merge code!]
 
-For a very revealing discussion with lots of experienced SCM/ALM people,
+For a very revealing discussion with many experienced SCM/ALM people,
 you may look at
 http://jamesmckay.net/2011/02/team-foundation-server-is-the-lotus-notes-of-version-control-tools/
 
 In short, it is strongly advisable to also check out other (possibly much more
 transparently developed) ALM solutions such as Trac, Jira, Polarion
 before committing to a specific product
-(these environments make up a large part of your development inner loop,
+(these environments make up a large part of your team's development inner loop,
 thus a wrong choice will cost dearly in wasted time and inefficiency).
 http://almatters.wordpress.com/2010/08/19/alm-open-source-tools-eclipse-mylyn-subclipse-trac-subversion/
 
@@ -594,12 +666,13 @@ http://code.google.com/p/gitextensions/
 
 === Epilogue ===
 
-Whenever something needs better explanation, just tell me and I'll try to improve it.
+Whenever something needs better explanation, just tell me
+and I'll try to improve it (I'm constantly rewording many parts of this README).
 Dito if you think that some mechanism is poorly implemented (we're still at pre-Beta stage!).
 
 Despite being at a semi-finished stage, the converter is now more than usable enough
-to successfully build and install/package a very large project consisting of
-many dozen sub projects.
+to successfully build and install/package a very large project
+consisting of many dozen sub projects.
 
 Happy hacking,
 
