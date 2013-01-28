@@ -163,7 +163,8 @@ def search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex, case_i
         log_debug "Applied #{proj_file_generic_match_regex}: FOUND specific entry #{dir_entry} (resulting prefix \"#{match_prefix}\", suffix \"#{match_suffix}\"), now removing all similar dir entries having related matches of less specific regexes"
         less_specific_dir_entries_to_remove = Array.new
         arr_proj_file_regex_remaining.each { |proj_file_deathbound_regex|
-          proj_file_generic_deathbound_regex = Regexp.new("#{match_prefix}#{proj_file_deathbound_regex}#{match_suffix}", case_insensitive_regex_match_option_flag)
+          regex_full = match_prefix + proj_file_deathbound_regex + match_suffix
+          proj_file_generic_deathbound_regex = Regexp.new(regex_full, case_insensitive_regex_match_option_flag)
           dir_entries_match_subset_remaining.each { |proj_file_deathbound|
             # Obviously need to skip that very entry that we found:
             next if dir_entry.eql?(proj_file_deathbound)

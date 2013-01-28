@@ -18,7 +18,7 @@ def load_configuration_file(str_file, str_descr, arr_descr_loaded)
   success = false
   begin
     load str_file
-    arr_descr_loaded.push("#{str_descr} #{str_file}")
+    arr_descr_loaded.push(str_descr + ' ' + str_file)
     success = true
   rescue LoadError
     # Ignore it (config file is optional!).
@@ -44,9 +44,9 @@ def load_configuration
   settings_file_prefix = 'vcproj2cmake_settings'
   settings_file_extension = 'rb'
   arr_descr_loaded = Array.new
-  settings_file_standard = "#{settings_file_prefix}.#{settings_file_extension}"
+  settings_file_standard = settings_file_prefix + '.' + settings_file_extension
   load_configuration_file(settings_file_standard, 'standard settings file', arr_descr_loaded)
-  settings_file_user = "#{settings_file_prefix}.user.#{settings_file_extension}"
+  settings_file_user = settings_file_prefix + '.user.' + settings_file_extension
   str_descr = 'user-specific customized settings file'
   str_msg_extra = nil
   if not load_configuration_file(settings_file_user, str_descr, arr_descr_loaded)
@@ -1377,7 +1377,7 @@ def vs7_create_config_variable_translation(str, arr_config_var_handling)
   str_scan_copy = str.dup # create a deep copy of string, to avoid "`scan': string modified (RuntimeError)"
   str_scan_copy.scan(VS7_PROP_VAR_SCAN_REGEX_OBJ) {
     config_var = $1
-    config_var_type_descr = "MSVS configuration variable"
+    config_var_type_descr = 'MSVS configuration variable'
     # MSVS Property / Environment variables are documented to be case-insensitive,
     # thus implement insensitive match:
     config_var_upcase = config_var.upcase
@@ -1471,7 +1471,7 @@ EOF
         is_env_var = true
       else
         log_warn "Unknown/user-custom config variable name #{config_var} encountered in line '#{str}' --> TODO?"
-        config_var_type_descr = "unknown configuration variable"
+        config_var_type_descr = 'unknown configuration variable'
         #str.gsub!(/\$\(#{config_var}\)/, "${v2c_VS_#{config_var}}")
         # For now, at least better directly reroute from environment variables as well:
         is_env_var = true
@@ -1760,7 +1760,7 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
     return path_cooked.empty? ? nil : path_cooked
   end
   GUID_DIG = '[[:digit:]A-Fa-f]'
-  GUID_PART = "#{GUID_DIG}#{GUID_DIG}#{GUID_DIG}#{GUID_DIG}"
+  GUID_PART = GUID_DIG + GUID_DIG + GUID_DIG + GUID_DIG
   VS_GUID_MATCH_REGEX_OBJ = %r{\{(#{GUID_PART}#{GUID_PART}-#{GUID_PART}-#{GUID_PART}-#{GUID_PART}-#{GUID_PART}#{GUID_PART}#{GUID_PART})\}}
   # Returns a Visual Studio GUID value with leading, trailing curly
   # brackets removed
@@ -2628,7 +2628,7 @@ class V2C_VS7ConfigurationsParser < V2C_VS7ParserBase
     config_entry = V2C_BuildConfigurationEntry.new
     build_type = condition.get_build_type()
     build_platform = condition.get_build_platform()
-    config_entry.description = "#{build_platform}|#{build_type}"
+    config_entry.description = build_platform + '|' + build_type
     config_entry.build_type = build_type
     config_entry.platform = build_platform
     get_build_platform_configs().add(config_entry)
@@ -3074,7 +3074,7 @@ class V2C_VSProjectFilesBundleParserBase < V2C_LoggerBase
   # Hrmm, that function does not really belong
   # in this somewhat too specific class...
   def check_unhandled_file_type(str_ext)
-    str_file = "#{@proj_filename}.#{str_ext}"
+    str_file = @proj_filename + '.' + str_ext
     if File.exists?(str_file)
       logger.unhandled_functionality("parser does not handle type of file #{str_file} yet!")
     end
@@ -4790,7 +4790,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
       res = property_name
     else
       config_name_upper = get_config_name_upcase(config_name)
-      res = "#{property_name}_#{config_name_upper}"
+      res = property_name + '_' + config_name_upper
     end
     return res
   end
@@ -4910,7 +4910,7 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
       # Name may contain spaces - need to handle them!
       build_type_flattened = util_flatten_string(build_type)
       platform_name_flattened = util_flatten_string(platform_name)
-      var_name = "v2c_want_buildcfg_platform_#{platform_name_flattened}_build_type_#{build_type_flattened}"
+      var_name = 'v2c_want_buildcfg_platform_' + platform_name_flattened + '_build_type_' + build_type_flattened
     end
     return var_name
   end
@@ -5126,7 +5126,7 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
     return arr_local_sources
   end
   def write_sources_list(source_list_name, arr_sources, var_prefix = 'SOURCES_files_')
-    source_files_variable = "#{var_prefix}#{source_list_name}"
+    source_files_variable = var_prefix + source_list_name
     write_list_quoted(source_files_variable, arr_sources)
     return source_files_variable
   end
@@ -5178,7 +5178,7 @@ class V2C_CMakeFileListsGenerator_VS7 < V2C_CMakeFileListGeneratorBase
       if parent_source_group == ''
         this_source_group = group_name
       else
-        this_source_group = "#{parent_source_group}\\\\#{group_name}"
+        this_source_group = parent_source_group + '\\\\' + group_name
       end
     end
 
@@ -5685,7 +5685,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # i.e. they are NOT to be treated in the knowledge
       # of some of them happening to be filesystem items.
       cmake_value = escape_content_for_cmake_string(value)
-      set_property(target_name, PROP_SET, "#{VS_GLOBAL_PREFIX_NAME}#{key}", [ cmake_value ])
+      set_property(target_name, PROP_SET, VS_GLOBAL_PREFIX_NAME + key, [ cmake_value ])
     }
   end
   def set_properties_vs_scc(target_name, scc_info_in)
@@ -5888,7 +5888,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
             # TODO: this might be relocatable to a common generator base helper method.
             arr_defs_assignments = Array.new
             hash_ensure_sorted_each(hash_defines_augmented).each { |key, value|
-              str_define = value.empty? ? key : "#{key}=#{value}"
+              str_define = value.empty? ? key : key + '=' + value
               arr_defs_assignments.push(str_define)
             }
             write_property_compile_definitions(condition, arr_defs_assignments, map_defines)
@@ -6213,9 +6213,9 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     if not str_conversion_root_rel.empty?
       str_conversion_root_rel_cooked = "/#{str_conversion_root_rel}"
     end
-    str_master_proj_source_dir = "#{get_dereferenced_variable_name(NAME_CMAKE_CURRENT_SOURCE_DIR)}#{str_conversion_root_rel_cooked}"
+    str_master_proj_source_dir = get_dereferenced_variable_name(NAME_CMAKE_CURRENT_SOURCE_DIR) + str_conversion_root_rel_cooked
     write_set_var_quoted(NAME_V2C_MASTER_PROJECT_SOURCE_DIR, str_master_proj_source_dir)
-    str_master_proj_binary_dir = "#{get_dereferenced_variable_name(NAME_CMAKE_CURRENT_BINARY_DIR)}#{str_conversion_root_rel_cooked}"
+    str_master_proj_binary_dir = get_dereferenced_variable_name(NAME_CMAKE_CURRENT_BINARY_DIR) + str_conversion_root_rel_cooked
     write_set_var_quoted(NAME_V2C_MASTER_PROJECT_BINARY_DIR, str_master_proj_binary_dir)
     # NOTE: use set() instead of list(APPEND...) to _prepend_ path
     # (otherwise not able to provide proper _overrides_)
