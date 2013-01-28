@@ -271,7 +271,7 @@ endfunction(_v2c_pch_do_setup)
 
 _v2c_pch_do_setup()
 
-# # # # #   COMMON HELPER FUNCTIONS   # # # # #
+# # # # #   COMMON BASE (NON-BUILD) UTIL HELPER FUNCTIONS   # # # # #
 
 # Helper to yell loudly in case of unset variables.
 # The input string should _not_ be the dereferenced form,
@@ -430,6 +430,12 @@ function(_v2c_fs_item_make_relative_to_path _in _path _out)
   set(${_out} "${out_}" PARENT_SCOPE)
 endfunction(_v2c_fs_item_make_relative_to_path _in _path _out)
 
+macro(_v2c_fs_file_touch _file)
+  # Let's hope file(APPEND "") successfully updates the timestamp only,
+  # otherwise resort to execute_process() cmake -E touch_nocreate.
+  file(APPEND "${_file}" "")
+endmacro(_v2c_fs_file_touch _file)
+
 function(_v2c_stamp_file_location_assign _stamp_file_name _out_stamp_file_location)
   _v2c_var_ensure_defined(_out_stamp_file_location)
   _v2c_var_verified_get(STAMP_FILES_DIR stamp_files_dir_)
@@ -441,6 +447,22 @@ function(_v2c_stamp_file_location_config_assign _config_name _stamp_file_name)
   _v2c_stamp_file_location_assign("${_stamp_file_name}" stamp_file_location_)
   _v2c_config_set(${_config_name} "${stamp_file_location_}")
 endfunction(_v2c_stamp_file_location_config_assign _config_name _stamp_file_name)
+
+# *V2C_DOCS_POLICY_MACRO*
+macro(_v2c_include_optional_invoke _include_file_name)
+  # Prevent problematic outcome of calls with empty variable
+  # (see our CMake bug #13388).
+  #
+  # For some very weird reason evaluating the macro parameter itself
+  # (i.e., the externally defined variable) via if(var) does NOT work -
+  # we need to assign to a *local* evaluation helper...
+  # (also, use very specific variable naming since we're a macro
+  # --> global pollution!)
+  set(v2c_include_file_name_ "${_include_file_name}")
+  if(v2c_include_file_name_)
+    include("${v2c_include_file_name_}" OPTIONAL)
+  endif(v2c_include_file_name_)
+endmacro(_v2c_include_optional_invoke _include_file_name)
 
 # # # # #   FEATURE CHECKS   # # # # #
 
@@ -815,12 +837,6 @@ function(_v2c_target_log_configuration _target)
   endif(TARGET ${_target})
 endfunction(_v2c_target_log_configuration _target)
 
-macro(_v2c_touch_file _file)
-  # Let's hope file(APPEND "") successfully updates the timestamp only,
-  # otherwise resort to cmake -E touch_nocreate.
-  file(APPEND "${_file}" "")
-endmacro(_v2c_touch_file _file)
-
 function(_v2c_pre_touch_output_file _target_pseudo_output_file _actual_output_file _file_dependencies_list)
   # Don't inhibit a rebuild if the output file does not even exist yet:
   if(NOT EXISTS "${_actual_output_file}")
@@ -836,7 +852,7 @@ function(_v2c_pre_touch_output_file _target_pseudo_output_file _actual_output_fi
   if(NOT needs_remake_)
     # We don't need a remake, thus update the pseudo output stamp file:
     _v2c_msg_info("${_actual_output_file} is current (no remake needed).")
-    _v2c_touch_file("${_target_pseudo_output_file}")
+    _v2c_fs_file_touch("${_target_pseudo_output_file}")
   endif(NOT needs_remake_)
 endfunction(_v2c_pre_touch_output_file _target_pseudo_output_file _actual_output_file _file_dependencies_list)
 
@@ -1136,19 +1152,9 @@ else(v2c_cmakelists_rebuilder_available)
 endif(v2c_cmakelists_rebuilder_available)
 
 # *V2C_DOCS_POLICY_MACRO*
+# Currently a specific-naming-only helper.
 macro(v2c_hook_invoke _hook_file_name)
-  # Prevent problematic outcome of calls with empty variable
-  # (see our CMake bug #13388).
-  #
-  # For some very weird reason evaluating the macro parameter itself
-  # (i.e., the externally defined variable) via if(var) does NOT work -
-  # we need to assign to a *local* evaluation helper...
-  # (also, use very specific variable naming since we're a macro
-  # --> global pollution!)
-  set(v2c_hook_file_name_ "${_hook_file_name}")
-  if(v2c_hook_file_name_)
-    include("${v2c_hook_file_name_}" OPTIONAL)
-  endif(v2c_hook_file_name_)
+  _v2c_include_optional_invoke("${_hook_file_name}")
 endmacro(v2c_hook_invoke _hook_file_name)
 
 # Configure CMAKE_MFC_FLAG etc.
