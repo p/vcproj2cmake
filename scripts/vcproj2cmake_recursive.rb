@@ -440,7 +440,17 @@ if (want_multi_processing and $v2c_enable_processes)
       #end
     }
   }
-  Process.waitall
+  results = Process.waitall
+  # MAKE DAMN SURE to properly signal exit status
+  # in case any of the sub processes happened to fail,
+  # otherwise it would be silently swallowed! (exit 0, success)
+  results.each { |result|
+    if result[1].exitstatus
+      # Side note: be sure to read
+      # http://www.bigfastblog.com/ruby-exit-exit-systemexit-and-at_exit-blunder
+      exit result[1].exitstatus
+    end
+  }
 elsif (want_multi_processing and $v2c_enable_threads)
   log_info 'Recursively converting projects, multi-threaded.'
 
