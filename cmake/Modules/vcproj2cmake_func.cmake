@@ -1180,6 +1180,8 @@ endmacro(v2c_local_set_cmake_atl_mfc_flags _target _build_platform _build_type _
 # -IBEFORE). This might be due to list var handing issues,
 # but possibly INCLUDE_DIRECTORIES prop simply does not support it.
 # Should analyze it soon.
+# TODO: brand new CMake versions now gained target_include_directories()
+# command.
 _v2c_var_set_empty(_v2c_feat_cmake_include_dirs_prop)
 if(_v2c_feat_cmake_include_dirs_prop)
   function(v2c_target_include_directories _target)
@@ -1337,6 +1339,8 @@ function(v2c_target_config_charset_set _target _build_platform _build_type _char
   endif("${_charset}" STREQUAL "UNICODE")
   if(charset_defines_list_)
     _v2c_buildcfg_buildtype_determine_upper("${_build_type}")
+    # TODO: brand new CMake versions now gained target_compile_definitions()
+    # command - might help...
     set_property(TARGET ${_target} APPEND PROPERTY COMPILE_DEFINITIONS_${_v2c_buildcfg_build_type_upper} ${charset_defines_list_})
   endif(charset_defines_list_)
 endfunction(v2c_target_config_charset_set _target _build_platform _build_type _charset)
@@ -1470,6 +1474,8 @@ ${c_section_end_}
     # relocate such things to a build tree directory.
     # However this would require implicitly adding this directory
     # to a project's default include path.
+    # Hah! In newer CMake versions the CMAKE_BUILD_INTERFACE_INCLUDES variable
+    # seems to be exactly provided for this purpose (TODO enable it?).
     _v2c_fs_item_make_relative_to_path("${v2c_target_midl_compile_HEADER_FILE_NAME}" "${PROJECT_SOURCE_DIR}" header_file_location_)
     _v2c_var_verified_get(MIDL_HANDLING_MODE v2c_midl_mode_)
     if(${v2c_midl_mode_} STREQUAL ${v2c_midl_handling_mode_wine})
@@ -1587,6 +1593,8 @@ function(v2c_target_pdb_configure _target _build_platform _build_type)
     # These target properties are said to be CMake >= 2.8.10 only.
     # No version check added here since setting them in vain
     # at least doesn't hurt.
+    # TODO: possibly we should also be doing something with the TARGET_PDB
+    # Expansion Rule (see CMake source).
     _v2c_buildcfg_buildtype_determine_upper("${_build_type}")
     if(v2c_target_pdb_configure_PDB_NAME)
       set_property(TARGET ${_target} PROPERTY PDB_NAME_${_v2c_buildcfg_build_type_upper} "${v2c_target_pdb_configure_PDB_NAME}")
@@ -1595,6 +1603,7 @@ function(v2c_target_pdb_configure _target _build_platform _build_type)
       # AFAICT as of CMake master 20121120
       # CMake source, while *setting* PDB_OUTPUT_DIRECTORY defaults,
       # does NOT actually *get* a custom one. Doh.
+      # (nope, it's using split values: "PDB" + "_OUTPUT_DIRECTORY")
       set_property(TARGET ${_target} PROPERTY PDB_OUTPUT_DIRECTORY_${_v2c_buildcfg_build_type_upper} ${v2c_target_pdb_configure_PDB_OUTPUT_DIRECTORY})
     endif(v2c_target_pdb_configure_PDB_OUTPUT_DIRECTORY)
   endif(is_active_)

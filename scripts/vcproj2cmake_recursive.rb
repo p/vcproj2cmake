@@ -386,9 +386,9 @@ Find.find('./') do
     log_debug "REBUILD #{f}!! #{rebuild}"
   end
 
-  # The root directory is special: in case of the V2C part being included within
-  # a larger CMake tree, it's already being accounted for
-  # (add_subdirectory() of it by other files), otherwise it should have a custom CMakeLists.txt
+  # The root directory is special: in case of the V2C part
+  # being included within a larger CMake tree,
+  # it's already being accounted for (add_subdirectory() of it by other files),   # otherwise it should have a custom CMakeLists.txt
   # which includes our "all projects list" CMake file.
   # Note that the V2C root dir might contain another project
   # (in the case of it being the CMake source root it better shouldn't!!) -

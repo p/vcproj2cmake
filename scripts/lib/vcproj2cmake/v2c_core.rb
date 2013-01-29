@@ -227,7 +227,7 @@ def log_error(str); $stderr.puts "ERROR: #{str}" if $v2c_log_level >= V2C_LOG_LE
 # one would want to have _partial_ aborts of processing only.
 # Soft error handling via exceptions would apply to errors due to problematic input -
 # but errors due to bugs in our code should cause immediate abort.
-def log_fatal(str); log_error "#{str}. Aborting!" if $v2c_log_level > V2C_LOG_LEVEL_OFF; exit 1 end
+def log_fatal(str); log_error str + '. Aborting!' if $v2c_log_level > V2C_LOG_LEVEL_OFF; exit 1 end
 
 def log_implementation_bug(str); log_fatal(str) end
 
@@ -244,7 +244,7 @@ class Logger
   def escape_item(file); "\"#{file}\"" end
 
   def error(str); log_error(formatter(str)) end
-  def fixme(str); log_error(formatter("FIXME: #{str}")) end
+  def fixme(str); log_error(formatter('FIXME: ' + str)) end
   def warn(str); log_warn(formatter(str)) end
   def info(str); log_info(formatter(str)) end
   def debug(str); log_debug(formatter(str)) end
@@ -254,11 +254,11 @@ class Logger
   def unhandled_exception(e, action)
     log_error "unhandled exception occurred during #{action}! #{e.message}, #{e.backtrace.inspect}"
   end
-  def unhandled_functionality(str_description); error "unhandled functionality: #{str_description}" end
+  def unhandled_functionality(str_description); error 'unhandled functionality: ' + str_description end
 
   private
   # I don't know WTH @class_name is not initialized. Probably an init order issue or whatever the heck is happening here. Oh well...
-  #def formatter(str) "#{@class_name}: #{str}" end
+  #def formatter(str) @class_name + ': ' + str end
   def formatter(str) str end
 end
 
@@ -333,25 +333,33 @@ end
 
 def escape_char(in_string, esc_char)
   #puts "in_string #{in_string}"
-  in_string.gsub!(/#{esc_char}/, "\\#{esc_char}")
+  in_string.gsub!(esc_char, '\\' + esc_char)
   #puts "in_string quoted #{in_string}"
 end
 
-BACKSLASH_REGEX_OBJ = %r{\\}
+# "Escaping a Backslash In Ruby's Gsub": "The reason for this is that
+# the backslash is special in the gsub method. To correctly output a
+# backslash, 4 backslashes are needed.". Oerks - oh well, do it.
+# hrmm, seems we need some more even...
+RUBY_GSUB_PER_BACKSLASH_MAGIC = '\\\\'
+
 def escape_backslash(in_string)
-  # "Escaping a Backslash In Ruby's Gsub": "The reason for this is that
-  # the backslash is special in the gsub method. To correctly output a
-  # backslash, 4 backslashes are needed.". Oerks - oh well, do it.
-  # hrmm, seems we need some more even...
-  # (or could we use single quotes (''') for that? Too lazy to retry...)
-  in_string.gsub!(BACKSLASH_REGEX_OBJ, '\\\\\\\\')
+  in_string.gsub!('\\', RUBY_GSUB_PER_BACKSLASH_MAGIC + RUBY_GSUB_PER_BACKSLASH_MAGIC)
+end
+
+want_bs_test = false
+if false != want_bs_test
+  test_bs = 'hi\\there'
+  puts "ESCAPED PRE: #{test_bs}"
+  escape_backslash(test_bs)
+  puts "ESCAPED POST: #{test_bs}"
 end
 
 # This method's output is quite a bit better
 # than a simple #{hash.inspect}.
 def log_hash(hash)
   log_debug '** log_hash **'
-  hash.each { |key, value|
+  hash.each_pair { |key, value|
     log_debug "#{key} --> #{value}"
   }
 end
@@ -792,6 +800,8 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
     # But the problem here would be that an imported target cannot be
     # APPENDed - it would have to be created in full, with any use of it
     # happening *subsequently*.
+    # TODO: brand new CMake versions now gained target_link_libraries()
+    # support for IMPORTED targets (commit 9cfe4f1).
     @arr_dependencies = Array.new # V2C_Dependency_Info
     @base_address = BASE_ADDRESS_NOT_SET
     @comdat_folding = COMDAT_FOLDING_DEFAULT
@@ -1366,7 +1376,7 @@ end
 # SolutionDir, TargetDir, DevEnvDir, InputDir, ProjectDir.
 # (and IntDir too, it seems?)
 def vs7_config_var_trailing_slash(cfg_var_translation)
-  "#{cfg_var_translation}/"
+  cfg_var_translation + '/'
 end
 
 # See also
@@ -1393,9 +1403,10 @@ end
 # add_custom_command()s "generator expressions" such as $<CONFIGURATION>.
 CMAKE_CFG_INTDIR_VAR_DEREF = '${CMAKE_CFG_INTDIR}'
 CMAKE_PROJECT_NAME_VAR_DEREF = '${PROJECT_NAME}'
-def vs7_create_config_variable_translation(str, arr_config_var_handling)
+def vs7_create_config_variable_translation(str_in, arr_config_var_handling)
+  str = str_in.clone
   # http://langref.org/all-languages/pattern-matching/searching/loop-through-a-string-matching-a-regex-and-performing-an-action-for-each-match
-  str_scan_copy = str.dup # create a deep copy of string, to avoid "`scan': string modified (RuntimeError)"
+  str_scan_copy = str_in.clone # create a deep copy of string, to avoid "`scan': string modified (RuntimeError)"
   str_scan_copy.scan(VS7_PROP_VAR_SCAN_REGEX_OBJ) {
     config_var = $1
     config_var_type_descr = 'MSVS configuration variable'
@@ -1785,7 +1796,8 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
   end
   GUID_DIG = '[[:digit:]A-Fa-f]'
   GUID_PART = GUID_DIG + GUID_DIG + GUID_DIG + GUID_DIG
-  VS_GUID_MATCH_REGEX_OBJ = %r{\{(#{GUID_PART}#{GUID_PART}-#{GUID_PART}-#{GUID_PART}-#{GUID_PART}-#{GUID_PART}#{GUID_PART}#{GUID_PART})\}}
+  GUID_EXPR = GUID_PART + GUID_PART + '-' + GUID_PART + '-' + GUID_PART + '-' + GUID_PART + '-' + GUID_PART + GUID_PART + GUID_PART
+  VS_GUID_MATCH_REGEX_OBJ = %r{\{(#{GUID_EXPR})\}}
   # Returns a Visual Studio GUID value with leading, trailing curly
   # brackets removed
   def strip_guid(guid)
@@ -1850,7 +1862,7 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
       else
         # Seems empty (whitespace-only) string is VS equivalent to false, right?
         # http://stackoverflow.com/a/1634814/1541578
-        str_value_cooked = str_value.gsub(/\s+/, "")
+        str_value_cooked = str_value.gsub(/\s+/, '')
         if str_value_cooked.empty?
           bool_out = false
           success = true
@@ -4151,7 +4163,7 @@ end
 # will completely _destructively override_ a pre-existing ItemGroup item
 # defined by the .vcxproj file (i.e. the pre-existing array item will be _replaced_).
 # IOW, it seems VS10 parses .filters _after_ having parsed .vcxproj,
-# with certain overriding taking place.
+# with certain amounts of overriding taking place.
 class V2C_VS10ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
   def initialize(p_parser_proj_file, arr_projects_out)
     super(p_parser_proj_file, 'MSVS10', arr_projects_out)
@@ -4467,7 +4479,7 @@ def check_cmakelists_txt_type(str_cmakelists_file_fqpn)
       end
     end
   }
-rescue Errno::ENOENT => e
+rescue Errno::ENOENT
   return CMAKELISTS_FILE_TYPE_NONE
 end
 
@@ -4531,7 +4543,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def print_marker_line(line)
     # write_comment_line(line) # UNCOMMENT THIS CALL IF NEEDED
   end
-  def write_comment_line(line); @textOut.write_line("# #{line}") end
+  def write_comment_line(line); @textOut.write_line('# ' + line) end
   def write_comment_at_level(level, block)
     return if @textOut.generated_comments_level() < level
     # Since we'd like the start of a comment paragraph to start with
@@ -4788,15 +4800,16 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   REGEX_OBJ_DOUBLEQUOTE = %r{"}
   REGEX_OBJ_DOLLAR_SIGN = %r{\$}
   def escape_content_for_cmake_string(in_string)
+    str = in_string.clone
     # Hmm, any other special chars to be escaped here?
-    escape_backslash(in_string)
+    escape_backslash(str)
     # Note that CMake currently does not properly handle an escaped
     # semi-colon (CMake list separator). See CMake bug #13806.
-    in_string.gsub!(REGEX_OBJ_SEMICOLON, '\\;')
-    in_string.gsub!(REGEX_OBJ_DOUBLEQUOTE, '\\"')
-    in_string.gsub!(REGEX_OBJ_DOLLAR_SIGN, '\\$')
+    str.gsub!(REGEX_OBJ_SEMICOLON, '\\;')
+    str.gsub!(REGEX_OBJ_DOUBLEQUOTE, '\\"')
+    str.gsub!(REGEX_OBJ_DOLLAR_SIGN, '\\$')
     # Do NOT return gsub!() (may return nil)
-    return in_string
+    return str
   end
   # (un)quote strings as needed
   #
@@ -4868,7 +4881,10 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     return CMAKE_IS_LIST_VAR_CONTENT_REGEX_OBJ.match(str_elem)
   end
   def util_flatten_string(in_string)
-    return in_string.gsub(WHITESPACE_REGEX_OBJ, '_')
+    out_string = in_string.clone
+    out_string.gsub!(WHITESPACE_REGEX_OBJ, '_')
+    out_string.tr!('\\', '_')
+    out_string
   end
   def get_config_name_upcase(config_name)
     # need to also convert config names with spaces into underscore variants, right?
@@ -5812,7 +5828,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # CMake-side code (i.e. in v2c_target_set_properties_vs_scc()).
     # Note that perhaps we should also escape all other chars
     # as in CMake's EscapeForXML() method.
-    scc_info_cmake.project_name.gsub!(/"/, '&quot;')
+    scc_info_cmake.project_name.gsub!('"', '&quot;')
     if scc_info_cmake.local_path
       escape_backslash(scc_info_cmake.local_path)
       escape_char(scc_info_cmake.local_path, '"')
@@ -5990,7 +6006,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
               if not compiler_info_curr.pdb_info.nil?
                 configure_pdb(compiler_info_curr.pdb_info, condition)
               end
-              # Original compiler flags are MSVC-only, of course. TODO: provide an automatic conversion towards gcc?
+              # Original compiler flags are MSVC-only, of course.
+              # TODO: provide an automatic conversion towards gcc?
               compiler_info_curr.arr_tool_variant_specific_info.each { |compiler_specific|
 	      str_conditional_compiler_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.compiler_name)
                 # I don't think we need this (we have per-target properties), thus we'll NOT write it!
@@ -6005,18 +6022,18 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
             # _resets_ a target's COMPILE_FLAGS property,
             # make sure to generate it _before_ specifying any COMPILE_FLAGS:
             # UPDATE: nope, it's now fixed, thus move it *after* the target
-	  # is fully configured (it needs to be able to correctly gather
-	  # all settings of the target it is supposed to be used for).
+            # is fully configured (it needs to be able to correctly gather
+            # all settings of the target it is supposed to be used for).
             write_precompiled_header(condition, compiler_info_curr.precompiled_header_info)
 
           } # config_info_curr.tools.arr_compiler_info.each
           tools.arr_linker_info.each { |linker_info_curr|
             linker_info_curr.arr_tool_variant_specific_info.each { |linker_specific|
-	    str_conditional_linker_platform = map_linker_name_to_cmake_platform_conditional(linker_specific.linker_name)
+              str_conditional_linker_platform = map_linker_name_to_cmake_platform_conditional(linker_specific.linker_name)
               # Probably more linker flags support needed? (mention via
               # CMAKE_SHARED_LINKER_FLAGS / CMAKE_MODULE_LINKER_FLAGS / CMAKE_EXE_LINKER_FLAGS
-              # depending on target type, and make sure to filter out options pre-defined by CMake platform
-              # setup modules)
+              # depending on target type, and make sure to filter out options
+              # pre-defined by CMake platform setup modules)
               write_property_link_flags(condition, linker_specific.arr_flags, str_conditional_linker_platform)
             } # linker.tool_specific.each
           } # arr_linker_info.each
@@ -6170,11 +6187,12 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # thus skip on one-time generation.
     return if $v2c_generator_one_time_conversion_only
 
-    # Rationale: keep count of generated lines of CMakeLists.txt to a bare minimum -
-    # call v2c_project_post_setup(), by simply passing all parameters that are _custom_ data
-    # of the current generated CMakeLists.txt file - all boilerplate handling functionality
-    # that's identical for each project should be implemented by the v2c_project_post_setup() function
-    # _internally_.
+    # Rationale: keep count of generated lines of CMakeLists.txt
+    # to a bare minimum -
+    # call v2c_project_post_setup(), by simply passing all parameters
+    # that are _custom_ data of the current generated CMakeLists.txt file -
+    # all boilerplate handling functionality that's identical for each project
+    # should be implemented by the v2c_project_post_setup() function _internally_.
     arr_args_func = [ array_to_cmake_list(arr_proj_files) ]
     write_invoke_config_object_v2c_function_quoted('v2c_project_post_setup', project_name, arr_args_func)
   end
@@ -6245,8 +6263,8 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
   # to be executed whenever it has not been done before within a scope),
   # thus we always do need to generate this line
   # rather than having it carried out by our module file.
-  # Having it mentioned by an included macro executed locally is not
-  # accepted either.
+  # Having it mentioned by an included macro executed locally
+  # is not accepted either.
   def put_per_scope_cmake_minimum_version
     # Required version line to make cmake happy.
     write_comment_at_level(COMMENT_LEVEL_VERBOSE,
@@ -6320,7 +6338,8 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
       "since in certain situations both may end up used\n" \
       "(think build tree created from standalone project)."
     )
-    # Whatever we do here - make sure we don't stomp out any potential prior CMAKE_MODULE_PATH definition!!
+    # Whatever we do here - make sure we don't stomp out
+    # any potential prior CMAKE_MODULE_PATH definition!!
     # (for details, see "CMake coding guide"
     #    http://www.aldebaran-robotics.com/documentation/qibuild/contrib/cmake/coding_guide.html )
     # Note that referencing the previous CMAKE_MODULE_PATH setting
