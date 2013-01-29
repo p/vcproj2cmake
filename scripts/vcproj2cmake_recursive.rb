@@ -67,7 +67,7 @@ class UnitWorkData
   attr_accessor :str_destination_dir
 end
 
-arr_unit_work = Array.new
+arr_work_units = Array.new
 
 arr_project_subdirs = Array.new
 
@@ -380,7 +380,7 @@ Find.find('./') do
   # but still it should provide some sizeable benefit).
   log_debug "Submitting #{arr_proj_files.inspect} to be converted in #{f}."
   unit_work = UnitWorkData.new(arr_proj_files, f, is_root_dir ? UnitWorkData::WORK_FLAG_IS_ROOT_DIR : 0)
-  arr_unit_work.push(unit_work)
+  arr_work_units.push(unit_work)
 
   #output.split("\n").each do |line|
   #  puts "[parent] output: #{line}"
@@ -411,67 +411,125 @@ def execute_work_unit(unitGlobal, myWork)
   v2c_convert_local_projects_outer(unitGlobal.script_location, unitGlobal.source_root, myWork.arr_proj_files, myWork.str_destination_dir, nil)
 end
 
-unitGlobal = UnitGlobalData.new(File.join(script_path, 'vcproj2cmake.rb'), source_root)
-
-# Well, what I'd actually like to check is whether Process.fork()
-# is supported or not. But this doesn't seem to be possible,
-# thus we'll have to check for non-Windows (or possibly some
-# check for POSIX might be doable somehow).
-is_hampered_os = (ENV['OS'] == 'Windows_NT')
-
-$v2c_enable_processes = (false == is_hampered_os)
-
-# TODO: should perhaps take into account number of CPU cores, too.
-want_multi_processing = (arr_unit_work.length > 5)
-
-if (want_multi_processing and $v2c_enable_processes)
-  # See also http://stackoverflow.com/a/1076445
-  log_info 'Recursively converting projects, multi-process.'
-  arr_unit_work.each { |myWork|
-    fork {
-      # Nope, does not seem to be true - anyway,
-      # we'll keep this code since I'm not entirely sure...
-      #begin
-        execute_work_unit(unitGlobal, myWork)
-      #rescue Exception => e
-      #  # Need to add an open-coded exception logging line
-      #  # since foreign-process exceptions will be swallowed silently!
-      #  puts "EXCEPTION!! #{e.inspect} #{e.backtrace}"
-      #end
-    }
-  }
-  results = Process.waitall
-  # MAKE DAMN SURE to properly signal exit status
-  # in case any of the sub processes happened to fail,
-  # otherwise it would be silently swallowed! (exit 0, success)
-  results.each { |result|
-    if result[1].exitstatus
-      # Side note: be sure to read
-      # http://www.bigfastblog.com/ruby-exit-exit-systemexit-and-at_exit-blunder
-      exit result[1].exitstatus
-    end
-  }
-elsif (want_multi_processing and $v2c_enable_threads)
-  log_info 'Recursively converting projects, multi-threaded.'
-
-  # "Ruby-Threads erzeugen"
-  #    http://home.vr-web.de/juergen.katins/ruby/buch/tut_threads.html
-
-  threads = []
-
-  for unit_work in arr_unit_work
-    threads << Thread.new(unit_work) { |myWork|
-      execute_work_unit(unitGlobal, myWork)
-    }
-  end
-
-  threads.each { |aThread| aThread.join }
-else # non-threaded
-  log_info 'Recursively converting projects, NON-threaded.'
-  arr_unit_work.each { |myWork|
-    execute_work_unit(unitGlobal, myWork)
+def execute_work_units(unitGlobal, arr_work_units)
+  arr_work_units.each { |work_unit|
+    execute_work_unit(unitGlobal, work_unit)
   }
 end
+
+def execute_work_package(unitGlobal, workPackage, want_multi_processing)
+  if (want_multi_processing and $v2c_enable_processes)
+    # See also http://stackoverflow.com/a/1076445
+    log_info 'Recursively converting projects, multi-process.'
+    workPackage.each { |arr_work_units_per_worker|
+      fork {
+        # Nope, does not seem to be true - anyway,
+        # we'll keep this code since I'm not entirely sure...
+        #begin
+          execute_work_units(unitGlobal, arr_work_units_per_worker)
+        #rescue Exception => e
+        #  # Need to add an open-coded exception logging line
+        #  # since foreign-process exceptions will be swallowed silently!
+        #  puts "EXCEPTION!! #{e.inspect} #{e.backtrace}"
+        #end
+      }
+    }
+    results = Process.waitall
+    # MAKE DAMN SURE to properly signal exit status
+    # in case any of the sub processes happened to fail,
+    # otherwise it would be silently swallowed! (exit 0, success)
+    results.each { |result|
+      if result[1].exitstatus
+        # Side note: be sure to read
+        # http://www.bigfastblog.com/ruby-exit-exit-systemexit-and-at_exit-blunder
+        exit result[1].exitstatus
+      end
+    }
+  elsif (want_multi_processing and $v2c_enable_threads)
+    log_info 'Recursively converting projects, multi-threaded.'
+
+    # "Ruby-Threads erzeugen"
+    #    http://home.vr-web.de/juergen.katins/ruby/buch/tut_threads.html
+
+    threads = []
+
+    for arr_work_units_per_worker in workPackage
+      threads << Thread.new(arr_work_units_per_worker) { |arr_work_units|
+        execute_work_units(unitGlobal, arr_work_units)
+      }
+    end
+
+    threads.each { |aThread| aThread.join }
+  else # non-threaded
+    log_info 'Recursively converting projects, NON-threaded.'
+    for arr_work_units_per_worker in workPackage
+      execute_work_units(unitGlobal, arr_work_units_per_worker)
+    end
+  end
+end
+
+def submit_work(unitGlobal, arr_work_units)
+  # I'm in fact not sure at all whether this code
+  # constitutes a cleanly abstracted implementation
+  # (e.g. launch a fixed number of workers, *then* submit work via IPC)
+  # of a thread/process pool, but for now... I don't care. ;)
+
+
+  # Well, what I'd actually like to check is whether Process.fork()
+  # is supported or not. But this doesn't seem to be possible,
+  # thus we'll have to check for non-Windows (or possibly some
+  # check for POSIX might be doable somehow).
+  is_hampered_os = (ENV['OS'] == 'Windows_NT')
+
+  $v2c_enable_processes = (false == is_hampered_os)
+
+  num_work_units = arr_work_units.length
+
+  want_multi_processing = (num_work_units > 4)
+
+  num_workers = 1
+  # In case of parallel processing, do *not* spawn as many
+  # workers as we have work units (for big project source trees
+  # this could amount to a DoS of the machine).
+  # Do that expensive CPU count query only if we need it...
+  if want_multi_processing
+    num_cpu_cores = number_of_processors()
+
+    # Definitely have one more worker than number of processing units created,
+    # to make sure that scheduler *always* has available
+    # at least one readily runnable worker.
+    num_workers = num_cpu_cores + 1
+
+    # IMPORTANT CHECK: for large machines, we obviously
+    # don't want more workers than the number of work units to be handled.
+    if num_workers > num_work_units
+      num_workers = num_work_units
+    end
+  end
+
+  num_work_units_per_worker = num_work_units / num_workers
+  # Account for division remainder:
+  if (num_work_units_per_worker * num_workers) < num_work_units
+    num_work_units_per_worker += 1
+  end
+
+  log_info "#{num_work_units} work units, #{num_workers} workers --> determined #{num_work_units_per_worker} work units per worker."
+
+  workPackage = Array.new
+  while 1
+    log_debug "arr_work_units.length #{arr_work_units.length}"
+    arr_worker_work_units = arr_work_units.slice!(0, num_work_units_per_worker)
+    log_debug "per-worker length: #{arr_worker_work_units.length}, num_work_units_per_worker #{num_work_units_per_worker}"
+    break if arr_worker_work_units.nil? or arr_worker_work_units.empty?
+    workPackage.push(arr_worker_work_units)
+  end
+
+  execute_work_package(unitGlobal, workPackage, want_multi_processing)
+end
+
+unitGlobal = UnitGlobalData.new(File.join(script_path, 'vcproj2cmake.rb'), source_root)
+
+submit_work(unitGlobal, arr_work_units)
 
 # Now, write out the file for the projects list (separate from any
 # multi-processing implementation).
