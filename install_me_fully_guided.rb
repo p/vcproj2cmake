@@ -69,7 +69,9 @@ def grep_cmakecache_variable_value(cmakecache_location, cmake_var)
       var_value = line.chomp.split('=')[1]
     }
   }
-  return var_value
+  var_value
+rescue
+  nil
 end
 
 cmakecache_location = "#{build_install_dir}/CMakeCache.txt"

@@ -15,19 +15,12 @@ V2C_LOG_LEVEL_DEBUG = 5
 V2C_LOG_LEVEL_TRACE = 6
 
 def load_configuration_file(str_file, str_descr, arr_descr_loaded)
-  success = false
-  begin
-    load str_file
-    arr_descr_loaded.push(str_descr + ' ' + str_file)
-    success = true
-  rescue LoadError
-    # Ignore it (config file is optional!).
-    # Need a dummy var to silence Excellent warning
-    # (nope, unused dummy var will trigger Ruby warning -
-    # use existing "success").
-    success = true
-  end
-  return success
+  load str_file
+  arr_descr_loaded.push(str_descr + ' ' + str_file)
+  true
+rescue LoadError
+  # Ignore it (config file is optional!).
+  true
 end
 
 def load_configuration
