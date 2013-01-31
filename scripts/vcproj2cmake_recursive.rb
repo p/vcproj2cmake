@@ -439,10 +439,12 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
     # in case any of the sub processes happened to fail,
     # otherwise it would be silently swallowed! (exit 0, success)
     results.each { |result|
-      if result[1].exitstatus
+      worker_exitstatus = result[1].exitstatus
+      if 0 != worker_exitstatus
+        log_error "Worker had non-zero exit status (#{worker_exitstatus}), exiting!"
         # Side note: be sure to read
         # http://www.bigfastblog.com/ruby-exit-exit-systemexit-and-at_exit-blunder
-        exit result[1].exitstatus
+        exit worker_exitstatus
       end
     }
   elsif (want_multi_processing and $v2c_enable_threads)
@@ -516,7 +518,7 @@ def submit_work(unitGlobal, arr_work_units)
   log_info "#{num_work_units} work units, #{num_workers} workers --> determined #{num_work_units_per_worker} work units per worker."
 
   workPackage = Array.new
-  while 1
+  while true
     log_debug "arr_work_units.length #{arr_work_units.length}"
     arr_worker_work_units = arr_work_units.slice!(0, num_work_units_per_worker)
     log_debug "per-worker length: #{arr_worker_work_units.length}, num_work_units_per_worker #{num_work_units_per_worker}"
