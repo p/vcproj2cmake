@@ -66,8 +66,57 @@ Details for manual usage (very rough summary), with Linux/Makefile generator:
      cmake -G Ninja - rather than generating Makefiles)
 
 
-NOTE: first thing to state is:
-if you do not have any users who are hooked on keeping to use
+=== Pondering converter (non-)usage ===
+
+A possibly useful alternative to this (somewhat complex) converter
+would be to try to load existing VS project files
+into e.g. kdevelop or Code::Blocks or Eclipse
+in case these support loading such foreign project files.
+But this use case only works for doing builds via certain IDEs
+which support loading/converting foreign files in the first place -
+e.g. for a command line build (Ninja- or Makefile-based)
+this won't help anyway.
+
+Moreover, loading foreign projects in IDEs has the disadvantage
+that in case conversion of such projects turns out to be
+insufficiently supported by the current version of the chosen IDE
+(and given the complexities of a build environment
+there's ample space for failure),
+you will likely have to upgrade an entire IDE application package
+(with all its painful dependencies), on a platform where possibly
+there isn't even a package of a newer version available currently.
+
+When using this converter instead, this case is easier since you only
+need to get corrected a small/self-contained/independent/non-compiled Ruby
+converter script, or, in the hopefully unlikely event of a CMake generator issue,
+installing a custom build of a current CMake, which is quite a bit easier
+than fulfilling all the build requirements for a full GUI-dependent
+IDE application.
+
+
+
+A completely alternative way of gaining cross-platform builds
+other than making use of CMake via vcproj2cmake
+may be to stay within proprietary .vcproj / Visual Studio realms
+and implement a cross-compiler setup there
+- this is said to be doable, and perhaps it can even be preferrable
+  (would be nice to receive input in case anyone has particular experience
+   in this area).
+Jam is said to possibly be a helpful tool in such case,
+since it can be deployed as a custom build command
+in a Visual Studio project config (and in several other IDEs, too).
+However, some people say that Jam has the appearance of being very easy,
+yet once you start doing more elaborate things it can get very hard
+rather quickly. Who knows... (any feedback?).
+
+Note that since VS is completely Windows-specific, the only way
+to use it on other platforms (barring virtual machine concepts)
+would be via Wine, and when I had a look at near-end 2012
+the support status of VS still was surprisingly murky.
+
+
+
+If you do not have any users who are hooked on keeping to use
 their static .vcproj files on Visual Studio, then it perhaps makes less sense
 to use our converter as a somewhat more cumbersome _online converter_ solution
 - instead you may choose to go for a full-scale manual conversion
@@ -497,20 +546,6 @@ that we might have rather very moot.
 Plus, sln2mak is C#-based (requiring an awkwardly _disconnected_ conversion
 of Non-Windows-targeted build settings on a Windows box),
 whereas vcproj2cmake is a fully cross-platform-deployable (Ruby) converter.
-
-
-A completely alternative way of gaining cross-platform builds
-other than making use of CMake via vcproj2cmake
-may be to stay within proprietary .vcproj / Visual Studio realms
-and to implement a cross-compiler setup
-- this is said to be doable, and perhaps it can even be preferrable
-  (would be nice to receive input in case anyone has particular experience
-   in this area).
-Jam is said to possibly be a helpful tool in such case,
-since it can be deployed as a custom build command in a Visual Studio project config (and in several other IDEs, too).
-However, some people say that Jam has the appearance of being very easy,
-yet once you start doing more elaborate things it can get very hard
-rather quickly. Who knows... (any feedback?).
 
 
 http://sourceforge.net/projects/folders4cmake/
