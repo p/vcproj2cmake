@@ -2555,6 +2555,9 @@ class V2C_VS7ConfigurationBaseParser < V2C_VS7ParserBase
     when TEXT_VS7_USEOFMFC
       # VS7 does not seem to use string values (only 0/1/2 integers), while VS10 additionally does.
       # NOTE SPELLING DIFFERENCE: MSVS7 has UseOfMFC, MSVS10 has UseOfMfc (see CMake MSVS generators)
+      # HOWEVER, qmake-generated .vcproj seem to use UseOfMfc!! After some re-evaluation,
+      # I'm now convinced it must be a bug in qmake generator (Qt projects don't have much
+      # use for Plain Old Software (POS) MFC)
       get_target_config_info().use_of_mfc = parse_integer(setting_value)
     when TEXT_WHOLEPROGRAMOPTIMIZATION
       get_target_config_info().whole_program_optimization = parse_wp_optimization(setting_value)
@@ -2858,6 +2861,21 @@ class V2C_VS7FilterParser < V2C_VS7ParserBase
     #logger.debug("parsed files group #{filter_info.name}, type #{filter_info.get_group_type()}")
     files_str[:filter_info] = filter_info
   end
+  # WARNING: make sure that all GUIDs are all-uppercase!
+  # See qmake msvc_vcproj.cpp:
+  GUID_QMAKE_SOURCEFILES = '{4FC737F1-C7A5-4376-A066-2A32D752A2FF}'.upcase
+  GUID_QMAKE_HEADERFILES = '{93995380-89BD-4b04-88EB-625FBE52EBFB}'.upcase
+  GUID_QMAKE_GENERATEDFILES = '{71ED8ED8-ACB9-4CE9-BBE1-E00B30144E11}'.upcase
+  GUID_QMAKE_RESOURCEFILES = '{D9D6E242-F8AF-46E4-B9FD-80ECBC20BA3E}'.upcase
+  GUID_QMAKE_LEXYACCFILES = '{E12AE0D2-192F-4d59-BD23-7D3FA58D3183}'.upcase
+  GUID_QMAKE_TRANSLATIONFILES = '{639EADAA-A684-42e4-A9AD-28FC9BCB8F7C}'.upcase
+  GUID_QMAKE_FORMFILES = '{99349809-55BA-4b9d-BF79-8FDBB0286EB3}'.upcase
+  GUID_QMAKE_EXTRACOMPILERFILES = '{E0D8C965-CC5F-43d7-AD63-FAEF0BBC0F85}'.upcase
+  # TODO: these GUIDs actually seem to be identical between VS7 and VS10,
+  # thus they should be made constants in a common base class...
+  GUID_VS_SOURCEFILES = '{4FC737F1-C7A5-4376-A066-2A32D752A2FF}'.upcase
+  GUID_VS_HEADERFILES = '{93995380-89BD-4B04-88EB-625FBE52EBFB}'.upcase
+  GUID_VS_RESOURCEFILES = '{67DA6AB6-F800-4C08-8B7A-83BB121AAD01}'.upcase
   def parse_file_list_attribute(filter_info, setting_key, setting_value)
     found = be_optimistic()
     case setting_key
@@ -2870,15 +2888,18 @@ class V2C_VS7FilterParser < V2C_VS7ParserBase
     when TEXT_UNIQUEIDENTIFIER
       filter_info.guid = setting_value
       setting_value_upper = setting_value.clone.upcase
-	# TODO: these GUIDs actually seem to be identical between VS7 and VS10,
-	# thus they should be made constants in a common base class...
       case setting_value_upper
-      when '{4FC737F1-C7A5-4376-A066-2A32D752A2FF}'
+      when GUID_VS_SOURCEFILES
+      when GUID_QMAKE_SOURCEFILES
 	  #filter_info.is_compiles = true
-      when '{93995380-89BD-4B04-88EB-625FBE52EBFB}'
+      when GUID_VS_HEADERFILES
+      when GUID_QMAKE_HEADERFILES
 	  #filter_info.is_includes = true
-      when '{67DA6AB6-F800-4C08-8B7A-83BB121AAD01}'
+      when GUID_VS_RESOURCEFILES
+      when GUID_QMAKE_RESOURCEFILES
         #filter_info.is_resources = true
+      when GUID_QMAKE_GENERATEDFILES
+        # FIXME: activate the "generated" flag for them...
       else
         unknown_value("unknown/custom UniqueIdentifier #{setting_value_upper}")
       end
