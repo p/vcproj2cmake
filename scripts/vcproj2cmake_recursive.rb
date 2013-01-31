@@ -412,9 +412,11 @@ def execute_work_unit(unitGlobal, myWork)
 end
 
 def execute_work_units(unitGlobal, arr_work_units)
+  log_info 'Worker starting.'
   arr_work_units.each { |work_unit|
     execute_work_unit(unitGlobal, work_unit)
   }
+  log_info 'Worker finished.'
 end
 
 def execute_work_package(unitGlobal, workPackage, want_multi_processing)
@@ -434,7 +436,9 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
         #end
       }
     }
+    log_info 'Waiting for all worker processes to finish...'
     results = Process.waitall
+    log_info 'Waiting for all worker processes: done.'
     # MAKE DAMN SURE to properly signal exit status
     # in case any of the sub processes happened to fail,
     # otherwise it would be silently swallowed! (exit 0, success)
@@ -461,9 +465,23 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
       }
     end
 
-    threads.each { |aThread| aThread.join }
-  else # non-threaded
-    log_info 'Recursively converting projects, NON-threaded.'
+    log_info 'Waiting for all worker threads to finish...'
+    # This amount ought to be enough even for the most daring of environments...
+    thread_wait_seconds = 120
+    threads.each { |aThread|
+      # Could add a count here, to bail out only after a certain limit is reached
+      while aThread.join(thread_wait_seconds).nil?
+        # Still running!? It's best to cleanly(?) error out completely,
+        # since continuing (i.e. merely breaking out of the loop)
+        # while having a thread running and remaining in unknown state
+        # may cause really un-"nice" issues.
+        log_warn "Worker thread still running after #{thread_wait_seconds} seconds!? Exiting!"
+        exit 1
+      end
+    }
+    log_info 'Waiting for all worker threads: done.'
+  else # single-process
+    log_info 'Recursively converting projects, single-process.'
     for arr_work_units_per_worker in workPackage
       execute_work_units(unitGlobal, arr_work_units_per_worker)
     end
@@ -531,7 +549,11 @@ end
 
 unitGlobal = UnitGlobalData.new(File.join(script_path, 'vcproj2cmake.rb'), source_root)
 
+log_info 'Work for generation of projects to be submitted...'
+
 submit_work(unitGlobal, arr_work_units)
+
+log_info 'Work for generation of projects finished - starting post-processing steps...'
 
 # Now, write out the file for the projects list (separate from any
 # multi-processing implementation).
