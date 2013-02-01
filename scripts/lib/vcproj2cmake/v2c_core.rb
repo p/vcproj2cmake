@@ -1542,6 +1542,9 @@ class V2C_ParserBase < V2C_LoggerBase
   end
   def parser_error_logic(str_description); parser_error("logic: #{str_description}", false) end
   def parser_error_syntax(str_description); parser_error("syntax: #{str_description}", false) end
+  def parser_error_syntax_semi_compatible(str_description)
+    parser_error_syntax(str_description + ' Possibly other tools might choke when encountering this issue, thus you should correct the file content.')
+  end
   def parser_error_todo(str_description); parser_error("todo: #{str_description}", false) end
   def error_unknown_case_value(description, val)
     parser_error("unknown/unsupported/corrupt #{description} case value! (#{val})", true)
@@ -3408,59 +3411,44 @@ class V2C_VS10ItemGroupFileElemParser < V2C_VS10ParserBase
 end
 
 class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
-  def initialize(elem_xml, file_list_out)
-    super(elem_xml, file_list_out)
-    @list_name = file_list_out.name
+  def initialize(elem_xml, group_type_name, file_lists_out)
+    super(elem_xml, file_lists_out)
+    @group_type_name = group_type_name
+    @cached_list_ptr = nil
   end
-  def get_file_list; @info_elem end
+  def get_file_lists; @info_elem end
   def parse_element(subelem_xml)
-    if not subelem_xml.name == @list_name
-      parser_error_syntax("ItemGroup element mismatch! list name #{@list_name} vs. element name #{subelem_xml.name}!")
+    # Attempt high performance implementation (this is hotpath)
+    if not subelem_xml.name == @group_type_name
+      # FIXME: we don't log any useful reference to the item: not the filename,
+      # and we don't have a project-specific logging helper class
+      # to at least mention the project name, too.
+      parser_error_syntax_semi_compatible("Incompatible ItemGroup element! Item group name #{@group_type_name} vs. element name #{subelem_xml.name}! Visual Studio seems to correctly handle even such differently-typed elements within a group.")
     end
+    list_curr = select_list(subelem_xml.name)
     file_info = V2C_Info_File.new
     file_parser = V2C_VS10ItemGroupFileElemParser.new(subelem_xml, file_info)
     found = file_parser.parse
     if FOUND_TRUE == found
-      get_file_list().append_file(file_info)
+      list_curr.append_file(file_info)
     else
       found = super
     end
     return found
   end
-  #def parse_post_hook
-  #  log_fatal "file list: #{get_file_list().inspect}"
-  #end
-end
-
-class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
-  def parse
-    found = FOUND_FALSE
-    elem_first = @elem_xml.elements[1] # 1-based index!!
-    if not elem_first.nil?
-      found = be_optimistic()
-      elem_name = elem_first.name
-      elem_parser = nil
-      case elem_name
-      when 'Filter'
-        elem_parser = V2C_VS10ItemGroupFiltersParser.new(@elem_xml, get_project().filters)
-      when 'ClCompile', 'ClInclude', 'Midl', 'None', 'ResourceCompile'
-        file_list_new = V2C_File_List_Info.new(elem_name, get_file_list_type(elem_name))
-        elem_parser = V2C_VS10ItemGroupFilesParser.new(@elem_xml, file_list_new)
-        elem_parser.parse
-        get_project().file_lists.append(file_list_new)
-      else
-        # We should NOT call base method, right? This is an _override_ of the
-        # standard method, and we expect to be able to parse it fully,
-        # thus signal failure.
-        found = FOUND_FALSE
+  private
+  def get_file_lists; @info_elem end
+  def select_list(name)
+    if @cached_list_ptr.nil? || @cached_list_ptr.name != name
+      file_lists = get_file_lists()
+      @cached_list_ptr = file_lists.lookup_from_list_name(name)
+      if @cached_list_ptr.nil?
+        @cached_list_ptr = V2C_File_List_Info.new(name, get_file_list_type(name))
+        file_lists.append(@cached_list_ptr)
       end
     end
-    return found
+    @cached_list_ptr
   end
-
-  private
-
-  def get_project; @info_elem end
   def get_file_list_type(file_list_name)
     type = V2C_File_List_Types::TYPE_NONE
     case file_list_name
@@ -3480,6 +3468,38 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
     end
     return type
   end
+  #def parse_post_hook
+  #  log_fatal "file list: #{get_file_list().inspect}"
+  #end
+end
+
+class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
+  def parse
+    found = FOUND_FALSE
+    elem_first = @elem_xml.elements[1] # 1-based index!!
+    if not elem_first.nil?
+      found = be_optimistic()
+      elem_name = elem_first.name
+      elem_parser = nil
+      case elem_name
+      when 'Filter'
+        elem_parser = V2C_VS10ItemGroupFiltersParser.new(@elem_xml, get_project().filters)
+      when 'ClCompile', 'ClInclude', 'Midl', 'None', 'ResourceCompile'
+        elem_parser = V2C_VS10ItemGroupFilesParser.new(@elem_xml, elem_name, get_project().file_lists)
+        elem_parser.parse
+      else
+        # We should NOT call base method, right? This is an _override_ of the
+        # standard method, and we expect to be able to parse it fully,
+        # thus signal failure.
+        found = FOUND_FALSE
+      end
+    end
+    return found
+  end
+
+  private
+
+  def get_project; @info_elem end
 end
 
 # Simple forwarder class. Creates specific property group parsers
