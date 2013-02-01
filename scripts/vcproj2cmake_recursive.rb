@@ -106,6 +106,36 @@ excl_regex_single = generate_multi_regex('^\.', arr_excl_proj_expr)
 # The regex to exclude a match (and all children!) within the hierarchy:
 excl_regex_recursive = generate_multi_regex('', arr_excl_dir_expr_skip_recursive_static)
 
+# Guards against exceptions due to encountering mismatching-encoding entries
+# within the directory.
+def dir_entries_grep_skip_broken(dir_entries, regex)
+  dir_entries.grep(regex)
+rescue ArgumentError => e
+  if not e.message.start_with?('invalid byte sequence')
+    raise
+  end
+  # Hrmpf, *some* entry failed. Rescue operations,
+  # by going through each entry manually and logging/skipping broken ones.
+  dir_entries_projects = dir_entries.collect { |entry|
+    result = nil
+    begin
+      if not regex.match(entry).nil?
+        result = entry
+      end
+    rescue ArgumentError => e
+      if e.message.start_with?('invalid byte sequence')
+        log_error "Dir entry #{entry} has invalid (foreign?) encoding (#{e.message}), skipping!"
+        result = nil
+      else
+        raise
+      end
+    end
+    result
+  }
+  dir_entries_projects.compact!
+  dir_entries_projects # *explicit* return (compact! has nil return!!)
+end
+
 # Filters suitable project files in a directory's entry list.
 # arr_proj_file_regex should contain regexes for project file matches
 # in most (very specific check) to least preferred (generic, catch-all check) order.
@@ -134,7 +164,7 @@ def search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex, case_i
   dir_entries_match_subset = Array.new
   arr_proj_file_regex.each { |proj_file_regex|
     proj_file_regex_tweaked = Regexp.new(proj_file_regex.to_s, case_insensitive_regex_match_option_flag)
-    dir_entries_match_subset_new = dir_entries.grep(/#{proj_file_regex_tweaked}/)
+    dir_entries_match_subset_new = dir_entries_grep_skip_broken(dir_entries, /#{proj_file_regex_tweaked}/)
     dir_entries_match_subset.concat(dir_entries_match_subset_new)
   }
 
