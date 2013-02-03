@@ -5127,39 +5127,6 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     write_comment_at_level(comment_level, comment)
     put_customization_hook_from_cmake_var(include_file_var)
   end
-  # Hrmm, I'm not quite sure yet where to aggregate this function...
-  #
-  # In most cases this function will be called internally within methods
-  # which generate calls to our vcproj2cmake_func.cmake helpers,
-  # so that these helpers can switch fully internally between
-  # either generating CMake calls
-  # (passing platform / build type parameters as gathered from condition)
-  # or (in self-contained mode) instead using the result of this function
-  # to add an open-coded CMake "if(CONDITIONAL)".
-  def get_buildcfg_var_name_of_condition(condition)
-    # HACK: very Q&D handling, to make things work quickly.
-    # Should think of implementing a proper abstraction for handling of conditions.
-    # Probably we _at least_ need to create a _condition generator_ class.
-
-    # Hrmm, for now we'll abuse a method at the V2C_Info_Condition class,
-    # but I'm not convinced at all that this is how things should be structured.
-    build_type = condition.get_build_type()
-    platform_name = condition.get_build_platform()
-    var_name = nil
-    if not build_type.nil? and not platform_name.nil?
-      # Name may contain spaces - need to handle them!
-      build_type_flattened = util_flatten_string(build_type)
-      platform_name_flattened = util_flatten_string(platform_name)
-      var_name = 'v2c_want_buildcfg_platform_' + platform_name_flattened + '_build_type_' + build_type_flattened
-    end
-    return var_name
-  end
-  def write_buildcfg_condition_block(condition)
-    var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
-    write_conditional_block([ var_v2c_want_buildcfg_curr ]) do
-      yield
-    end
-  end
   def parse_platform_conversions_internal(platform_defs, arr_defs, map_defs, skip_failed_lookups)
     arr_defs.each { |curr_defn|
       #log_debug map_defs[curr_defn]
@@ -5244,7 +5211,8 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     #   http://www.mail-archive.com/cmake@cmake.org/msg38677.html
 
     if 1 == $v2c_generate_self_contained_file
-      write_buildcfg_condition_block(condition) do
+      gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, condition, false)
+      gen_condition.generate do
         #if use_of_mfc > V2C_TargetConfig_Defines::MFC_FALSE
           write_set_var('CMAKE_MFC_FLAG', use_of_mfc)
         #end
@@ -5263,6 +5231,12 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
       write_invoke_object_conditional_v2c_function('v2c_local_set_cmake_atl_mfc_flags', target_name, condition, arr_args_func)
     end
   end
+  # FIXME: intermingling and stupifying condition handling like this
+  # likely isn't such a smart idea (there might easily turn up conditions
+  # more complicated than what we expect).
+  # Should instead generate an outer frame via condition generator
+  # and _then_ invoke the function (perhaps keeping the
+  # build_platform/build_type args).
   def write_invoke_object_conditional_v2c_function(str_function, object_name, condition, arr_args_func_other)
     arr_args_func = [
       prepare_string_literal(condition.get_build_platform()),
@@ -5318,6 +5292,120 @@ if 1 == $v2c_generate_self_contained_file
   end
 else
   class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeV2CSyntaxGeneratorV2CFunc
+  end
+end
+
+class V2C_CMakeV2CConditionGeneratorBase < V2C_CMakeV2CSyntaxGenerator
+  def generate(arr_config_info)
+    generate_assignments_of_build_type_variables(arr_config_info)
+  end
+  private
+  # These configuration types (Debug, Release) may be _different_
+  # in each .vc[x]proj file, thus it's a target generator functionality
+  # and _not_ a functionality of the local generator (which may generate
+  # *multiple* project targets!).
+  def generate_assignments_of_build_type_variables(arr_config_info)
+    # ARGH, we have an issue with CMake not being fully up to speed with
+    # multi-configuration generators (e.g. .vcproj/.vcxproj):
+    # it should be able to declare _all_ configuration-dependent settings
+    # in a .vcproj file as configuration-dependent variables
+    # (just like set_property(... COMPILE_DEFINITIONS_DEBUG ...)),
+    # but with configuration-specific(!) include directories on .vcproj side,
+    # there's currently only a _generic_ include_directories() command :-(
+    # (dito with target_link_libraries() - or are we supposed to create an imported
+    # target for each dependency, for more precise configuration-specific library names??)
+    # Thus we should specifically specify include_directories()
+    # where we can discern the configuration type
+    # (in single-configuration generators using CMAKE_BUILD_TYPE) and -
+    # in the case of multi-config generators - pray that the authoritative
+    # configuration has an AdditionalIncludeDirectories setting
+    # that matches that of all other configs, since we're unable to specify
+    # it in a configuration-specific way :(
+    # Well, in that case we should simply resort to generating
+    # the _union_ of all include directories of all configurations...
+    # "Re: [CMake] debug/optimized include directories"
+    #   http://www.mail-archive.com/cmake@cmake.org/msg38940.html
+    # is a long discussion of this severe issue.
+    # Probably the best we can do is to add a function to add to vcproj2cmake_func.cmake which calls either raw include_directories() or sets the future
+    # target property, depending on a pre-determined support flag
+    # for proper include dirs setting.
+
+    # HACK global var (multi-thread unsafety!)
+    # Thus make sure to have a local copy, for internal modifications.
+    config_multi_authoritative = $config_multi_authoritative.clone
+    if config_multi_authoritative.empty?
+      # Hrmm, we used to fetch this via REXML next_element,
+      # which returned the _second_ setting (index 1)
+      # i.e. Release in a certain file,
+      # while we now get the first config, Debug, in that file.
+      config_multi_authoritative = arr_config_info[0].condition.get_build_type()
+    end
+
+    if 1 == $v2c_generate_self_contained_file
+      arr_config_info.each { |config_info_curr|
+        condition = config_info_curr.condition
+        build_type = condition.get_build_type()
+        build_type_cooked = prepare_string_literal(build_type)
+        arr_cmake_build_type_condition = nil
+        if config_multi_authoritative == build_type
+          arr_cmake_build_type_condition = [ 'CMAKE_CONFIGURATION_TYPES', 'OR', 'CMAKE_BUILD_TYPE', 'STREQUAL', build_type_cooked ]
+        else
+          # YES, this condition is supposed to NOT trigger in case of a multi-configuration generator
+          arr_cmake_build_type_condition = [ 'CMAKE_BUILD_TYPE', 'STREQUAL', build_type_cooked ]
+        end
+        write_set_var_bool_conditional(get_buildcfg_var_name_of_condition(condition), arr_cmake_build_type_condition)
+      }
+    #else... implicitly being done by v2c_platform_build_setting_configure() invoked during project leadin.
+    end
+  end
+  # In most cases this function will be called internally within methods
+  # which generate calls to our vcproj2cmake_func.cmake helpers,
+  # so that these helpers can switch fully internally between
+  # either generating CMake calls
+  # (passing platform / build type parameters as gathered from condition)
+  # or (in self-contained mode) instead using the result of this function
+  # to add an open-coded CMake "if(CONDITIONAL)".
+  def get_buildcfg_var_name_of_condition(condition)
+    # HACK: Q&D handling, to make things work quickly.
+
+    # Hrmm, for now we'll abuse a method at the V2C_Info_Condition class,
+    # but I'm not convinced at all that this is how things should be structured.
+    build_type = condition.get_build_type()
+    platform_name = condition.get_build_platform()
+    var_name = nil
+    if not build_type.nil? and not platform_name.nil?
+      # Name may contain spaces - need to handle them!
+      build_type_flattened = util_flatten_string(build_type)
+      platform_name_flattened = util_flatten_string(platform_name)
+      var_name = 'v2c_want_buildcfg_platform_' + platform_name_flattened + '_build_type_' + build_type_flattened
+    end
+    return var_name
+  end
+end
+
+class V2C_CMakeV2CConditionGenerator < V2C_CMakeV2CConditionGeneratorBase
+  def initialize(textOut, condition, flag_skip_build_cfg_type_parts)
+    super(textOut)
+    @condition = condition
+    # Flag to indicate that we don't want the build platform/type part
+    # of the condition (probably since that will be handled elsewhere).
+    @flag_skip_build_cfg_type_parts = flag_skip_build_cfg_type_parts
+  end
+  def generate
+    write_condition_block(@condition) do
+      yield
+    end
+  end
+  private
+  # This function may become infinitely more complex...
+  # (conditions may carry *much* more than a mere build platform/type
+  # check - things such as file existence checks [hmm, would these be
+  # CMake configure time or build run time??]).
+  def write_condition_block(condition)
+    var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
+    write_conditional_block([ var_v2c_want_buildcfg_curr ]) do
+      yield
+    end
   end
 end
 
@@ -5499,63 +5587,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     @localGenerator = localGenerator
   end
 
-  # These configuration types (Debug, Release) may be _different_
-  # in each .vc[x]proj file, thus it's a target generator functionality
-  # and _not_ a functionality of the local generator (which may generate
-  # *multiple* project targets!).
-  def generate_assignments_of_build_type_variables(arr_config_info)
-    # ARGH, we have an issue with CMake not being fully up to speed with
-    # multi-configuration generators (e.g. .vcproj/.vcxproj):
-    # it should be able to declare _all_ configuration-dependent settings
-    # in a .vcproj file as configuration-dependent variables
-    # (just like set_property(... COMPILE_DEFINITIONS_DEBUG ...)),
-    # but with configuration-specific(!) include directories on .vcproj side,
-    # there's currently only a _generic_ include_directories() command :-(
-    # (dito with target_link_libraries() - or are we supposed to create an imported
-    # target for each dependency, for more precise configuration-specific library names??)
-    # Thus we should specifically specify include_directories() where we can
-    # discern the configuration type (in single-configuration generators using
-    # CMAKE_BUILD_TYPE) and - in the case of multi-config generators - pray
-    # that the authoritative configuration has an AdditionalIncludeDirectories setting
-    # that matches that of all other configs, since we're unable to specify
-    # it in a configuration-specific way :(
-    # Well, in that case we should simply resort to generating
-    # the _union_ of all include directories of all configurations...
-    # "Re: [CMake] debug/optimized include directories"
-    #   http://www.mail-archive.com/cmake@cmake.org/msg38940.html
-    # is a long discussion of this severe issue.
-    # Probably the best we can do is to add a function to add to vcproj2cmake_func.cmake which calls either raw include_directories() or sets the future
-    # target property, depending on a pre-determined support flag
-    # for proper include dirs setting.
-
-    # HACK global var (multi-thread unsafety!)
-    # Thus make sure to have a local copy, for internal modifications.
-    config_multi_authoritative = $config_multi_authoritative
-    if config_multi_authoritative.empty?
-      # Hrmm, we used to fetch this via REXML next_element,
-      # which returned the _second_ setting (index 1)
-      # i.e. Release in a certain file,
-      # while we now get the first config, Debug, in that file.
-      config_multi_authoritative = arr_config_info[0].condition.get_build_type()
-    end
-
-    if 1 == $v2c_generate_self_contained_file
-      arr_config_info.each { |config_info_curr|
-        condition = config_info_curr.condition
-        build_type = condition.get_build_type()
-        build_type_cooked = prepare_string_literal(build_type)
-        arr_cmake_build_type_condition = nil
-        if config_multi_authoritative == build_type
-          arr_cmake_build_type_condition = [ 'CMAKE_CONFIGURATION_TYPES', 'OR', 'CMAKE_BUILD_TYPE', 'STREQUAL', build_type_cooked ]
-        else
-          # YES, this condition is supposed to NOT trigger in case of a multi-configuration generator
-          arr_cmake_build_type_condition = [ 'CMAKE_BUILD_TYPE', 'STREQUAL', build_type_cooked ]
-        end
-        write_set_var_bool_conditional(get_buildcfg_var_name_of_condition(condition), arr_cmake_build_type_condition)
-      }
-    #else... implicitly being done by v2c_platform_build_setting_configure() invoked during project leadin.
-    end
-  end
   # File-related TODO:
   # should definitely support the following CMake properties, as needed:
   # PUBLIC_HEADER (cmake --help-property PUBLIC_HEADER), PRIVATE_HEADER, HEADER_FILE_ONLY
@@ -5860,7 +5891,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # the container for the list of _actual_ dependencies as stated by the project
     all_platform_defs = Hash.new
     parse_platform_conversions(all_platform_defs, arr_defs_assignments, map_defs, false)
-    write_buildcfg_condition_block(condition) do
+    gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, condition, false)
+    gen_condition.generate do
       build_type = condition.get_build_type()
       hash_ensure_sorted_each(all_platform_defs).each { |key, arr_platdefs|
         #logger.info "arr_platdefs: #{arr_platdefs}"
@@ -5873,7 +5905,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def write_property_compile_flags(condition, arr_flags, str_conditional)
     return if arr_flags.empty?
     next_paragraph()
-    write_buildcfg_condition_block(condition) do
+    gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, condition, false)
+    gen_condition.generate do
       write_conditional_block_string(str_conditional) do
         # FIXME!!! It appears that while CMake source has COMPILE_DEFINITIONS_<CONFIG>,
         # it does NOT provide a per-config COMPILE_FLAGS property! Need to verify ASAP
@@ -6025,7 +6058,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
     arr_config_info = project_info.arr_config_info
 
-    generate_assignments_of_build_type_variables(arr_config_info)
+    gen_condition_setup = V2C_CMakeV2CConditionGeneratorBase.new(@textOut)
+    gen_condition_setup.generate(arr_config_info)
 
     arr_target_config_info = project_info.arr_target_config_info
 
@@ -6035,7 +6069,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       next_paragraph()
 
       condition = config_info_curr.condition
-      write_buildcfg_condition_block(condition) do
+      gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, condition, false)
+      gen_condition.generate do
         config_info_curr.tools.arr_compiler_info.each { |compiler_info_curr|
           arr_includes = compiler_info_curr.get_include_dirs(false, false)
           @localGenerator.write_include_directories(arr_includes, generator_base.map_includes)
