@@ -1881,6 +1881,7 @@ class V2C_VSProjectFileXmlParserBase < V2C_VSXmlParserBase
 end
 
 module V2C_VS7Syntax
+  TEXT_NAME = 'Name'
   # In VS7, a boolean property appears to be representable
   # by "0", "1" values as well. FIXME: perhaps we're being imprecise here:
   # we should make sure to implement precise handling for specific VS7/VS10 element/attribute types.
@@ -1947,6 +1948,11 @@ end
 
 class V2C_VS7ProjectParserBase < V2C_VSProjectParserBase
   include V2C_VS7Syntax
+end
+
+module V2C_VSConfigurationSetDefines
+  TEXT_CONFIGURATION = 'Configuration'
+  TEXT_PLATFORM = 'Platform'
 end
 
 module V2C_VSToolDefines
@@ -2169,7 +2175,6 @@ end
 module V2C_VS7ToolSyntax
   include V2C_VS7Syntax
   include V2C_VSToolDefines
-  TEXT_NAME = 'Name'
   TEXT_VCCLCOMPILERTOOL = 'VCCLCompilerTool'
   TEXT_VCLINKERTOOL = 'VCLinkerTool'
 end
@@ -2559,7 +2564,7 @@ class V2C_VS7ConfigurationBaseParser < V2C_VS7ParserBase
       get_target_config_info().charset = parse_charset(setting_value)
     when TEXT_CONFIGURATIONTYPE
       get_target_config_info().cfg_type = parse_configuration_type(setting_value)
-    when 'Name'
+    when TEXT_NAME
       condition = V2C_Info_Condition.new
       arr_name = setting_value.split('|')
       condition.set_build_type(arr_name[0])
@@ -2634,6 +2639,7 @@ class V2C_VS7FileConfigurationParser < V2C_VS7ConfigurationBaseParser
 end
 
 class V2C_VS7ConfigurationsParser < V2C_VS7ParserBase
+  include V2C_VSConfigurationSetDefines
   def initialize(elem_xml, info_elem_out, arr_target_config_info_out, build_platform_configs_out)
     super(elem_xml, info_elem_out)
     @arr_target_config_info = arr_target_config_info_out
@@ -2648,7 +2654,7 @@ class V2C_VS7ConfigurationsParser < V2C_VS7ParserBase
     found = be_optimistic()
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
-    when 'Configuration'
+    when TEXT_CONFIGURATION
       target_config_info_curr = V2C_Target_Config_Build_Info.new
       config_info_curr = V2C_Project_Config_Info.new
       elem_parser = V2C_VS7ProjectConfigurationParser.new(subelem_xml, target_config_info_curr, config_info_curr)
@@ -2726,7 +2732,7 @@ class V2C_VS7FileParser < V2C_VS7ParserBase
     # Ignore files with custom build steps
     included_in_build = true
     @elem_xml.elements.each('FileConfiguration/Tool') { |subelem_xml|
-      if subelem_xml.attributes['Name'] == 'VCCustomBuildTool'
+      if subelem_xml.attributes[TEXT_NAME] == 'VCCustomBuildTool'
         included_in_build = false
         return # no complex handling, just return
       end
@@ -2896,7 +2902,7 @@ class V2C_VS7FilterParser < V2C_VS7ParserBase
     case setting_key
     when 'Filter'
       filter_info.arr_scfilter = split_values_list_discard_empty(setting_value)
-    when 'Name'
+    when TEXT_NAME
       filter_info.name = setting_value
     when 'SourceControlFiles'
       filter_info.val_scmfiles = get_boolean_value(setting_value)
@@ -2982,7 +2988,7 @@ class V2C_VS7PlatformParser < V2C_VS7ParserBase
   def parse_attribute(setting_key, setting_value)
     found = be_optimistic()
     case setting_key
-    when 'Name'
+    when TEXT_NAME
       @info_elem = setting_value
     else
       found = super
@@ -2992,6 +2998,7 @@ class V2C_VS7PlatformParser < V2C_VS7ParserBase
 end
 
 class V2C_VS7PlatformsParser < V2C_VS7ParserBase
+  include V2C_VSConfigurationSetDefines
   def initialize(elem_xml, info_elem_out)
     super(elem_xml, info_elem_out)
   end
@@ -3002,7 +3009,7 @@ class V2C_VS7PlatformsParser < V2C_VS7ParserBase
     found = be_optimistic()
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
-    when 'Platform'
+    when TEXT_PLATFORM
       platform_name = ''
       elem_parser = V2C_VS7PlatformParser.new(subelem_xml, platform_name)
       if elem_parser.parse
@@ -3091,7 +3098,7 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
     case setting_key
     when TEXT_KEYWORD
       get_project().vs_keyword = setting_value
-    when 'Name'
+    when TEXT_NAME
       get_project().name = setting_value
     when 'ProjectCreator' # used by Fortran .vfproj ("Intel Fortran")
       get_project().creator = setting_value
@@ -3229,6 +3236,7 @@ module V2C_VS10Defines
   TEXT_DEFAULT = 'Default'
   TEXT_DISABLED = 'Disabled'
   TEXT_FALSE_LOWER = 'false' # Perhaps move to a common VS module
+  TEXT_INCLUDE = 'Include'
 end
 
 module V2C_VS10Syntax
@@ -3313,12 +3321,13 @@ end
 
 class V2C_VS10ItemGroupProjectConfigurationDescriptionParser < V2C_VS10ParserBase
   private
+  include V2C_VSConfigurationSetDefines
   def get_config_entry; @info_elem end
 
   def parse_attribute(setting_key, setting_value)
     found = be_optimistic()
     case setting_key
-    when 'Include'
+    when TEXT_INCLUDE
       get_config_entry().description = setting_value
     else
       found = super
@@ -3328,9 +3337,9 @@ class V2C_VS10ItemGroupProjectConfigurationDescriptionParser < V2C_VS10ParserBas
   def parse_setting(setting_key, setting_value)
     found = be_optimistic()
     case setting_key
-    when 'Configuration'
+    when TEXT_CONFIGURATION
       get_config_entry().build_type = setting_value
-    when 'Platform'
+    when TEXT_PLATFORM
       get_config_entry().platform = setting_value
     else
       found = super
@@ -3377,7 +3386,7 @@ class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
   def parse_attribute(setting_value, setting_key)
     found = be_optimistic()
     case setting_key
-    when 'Include'
+    when TEXT_INCLUDE
        get_filter().name = setting_value
     else
       found = super
@@ -3413,7 +3422,7 @@ class V2C_VS10ItemGroupFileElemParser < V2C_VS10ParserBase
   def parse_attribute(setting_key, setting_value)
     found = be_optimistic()
     case setting_key
-    when 'Include'
+    when TEXT_INCLUDE
       get_file_elem().path_relative = get_filesystem_location(setting_value)
     else
       found = super
