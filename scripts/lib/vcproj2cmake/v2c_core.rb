@@ -4451,8 +4451,6 @@ def check_cmakelists_txt_type(str_cmakelists_file_fqpn)
 
   #puts "str_cmakelists_file_fqpn: #{str_cmakelists_file_fqpn}"
 
-  return CMAKELISTS_FILE_TYPE_NONE if not File.exist?(str_cmakelists_file_fqpn)
-
   File.open(str_cmakelists_file_fqpn, 'r') { |f_cmakelists|
     lines = f_cmakelists.readlines()
     prior_file_was_generated_by_v2c = string_storage_contains(lines, CMAKELISTS_AUTO_GENERATED_REGEX_OBJ)
@@ -4469,6 +4467,8 @@ def check_cmakelists_txt_type(str_cmakelists_file_fqpn)
       end
     end
   }
+rescue Errno::ENOENT => e
+  return CMAKELISTS_FILE_TYPE_NONE
 end
 
 class V2C_GeneratorError < StandardError
