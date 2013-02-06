@@ -6757,13 +6757,8 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
     log_debug "Parsed project #{project_info.name}."
 
     project_processed = false
-    begin
-      post_processor = V2C_ProjectPostProcess.new(project_info)
-      project_processed = post_processor.process
-    rescue Exception => e
-      logger.unhandled_exception(e, 'project post-processing')
-      raise
-    end
+    post_processor = V2C_ProjectPostProcess.new(project_info)
+    project_processed = post_processor.process
     (false == project_processed)
   }
 
