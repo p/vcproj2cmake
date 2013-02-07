@@ -209,6 +209,30 @@ if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 endif(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 
 
+function(_v2c_find_package_ruby _out_ruby_bin)
+  if(NOT RUBY_EXECUTABLE) # avoid repeated checks (see cmake --trace)
+    # NOTE: find_package() depends on a valid pre-existing project() line,
+    # otherwise missing CMake bootstrap:
+    # "Error required internal CMake variable not set"
+    # (CMAKE_FIND_LIBRARY_PREFIXES).
+    # Thus call the function doing this find_package()
+    # only once we have a project target call target setup functions...
+    # An alternative would be to ensure a prior project(), by doing
+    # project(vcproj2cmake). But I'm unsure whether I'm ready to suffer
+    # the potential consequences of such a change...
+    # Need to supply QUIET param: a half-successful query
+    # (providing RUBY_EXECUTABLE yet not locating any Ruby devel components)
+    # will log a warning yet we don't want to see it (not interested in them).
+
+    # FIXME: will revert to find_program() until execution order is fixed,
+    # since find_program() does not have the issues described above.
+    # Should fix things ASAP.
+    #find_package(Ruby QUIET)
+    find_program(RUBY_EXECUTABLE NAMES ruby)
+  endif(NOT RUBY_EXECUTABLE)
+  set(${_out_ruby_bin} "${RUBY_EXECUTABLE}" PARENT_SCOPE)
+endfunction(_v2c_find_package_ruby _out_ruby_bin)
+
 # Define a couple global constant settings
 # (make sure to keep outside of repeatedly invoked functions below)
 
@@ -718,26 +742,38 @@ endif(_v2c_generator_has_dynamic_platform_switching)
 function(_v2c_config_do_setup_rebuilder)
   # Some one-time setup steps:
 
+  # Make sure to bail out fast if already processed
+  # (condition is existence of update_cmakelists_ALL target established below):
+  if(TARGET update_cmakelists_ALL)
+    return()
+  endif(TARGET update_cmakelists_ALL)
+
   # Have a user-side update_cmakelists_ALL convenience target:
   # enables updating _all_ outdated CMakeLists.txt files within a project hierarchy.
   # Providing _this_ particular target (as a dummy) is _always_ needed,
   # even if the rebuild mechanism cannot be provided (missing script, etc.).
-  if(NOT TARGET update_cmakelists_ALL)
-    add_custom_target(update_cmakelists_ALL)
-  endif(NOT TARGET update_cmakelists_ALL)
+  add_custom_target(update_cmakelists_ALL)
 
-  if(NOT RUBY_EXECUTABLE) # avoid repeated checks (see cmake --trace)
-    find_package(Ruby)
-    if(NOT RUBY_EXECUTABLE)
-      _v2c_msg_warning("could not detect your ruby installation (perhaps forgot to set CMAKE_PREFIX_PATH?), bailing out: won't automagically rebuild CMakeLists.txt on changes...")
-      return()
-    endif(NOT RUBY_EXECUTABLE)
-  endif(NOT RUBY_EXECUTABLE)
+  # Do we actually want to have the rebuilder?
+  v2c_rebuilder_enabled(v2c_use_rebuilder_)
+  if(NOT v2c_use_rebuilder_)
+    return()
+  endif(NOT v2c_use_rebuilder_)
 
+  _v2c_find_package_ruby(ruby_bin_)
+  if(NOT ruby_bin_)
+    _v2c_msg_warning("could not detect your ruby installation (perhaps forgot to set CMAKE_PREFIX_PATH?), bailing out: won't automagically rebuild CMakeLists.txt on changes...")
+    return()
+  endif(NOT ruby_bin_)
+
+  _v2c_config_get(root_mappings_files_list_v1 root_mappings_files_list_)
+  _v2c_config_get(project_exclude_list_file_location_v1 project_exclude_list_file_location_)
   set(cmakelists_rebuilder_deps_static_list_
+    # NOTE: --warn-uninitialized may have false alarm,
+    # due to a reported CMake bug when set(PARENT_SCOPE) of *empty* values.
     ${root_mappings_files_list_}
     "${project_exclude_list_file_location_}"
-    "${RUBY_EXECUTABLE}"
+    "${ruby_bin_}"
     # TODO add any other relevant dependencies here
   )
   _v2c_config_set(cmakelists_rebuilder_deps_static_list_v1
@@ -818,12 +854,16 @@ function(_v2c_config_do_setup)
     set(${_res_out} ${v2c_use_rebuilder_})
   endmacro(v2c_rebuilder_enabled _res_out)
 
-  # Now do rebuilder setup within this function, too,
-  # to have direct access to parent scope's important configuration variables.
-  v2c_rebuilder_enabled(v2c_use_rebuilder_)
-  if(v2c_use_rebuilder_)
-    _v2c_config_do_setup_rebuilder()
-  endif(v2c_use_rebuilder_)
+  # FIXME: we'll still keep this call here,
+  # but it should be done as delay-init (on-demand),
+  # since it needs to sit post-project().
+  # Problem is that we cannot do that now since some other rebuilder parts below
+  # depend on rebuilder fully initialized already.
+  # Should thus move all rebuilder-side functions into one linear block,
+  # to *all* be instantiated directly upon rebuilder setup.
+  # Eventually could move all rebuilder impl functions into a separate module,
+  # but I'm not sure whether we want to have more modules...
+  _v2c_config_do_setup_rebuilder()
 endfunction(_v2c_config_do_setup)
 
 _v2c_config_do_setup()
@@ -1000,11 +1040,12 @@ if(v2c_cmakelists_rebuilder_available)
       ${_v2c_cmakelists_rebuilder_deps_common_list}
       "${script_recursive_}"
     )
+    _v2c_find_package_ruby(ruby_bin_)
     # For now, we'll NOT add the "ALL" attribute
     # since this global recursive target is supposed to be
     # a _forced_, one-time explicitly user-requested operation.
     add_custom_target(${cmakelists_target_rebuild_all_name_}
-      COMMAND "${RUBY_EXECUTABLE}" "${script_recursive_}"
+      COMMAND "${ruby_bin_}" "${script_recursive_}"
       WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
       DEPENDS ${cmakelists_rebuilder_deps_recursive_list_}
       COMMENT "Doing recursive .vcproj --> CMakeLists.txt conversion in all source root sub directories."
@@ -1118,8 +1159,9 @@ if(v2c_cmakelists_rebuilder_available)
     # That subsequent target would have to be chained in such a way to ensure
     # that it gets executed after *all* conversion targets are done.
     # THE ACTUAL CONVERSION COMMAND:
+    _v2c_find_package_ruby(ruby_bin_)
     add_custom_command(OUTPUT "${cmakelists_update_this_cmakelists_updated_stamp_file_}"
-      COMMAND "${RUBY_EXECUTABLE}" "${_script}" "${orig_proj_file_main_}" "${_cmakelists_file}" "${_master_proj_dir}"
+      COMMAND "${ruby_bin_}" "${_script}" "${orig_proj_file_main_}" "${_cmakelists_file}" "${_master_proj_dir}"
       COMMAND "${CMAKE_COMMAND}" -E remove -f "${cmakelists_update_check_stamp_file_v1_}"
       COMMAND "${CMAKE_COMMAND}" -E touch "${cmakelists_update_this_cmakelists_updated_stamp_file_}"
       DEPENDS ${cmakelists_rebuilder_deps_list_}
@@ -1244,22 +1286,25 @@ if(v2c_cmakelists_rebuilder_available)
       add_dependencies(${dependent_target_main_} ${target_cmakelists_ensure_rebuilt_name_})
     endif(TARGET ${dependent_target_main_})
   endfunction(_v2c_project_rebuild_on_update _directory_projects_list _dir_orig_proj_files_list _cmakelists_file _script _master_proj_dir)
-else(v2c_cmakelists_rebuilder_available)
-  function(_v2c_project_rebuild_on_update _directory_projects_list _dir_orig_proj_files_list _cmakelists_file _script _master_proj_dir)
-    # DUMMY!
-  endfunction(_v2c_project_rebuild_on_update _directory_projects_list _dir_orig_proj_files_list _cmakelists_file _script _master_proj_dir)
 endif(v2c_cmakelists_rebuilder_available)
-if(v2c_cmakelists_rebuilder_available)
+
+# Decide providing non-dummy impl of v2c_converter_script_set_location()
+# depending on USE_AUTOMATIC_CMAKELISTS_REBUILDER already
+# rather than whether it's *actually* initialized
+# (we might have a delay-init of rebuilder, but we need to have the location
+# properly recorded by non-rebuilder layers already!).
+v2c_rebuilder_enabled(v2c_cmakelists_rebuilder_enabled)
+if(v2c_cmakelists_rebuilder_enabled)
   # *V2C_DOCS_POLICY_MACRO*
   macro(v2c_converter_script_set_location _location)
     # user override mechanism (don't prevent specifying a custom location of this script)
     _v2c_var_set_default_if_not_set(V2C_SCRIPT_LOCATION "${_location}")
   endmacro(v2c_converter_script_set_location _location)
-else(v2c_cmakelists_rebuilder_available)
+else(v2c_cmakelists_rebuilder_enabled)
   macro(v2c_converter_script_set_location _location)
     # DUMMY!
   endmacro(v2c_converter_script_set_location _location)
-endif(v2c_cmakelists_rebuilder_available)
+endif(v2c_cmakelists_rebuilder_enabled)
 
 # *V2C_DOCS_POLICY_MACRO*
 # Currently a specific-naming-only helper.
@@ -1970,6 +2015,21 @@ function(v2c_project_post_setup _project _orig_proj_files_list)
   v2c_hook_invoke("${V2C_HOOK_POST}")
 endfunction(v2c_project_post_setup _project _orig_proj_files_list)
 
+function(_v2c_directory_post_setup_do_rebuilder _directory_projects_list _dir_orig_proj_files_list)
+  # Rebuilder not available? Bail out...
+  if(NOT COMMAND _v2c_project_rebuild_on_update)
+    return()
+  endif(NOT COMMAND _v2c_project_rebuild_on_update)
+
+  # Implementation note: the last argument to
+  # _v2c_project_rebuild_on_update() should be as much of a 1:1 passthrough of
+  # the input argument to the CMakeLists.txt converter ruby script execution as possible/suitable,
+  # since invocation arguments of this script on rebuild should be (roughly) identical.
+  _v2c_var_my_get(SCRIPT_LOCATION converter_script_location_)
+  _v2c_var_my_get(MASTER_PROJECT_SOURCE_DIR solution_root_source_dir_)
+  _v2c_project_rebuild_on_update("${_directory_projects_list}" "${_dir_orig_proj_files_list}" "${CMAKE_CURRENT_LIST_FILE}" "${converter_script_location_}" "${solution_root_source_dir_}")
+endfunction(_v2c_directory_post_setup_do_rebuilder _directory_projects_list _dir_orig_proj_files_list)
+
 function(v2c_directory_post_setup)
   _v2c_directory_projects_list_get(directory_projects_list_)
   # v2c_directory_post_setup() will be invoked by both regular local
@@ -1985,11 +2045,13 @@ function(v2c_directory_post_setup)
       get_property(orig_proj_files_list_ DIRECTORY PROPERTY V2C_PROJECT_${proj_}_ORIG_PROJ_FILES_LIST)
       list(APPEND dir_orig_proj_files_list_ ${orig_proj_files_list_})
     endforeach(proj_ ${directory_projects_list_})
-    # Implementation note: the last argument to
-    # _v2c_project_rebuild_on_update() should be as much of a 1:1 passthrough of
-    # the input argument to the CMakeLists.txt converter ruby script execution as possible/suitable,
-    # since invocation arguments of this script on rebuild should be (roughly) identical.
-    _v2c_project_rebuild_on_update("${directory_projects_list_}" "${dir_orig_proj_files_list_}" "${CMAKE_CURRENT_LIST_FILE}" "${V2C_SCRIPT_LOCATION}" "${V2C_MASTER_PROJECT_SOURCE_DIR}")
+
+    # (Ab-)use this post-project helper function
+    # for a call to rebuilder setup,
+    # to ensure that there's a valid project() once this setup gets done:
+    _v2c_config_do_setup_rebuilder()
+
+    _v2c_directory_post_setup_do_rebuilder("${directory_projects_list_}" "${dir_orig_proj_files_list_}")
   endif(directory_projects_list_)
   v2c_hook_invoke("${V2C_HOOK_DIRECTORY_POST}")
 endfunction(v2c_directory_post_setup)
