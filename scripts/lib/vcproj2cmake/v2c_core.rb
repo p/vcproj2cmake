@@ -1551,12 +1551,15 @@ class V2C_ParserBase < V2C_LoggerBase
       logger.error(str_description)
     end
   end
-  def parser_error_logic(str_description); parser_error("logic: #{str_description}", false) end
-  def parser_error_syntax(str_description); parser_error("syntax: #{str_description}", false) end
+  # TODO: should probably be providing lowlevel helper with a number of bit flags
+  # (info/warn/error | logic/syntax | please_report/critical)
+  def parser_warn_syntax(str_description); logger.warn('syntax: ' + str_description) end
+  def parser_error_logic(str_description); parser_error('logic: ' + str_description, false) end
+  def parser_error_syntax(str_description); parser_error('syntax: ' + str_description, false) end
   def parser_error_syntax_semi_compatible(str_description)
     parser_error_syntax(str_description + ' Possibly other tools might choke when encountering this issue, thus you should correct the file content.')
   end
-  def parser_error_todo(str_description); parser_error("todo: #{str_description}", false) end
+  def parser_error_todo(str_description); parser_error('todo: ' + str_description, false) end
   def error_unknown_case_value(description, val)
     parser_error("unknown/unsupported/corrupt #{description} case value! (#{val})", true)
   end
@@ -3992,6 +3995,18 @@ class V2C_VS10ProjectParser < V2C_VSProjectParserBase
 
   private
 
+  def parse_attribute(setting_key, setting_value)
+    found = be_optimistic()
+    case setting_key
+    when 'DefaultTargets'
+      handle_default_targets(setting_value)
+    when 'xmlns'
+      handle_xmlns(setting_value)
+    else
+      found = super
+    end
+    found
+  end
   def parse_element(subelem_xml)
     found = be_optimistic()
     elem_parser = nil # IMPORTANT: reset it!
@@ -4016,6 +4031,43 @@ class V2C_VS10ProjectParser < V2C_VSProjectParserBase
     end
     log_found(found, subelem_xml.name)
     return found
+  end
+  def handle_default_targets(targets)
+    # I'm interested in what kind of content might turn up here.
+    # Thus ignore the default "Build" string, but warn on all other content.
+    if 'Build' != targets
+      unknown_attribute('DefaultTargets', targets)
+    end
+  end
+  def handle_xmlns(xmlns)
+    # Not sure what to do with this information (other than having silenced an
+    # "unknown attribute" warning ;),
+    # but at least it might be useful to track the set of possible xmlns URLs.
+    case xmlns
+    when 'http://schemas.microsoft.com/developer/msbuild/2003'
+    else
+      parser_warn_syntax("Unknown XML namespace string #{xmlns}, please report!")
+    end
+    # Actual validation of a .vcxproj might have been useful,
+    # but not possible!?
+    # See http://thestewscope.wordpress.com/2007/12/18/ruby-and-xml-schema/
+    # Well, nope,
+    # http://stackoverflow.com/questions/1396759/xsd-schema-validation-in-ruby
+    # http://thestewscope.wordpress.com/2008/10/10/ruby-and-xml-schema-todays-story/
+    # say that one can use the nokogiri gem (or less preferably, libxml-ruby)
+    # for this purpose.
+    # The XSD probably is the Microsoft.Build.xsd file, available in the
+    # mono-xbuild (ick!) Debian package.
+    # However, there's a posting
+    # "*.*proj files wont validate against Microsft.Build.xsd",
+    # http://www.tech-archive.net/Archive/VisualStudio/microsoft.public.vstudio.general/2005-07/msg00149.html
+    # Also, "Support for additional XML parsers",
+    #   http://community.slickedit.com/index.php?topic=2321.0
+    # mentions potential trouble with Xerces parser on that file.
+    # A simple
+    # xmllint --valid --noout file.vcxproj
+    # will bail out due to not finding an XSD at the xmlns URL.
+    # See also http://schneegans.de/sv/ for an online validator.
   end
 end
 
