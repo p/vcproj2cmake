@@ -4563,32 +4563,41 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   end
   # TODO: ideally we would do single-line/multi-line splitting operation _automatically_
   # (and bonus points for configurable line length...)
-  def write_command_list(cmake_command, cmake_command_arg, arr_elems)
+  def write_command_list(cmake_command, cmake_command_arg, arr_args_cmd)
     if cmake_command_arg.nil?; cmake_command_arg = '' end
-    @textOut.write_line("#{cmake_command}(#{cmake_command_arg}")
-    @textOut.indent_more()
-      arr_elems.each do |curr_elem|
-        @textOut.write_line(curr_elem)
-      end
-    @textOut.indent_less()
+    @textOut.write_line(cmake_command + '(' + cmake_command_arg)
+    if not arr_args_cmd.nil?
+      @textOut.indent_more()
+        arr_args_cmd.each do |curr_arg|
+          @textOut.write_line(curr_arg)
+        end
+      @textOut.indent_less()
+    end
     @textOut.write_line(')')
   end
-  def write_command_list_quoted(cmake_command, cmake_command_arg, arr_elems)
-    cmake_command_arg_quoted = element_handle_quoting(cmake_command_arg) if not cmake_command_arg.nil?
-    arr_elems_quoted = Array.new
-    arr_elems.each do |curr_elem|
-      # HACK for nil input of SCC info.
-      if curr_elem.nil?; curr_elem = '' end
-      arr_elems_quoted.push(element_handle_quoting(curr_elem))
+  def write_command_list_quoted(cmake_command, cmake_command_arg_main, arr_args_cmd)
+    cmake_command_arg_main_quoted = element_handle_quoting(cmake_command_arg_main) if not cmake_command_arg_main.nil?
+    arr_args_cmd_quoted = nil
+    if not arr_args_cmd.nil?
+      arr_args_cmd_quoted = Array.new
+      arr_args_cmd.each do |curr_arg|
+        # HACK for nil input of SCC info.
+        if curr_arg.nil?; curr_arg = '' end
+        arr_args_cmd_quoted.push(element_handle_quoting(curr_arg))
+      end
     end
-    write_command_list(cmake_command, cmake_command_arg_quoted, arr_elems_quoted)
-  end
-  def write_command_single_line(cmake_command, str_cmake_command_args)
-    @textOut.write_line("#{cmake_command}(#{str_cmake_command_args})")
+    write_command_list(cmake_command, cmake_command_arg_main_quoted, arr_args_cmd_quoted)
   end
   def write_command_list_single_line(cmake_command, arr_args_cmd)
-    str_cmake_command_args = arr_args_cmd.join(' ')
-    write_command_single_line(cmake_command, str_cmake_command_args)
+    @textOut.write_line(cmake_command + '(' + array_to_string(arr_args_cmd) + ')')
+  end
+  def write_command_single_line(cmake_command, str_cmake_command_args)
+    # Be sure to have this string-based function invoke the array-based one
+    # rather than the other way around:
+    # in order to optimally preserve possibilities of quoting decision-making,
+    # it's important to keep individual elements separated as long as possible
+    # (avoid string-space-joining of array content prematurely).
+    write_command_list_single_line(cmake_command, [ str_cmake_command_args ])
   end
   def write_list(list_var_name, arr_elems)
     write_command_list('set', list_var_name, arr_elems)
@@ -4612,39 +4621,55 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     write_command_single_line('add_subdirectory', str_subdir_quoted)
   end
 
-  def get_var_conditional_command(command_name); "COMMAND #{command_name}" end
+  def get_var_conditional_command(command_name); [ 'COMMAND', command_name ] end
 
-  def get_conditional_inverted(str_conditional); "NOT #{str_conditional}" end
-  # WIN32, MSVC, ...
-  def write_conditional_if(str_conditional)
-    return if str_conditional.nil?
-    write_command_single_line('if', str_conditional)
+  def get_conditional_inverted(arr_conditional); arr_conditional.unshift('NOT') end
+  def write_conditional_else(arr_conditional_params)
+    @textOut.indent_less()
+    write_command_list_single_line('else', arr_conditional_params)
     @textOut.indent_more()
   end
-  def write_conditional_else(str_conditional)
-    return if str_conditional.nil?
-    @textOut.indent_less()
-    write_command_single_line('else', str_conditional)
-    @textOut.indent_more()
+  def write_conditional_block(arr_conditional)
+    gen_if(arr_conditional) {
+      yield
+    }
   end
-  def write_conditional_end(str_conditional)
-    return if str_conditional.nil?
-    @textOut.indent_less()
-    write_command_single_line('endif', str_conditional)
+  # FIXME: should change all/most users into the Array-based variant above
+  # (to prevent quoting heuristics issues due to premature space-joining) -
+  # but this change is HUGE...
+  def write_conditional_block_string(str_conditional)
+    write_conditional_block([ str_conditional ]) {
+      yield
+    }
   end
-  def write_conditional_block(str_conditional)
-    write_conditional_if(str_conditional)
-    yield
-    write_conditional_end(str_conditional)
+  # Generates CMake commands matching the common COMMAND / endCOMMAND pair.
+  def gen_scoped_cmake_command(cmake_command, arr_params)
+    write_command_list_single_line(cmake_command, arr_params)
+      @textOut.indent_more()
+        yield
+      @textOut.indent_less()
+    write_command_list_single_line('end' + cmake_command, arr_params)
+  end
+  def gen_if(arr_params)
+    if arr_params.nil? or arr_params.empty?
+      yield
+    else
+      gen_scoped_cmake_command('if', arr_params) {
+        yield
+      }
+    end
+  end
+  def gen_foreach(arr_params)
+    gen_scoped_cmake_command('foreach', arr_params) {
+      yield
+    }
   end
   def put_function(name, arr_params)
     arr_func = [ name ]
-    arr_func.concat(arr_params)
-    write_command_list_single_line('function', arr_func)
-      @textOut.indent_more()
+    arr_func.concat(arr_params) if not arr_params.nil?
+    gen_scoped_cmake_command('function', arr_func) {
       yield
-      @textOut.indent_less()
-    write_command_list_single_line('endfunction', arr_func)
+    }
   end
   # Hides some CMake processing within an artificial function scope
   # (cuts down on variable definitions remaining beyond their actual use).
@@ -4669,16 +4694,19 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def write_set_var_bool(var_name, setting)
     write_set_var(var_name, get_keyword_bool(setting))
   end
-  def write_set_var_bool_conditional(var_name, str_condition)
-    write_conditional_if(str_condition)
+  def write_set_var_bool_conditional(var_name, arr_condition_params)
+    # We'll use the set-false/if/set-true/endif syntax rather than
+    # if/set-true/else/set-false/endif syntax
+    # since the conditional might grow quite complex,
+    # thus it's a waste to generate a precisely matching else(something).
+    write_set_var_bool(var_name, false)
+    gen_if(arr_condition_params) {
       write_set_var_bool(var_name, true)
-    write_conditional_else(str_condition)
-      write_set_var_bool(var_name, false)
-    write_conditional_end(str_condition)
+    }
   end
   def write_set_var_if_unset(var_name, setting)
-    str_conditional = get_conditional_inverted(var_name)
-    write_conditional_block(str_conditional) do
+    arr_conditional = get_conditional_inverted([ var_name ])
+    write_conditional_block(arr_conditional) do
       write_set_var(var_name, setting)
     end
   end
@@ -4697,13 +4725,13 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   end
   def write_cmake_minimum_version(str_cmake_minimum_version)
     ensure_string_nonempty(str_cmake_minimum_version)
-    write_command_single_line('cmake_minimum_required', "VERSION #{str_cmake_minimum_version}")
+    write_command_list_single_line('cmake_minimum_required', [ 'VERSION', str_cmake_minimum_version ])
   end
   def write_cmake_policy(policy_num, set_to_new)
     comment = get_cmake_policy_docstring(policy_num)
     str_policy = '%s%04d' % [ 'CMP', policy_num ]
-    str_conditional = "POLICY #{str_policy}"
-    write_conditional_block(str_conditional) do
+    arr_conditional = [ 'POLICY', str_policy ]
+    write_conditional_block(arr_conditional) do
       if not comment.nil?
         write_comment_at_level(COMMENT_LEVEL_VERBOSE, comment)
       end
@@ -4714,15 +4742,17 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   end
   PROP_SET = false
   PROP_APPEND = true
-  def put_property(prop_type_string, flag_append, prop_key, arr_prop_vals)
-    str_append = flag_append ? 'APPEND ' : ''
-    write_command_list('set_property', "#{prop_type_string} #{str_append}PROPERTY #{prop_key}", arr_prop_vals)
+  def put_property(arr_prop_type, flag_append, prop_key, arr_prop_vals)
+    arr_prop_parms = Array.new(arr_prop_type)
+    arr_prop_parms.push('APPEND') if PROP_APPEND == flag_append
+    arr_prop_parms.concat([ 'PROPERTY', prop_key])
+    write_command_list('set_property', array_to_string(arr_prop_parms), arr_prop_vals)
   end
   def put_property_source(source_list_expr, prop_key, arr_prop_vals)
-    put_property("SOURCE #{source_list_expr}", PROP_SET, prop_key, arr_prop_vals)
+    put_property([ 'SOURCE', source_list_expr ], PROP_SET, prop_key, arr_prop_vals)
   end
   def put_property_directory__compile_flags(attr_opts, flag_append)
-    put_property('DIRECTORY', flag_append, 'COMPILE_FLAGS', [ attr_opts ])
+    put_property([ 'DIRECTORY' ], flag_append, 'COMPILE_FLAGS', [ attr_opts ])
   end
   def mark_files_as_generated(file_list_description, arr_generated_files, is_generated)
     file_list_var = "SOURCES_GENERATED_#{file_list_description}"
@@ -4799,8 +4829,21 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def element_manual_quoting(elem)
     return "\"#{elem}\""
   end
+  # FIXME: I believe array_to_cmake_list() is broken, thus should be avoided:
+  # 1. CMake is broken, does not escape ';' in list element payload data
+  #    properly (see CMake bug #13806)
+  # 2. *first* quoting should be done per-element and *then* join()ed
+  # Thus it's probably preferable to avoid ';'-separated CMake list style
+  # and instead use ' '-separated element enumeration (with elements quoted
+  # if needed) wherever possible, to try to minimize confusion between
+  # raw payload containing ';' (un-escaped!)
+  # and separators between payload elements *also* being ';'
+  # (which is a grave conflict in case of broken escape handling).
   def array_to_cmake_list(arr_elems)
     return element_manual_quoting(arr_elems.join(';'))
+  end
+  def array_to_string(arr_params)
+    arr_params.nil? ? '' : arr_params.join(' ')
   end
   # Escapes payload content passed in
   # as needed to enable subsequent use as a CMake string
@@ -4919,12 +4962,17 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
       compile_defn
     end
   end
-  def get_target_syntax_expression(target_name); 'TARGET ' + target_name end
+  def get_target_syntax_expression(target_name); [ 'TARGET', target_name ] end
   def when_target_valid_scriptlet_block(target_name)
-    target_conditional = get_target_syntax_expression(target_name)
-    write_conditional_block(target_conditional) do
+    arr_target_conditional = get_target_syntax_expression(target_name)
+    write_conditional_block(arr_target_conditional) do
       yield
     end
+  end
+  def put_conditional_skipper(arr_conditional_params)
+    write_conditional_block(arr_conditional_params) {
+      write_command_single_line('return', nil)
+    }
   end
 end
 
@@ -5037,7 +5085,7 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
   end
   def write_buildcfg_condition_block(condition)
     var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
-    write_conditional_block(var_v2c_want_buildcfg_curr) do
+    write_conditional_block([ var_v2c_want_buildcfg_curr ]) do
       yield
     end
   end
@@ -5425,14 +5473,14 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         condition = config_info_curr.condition
         build_type = condition.get_build_type()
         build_type_cooked = prepare_string_literal(build_type)
-        str_cmake_build_type_condition = ''
+        arr_cmake_build_type_condition = nil
         if config_multi_authoritative == build_type
-          str_cmake_build_type_condition = "CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
+          arr_cmake_build_type_condition = [ 'CMAKE_CONFIGURATION_TYPES', 'OR', 'CMAKE_BUILD_TYPE', 'STREQUAL', build_type_cooked ]
         else
           # YES, this condition is supposed to NOT trigger in case of a multi-configuration generator
-          str_cmake_build_type_condition = "CMAKE_BUILD_TYPE STREQUAL #{build_type_cooked}"
+          arr_cmake_build_type_condition = [ 'CMAKE_BUILD_TYPE', 'STREQUAL', build_type_cooked ]
         end
-        write_set_var_bool_conditional(get_buildcfg_var_name_of_condition(condition), str_cmake_build_type_condition)
+        write_set_var_bool_conditional(get_buildcfg_var_name_of_condition(condition), arr_cmake_build_type_condition)
       }
     #else... implicitly being done by v2c_platform_build_setting_configure() invoked during project leadin.
     end
@@ -5605,8 +5653,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def put_target_type(target, map_dependencies, target_info_curr, target_config_info_curr)
     target_is_valid = false
 
-    str_condition_no_target = get_conditional_inverted(get_target_syntax_expression(target.name))
-    write_conditional_block(str_condition_no_target) do
+    arr_condition_no_target = get_conditional_inverted(get_target_syntax_expression(target.name))
+    write_conditional_block(arr_condition_no_target) do
       target_is_valid = write_target_type(target_config_info_curr.cfg_type)
     end
 
@@ -5706,7 +5754,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     set_property(@target.name, PROP_APPEND, property_name, arr_compile_defn_cooked)
   end
   def generate_property_compile_definitions_per_platform(config_name, arr_platdefs, str_platform)
-    write_conditional_block(str_platform) do
+    write_conditional_block_string(str_platform) do
       put_property_compile_definitions(config_name, arr_platdefs)
     end
   end
@@ -5755,27 +5803,28 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     return if arr_flags.empty?
     next_paragraph()
     write_buildcfg_condition_block(condition) do
-      write_conditional_block(str_conditional) do
+      write_conditional_block_string(str_conditional) do
         # FIXME!!! It appears that while CMake source has COMPILE_DEFINITIONS_<CONFIG>,
         # it does NOT provide a per-config COMPILE_FLAGS property! Need to verify ASAP
         # whether compile flags do get passed properly in debug / release.
         # Strangely enough it _does_ have LINK_FLAGS_<CONFIG>, though!
-        str_target_expr = get_target_syntax_expression(@target.name)
+        arr_target_expr = get_target_syntax_expression(@target.name)
         build_type = condition.get_build_type()
         property_name = get_name_of_per_config_type_property('COMPILE_FLAGS', build_type)
-        put_property(str_target_expr, PROP_APPEND, property_name, arr_flags)
+        put_property(arr_target_expr, PROP_APPEND, property_name, arr_flags)
       end
     end
   end
   def write_property_link_flags(condition, arr_flags, str_conditional)
     return if arr_flags.empty?
     next_paragraph()
-    write_buildcfg_condition_block(condition) do
-      write_conditional_block(str_conditional) do
-        str_target_expr = get_target_syntax_expression(@target.name)
+    gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, condition, false)
+    gen_condition.generate do
+      write_conditional_block_string(str_conditional) do
+        arr_target_expr = get_target_syntax_expression(target.name)
         build_type = condition.get_build_type()
         property_name = get_name_of_per_config_type_property('LINK_FLAGS', build_type)
-        put_property(str_target_expr, PROP_APPEND, property_name, arr_flags)
+        put_property(arr_target_expr, PROP_APPEND, property_name, arr_flags)
       end
     end
   end
@@ -6250,8 +6299,8 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     # since they're deeply related (block should always be used
     # in combination with the conditional).
     str_per_scope_definition_guard = '_v2c_global_defs_per_scope_defined'
-    str_condition_inverse = get_conditional_inverted(str_per_scope_definition_guard)
-    write_conditional_block(str_condition_inverse) do
+    arr_condition_inverse = get_conditional_inverted([ str_per_scope_definition_guard ])
+    write_conditional_block(arr_condition_inverse) do
       put_per_scope_cmake_minimum_version()
       put_per_scope_cmake_policies()
 
@@ -6295,8 +6344,8 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     next_paragraph()
   end
   def put_per_scope_cmake_policies
-    str_conditional = get_var_conditional_command('cmake_policy')
-    write_conditional_block(str_conditional) do
+    arr_conditional = get_var_conditional_command('cmake_policy')
+    write_conditional_block(arr_conditional) do
       # CMP0005: manual quoting of brackets in definitions doesn't seem to work otherwise,
       # in cmake 2.6.4-7.el5 with "OLD".
       # For policy tweaking, use of cmake_policy(PUSH/POP) might be
@@ -6443,8 +6492,8 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     # .vcproj to indicate tool specifics, thus these seem to
     # be settings for ANY PARTICULAR tool that is configured
     # on the Win32 side (.vcproj in general).
-    str_platform = 'WIN32'
-    write_conditional_block(str_platform) do
+    arr_conditional_platform = [ 'WIN32' ]
+    write_conditional_block(arr_conditional_platform) do
       put_property_directory__compile_flags(attr_opts, true)
     end
   end
@@ -6457,7 +6506,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
       #logger.info "arr_platdefs: #{arr_platdefs}"
       next_paragraph()
       str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
-      write_conditional_block(str_platform) do
+      write_conditional_block_string(str_platform) do
         write_command_list_quoted(cmake_command, cmake_command_arg, arr_platdefs)
       end
     }
