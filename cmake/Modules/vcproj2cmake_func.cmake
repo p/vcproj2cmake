@@ -123,17 +123,25 @@ macro(_v2c_var_set_default_if_not_set _var_name _v2c_default_setting)
 endmacro(_v2c_var_set_default_if_not_set _var_name _v2c_default_setting)
 
 # Helper for nicely verified fetching of a variable (usually CACHE) :)
-function(_v2c_var_verified_get _var_name _out_value)
+# Naming *_my_* to reflect the fact that it internally assigns V2C_ prefix.
+function(_v2c_var_my_get _var_name _out_value)
   set(var_name_ V2C_${_var_name})
   _v2c_var_ensure_defined(${var_name_})
   set(${_out_value} "${${var_name_}}" PARENT_SCOPE)
-endfunction(_v2c_var_verified_get _var_name _out_value)
+endfunction(_v2c_var_my_get _var_name _out_value)
 
 # Helper to fetch a variable (usually CACHE), unverified.
-function(_v2c_var_get _var_name _out_value)
+# Add special naming marker to the unverified rather than the
+# verified function (penalize use of unverified function).
+function(_v2c_var_my_unverified_get _var_name _out_value)
+  _v2c_var_set_empty(value_)
   set(var_name_ V2C_${_var_name})
-  set(${_out_value} "${${var_name_}}" PARENT_SCOPE)
-endfunction(_v2c_var_get _var_name _out_value)
+  # DEFINED check, to avoid --warn-uninitialized spew:
+  if(DEFINED ${var_name_})
+    set(value_ "${${var_name_}}")
+  endif(DEFINED ${var_name_})
+  set(${_out_value} "${value_}" PARENT_SCOPE)
+endfunction(_v2c_var_my_unverified_get _var_name _out_value)
 
 macro(_v2c_msg_info _msg)
   message(STATUS "${V2C_CMAKE_CONFIGURE_PROMPT}${_msg}")
@@ -231,7 +239,7 @@ option(V2C_WANT_PROJECT_ORIGINAL_GUID_ASSIGNED "Activate re-use of the original 
 function(v2c_project_original_guid_desired_get _target _out_flag)
   # _target currently unused...
   _v2c_var_ensure_defined(_target)
-  _v2c_var_verified_get(WANT_PROJECT_ORIGINAL_GUID_ASSIGNED want_orig_guid_assigned_)
+  _v2c_var_my_get(WANT_PROJECT_ORIGINAL_GUID_ASSIGNED want_orig_guid_assigned_)
   set(${_out_flag} ${want_orig_guid_assigned_} PARENT_SCOPE)
 endfunction(v2c_project_original_guid_desired_get _target _out_flag)
 
@@ -449,7 +457,7 @@ endmacro(_v2c_fs_file_touch _file)
 
 function(_v2c_stamp_file_location_assign _stamp_file_name _out_stamp_file_location)
   _v2c_var_ensure_defined(_out_stamp_file_location)
-  _v2c_var_verified_get(STAMP_FILES_DIR stamp_files_dir_)
+  _v2c_var_my_get(STAMP_FILES_DIR stamp_files_dir_)
   set(location_ "${stamp_files_dir_}/${_stamp_file_name}")
   set(${_out_stamp_file_location} "${location_}" PARENT_SCOPE)
 endfunction(_v2c_stamp_file_location_assign _stamp_file_name _out_stamp_file_location)
@@ -560,7 +568,7 @@ endfunction(_v2c_buildcfg_get_magic_conditional_name _target _build_platform _bu
 if(CMAKE_CONFIGURATION_TYPES)
   function(_v2c_buildcfg_define_magic_conditional _target _build_platform _build_type _var_out)
     set(val_ FALSE)
-    _v2c_var_verified_get(BUILD_PLATFORM build_platform_)
+    _v2c_var_my_get(BUILD_PLATFORM build_platform_)
     if("${build_platform_}" STREQUAL "${_build_platform}")
       set(val_ TRUE)
     endif("${build_platform_}" STREQUAL "${_build_platform}")
@@ -569,7 +577,7 @@ if(CMAKE_CONFIGURATION_TYPES)
 else(CMAKE_CONFIGURATION_TYPES)
   function(_v2c_buildcfg_define_magic_conditional _target _build_platform _build_type _var_out)
     set(val_ FALSE)
-    _v2c_var_verified_get(BUILD_PLATFORM build_platform_)
+    _v2c_var_my_get(BUILD_PLATFORM build_platform_)
     if("${build_platform_}" STREQUAL "${_build_platform}")
       if(CMAKE_BUILD_TYPE STREQUAL "${_build_type}")
         set(val_ TRUE)
@@ -676,7 +684,7 @@ else(_v2c_generator_has_dynamic_platform_switching)
   function(_v2c_buildcfg_determine_platform_var _target)
     _v2c_project_platform_get_list(${_target} platform_names_list_)
     # Query possibly existing var definition.
-    _v2c_var_get(BUILD_PLATFORM build_platform_)
+    _v2c_var_my_unverified_get(BUILD_PLATFORM build_platform_)
     if(build_platform_)
       # Hmm... preserving the reason variable content is a bit difficult
       # in light of V2C_BUILD_PLATFORM being a CACHE variable
@@ -774,7 +782,7 @@ function(_v2c_config_do_setup_rebuilder)
   endif(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD)
   # Provide *public* API helper for user-side query.
   function(v2c_rebuilder_build_abort_is_enabled _res_out)
-    _v2c_var_verified_get(CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD v2c_abort_after_rebuild_)
+    _v2c_var_my_get(CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD v2c_abort_after_rebuild_)
     set(${_res_out} ${v2c_abort_after_rebuild_} PARENT_SCOPE)
   endfunction(v2c_rebuilder_build_abort_is_enabled _res_out)
 endfunction(_v2c_config_do_setup_rebuilder)
@@ -782,7 +790,7 @@ endfunction(_v2c_config_do_setup_rebuilder)
 function(_v2c_config_do_setup)
   # FIXME: should obey V2C_LOCAL_CONFIG_RELPATH setting!! Nope, this is a
   # reference to the _global_ one here...
-  _v2c_var_verified_get(GLOBAL_CONFIG_RELPATH global_config_subdir_)
+  _v2c_var_my_get(GLOBAL_CONFIG_RELPATH global_config_subdir_)
 
   # These files are *optional* elements of the source tree!
   # (thus we shouldn't carelessly list them as target file dependencies etc.)
@@ -806,7 +814,7 @@ function(_v2c_config_do_setup)
   # Provide *public* API for user-side query of rebuilder activation status.
   # Once active, further rebuilder APIs may be called.
   macro(v2c_rebuilder_enabled _res_out)
-    _v2c_var_verified_get(USE_AUTOMATIC_CMAKELISTS_REBUILDER v2c_use_rebuilder_)
+    _v2c_var_my_get(USE_AUTOMATIC_CMAKELISTS_REBUILDER v2c_use_rebuilder_)
     set(${_res_out} ${v2c_use_rebuilder_})
   endmacro(v2c_rebuilder_enabled _res_out)
 
@@ -885,7 +893,7 @@ function(_v2c_target_log_configuration _target)
 endfunction(_v2c_target_log_configuration _target)
 
 function(_v2c_project_local_config_dir_relpath_get _out_local_config_dir_relpath)
-  _v2c_var_verified_get(LOCAL_CONFIG_RELPATH local_config_relpath_)
+  _v2c_var_my_get(LOCAL_CONFIG_RELPATH local_config_relpath_)
   set(${_out_local_config_dir_relpath} "${local_config_relpath_}" PARENT_SCOPE)
 endfunction(_v2c_project_local_config_dir_relpath_get _out_local_config_dir_relpath)
 
@@ -900,7 +908,7 @@ endfunction(_v2c_temp_store_dir_relpath_get _out_temp_store_dir_relpath)
 # Naming clearly lumped into *_target_*() scope-wise
 # since source groups are provided by a project file i.e. a project *target*.
 function(_v2c_target_source_groups_is_enabled _target _out_is_enabled)
-  _v2c_var_verified_get(SOURCE_GROUPS_ENABLED is_enabled_)
+  _v2c_var_my_get(SOURCE_GROUPS_ENABLED is_enabled_)
   # Could add a per-target evaluation of source group setting here,
   # but a per-project-target decision is not too useful anyway...
   set(${_out_is_enabled} ${is_enabled_} PARENT_SCOPE)
@@ -1176,7 +1184,7 @@ if(v2c_cmakelists_rebuilder_available)
 
     # FIXME: should use that V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD conditional
     # to establish (during one-time setup) a _dummy/non-dummy_ _function_ for rebuild abort handling.
-    _v2c_var_verified_get(CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD v2c_abort_after_rebuild_)
+    _v2c_var_my_get(CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD v2c_abort_after_rebuild_)
     if(v2c_abort_after_rebuild_)
       if(need_init_main_targets_this_time_)
         _v2c_config_get(cmakelists_update_check_did_abort_public_marker_file_v1 cmakelists_update_check_did_abort_public_marker_file_v1_)
@@ -1307,7 +1315,7 @@ else(_v2c_feat_cmake_include_dirs_prop)
 endif(_v2c_feat_cmake_include_dirs_prop)
 
 
-_v2c_var_verified_get(WANT_PCH_PRECOMPILED_HEADER_SUPPORT v2c_want_pch_support)
+_v2c_var_my_get(WANT_PCH_PRECOMPILED_HEADER_SUPPORT v2c_want_pch_support)
 if(v2c_want_pch_support)
   function(_v2c_pch_log_setup_status _target _header_file _pch_mode _dowarn)
     _v2c_bool_get_status_string(V2C_WANT_PCH_PRECOMPILED_HEADER_WARNINGS warnings_status_)
@@ -1386,7 +1394,7 @@ if(v2c_want_pch_support)
       set(do_use_ FALSE)
       set(do_create_ TRUE)
     endif(do_use_)
-    _v2c_var_verified_get(WANT_PCH_PRECOMPILED_HEADER_WARNINGS want_pch_warnings_)
+    _v2c_var_my_get(WANT_PCH_PRECOMPILED_HEADER_WARNINGS want_pch_warnings_)
     _v2c_var_set_empty(do_warn_)
     if(want_pch_warnings_)
       set(do_warn_ 1)
@@ -1579,7 +1587,7 @@ ${c_section_end_}
     # Hah! In newer CMake versions the CMAKE_BUILD_INTERFACE_INCLUDES variable
     # seems to be exactly provided for this purpose (TODO enable it?).
     _v2c_fs_item_make_relative_to_path("${v2c_target_midl_compile_HEADER_FILE_NAME}" "${PROJECT_SOURCE_DIR}" header_file_location_)
-    _v2c_var_verified_get(MIDL_HANDLING_MODE v2c_midl_mode_)
+    _v2c_var_my_get(MIDL_HANDLING_MODE v2c_midl_mode_)
     if(${v2c_midl_mode_} STREQUAL ${v2c_midl_handling_mode_wine})
       set(cmd_list_ "${V2C_WINE_WIDL_BIN}")
       _v2c_var_set_empty(v2c_widl_outputs_)
