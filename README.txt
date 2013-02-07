@@ -49,11 +49,13 @@ Details for manual usage (very rough summary), with Linux/Makefile generator:
   or directly modify the vcproj2cmake_settings.rb there
   (not recommended - the non-user file will be overwritten on each repository update,
   thus restoring all settings to default)
-- in the project source tree, run ruby [PATH_TO_VCPROJ2CMAKE]/scripts/vcproj2cmake.rb PROJECT.vcproj
+- in the project source tree, run
+  ruby [PATH_TO_VCPROJ2CMAKE]/scripts/vcproj2cmake.rb PROJECT.vcproj
   (alternatively, execute vcproj2cmake_recursive.rb to convert an entire
   hierarchy of .vcproj sub projects [parsing of .sln solution files is
   unfortunately not supported yet])
-- copy all required cmake/Modules, cmake/vcproj2cmake and samples (provided by the vcproj2cmake source tree!)
+- copy all required cmake/Modules, cmake/vcproj2cmake
+  and samples (provided by the vcproj2cmake source tree!)
   to their respective paths in your project source tree
 - after successfully having converted the .vcproj file to a CMakeLists.txt,
   start your out-of-tree CMake builds:
@@ -310,10 +312,11 @@ then a platform-specific conditional identifier (WIN32, APPLE, ...)
   which is used in a CMake "if(...)" conditional
   (or no identifier in case the mapping is supposed to apply for all
   platforms),
-then a '=' to assign the replacement expression which is to be used
-  on that platform,
+then a '='
+  to assign the replacement expression which is to be used on that platform,
 then the ensuing replacement expression.
-Then an '|' (pipe, "or") for an optional series of additional platform conditionals.
+Then an '|' (pipe, "or")
+  for an optional series of additional platform conditionals.
 
 
 Note that ideally you merely need to centrally maintain all mappings
@@ -346,14 +349,16 @@ See also
   http://cboard.cprogramming.com/c-programming/124805-%5Bgcc%5D-specifying-include-libraries-source-files.html
   "Passing names of libraries to linker." http://gcc.gnu.org/ml/gcc-help/2005-06/msg00205.html
 
-This sufficiently automatic and easy conversion mechanism unfortunately has certain drawbacks:
+This sufficiently automatic and easy conversion mechanism unfortunately
+has certain drawbacks:
 E.g. in case of Boost, it will cause linking of a target
 to the _full_ list of libraries contained within ${Boost_LIBRARIES}.
-If you don't want to pay this link and bloat penalty, then you will have to add each
-dependency to the AdditionalDependencies (library dependency) elements in your Visual Studio
-projects, mentioning the _full_, _correctly versioned_ library name.
-This specific semi-redundant information, of course,
-is something that Windows-side VS projects possibly don't want to have to maintain
+If you don't want to pay this link and bloat penalty,
+then you will have to add each dependency to the AdditionalDependencies
+(library dependency) elements in your Visual Studio projects,
+mentioning the _full_, _correctly versioned_ library name.
+This specific semi-redundant information, of course, is something
+that Windows-side VS projects possibly don't want to have to maintain
 (or, as happened in my case, are happy to unknowingly remove on a whim
 during an upgrade).
 
@@ -437,8 +442,8 @@ and/or correcting improperly cased #include statements in source code.
 == Build run issues ==
 
 If there's compile failure due to missing includes, then it probably means that
-a newly converted CMakeLists.txt still contains an include_directories() command
-which lists some paths in their raw, original, Windows-specific form.
+a newly converted CMakeLists.txt still contains an include_directories()
+command which lists some paths in their raw, original, Windows-specific form.
 What should have happened is automatic replacement of such path strings
 with a CMake-side configuration variable (e.g. ${toolkit_INCLUDE_DIR})
 via a regular expression in the mappings file (include_mappings.txt).
@@ -468,8 +473,31 @@ and semi-mature .vc[x]proj to CMake converter).
 == IDE issues ==
 
 Visual Studio handling can be quite a bitch at times.
-This is especially true for e.g. project reloading prompts
+This is especially true for e.g. dozens of project reloading prompts
 and SCC (Source Control Management) integration.
+
+
+While it's very nice to have a CMake as a multi-environment build generator,
+it's not so nice to have a Visual Studio which is unable to properly deal
+with projects being regenerated on the fly whenever some changes have been
+made to the CMake files.
+Changes to the configuration may cause CMake to regenerate
+several dozen projects sometimes (or up to a pretty unlimited number
+in case of monster solution files), and if these are open in VS currently,
+then VS will beyond-stupidly user-prompt *for each and every one*
+of these projects to have them reloaded.
+This grave VS usability problem has been plaguing CMake for many years already
+(IIRC even VS2005), and CMake implemented helper targets
+to try to invoke dialogs for mass confirm,
+but not too surprisingly even these helper targets are not working
+fully properly in VS2010.
+In some situations it works relatively convincingly, whereas in others
+it doesn't (probably depends on whether having a build ongoing,
+or perhaps on the moon phase).
+Note that there's a CMAKE_SUPPRESS_REGENERATION variable to be set
+in case the behaviour happens to be intolerable.
+
+
 While I was unable to make SCC integration work on a VS2005 <=> VSS combo
 (resulting in awfully annoying nagging by VS)
 despite a sizeable amount of attempts, on a VS2010 <=> TFS combo I finally
@@ -661,9 +689,10 @@ such a define to bail out of compilation, hard.
 If someone is still making use of the SCM (Source Control Management)
 abomination called VSS
 and contemplating migrating to a different, actually usable system,
-then it may be useful to NOT default-decide to go for the "obvious" successor
-(Microsoft TFS), but instead making an Informed Decision (tm) of which
-capable SCM (or in fact, an integrated Tracker/Ticket environment [ALM]) to choose.
+then it may be useful to NOT default-decide to go
+for the "obvious" successor (Microsoft TFS),
+but instead making an Informed Decision (tm) of which capable SCM
+(or in fact, an integrated Tracker/Ticket environment [ALM]) to choose.
 While TFS is an awful lot better than VSS, it still has some painful
 shortcomings, among these:
 - non-cross-platform tool
@@ -681,7 +710,7 @@ shortcomings, among these:
 - interfacing towards much more strongly cross-platform SCMs such as SVN or git
   is h*ll:
   - SvnBridge project rates itself as "stable" - everything but
-    as of 2012... (I'm working on getting this fixed -
+    as of 2013... (I'm working on getting this fixed -
     with my public patch applied it's much improved now)
   - git-tfs requires installation on a Windows server as well,
     or Mono-tainted untested alternative use
