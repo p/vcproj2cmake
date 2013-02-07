@@ -204,7 +204,7 @@ endif(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 # Define a couple global constant settings
 # (make sure to keep outside of repeatedly invoked functions below)
 
-# There's a scope discrepancy between functions (_globally_ valid)
+# In CMake there's a scope discrepancy between functions (_globally_ valid)
 # and ordinary variables (valid within sub scope only), which causes
 # problems when invoking certain functions from within the "wrong" scope
 # (e.g. directory), since accessing pre-defined variables
@@ -751,6 +751,7 @@ function(_v2c_config_do_setup_rebuilder)
         DOC "A small program whose only purpose is to be suitable to signal failure (i.e. which provides a non-successful execution return value), usually /bin/false on UNIX; may alternatively be set to an invalid program name, too."
       )
       _v2c_var_ensure_defined(V2C_ABORT_BIN)
+      mark_as_advanced(V2C_ABORT_BIN)
       _v2c_config_set(ABORT_BIN_v1 "${V2C_ABORT_BIN}")
     else(UNIX)
       _v2c_config_set(ABORT_BIN_v1 v2c_invoked_non_existing_command_simply_to_force_build_abort)
@@ -764,14 +765,14 @@ function(_v2c_config_do_setup_rebuilder)
     # (oh yay, we even need to have the marker file removed on next build launch again).
     _v2c_stamp_file_location_config_assign(update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1 "v2c_cmakelists_update_abort_cleanup_done.stamp")
 
-     # Provide API helper, for user-side build scripts to know how to detect
-     # that a build abort occured.
+     # Provide *public* API helper, to have user-side build scripts know
+     # how to detect that a build abort occured.
      function(v2c_rebuilder_build_abort_get_marker_file _res_out)
        _v2c_config_get(update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1 update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1_)
        set(${_res_out} "${update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1_}" PARENT_SCOPE)
      endfunction(v2c_rebuilder_build_abort_get_marker_file _res_out)
   endif(V2C_CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD)
-  # Provide API helper for user-side query.
+  # Provide *public* API helper for user-side query.
   function(v2c_rebuilder_build_abort_is_enabled _res_out)
     _v2c_var_verified_get(CMAKELISTS_REBUILDER_ABORT_AFTER_REBUILD v2c_abort_after_rebuild_)
     set(${_res_out} ${v2c_abort_after_rebuild_} PARENT_SCOPE)
@@ -802,7 +803,7 @@ function(_v2c_config_do_setup)
   file(GLOB root_mappings_files_list_ "${CMAKE_SOURCE_DIR}/${mappings_files_expr_}")
   _v2c_config_set(root_mappings_files_list_v1 "${root_mappings_files_list_}")
 
-  # Provide API helper for user-side query of rebuilder activation status.
+  # Provide *public* API for user-side query of rebuilder activation status.
   # Once active, further rebuilder APIs may be called.
   macro(v2c_rebuilder_enabled _res_out)
     _v2c_var_verified_get(USE_AUTOMATIC_CMAKELISTS_REBUILDER v2c_use_rebuilder_)
@@ -971,7 +972,7 @@ function(_v2c_projects_find_valid_target _projects_list _target_out)
   set(${_target_out} ${target_} PARENT_SCOPE)
 endfunction(_v2c_projects_find_valid_target _projects_list _target_out)
 
-# Use the stamp file as the final criteria to check
+# Use the stamp file name var as the final criteria to check
 # whether rebuilder setup was successful:
 _v2c_config_get_unchecked(cmakelists_update_check_stamp_file_v1 v2c_cmakelists_rebuilder_available)
 if(v2c_cmakelists_rebuilder_available)
@@ -1965,7 +1966,8 @@ function(v2c_directory_post_setup)
   _v2c_directory_projects_list_get(directory_projects_list_)
   # v2c_directory_post_setup() will be invoked by both regular local
   # CMakeLists.txt (created for any directory which contains VS project
-  # files) *and* other ones (currently the root directory CMakeLists.txt).
+  # files) *and* other possibly project-devoid ones
+  # (e.g. the root directory CMakeLists.txt currently).
   # This means that directory_projects_list_ will obviously be
   # available for "real" converted-projects CMakeLists.txt only.
   if(directory_projects_list_)
