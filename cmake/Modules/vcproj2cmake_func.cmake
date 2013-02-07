@@ -100,6 +100,16 @@ macro(_v2c_var_set_empty)
   endforeach(var_name_ ${ARGV})
 endmacro(_v2c_var_set_empty)
 
+# Comment-only-helper for workaround
+# for CMake empty-var-PARENT_SCOPE-results-in-non-DEFINED bug (#13786).
+# Simply set var to empty prior to calling a problematic PARENT_SCOPE function.
+# This central helper would actually allow us
+# to disable this potentially bug-shadowing workaround
+# in case of detecting newish CMake version which will perhaps have it fixed.
+macro(_v2c_var_empty_parent_scope_bug_workaround _var_name)
+  set(${_var_name} "")
+endmacro(_v2c_var_empty_parent_scope_bug_workaround _var_name)
+
 # Assign the default setting of a variable.
 # Comment-by-naming-only helper.
 macro(_v2c_var_set_default _var_name _default)
@@ -380,6 +390,7 @@ function(_v2c_config_get _cfg_key _cfg_value_out)
   if(NOT cfg_value_is_set_)
     _v2c_msg_fatal_error("_v2c_config_get: config var ${_cfg_key} not set!?")
   endif(NOT cfg_value_is_set_)
+  _v2c_var_empty_parent_scope_bug_workaround(cfg_value_)
   _v2c_config_get_unchecked(${_cfg_key} cfg_value_)
   set(${_cfg_value_out} "${cfg_value_}" PARENT_SCOPE)
 endfunction(_v2c_config_get _cfg_key _cfg_value_out)
