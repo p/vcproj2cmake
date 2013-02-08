@@ -1568,6 +1568,11 @@ end
 # XML support as required by VS7+/VS10 parsers:
 require 'rexml/document'
 
+# TODO: oerks, it seems making use of rexml/streamlistener
+# may be a much better way of parsing content in a linear way.
+# Should probably rework the core of our classes to use the StreamListener,
+# and hopefully keep servicing our existing overrides.
+
 class V2C_XmlParserBase < V2C_ParserBase
   def unknown_attribute(key, value); unknown_something_key_value('attribute', key, value) end
   def unknown_element_key(name); unknown_something('element', name) end
@@ -3255,11 +3260,6 @@ module V2C_VS10Syntax
   end
 end
 
-# NOTE: VS10 == MSBuild == somewhat Ant-based.
-# Thus it would probably be useful to create an Ant syntax parser base class
-# and derive MSBuild-specific behaviour from it.
-# For a list of XML file element names (i.e. schema info), see
-#   http://stackoverflow.com/questions/7899043/getting-lots-of-warnings-when-building-with-targets-in-visual-studio-2010
 class V2C_VS10ParserBase < V2C_VSXmlParserBase
   include V2C_VS10Syntax
 end
@@ -3426,6 +3426,10 @@ class V2C_VS10ItemGroupFileElemParser < V2C_VS10ParserBase
     found = be_optimistic()
     case setting_key
     when TEXT_INCLUDE
+      # NOTE: this may be not entirely correct:
+      # MSBuild specs indicate that both (even recursive) wildcards ({?|*})
+      # and multiple elements ("file1.c; file2.c") are valid - for MSBuild
+      # (not sure whether that applies to .vcxproj, too)
       get_file_elem().path_relative = get_filesystem_location(setting_value)
     else
       found = super
@@ -4225,6 +4229,21 @@ end
 # defined by the .vcxproj file (i.e. the pre-existing array item will be _replaced_).
 # IOW, it seems VS10 parses .filters _after_ having parsed .vcxproj,
 # with certain amounts of overriding taking place.
+# Also, the fact that the xmlns= attribute's value of a .filters file
+# is _identical_ with the one of a .vcxproj file should be enough proof
+# that a .filters file's content is simply a KISS extension of the
+# (possibly same) content of a .vcxproj file. IOW, parsing should most likely
+# be _identical_ (and thus enhance possibly already added structures!?).
+#
+# NOTE: VS10 == MSBuild (i.e. it uses the MSBuild Project File Schema)
+# == somewhat Ant-based.
+# Thus it would perhaps be useful to create an Ant syntax parser base class
+# and derive MSBuild-specific behaviour from it.
+# You should look at MSBuild pages for specs (see
+# "MSBuild Project File Schema Reference",
+#   http://msdn.microsoft.com/en-us/library/5dy88c2e%28v=vs.80%29.aspx )
+# For a list of XML file element names (i.e. schema info), see
+#   http://stackoverflow.com/questions/7899043/getting-lots-of-warnings-when-building-with-targets-in-visual-studio-2010
 class V2C_VS10ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
   def initialize(p_parser_proj_file, arr_projects_out)
     super(p_parser_proj_file, 'MSVS10', arr_projects_out)
