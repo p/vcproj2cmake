@@ -4808,36 +4808,14 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     write_command_list_single_line('else', arr_conditional_params)
     @textOut.indent_more()
   end
+  # Public name for the CMake-specific if() syntax.
+  # Wanted to have a public alias_method for a private gen_if(),
+  # but that doesn't work nicely (undefined method issue etc.).
   def write_conditional_block(arr_conditional)
-    gen_if(arr_conditional) {
-      yield
-    }
-  end
-  # FIXME: should change all/most users into the Array-based variant above
-  # (to prevent quoting heuristics issues due to premature space-joining) -
-  # but this change is HUGE...
-  def write_conditional_block_string(str_conditional)
-    if str_conditional.nil? or str_conditional.empty?
+    if arr_conditional.nil?
       yield
     else
-      write_conditional_block([ str_conditional ]) {
-        yield
-      }
-    end
-  end
-  # Generates CMake commands matching the common COMMAND / endCOMMAND pair.
-  def gen_scoped_cmake_command(cmake_command, arr_params)
-    write_command_list_single_line(cmake_command, arr_params)
-      @textOut.indent_more()
-        yield
-      @textOut.indent_less()
-    write_command_list_single_line('end' + cmake_command, arr_params)
-  end
-  def gen_if(arr_params)
-    if arr_params.nil? or arr_params.empty?
-      yield
-    else
-      gen_scoped_cmake_command('if', arr_params) {
+      gen_if(arr_conditional) {
         yield
       }
     end
@@ -4887,13 +4865,13 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     # since the conditional might grow quite complex,
     # thus it's a waste to generate a precisely matching else(something).
     write_set_var_bool(var_name, false)
-    gen_if(arr_condition_params) {
+    write_conditional_block(arr_condition_params) {
       write_set_var_bool(var_name, true)
     }
   end
   def write_set_var_if_unset(var_name, setting)
-    arr_conditional = get_conditional_inverted([ var_name ])
-    write_conditional_block(arr_conditional) do
+    arr_conditional_not_set = get_conditional_inverted([ var_name ])
+    write_conditional_block(arr_conditional_not_set) do
       write_set_var(var_name, setting)
     end
   end
@@ -4974,6 +4952,15 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   # analogous to CMake separate_arguments() command
   def separate_arguments(array_in); array_in.join(';') end
 
+  STRING_ELEMENT_SEPARATOR_REGEX_OBJ = %r{[\s]} # (\s char set includes \n)
+  # Splits a whitespace-separated string into an array of its components.
+  # Sometimes used as a Q&D mechanism to revert a dirtily pre-joined
+  # collection of parameters into array form.
+  def split_string_to_array(str_value)
+    return nil if str_value.nil?
+    str_value.split(STRING_ELEMENT_SEPARATOR_REGEX_OBJ)
+  end
+
   # Hrmm, I'm not quite happy about this helper's location and
   # purpose. Probably some hierarchy is not really clean.
   def prepare_string_literal(str_in)
@@ -4982,6 +4969,34 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
 
   def path_join(a, b); cmake_path_join(a, b) end
   private
+  # Generates CMake commands matching the common COMMAND / endCOMMAND pair.
+  def gen_scoped_cmake_command(cmake_command, arr_params)
+    write_command_list_single_line(cmake_command, arr_params)
+      @textOut.indent_more()
+        yield
+      @textOut.indent_less()
+    write_command_list_single_line('end' + cmake_command, arr_params)
+  end
+  def gen_if(arr_params)
+    empty_conditional = false
+    if arr_params.nil? or arr_params.empty?
+      empty_conditional = true
+    else
+      first_parm = arr_params[0]
+      if first_parm.nil? or first_parm.empty?
+        empty_conditional = true
+      end
+    end
+
+    if false != empty_conditional
+      logger.warn 'Empty conditional supplied, will not generate if()!'
+      yield
+    else
+      gen_scoped_cmake_command('if', arr_params) {
+        yield
+      }
+    end
+  end
 
   PC_TODO = 'TODO_POLICY_DOCUMENTATION'
   # For details, see cmake --help-policies or cmakepolicies(1).
@@ -5300,16 +5315,16 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
 
   V2C_COMPILER_MSVC_REGEX_OBJ = %r{^MSVC}
   def map_compiler_name_to_cmake_platform_conditional(compiler_name)
-    str_conditional_compiler_platform = nil
+    arr_conditional_compiler_platform = nil
     # For a number of platform indentifier variables,
     # see "CMake Useful Variables" http://www.cmake.org/Wiki/CMake_Useful_Variables
     case compiler_name
     when V2C_COMPILER_MSVC_REGEX_OBJ
-      str_conditional_compiler_platform = 'MSVC'
+      arr_conditional_compiler_platform = [ 'MSVC' ]
     else
       logger.unhandled_functionality "unknown (unsupported) compiler name #{compiler_name}!"
     end
-    return str_conditional_compiler_platform
+    return arr_conditional_compiler_platform
   end
   def map_linker_name_to_cmake_platform_conditional(linker_name)
     # For now, let's assume that compiler / linker name mappings are the same:
@@ -5985,8 +6000,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # make sure to specify APPEND for greater flexibility (hooks etc.)
     set_property(@target.name, PROP_APPEND, property_name, arr_compile_defn_cooked)
   end
-  def generate_property_compile_definitions_per_platform(config_name, arr_platdefs, str_platform)
-    write_conditional_block_string(str_platform) do
+  def generate_property_compile_definitions_per_platform(config_name, arr_platdefs, arr_conditional_platform)
+    write_conditional_block(arr_conditional_platform) do
       put_property_compile_definitions(config_name, arr_platdefs)
     end
   end
@@ -6027,17 +6042,17 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       hash_ensure_sorted_each(all_platform_defs).each { |key, arr_platdefs|
         #logger.info "key #{key}, arr_platdefs: #{arr_platdefs}"
         next_paragraph()
-        str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
-        generate_property_compile_definitions_per_platform(build_type, arr_platdefs, str_platform)
+        arr_conditional_platform = key.eql?(V2C_ALL_PLATFORMS_MARKER) ? nil : split_string_to_array(key)
+        generate_property_compile_definitions_per_platform(build_type, arr_platdefs, arr_conditional_platform)
       }
     end
   end
-  def write_property_compile_flags(condition, arr_flags, str_conditional)
+  def write_property_compile_flags(condition, arr_flags, arr_conditional)
     return if arr_flags.empty?
     next_paragraph()
     gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, condition, false)
     gen_condition.generate do
-      write_conditional_block_string(str_conditional) do
+      write_conditional_block(arr_conditional) do
         # FIXME!!! It appears that while CMake source has COMPILE_DEFINITIONS_<CONFIG>,
         # it does NOT provide a per-config COMPILE_FLAGS property! Need to verify ASAP
         # whether compile flags do get passed properly in debug / release.
@@ -6049,12 +6064,12 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       end
     end
   end
-  def write_property_link_flags(condition, arr_flags, str_conditional)
+  def write_property_link_flags(condition, arr_flags, arr_conditional)
     return if arr_flags.empty?
     next_paragraph()
     gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, condition, false)
     gen_condition.generate do
-      write_conditional_block_string(str_conditional) do
+      write_conditional_block(arr_conditional) do
         arr_target_expr = get_target_syntax_expression(target.name)
         build_type = condition.get_build_type()
         property_name = get_name_of_per_config_type_property('LINK_FLAGS', build_type)
@@ -6309,12 +6324,12 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
               # Original compiler flags are MSVC-only, of course.
               # TODO: provide an automatic conversion towards gcc?
               compiler_info_curr.arr_tool_variant_specific_info.each { |compiler_specific|
-	      str_conditional_compiler_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.compiler_name)
+                arr_conditional_compiler_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.compiler_name)
                 # I don't think we need this (we have per-target properties), thus we'll NOT write it!
                 #if not attr_opts.nil?
                 #  local_generator.write_directory_property_compile_flags(attr_options)
                 #end
-                write_property_compile_flags(condition, compiler_specific.arr_flags, str_conditional_compiler_platform)
+                write_property_compile_flags(condition, compiler_specific.arr_flags, arr_conditional_compiler_platform)
               } # compiler.tool_specific.each
             } # arr_target_config_info.each
 
@@ -6329,12 +6344,12 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
           } # config_info_curr.tools.arr_compiler_info.each
           tools.arr_linker_info.each { |linker_info_curr|
             linker_info_curr.arr_tool_variant_specific_info.each { |linker_specific|
-              str_conditional_linker_platform = map_linker_name_to_cmake_platform_conditional(linker_specific.linker_name)
+              arr_conditional_linker_platform = map_linker_name_to_cmake_platform_conditional(linker_specific.linker_name)
               # Probably more linker flags support needed? (mention via
               # CMAKE_SHARED_LINKER_FLAGS / CMAKE_MODULE_LINKER_FLAGS / CMAKE_EXE_LINKER_FLAGS
               # depending on target type, and make sure to filter out options
               # pre-defined by CMake platform setup modules)
-              write_property_link_flags(condition, linker_specific.arr_flags, str_conditional_linker_platform)
+              write_property_link_flags(condition, linker_specific.arr_flags, arr_conditional_linker_platform)
             } # linker.tool_specific.each
           } # arr_linker_info.each
         } # config_info_curr
@@ -6747,8 +6762,8 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     hash_ensure_sorted_each(all_platform_defs).each { |key, arr_platdefs|
       #logger.info "key #{key}, arr_platdefs: #{arr_platdefs}"
       next_paragraph()
-      str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
-      write_conditional_block_string(str_platform) do
+      arr_conditional_platform = key.eql?(V2C_ALL_PLATFORMS_MARKER) ? nil : split_string_to_array(key)
+      write_conditional_block(arr_conditional_platform) do
         write_command_list_quoted(cmake_command, cmake_command_arg, arr_platdefs)
       end
     }
