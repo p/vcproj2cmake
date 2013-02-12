@@ -4809,9 +4809,13 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   # (to prevent quoting heuristics issues due to premature space-joining) -
   # but this change is HUGE...
   def write_conditional_block_string(str_conditional)
-    write_conditional_block([ str_conditional ]) {
+    if str_conditional.nil? or str_conditional.empty?
       yield
-    }
+    else
+      write_conditional_block([ str_conditional ]) {
+        yield
+      }
+    end
   end
   # Generates CMake commands matching the common COMMAND / endCOMMAND pair.
   def gen_scoped_cmake_command(cmake_command, arr_params)
