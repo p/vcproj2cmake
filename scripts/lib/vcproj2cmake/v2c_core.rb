@@ -4874,7 +4874,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   # http://www.cmake.org/Wiki/CMake/Language_Syntax says
   # one can use any of TRUE/FALSE, ON/OFF, YES/NO,
   # thus we'll obviously choose the shortest solution.
-  def get_keyword_bool(setting); setting ? 'ON' : 'OFF' end
+  def get_keyword_bool(setting); false != setting ? 'ON' : 'OFF' end
   def write_set_var(var_name, setting)
     write_command_list('set', var_name, [ setting ])
   end
@@ -5290,7 +5290,7 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     platform_defs_raw = Hash.new
     parse_platform_conversions_internal(platform_defs_raw, arr_defs, map_defs, skip_failed_lookups)
     platform_defs_raw.each do |key, arr_platdefs|
-      #logger.info "arr_platdefs: #{arr_platdefs}"
+      #logger.info "key #{key}, arr_platdefs: #{arr_platdefs}"
       next if arr_platdefs.empty?
       arr_platdefs.uniq!
       platform_defs[key] = arr_platdefs
@@ -6025,7 +6025,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     gen_condition.generate do
       build_type = condition.get_build_type()
       hash_ensure_sorted_each(all_platform_defs).each { |key, arr_platdefs|
-        #logger.info "arr_platdefs: #{arr_platdefs}"
+        #logger.info "key #{key}, arr_platdefs: #{arr_platdefs}"
         next_paragraph()
         str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
         generate_property_compile_definitions_per_platform(build_type, arr_platdefs, str_platform)
@@ -6745,7 +6745,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     parse_platform_conversions(all_platform_defs, arr_defs, map_defs, skip_failed_lookups)
     # HACK: yes, we do need to re-sort this Hash _right before_ using it...
     hash_ensure_sorted_each(all_platform_defs).each { |key, arr_platdefs|
-      #logger.info "arr_platdefs: #{arr_platdefs}"
+      #logger.info "key #{key}, arr_platdefs: #{arr_platdefs}"
       next_paragraph()
       str_platform = key if not key.eql?(V2C_ALL_PLATFORMS_MARKER)
       write_conditional_block_string(str_platform) do
