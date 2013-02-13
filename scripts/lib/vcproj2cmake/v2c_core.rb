@@ -1474,6 +1474,7 @@ end
 # For things related to CMAKE_CFG_INTDIR, see also
 # add_custom_command()s "generator expressions" such as $<CONFIGURATION>.
 CMAKE_CFG_INTDIR_VAR_DEREF = '${CMAKE_CFG_INTDIR}'
+CMAKE_PROJECT_BINARY_DIR_VAR_DEREF = '${PROJECT_BINARY_DIR}'
 CMAKE_PROJECT_NAME_VAR_DEREF = '${PROJECT_NAME}'
 def vs7_create_config_variable_translation(str_in, arr_config_var_handling)
   str = str_in.clone
@@ -1548,6 +1549,13 @@ EOF
       # depending on which of the possibly *multiple* solution sub dir hierarchies
       # it's being defined by).
       config_var_replacement = vs7_config_var_trailing_slash('${V2C_MASTER_PROJECT_SOURCE_DIR}')
+    when 'TARGETDIR'
+      # OK, I'm not too happy with this translation:
+      # While PROJECT_BINARY_DIR should properly apply for a *standard* case,
+      # there are things such as LIBRARY_OUTPUT_DIRECTORY_<CONFIG> target
+      # properties, and these should be properly supported once someone
+      # actually needs these specific non-default variable references to work...
+      config_var_replacement = CMAKE_PROJECT_BINARY_DIR_VAR_DEREF
     when 'TARGETNAME'
       # NOTE: $(TargetName) is available in both VS7/VS10,
       # however it changed its content (see
