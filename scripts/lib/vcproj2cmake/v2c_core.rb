@@ -90,7 +90,13 @@ def v2c_get_path_config(master_project_source_dir)
   V2C_Path_Config.new(master_project_source_dir)
 end
 
-# TODO: make this a user-visible config setting soon
+# TODO: make this a user-visible config setting soon.
+# Perhaps we might want to change this config setting into a
+# selection of SELF_CONTAINED_NO, SELF_CONTAINED_YES, SELF_CONTAINED_ADDITIONAL
+# or some such (some people might want to generate CMakeLists.txt,
+# then immediately start committing and modifying those files towards
+# CMake-only use of their development, thus seeing the self-contained
+# parts in addition to the V2C-module-dependent implementation might be useful).
 $v2c_generate_self_contained_file = 0
 
 # At least currently, this is a custom plugin mechanism.
