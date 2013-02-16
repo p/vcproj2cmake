@@ -1,4 +1,4 @@
-vcproj2cmake.rb - .vcproj/.vcxproj to CMakeLists.txt converter scripts
+vcproj2cmake.rb - .vcxproj/.vcproj to CMakeLists.txt converter scripts
 written by Andreas Mohr and Jesper Eskilson.
 License: BSD (see LICENSE.txt)
 
@@ -34,15 +34,16 @@ On Mac OS X, that would mean using e.g. one of Homebrew, nix, rudix, MacPorts.
 
 ===========================================================================
 Usage, easy mode:
-- run install_me_fully_guided.rb or (on UNIX) install_me_fully_guided.sh
+- run ruby install_me_fully_guided.rb or (on UNIX) install_me_fully_guided.sh
 - this will interactively prompt you for everything
 - ideally you will end up with a completely built CMake-enabled build tree
-  of your .vc[x]proj-based source tree if everything goes fine
-  (famous last words...)
+  of your .vc[x]proj-based source tree (or a downloaded sample application)
+  if everything goes fine (famous last words...)
 ===========================================================================
 
 Details for manual usage (very rough summary), with Linux/Makefile generator:
-- use existing Visual Studio project source tree which contains a .vcproj file
+- use existing Visual Studio project source tree which contains
+  a .vcxproj/.vcproj file
 - install vcproj2cmake environment to this source tree
 - [OPTIONAL] choose suitable vcproj2cmake converter configuration:
   create a [PATH_TO_INSTALLED_VCPROJ2CMAKE]/scripts/vcproj2cmake_settings.user.rb,
@@ -50,10 +51,10 @@ Details for manual usage (very rough summary), with Linux/Makefile generator:
   (not recommended - the non-user file will be overwritten on each repository update,
   thus restoring all settings to default)
 - in the project source tree, run
-  ruby [PATH_TO_VCPROJ2CMAKE]/scripts/vcproj2cmake.rb PROJECT.vcproj
+  ruby [PATH_TO_VCPROJ2CMAKE]/scripts/vcproj2cmake.rb YOURPROJECT.vcproj
   (alternatively, execute vcproj2cmake_recursive.rb to convert an entire
-  hierarchy of .vcproj sub projects [parsing of .sln solution files is
-  unfortunately not supported yet])
+  hierarchy of .vcproj sub projects [parsing of .sln solution files
+  unfortunately is not supported yet])
 - copy all required cmake/Modules, cmake/vcproj2cmake
   and samples (provided by the vcproj2cmake source tree!)
   to their respective paths in your project source tree
@@ -62,7 +63,8 @@ Details for manual usage (very rough summary), with Linux/Makefile generator:
   - mkdir ../[PROJECT_NAME].build_toolkit1_v1.2.3_unicode_debug
   - cd ../[PROJECT_NAME].build_toolkit1_v1.2.3_unicode_debug
   - ccmake -DCMAKE_BUILD_TYPE=Debug ../[PROJECT_NAME] (alternatively: cmake ../[PROJECT_NAME])
-     -- NOTE that DCMAKE_BUILD_TYPE is a _required_ setting on many generators (things will break if unspecified)
+     -- NOTE that CMAKE_BUILD_TYPE is a _required_ setting on many generators
+        (things will break if unspecified)
   - time make -j3 -k
     (however I would recommend making use of CMake's Ninja generator -
      cmake -G Ninja - rather than generating Makefiles)
@@ -90,10 +92,10 @@ there isn't even a package of a newer version available currently.
 
 When using this converter instead, this case is easier since you only
 need to get corrected a small/self-contained/independent/non-compiled Ruby
-converter script, or, in the hopefully unlikely event of a CMake generator issue,
-installing a custom build of a current CMake, which is quite a bit easier
-than fulfilling all the build requirements for a full GUI-dependent
-IDE application.
+converter script, or, in the hopefully unlikely event of a
+CMake generator issue, installing a custom build of a current CMake,
+which is quite a bit easier than fulfilling all the build requirements
+for a full GUI-dependent IDE application.
 
 
 
@@ -134,9 +136,9 @@ OTOH by using our scripts for one-time-conversion only
 (i.e. to use the result to then go full CMake), you will:
 - lose out on any of the hopefully substantial further improvements
   done to our online conversion script in the future
-- be constrained to generating all sorts of your build environments
+- be constrained to have all sorts of your build environments _generated_
   via CMake configuration files, which means that any IDE-side changes
-  of the *generated* projects (and this includes changes in the list
+  of these _generated_ projects (and this includes changes in the list
   of source files and source file filters)
   will not persist due to the generated configuration having been established
   by (adapting) central CMake settings - CMake generation, OTOH,
@@ -222,15 +224,15 @@ be shoved into one _sub_ directory within the Team Project
 === Hook script includes ===
 
 In the generated CMakeLists.txt file(s), you may notice lines like
-include(${V2C_HOOK_PROJECT} OPTIONAL)
+v2c_hook_invoke(${V2C_HOOK_PROJECT})
 These are meant to provide interception points ("hooks")
 to enhance online-converted CMakeLists.txt with specific static content
 (e.g. to call required CMake Find scripts via "find_package(Foobar REQUIRED)",
 or to override some undesireable .vc[x]proj choices, to provide some user-facing
 CMake setup cache variables, etc.).
-One could just as easily have written this line like
-include(cmake/vcproj2cmake/hook_project.txt OPTIONAL)
-, but then it would be somewhat less flexible (some environments might want to
+One could just as easily have used a hard-coded
+cmake/vcproj2cmake/hook_project.txt in this call,
+but then it would be somewhat less flexible (some environments might want to
 temporarily disable use of these included scripts, by changing the variable
 to a different/inexistent script).
 Note that these required variables like V2C_HOOK_PROJECT are pre-defined by our
@@ -308,7 +310,7 @@ Basic syntax of mappings files is:
 First original expression as used by the static Windows side (.vcproj content)
   - note case sensitivity! -,
 then ':' as separator between original content and CMake-side mappings,
-then a platform-specific conditional identifier (WIN32, APPLE, ...)
+then a usually platform-specific conditional identifier (WIN32, APPLE, ...)
   which is used in a CMake "if(...)" conditional
   (or no identifier in case the mapping is supposed to apply for all
   platforms),
@@ -372,16 +374,17 @@ Visual Studio project tree.
 This is to be done by mentioning the names of the projects to be excluded
 in the file $v2c_config_dir_local/project_exclude_list.txt
 
-Any CACHE variables or option()s provided by our vcproj2cmake CMake code
-can have an successful preset override during the initial CMake configure run
+Any CACHE variables or option()s offered by CMake-side code
+can have a successful preset override during the initial CMake configure run
 (by imposing their initial value via cmake -D).
 
 === Automatic re-conversion upon .vcproj changes ===
 
-vcproj2cmake now contains a mechanism (added as targets to the build environment)
-for _automatically_ triggered re-conversion of files
-whenever the backing .vc[x]proj file changed (received some updates).
-This is implemented in function
+vcproj2cmake now contains a mechanism for _automatically_ triggered
+re-conversion of files whenever the backing .vc[x]proj file changed
+(received some updates).
+This functionality is added as targets to the build environment
+and implemented by function
 cmake/Modules/vcproj2cmake_func.cmake/v2c_rebuild_on_update()
 This internal mechanism is enabled by default - you may modify the user-side
 CMake CACHE variable V2C_USE_AUTOMATIC_CMAKELISTS_REBUILDER to disable it.
@@ -408,14 +411,14 @@ after a source upgrade via SCM, you may invoke target update_cmakelists_ALL,
 followed by doing a full build.
 
 Unfortunately, for the case of newly deleted files of a project,
-a CMake configure run as forced by a subsequent build run will error out
-due to not finding the deleted file within its file list, thus there's no way
-to automatically and conveniently reconvert the affected CMakeLists.txt file(s)
-in this case, since the entire build environment (and especially
-important targets such as update_cmakelists_ALL), is rendered non-working
-until the next successful configure run. Thus in such cases the user
-needs to resort to manually re-running the converter script
-(e.g. vcproj2cmake_recursive.rb) again.
+a CMake configure run as forced by a build run subsequent to these changes
+will error out due to not finding the deleted file within its file list,
+thus there's no way to automatically and conveniently reconvert the affected
+CMakeLists.txt file(s) in this case, since the entire build environment
+(and especially important targets such as update_cmakelists_ALL)
+is rendered non-working until the next successful configure run.
+Thus in such cases the user needs to resort to manually re-running
+the converter script (e.g. vcproj2cmake_recursive.rb) again.
 
 
 
@@ -436,13 +439,24 @@ and/or correcting improperly cased #include statements in source code.
 
 - use CMake's message(FATAL_ERROR "DBG: xxx") command
 - add_custom_command(... COMMENT="DBG: we are doing ${THIS} and failing ${THAT}")
-- cmake --debug-output --trace
+- in CMAKE_BINARY_DIR: cmake --debug-output --trace . &>/tmp/cmake.log
+  [then analyze that log file]
+
+
+If you get an obscure (without a suitable location pinpointed) CMake configure error,
+then either analyze a log file of cmake --trace,
+or comment ('#') many/several entries in
+cmake/vcproj2cmake/generated_temporary_content/all_sub_projects.txt
+until you see an enlightening change in CMake configure run result
+(i.e. once the project(s) that contain script parts which cause it to fail
+are disabled). As a potential complication, please remember
+that some (then-missing) projects may be dependencies of others, however!
 
 
 == Build run issues ==
 
-If there's compile failure due to missing includes, then it probably means that
-a newly converted CMakeLists.txt still contains an include_directories()
+If there's compile failure due to missing includes, then it probably means
+that a newly converted CMakeLists.txt still contains an include_directories()
 command which lists some paths in their raw, original, Windows-specific form.
 What should have happened is automatic replacement of such path strings
 with a CMake-side configuration variable (e.g. ${toolkit_INCLUDE_DIR})
@@ -463,11 +477,13 @@ on your system.
 
 If things appear to be failing left and right,
 the reason might be a lack of CMake proficiency, thus it's perhaps best
-to start with a new small, clean CMake sample project
+to start with a new small, clean CMake-only sample project
 (perhaps use one of the samples on the internet) before using this converter,
 to gain some CMake experience (CMake itself has a rather steep learning curve,
 thus it might be even worse trying to start with a somewhat complex
 and semi-mature .vc[x]proj to CMake converter).
+Alternatively, just let me know about your growing pains, and I'll try
+to help you out immediately.
 
 
 == IDE issues ==
@@ -487,7 +503,7 @@ in case of monster solution files), and if these are open in VS currently,
 then VS will beyond-stupidly user-prompt *for each and every one*
 of these projects to have them reloaded.
 This grave VS usability problem has been plaguing CMake for many years already
-(IIRC even VS2005), and CMake implemented helper targets
+(IIRC even VS2005), thus CMake chose to implement helper targets
 to try to invoke dialogs for mass confirm,
 but not too surprisingly even these helper targets are not working
 fully properly in VS2010.
@@ -495,7 +511,7 @@ In some situations it works relatively convincingly, whereas in others
 it doesn't (probably depends on whether having a build ongoing,
 or perhaps on the moon phase).
 Note that there's a CMAKE_SUPPRESS_REGENERATION variable to be set
-in case the behaviour happens to be intolerable.
+in case the behaviour in your environment happens to be intolerable.
 
 
 While I was unable to make SCC integration work on a VS2005 <=> VSS combo
@@ -759,8 +775,9 @@ http://code.google.com/p/gitextensions/
 
 === Epilogue ===
 
-Whenever something needs better explanation, just tell me
-and I'll try to improve it (I'm constantly rewording many parts of this README).
+Whenever something needs better explanation (or is just worded awkwardly),
+just tell me and I'll try to improve it (I'm constantly rewording
+many parts of this README).
 Dito if you think that some mechanism is poorly implemented (we're still at pre-Beta stage!).
 
 Despite being at a semi-finished stage, the converter is now more than usable enough
@@ -769,4 +786,4 @@ consisting of many dozen sub projects.
 
 Happy hacking,
 
-Andreas Mohr <andi@lisas.de>
+Andreas Mohr <andim2@users.sf.net>
