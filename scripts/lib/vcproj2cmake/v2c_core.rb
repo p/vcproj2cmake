@@ -1288,6 +1288,8 @@ end
 # in case a certain parser type did then NOT handle
 # assigning useful values to them.
 class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consistently get a condition element - but the VS10-side project info actually most likely does not have/use it!
+  ORIG_ENV_SHORTNAME_MSVS7 = 'MSVS7'
+  ORIG_ENV_SHORTNAME_MSVS10 = 'MSVS10'
   def initialize
     @type = nil # project type
     # Interesting discussion about VS ProjectType:
@@ -3308,7 +3310,7 @@ end
 
 class V2C_VS7ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
   def initialize(p_parser_proj_file, arr_projects_out)
-    super(p_parser_proj_file, 'MSVS7', arr_projects_out)
+    super(p_parser_proj_file, V2C_Project_Info::ORIG_ENV_SHORTNAME_MSVS7, arr_projects_out)
   end
   def parse_project_files
     proj_file_parser = V2C_VS7ProjectFileParser.new(@p_parser_proj_file, @arr_projects_new)
@@ -4369,7 +4371,7 @@ end
 #   http://stackoverflow.com/questions/7899043/getting-lots-of-warnings-when-building-with-targets-in-visual-studio-2010
 class V2C_VS10ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
   def initialize(p_parser_proj_file, arr_projects_out)
-    super(p_parser_proj_file, 'MSVS10', arr_projects_out)
+    super(p_parser_proj_file, V2C_Project_Info::ORIG_ENV_SHORTNAME_MSVS10, arr_projects_out)
   end
   def parse_project_files
     proj_file_parser = V2C_VS10ProjectFileParser.new(@p_parser_proj_file, @arr_projects_new, false)
