@@ -5566,11 +5566,12 @@ end
 class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
   VS7_UNWANTED_FILE_TYPES_REGEX_OBJ = %r{\.(lex|y|ico|bmp|txt)$}
   VS7_LIB_FILE_TYPES_REGEX_OBJ = %r{\.lib$}
-  def initialize(textOut, project_name, project_dir, arr_sub_sources_for_parent)
+  def initialize(textOut, project_name, project_dir, arr_sub_sources_for_parent, skip_non_sources)
     super(textOut)
     @project_name = project_name
     @project_dir = project_dir
     @arr_sub_sources_for_parent = arr_sub_sources_for_parent
+    @skip_non_sources = skip_non_sources
   end
   def filter_files(arr_file_infos)
     arr_local_sources = nil
@@ -5594,7 +5595,10 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
         #return if f =~ /\.(h|H|lex|y|ico|bmp|txt)$/
         # No we should NOT ignore header files: if they aren't added to the target,
         # then VS won't display them in the file tree.
-        next if VS7_UNWANTED_FILE_TYPES_REGEX_OBJ.match(f)
+        # Well, for MSVS10, other files (.bmp etc.) should definitely be listed
+        # (e.g. in 'None' list), thus do NOT skip things there
+        # (and perhaps this check ought to be removed even for MSVS7)
+        next if (false != @skip_non_sources) && VS7_UNWANTED_FILE_TYPES_REGEX_OBJ.match(f)
 
         # Verbosely ignore .lib "sources"
         if VS7_LIB_FILE_TYPES_REGEX_OBJ.match(f)
@@ -5630,7 +5634,7 @@ end
 # FIXME: temporarily appended a _VS7 suffix since we're currently changing file list generation during our VS10 generator work.
 class V2C_CMakeFileListsGenerator_VS7 < V2C_CMakeFileListGeneratorBase
   def initialize(textOut, project_name, project_dir, files_str, parent_source_group, arr_sub_sources_for_parent)
-    super(textOut, project_name, project_dir, arr_sub_sources_for_parent)
+    super(textOut, project_name, project_dir, arr_sub_sources_for_parent, true)
     @files_str = files_str
     @parent_source_group = parent_source_group
   end
@@ -5718,7 +5722,7 @@ end
 
 class V2C_CMakeFileListGenerator_VS10 < V2C_CMakeFileListGeneratorBase
   def initialize(textOut, project_name, project_dir, file_list, parent_source_group, arr_sub_sources_for_parent)
-    super(textOut, project_name, project_dir, arr_sub_sources_for_parent)
+    super(textOut, project_name, project_dir, arr_sub_sources_for_parent, false)
     @file_list = file_list
     @parent_source_group = parent_source_group
   end
