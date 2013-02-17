@@ -6237,7 +6237,16 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   # PUBLIC_HEADER (cmake --help-property PUBLIC_HEADER), PRIVATE_HEADER, HEADER_FILE_ONLY
   # and possibly the PUBLIC_HEADER option of the INSTALL(TARGETS) command.
   def put_file_list(project_info, arr_sub_source_list_var_names)
-    put_file_list_source_group_recursive(project_info.name, project_info.main_files, nil, arr_sub_source_list_var_names)
+    # We currently have some unclean (separate) parsing of file list and source group info,
+    # resulting in different data structures.
+    # Thus skip some generation as suitable.
+    if nil != project_info.main_files
+      # We should start reworking this handling on MSVS7 side
+      # once it's verified that source_group() support on MSVS10 side
+      # does work properly.
+      logger.fixme 'This source group generation ought to be removed in favour of the new source group handling'
+      put_file_list_source_group_recursive(project_info.name, project_info.main_files, nil, arr_sub_source_list_var_names)
+    end
 
     put_file_list_vs10(project_info.name, project_info.file_lists, nil, arr_sub_source_list_var_names)
 
