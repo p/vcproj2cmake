@@ -353,12 +353,12 @@ def normalize_path(p)
   File.join(felems).concat(trailing_slash_status)
 end
 
-def escape_char(in_string, esc_char)
+def escape_char(in_string, foreign_payload_char)
   #puts "in_string #{in_string}"
-  # WARNING!! It's NOT possible to simply pass "esc_char," param here
+  # WARNING!! It's NOT possible to simply pass "foreign_payload_char," param here
   # (gsub replacement will FAIL) - we need actual pattern syntax here.
   # *Other* (char literal) uses of gsub! in our code do not need this. Weird.
-  in_string.gsub!(/#{esc_char}/, '\\' + esc_char)
+  in_string.gsub!(/#{foreign_payload_char}/, '\\' + foreign_payload_char)
   #puts "in_string quoted #{in_string}"
 end
 
@@ -4419,8 +4419,8 @@ class V2C_ProjectValidator
   def validate_project
     validate_target_configs(@project_info.arr_target_config_info)
     #log_debug "project data: #{@project_info.inspect}"
-    if @project_info.orig_environment_shortname.nil?; validation_error('original environment not set!?') end
     if @project_info.name.nil?; validation_error('name not set!?') end
+    if @project_info.orig_environment_shortname.nil?; validation_error('original environment not set!?') end
     # FIXME: Disabled for TESTING only - should re-enable a fileset check once VS10 parsing is complete.
     #if @project_info.main_files.nil?; validation_error('no files!?') end
     arr_config_info = @project_info.arr_config_info
@@ -5342,7 +5342,7 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     when V2C_COMPILER_MSVC_REGEX_OBJ
       arr_conditional_compiler_platform = [ 'MSVC' ]
     else
-      logger.unhandled_functionality "unknown (unsupported) compiler name #{compiler_name}!"
+      logger.unhandled_functionality "unknown (unsupported) compiler name #{logger.escape_item(compiler_name)}!"
     end
     return arr_conditional_compiler_platform
   end
@@ -5587,8 +5587,7 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
   def filter_files(arr_file_infos)
     arr_local_sources = nil
     if not arr_file_infos.nil?
-      arr_local_sources = Array.new
-      arr_file_infos.each { |file|
+      arr_local_sources = arr_file_infos.collect { |file|
         f = file.path_relative
 
 	# We fully expect ALL non-generated files to already be available!
@@ -5622,8 +5621,9 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
           next # no complex handling, just skip
         end
 
-        arr_local_sources.push(f)
+        f
       }
+      arr_local_sources.compact!
     end
     return arr_local_sources
   end
