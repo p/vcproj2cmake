@@ -1010,6 +1010,39 @@ class V2C_Tool_MIDL_Specific_Info_MSVC10 < V2C_Tool_MIDL_Specific_Info
   end
 end
 
+class V2C_Tool_PrePostBuildLink_Info < V2C_Tool_Base_Info
+  VARIANT_PREBUILD = 1
+  VARIANT_PRELINK = 2
+  VARIANT_POSTBUILD = 3
+  def initialize(mode, tool_variant_specific_info = nil)
+    super(tool_variant_specific_info)
+    @mode = mode
+    @message = nil # Text printed upon target execution
+    @commandline = nil # Command line to be executed
+  end
+  attr_reader :mode
+  attr_accessor :message
+  attr_accessor :commandline
+end
+
+class V2C_Tool_PrePostBuildLink_Specific_Info < V2C_Tool_Specific_Info_Base
+  def initialize(tool_id)
+    super(tool_id)
+  end
+end
+
+class V2C_Tool_PrePostBuildLink_Specific_Info_MSVC7 < V2C_Tool_PrePostBuildLink_Specific_Info
+  def initialize()
+    super('MSVC7')
+  end
+end
+
+class V2C_Tool_PrePostBuildLink_Specific_Info_MSVC10 < V2C_Tool_PrePostBuildLink_Specific_Info
+  def initialize()
+    super('MSVC10')
+  end
+end
+
 # CONVENTION_VS_PROJECT_RELATIVE_PATH:
 # In the case of this filesystem item value, our convention is following Visual
 # Studio's convention: the value is evaluated as *relative* to the project's
@@ -1085,10 +1118,21 @@ class V2C_Tools_Info < V2C_Info_Elem_Base
     @arr_compiler_info = Array.new
     @arr_linker_info = Array.new
     @arr_midl_info = Array.new
+    @arr_prepostbuildlink_info = Array.new
   end
   attr_accessor :arr_compiler_info
   attr_accessor :arr_linker_info
   attr_accessor :arr_midl_info
+  attr_accessor :arr_prepostbuildlink_info
+  # Determines whether the class has been modified.
+  # .blank? is only supported on Ruby on Rails,
+  # but perhaps there's a way to construct a fresh unmodified object
+  # for comparison purposes...
+  # And somehow I'm not sure whether it's ok
+  # that we even need such a helper...
+  def is_unmodified
+    true == (@arr_compiler_info.empty? and @arr_linker_info.empty? and @arr_midl_info.empty? and @arr_prepostbuildlink_info.empty?)
+  end
 end
 
 # Common base class of both file config and project config.
@@ -1917,6 +1961,9 @@ end
 
 class V2C_XmlParserBase < V2C_ParserBase
   def unknown_attribute(key, value); unknown_something_key_value('attribute', key, value) end
+  def unknown_attribute_value(key, value)
+    unknown_something_key_value('attribute value', key, value)
+  end
   def unknown_element_key(name); unknown_something('element', name) end
   def unknown_element(key, value); unknown_something_key_value('element', key, value) end
   def unknown_element_text(name); unknown_something('element text', name) end
@@ -2085,6 +2132,21 @@ class V2C_XmlParserBase < V2C_ParserBase
   end
   def unknown_something_key_value(something_name, key, value)
     logger.todo "#{self.class.name}: unknown/incorrect XML #{something_name} (#{key}: #{value})!"
+  end
+  def string_unescape_from_xml(raw)
+    # See also http://stackoverflow.com/questions/14899734/unescape-numeric-xml-entities-with-lua
+    cooked = raw.clone
+    cooked.gsub!('&#x0A;', "\n")
+    cooked.gsub!('&#x0D;', "\r")
+    # Translate the 5 predefined XML entities:
+    # Attention ordering: '&' should get translated last!!
+    # (otherwise false matches possible!)
+    cooked.gsub!('&quot;', '"')
+    cooked.gsub!('&apos;', "'")
+    cooked.gsub!('&lt;', '<')
+    cooked.gsub!('&gt;', '>')
+    cooked.gsub!('&amp;', '&')
+    cooked
   end
 end
 
@@ -2627,6 +2689,9 @@ module V2C_VS7ToolSyntax
   include V2C_VSToolDefines
   TEXT_VCCLCOMPILERTOOL = 'VCCLCompilerTool'
   TEXT_VCLINKERTOOL = 'VCLinkerTool'
+  TEXT_VCPREBUILDEVENTTOOL = 'VCPreBuildEventTool'
+  TEXT_VCPRELINKEVENTTOOL = 'VCPreLinkEventTool'
+  TEXT_VCPOSTBUILDEVENTTOOL = 'VCPostBuildEventTool'
 end
 
 module V2C_VS7ToolCompilerSyntax
@@ -2934,6 +2999,58 @@ class V2C_VSToolMIDLParser < V2C_VSToolDefineParserBase
   end
 end
 
+class V2C_VSToolPrePostBuildLinkEventParser < V2C_VSToolParserBase
+  # I'm actually not sure yet whether we should be using strip_whitespace()
+  # at this layer - perhaps it should be used in the VS10 case only,
+  # and perhaps this even means even doing strip_whitespace()
+  # prior to handing content over to parse_element() implementation!
+  def parse_commandline(str_in)
+    str_unescaped = string_unescape_from_xml(string_value_preprocess(str_in))
+
+    # This is problematic - generic build information data
+    # as gathered from original project files
+    # shouldn't contain any CMake-specific content yet.
+    # Since we only have a CMake generator for now,
+    # it does not really matter yet. Oh well...
+    arr_script_code = Array.new
+    str_translated = vs7_create_config_variable_translation(str_unescaped, arr_script_code)
+
+    str_translated = nil if str_translated.empty?
+
+    # Note that VS has a "\some\path\" syntax, i.e. it has a last backslash
+    # escape prior to closing quote, which is a very special case.
+    # We possibly ought to remove this quote-escaping "feature" here
+    # (since we're going towards other platforms),
+    # and it then ought to be re-added for VS generation
+    # (but CMake perhaps already does do that properly anyway...).
+    logger.debug "commandline is #{str_translated}"
+    str_translated
+  end
+  def parse_message(str_in)
+    str = string_value_preprocess(str_in)
+    str = nil if str.empty?
+    str
+  end
+end
+
+class V2C_VS7ToolPrePostBuildLinkEventToolParser < V2C_VSToolPrePostBuildLinkEventParser
+  include V2C_VS7Syntax
+  def parse_attribute(setting_key, setting_value)
+    found = be_optimistic()
+    case setting_key
+    when 'CommandLine'
+      @info_elem.commandline = parse_commandline(setting_value)
+    when 'Description'
+      @info_elem.message = parse_message(setting_value)
+    when TEXT_NAME
+      # to be ignored
+    else
+      found = super
+    end
+    return found
+  end
+end
+
 # Simple forwarder class. Creates specific parsers and invokes them.
 class V2C_VS7ToolForwarderParser < V2C_VS7ParserBase
   def parse
@@ -2951,7 +3068,18 @@ class V2C_VS7ToolForwarderParser < V2C_VS7ParserBase
       arr_info = get_tools_info().arr_linker_info
       info = V2C_Tool_Linker_Info.new(V2C_Tool_Linker_Specific_Info_MSVC7.new)
       elem_parser = V2C_VS7ToolLinkerParser.new(@elem_xml, info)
+    when TEXT_VCPREBUILDEVENTTOOL, TEXT_VCPRELINKEVENTTOOL, TEXT_VCPOSTBUILDEVENTTOOL
+      arr_info = get_tools_info().arr_prepostbuildlink_info
+      variant = nil
+      case toolname
+      when TEXT_VCPREBUILDEVENTTOOL; variant = V2C_Tool_PrePostBuildLink_Info::VARIANT_PREBUILD
+      when TEXT_VCPRELINKEVENTTOOL; variant = V2C_Tool_PrePostBuildLink_Info::VARIANT_PRELINK
+      when TEXT_VCPOSTBUILDEVENTTOOL; variant = V2C_Tool_PrePostBuildLink_Info::VARIANT_POSTBUILD
+      end
+      info = V2C_Tool_PrePostBuildLink_Info.new(variant, V2C_Tool_PrePostBuildLink_Specific_Info_MSVC7.new)
+      elem_parser = V2C_VS7ToolPrePostBuildLinkEventToolParser.new(@elem_xml, info)
     else
+      unknown_attribute_value(TEXT_NAME, toolname)
       found = FOUND_FALSE
     end
     if not elem_parser.nil?
@@ -4301,11 +4429,33 @@ class V2C_VS10ToolMIDLParser < V2C_VSToolMIDLParser
   include V2C_VS10Syntax
 end
 
+class V2C_VS10ToolPrePostBuildLinkEventParser < V2C_VSToolPrePostBuildLinkEventParser
+  def parse_element(subelem_xml)
+    found = be_optimistic()
+    setting_key = subelem_xml.name
+    setting_value = subelem_xml.text
+    case setting_key
+    when 'Command'
+      @info_elem.commandline = parse_commandline(setting_value)
+    when 'Message'
+      @info_elem.message = parse_message(setting_value)
+    when TEXT_NAME
+      # to be ignored
+    else
+      found = super
+    end
+    return found
+  end
+end
+
 class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
   private
 
   def get_config_info; @info_elem end
   def get_tools_info; return get_config_info().tools end
+  TEXT_PREBUILDEVENT = 'PreBuildEvent'
+  TEXT_PRELINKEVENT = 'PreLinkEvent'
+  TEXT_POSTBUILDEVENT = 'PostBuildEvent'
   def parse_element(subelem_xml)
     found = be_optimistic()
     setting_key = subelem_xml.name
@@ -4327,6 +4477,16 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
       arr_info = get_tools_info().arr_midl_info
       info = V2C_Tool_MIDL_Info.new(V2C_Tool_MIDL_Specific_Info_MSVC10.new)
       item_def_group_parser = V2C_VS10ToolMIDLParser.new(subelem_xml, info)
+    when TEXT_PREBUILDEVENT, TEXT_PRELINKEVENT, TEXT_POSTBUILDEVENT
+      arr_info = get_tools_info().arr_prepostbuildlink_info
+      variant = nil
+      case setting_key
+      when TEXT_PREBUILDEVENT; variant = V2C_Tool_PrePostBuildLink_Info::VARIANT_PREBUILD
+      when TEXT_PRELINKEVENT; variant = V2C_Tool_PrePostBuildLink_Info::VARIANT_PRELINK
+      when TEXT_POSTBUILDEVENT; variant = V2C_Tool_PrePostBuildLink_Info::VARIANT_POSTBUILD
+      end
+      info = V2C_Tool_PrePostBuildLink_Info.new(variant, V2C_Tool_PrePostBuildLink_Specific_Info_MSVC10.new)
+      item_def_group_parser = V2C_VS10ToolPrePostBuildLinkEventParser.new(subelem_xml, info)
     else
       found = super
     end
@@ -4338,10 +4498,7 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
     return found
   end
   def parse_verify
-    found = FOUND_TRUE
-    tools_info = get_tools_info()
-    found = FOUND_FALSE if tools_info.arr_compiler_info.empty? and tools_info.arr_linker_info.empty? and tools_info.arr_midl_info.empty?
-    found
+    get_tools_info().is_unmodified() ? FOUND_FALSE : FOUND_TRUE
   end
 end
 
