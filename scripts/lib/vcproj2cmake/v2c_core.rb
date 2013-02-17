@@ -610,6 +610,7 @@ class V2C_Tool_Specific_Info_Base
     @tool_id = tool_id # Contains an identifier of the specific tool (e.g. 'MSVC7', 'MSVC10')
   end
   attr_accessor :original
+  attr_reader :tool_id
 end
 
 class V2C_Tool_Compiler_Specific_Info_Base < V2C_Tool_Specific_Info_Base
@@ -2571,7 +2572,7 @@ class V2C_VSToolMIDLParser < V2C_VSToolDefineParserBase
 end
 
 # Simple forwarder class. Creates specific parsers and invokes them.
-class V2C_VS7ToolParser < V2C_VS7ParserBase
+class V2C_VS7ToolForwarderParser < V2C_VS7ParserBase
   def parse
     found = be_optimistic()
     toolname = @elem_xml.attributes[TEXT_NAME]
@@ -2696,7 +2697,7 @@ class V2C_VS7ConfigurationBaseParser < V2C_VS7ParserBase
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
     when 'Tool'
-      elem_parser = V2C_VS7ToolParser.new(subelem_xml, get_tools_info())
+      elem_parser = V2C_VS7ToolForwarderParser.new(subelem_xml, get_tools_info())
     else
       elem_parser = nil
     end
@@ -3644,8 +3645,8 @@ end
 
 # Simple forwarder class. Creates specific property group parsers
 # and invokes them.
-# V2C_VS10PropertyGroupParser / V2C_VS10ItemGroupParser are pretty much identical.
-class V2C_VS10ItemGroupParser < V2C_VS10ParserBase
+# V2C_VS10PropertyGroupForwarderParser / V2C_VS10ItemGroupForwarderParser are pretty much identical.
+class V2C_VS10ItemGroupForwarderParser < V2C_VS10ParserBase
   def parse
     found = be_optimistic()
     itemgroup_label = @elem_xml.attributes['Label']
@@ -4076,8 +4077,8 @@ end
 
 # Simple forwarder class. Creates specific property group parsers
 # and invokes them.
-# V2C_VS10PropertyGroupParser / V2C_VS10ItemGroupParser are pretty much identical.
-class V2C_VS10PropertyGroupParser < V2C_VS10BaseElemParser
+# V2C_VS10PropertyGroupForwarderParser / V2C_VS10ItemGroupForwarderParser are pretty much identical.
+class V2C_VS10PropertyGroupForwarderParser < V2C_VS10BaseElemParser
   def parse
     found = be_optimistic()
     propgroup_label = @elem_xml.attributes['Label']
@@ -4128,7 +4129,7 @@ class V2C_VS10ProjectParser < V2C_VSProjectParserBase
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
     when 'ItemGroup'
-      elem_parser = V2C_VS10ItemGroupParser.new(subelem_xml, get_project())
+      elem_parser = V2C_VS10ItemGroupForwarderParser.new(subelem_xml, get_project())
       elem_parser.parse
     when 'ItemDefinitionGroup'
       config_info_curr = V2C_Project_Config_Info.new
@@ -4140,7 +4141,7 @@ class V2C_VS10ProjectParser < V2C_VSProjectParserBase
       elem_parser = V2C_VS10ProjectExtensionsParser.new(subelem_xml, get_project())
       elem_parser.parse
     when 'PropertyGroup'
-      elem_parser = V2C_VS10PropertyGroupParser.new(subelem_xml, get_project())
+      elem_parser = V2C_VS10PropertyGroupForwarderParser.new(subelem_xml, get_project())
       elem_parser.parse
     else
       found = super
@@ -4260,14 +4261,14 @@ class V2C_VS10ProjectFiltersParser < V2C_VS10ParserBase
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
     when 'ItemGroup'
-      # FIXME: _perhaps_ we should pass a boolean to V2C_VS10ItemGroupParser
+      # FIXME: _perhaps_ we should pass a boolean to V2C_VS10ItemGroupForwarderParser
       # indicating whether we're .vcxproj or .filters.
       # But then VS handling of file elements in .vcxproj and .filters
       # might actually be completely identical, so a boolean split would be
       # counterproductive (TODO verify!).
-      elem_parser = V2C_VS10ItemGroupParser.new(subelem_xml, get_project())
+      elem_parser = V2C_VS10ItemGroupForwarderParser.new(subelem_xml, get_project())
     #when 'PropertyGroup'
-    #  proj_filters_elem_parser = V2C_VS10PropertyGroupParser.new(subelem_xml, get_project())
+    #  proj_filters_elem_parser = V2C_VS10PropertyGroupForwarderParser.new(subelem_xml, get_project())
     else
       elem_parser = nil
     end
