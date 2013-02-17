@@ -605,27 +605,26 @@ class V2C_Tool_Define_Base_Info < V2C_Tool_Base_Info
 end
 
 class V2C_Tool_Specific_Info_Base
-  def initialize
+  def initialize(tool_id)
     @original = false # bool: true == gathered from parsed project, false == converted from other original tool-specific entries
+    @tool_id = tool_id # Contains an identifier of the specific tool (e.g. 'MSVC7', 'MSVC10')
   end
   attr_accessor :original
 end
 
 class V2C_Tool_Compiler_Specific_Info_Base < V2C_Tool_Specific_Info_Base
-  def initialize(compiler_name)
-    super()
-    @compiler_name = compiler_name
+  def initialize(tool_id)
+    super(tool_id)
     @arr_flags = Array.new
     @arr_disable_warnings = Array.new
   end
-  attr_accessor :compiler_name
   attr_accessor :arr_flags
   attr_accessor :arr_disable_warnings
 end
 
 class V2C_Tool_Compiler_Specific_Info_MSVC_Base < V2C_Tool_Compiler_Specific_Info_Base
-  def initialize(compiler_name)
-    super(compiler_name)
+  def initialize(tool_id)
+    super(tool_id)
     @warning_level = 3 # numeric value (for /W4 etc.); TODO: translate into MSVC /W... flag
   end
   attr_accessor :warning_level
@@ -753,18 +752,16 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Define_Base_Info
 end
 
 class V2C_Tool_Linker_Specific_Info < V2C_Tool_Specific_Info_Base
-  def initialize(linker_name)
-    super()
-    @linker_name = linker_name
+  def initialize(tool_id)
+    super(tool_id)
     @arr_flags = Array.new
   end
-  attr_accessor :linker_name
   attr_accessor :arr_flags
 end
 
 class V2C_Tool_Linker_Specific_Info_MSVC < V2C_Tool_Linker_Specific_Info
-  def initialize(linker_name)
-    super(linker_name)
+  def initialize(tool_id)
+    super(tool_id)
   end
 end
 
@@ -877,12 +874,10 @@ end
 #   "Appendix B. Builders"
 #   http://www.scons.org/doc/2.0.1/HTML/scons-user/a8524.html
 class V2C_Tool_MIDL_Specific_Info < V2C_Tool_Specific_Info_Base
-  def initialize(midl_name)
-    super()
-    @midl_name = midl_name
+  def initialize(tool_id)
+    super(tool_id)
     @arr_flags = Array.new
   end
-  attr_accessor :midl_name
   attr_accessor :arr_flags
 end
 
@@ -6348,7 +6343,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
               # Original compiler flags are MSVC-only, of course.
               # TODO: provide an automatic conversion towards gcc?
               compiler_info_curr.arr_tool_variant_specific_info.each { |compiler_specific|
-                arr_conditional_compiler_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.compiler_name)
+                arr_conditional_compiler_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.tool_id)
                 # I don't think we need this (we have per-target properties), thus we'll NOT write it!
                 #if not attr_opts.nil?
                 #  local_generator.write_directory_property_compile_flags(attr_options)
@@ -6368,7 +6363,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
           } # config_info_curr.tools.arr_compiler_info.each
           tools.arr_linker_info.each { |linker_info_curr|
             linker_info_curr.arr_tool_variant_specific_info.each { |linker_specific|
-              arr_conditional_linker_platform = map_linker_name_to_cmake_platform_conditional(linker_specific.linker_name)
+              arr_conditional_linker_platform = map_linker_name_to_cmake_platform_conditional(linker_specific.tool_id)
               # Probably more linker flags support needed? (mention via
               # CMAKE_SHARED_LINKER_FLAGS / CMAKE_MODULE_LINKER_FLAGS / CMAKE_EXE_LINKER_FLAGS
               # depending on target type, and make sure to filter out options
