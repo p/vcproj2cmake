@@ -3219,14 +3219,14 @@ class V2C_VSProjectFilesBundleParserBase < V2C_LoggerBase
     @p_parser_proj_file = p_parser_proj_file
     @proj_filename = p_parser_proj_file.to_s # FIXME: do we want to keep the string-based filename? We should probably change several sub classes to be Pathname-based...
     @str_orig_environment_shortname = str_orig_environment_shortname
-    @arr_projects_out_all = arr_projects_out # We'll keep a project _array_ as member since it's conceivable that both VS7 and VS10 might have several project elements in their XML files.
-    @arr_projects_out = Array.new # the specific projects parsed within this run
+    @arr_projects_out = arr_projects_out # We'll keep a project _array_ as member since it's conceivable that both VS7 and VS10 might have several project elements in their XML files.
+    @arr_projects_new = Array.new # the specific projects parsed within this run
   end
   def parse
     parse_project_files
     check_unhandled_file_types
     mark_projects_postprocessing
-    @arr_projects_out_all.concat(@arr_projects_out)
+    @arr_projects_out.concat(@arr_projects_new)
   end
 
   # Hrmm, that function does not really belong
@@ -3247,19 +3247,19 @@ class V2C_VSProjectFilesBundleParserBase < V2C_LoggerBase
     mark_projects_orig_environment_shortname(@str_orig_environment_shortname)
     project_name_default = get_default_project_name
     mark_projects_default_project_name(project_name_default)
-    @arr_projects_out.each { |project_new|
+    @arr_projects_new.each { |project_new|
       # FIXME: lists main project file only - should probably also
       # add some peripheral original project files (.filters, .user, ...).
       project_new.arr_p_original_project_files = [ @p_parser_proj_file ]
     }
   end
   def mark_projects_orig_environment_shortname(str_orig_environment_shortname)
-    @arr_projects_out.each { |project_new|
+    @arr_projects_new.each { |project_new|
       project_new.orig_environment_shortname = str_orig_environment_shortname
     }
   end
   def mark_projects_default_project_name(project_name_default)
-    @arr_projects_out.each { |project_new|
+    @arr_projects_new.each { |project_new|
       project_new.name ||= project_name_default
     }
   end
@@ -3311,7 +3311,7 @@ class V2C_VS7ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
     super(p_parser_proj_file, 'MSVS7', arr_projects_out)
   end
   def parse_project_files
-    proj_file_parser = V2C_VS7ProjectFileParser.new(@p_parser_proj_file, @arr_projects_out)
+    proj_file_parser = V2C_VS7ProjectFileParser.new(@p_parser_proj_file, @arr_projects_new)
     proj_file_parser.parse_file
   end
   def check_unhandled_file_types
@@ -4372,16 +4372,14 @@ class V2C_VS10ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
     super(p_parser_proj_file, 'MSVS10', arr_projects_out)
   end
   def parse_project_files
-    arr_projects_new = Array.new
-    proj_file_parser = V2C_VS10ProjectFileParser.new(@p_parser_proj_file, arr_projects_new, false)
+    proj_file_parser = V2C_VS10ProjectFileParser.new(@p_parser_proj_file, @arr_projects_new, false)
     if false != proj_file_parser.parse_file
-      #proj_filters_file_parser = V2C_VS10ProjectFiltersFileParser.new(@proj_filename + '.filters', arr_projects_new)
+      #proj_filters_file_parser = V2C_VS10ProjectFiltersFileParser.new(@proj_filename + '.filters', @arr_projects_new)
       p_parser_proj_file_filters = Pathname.new(@p_parser_proj_file.to_s + '.filters')
-      proj_filters_file_parser = V2C_VS10ProjectFileParser.new(p_parser_proj_file_filters, arr_projects_new, true)
+      proj_filters_file_parser = V2C_VS10ProjectFileParser.new(p_parser_proj_file_filters, @arr_projects_new, true)
 
       proj_filters_file_parser.parse_file
 
-      @arr_projects_out.concat(arr_projects_new)
     end
   end
   def check_unhandled_file_types
