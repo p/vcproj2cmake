@@ -242,6 +242,17 @@ def log_fatal(str); log_error str + '. Aborting!' if $v2c_log_level > V2C_LOG_LE
 
 def log_implementation_bug(str); log_fatal(str) end
 
+
+
+if 0 < $v2c_validate_vcproj_abort_on_error
+  # Definitely log a warning explicitly mentioning "exceptions",
+  # since this setting will swallow exceptions
+  # and may be (was) confusing to track down.
+  log_warn "$v2c_validate_vcproj_abort_on_error set to #{$v2c_validate_vcproj_abort_on_error} --> some exceptions will get swallowed."
+end
+
+
+
 class Logger
   def initialize(class_name, log_descriptor)
     @class_name = class_name
