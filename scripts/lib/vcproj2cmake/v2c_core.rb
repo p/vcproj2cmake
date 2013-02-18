@@ -344,7 +344,10 @@ end
 
 def escape_char(in_string, esc_char)
   #puts "in_string #{in_string}"
-  in_string.gsub!(esc_char, '\\' + esc_char)
+  # WARNING!! It's NOT possible to simply pass "esc_char," param here
+  # (gsub replacement will FAIL) - we need actual pattern syntax here.
+  # *Other* (char literal) uses of gsub! in our code do not need this. Weird.
+  in_string.gsub!(/#{esc_char}/, '\\' + esc_char)
   #puts "in_string quoted #{in_string}"
 end
 
