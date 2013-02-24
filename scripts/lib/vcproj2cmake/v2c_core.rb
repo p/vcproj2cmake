@@ -1126,11 +1126,37 @@ class V2C_File_List_Info
   attr_accessor :name
   attr_accessor :type
   attr_reader :arr_files
-  def append_file(file_info)
-    existing_file = @hash_files[file_info.path_relative]
+  # Note: VS10 appears to do a case-insensitive match of prior entries!!
+  # (e.g. .vcxproj test.cpp vs. .filters Test.cpp).
+  # Thus add a case insensitive flag to cope with that,
+  # and add another flag to openly warn about such less-precise matches.
+  APPEND_CASE_INSENSITIVE = 1
+  APPEND_WARN_MISMATCH = 2
+  def append_file(file_info, flags)
+    path_new = file_info.path_relative
+    # Always try a fast precise match lookup first,
+    # irrespective of additional case insensitivity desires.
+    existing_file = @hash_files[path_new]
+    if existing_file.nil?
+      if (flags & APPEND_CASE_INSENSITIVE)
+        @hash_files.each_pair { |key, value|
+          if key.casecmp(path_new) == 0
+            existing_file = value
+            explanation = "Appended content of new file #{path_new} which has case sensitivity mismatch with existing entry #{key}."
+            if (flags & APPEND_WARN_MISMATCH)
+              # Hrmmpf, cannot make use of
+              # parser_error_syntax_semi_compatible() here...
+              log_error("#{explanation} While VS10 does case insensitive assignment, this case mismatch probably should best be corrected.")
+            else
+              log_info explanation
+            end
+          end
+        }
+      end
+    end
     if existing_file.nil?
       @arr_files.push(file_info)
-      @hash_files[file_info.path_relative] = file_info
+      @hash_files[path_new] = file_info
     else
       existing_file.extend(file_info)
     end
@@ -3570,7 +3596,7 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
     file_parser = V2C_VS10ItemGroupFileElemParser.new(subelem_xml, file_info)
     found = file_parser.parse
     if FOUND_TRUE == found
-      list_curr.append_file(file_info)
+      list_curr.append_file(file_info, V2C_File_List_Info::APPEND_CASE_INSENSITIVE|V2C_File_List_Info::APPEND_WARN_MISMATCH)
     else
       found = super
     end
