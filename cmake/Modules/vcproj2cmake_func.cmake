@@ -1635,6 +1635,7 @@ ${c_section_end_}
     _v2c_var_my_get(MIDL_HANDLING_MODE v2c_midl_mode_)
     if(${v2c_midl_mode_} STREQUAL ${v2c_midl_handling_mode_wine})
       set(cmd_list_ "${V2C_WINE_WIDL_BIN}")
+      set(v2c_widl_depends_ "${V2C_WINE_WIDL_BIN}")
       _v2c_var_set_empty(v2c_widl_outputs_)
       if(header_file_location_)
 	list(APPEND cmd_list_ "-h" "-H${header_file_location_}")
@@ -1683,9 +1684,9 @@ ${c_section_end_}
         endif(v2c_target_midl_compile_TARGET_ENVIRONMENT STREQUAL "X64")
       endif(v2c_target_midl_compile_TARGET_ENVIRONMENT)
       list(APPEND cmd_list_ "${idl_file_location_}")
-      _v2c_msg_info("${_target}: ${v2c_widl_descr_} (command line: ${cmd_list_}, output: ${v2c_widl_outputs_}, depends: ${v2c_widl_depends_}).")
       if(v2c_widl_outputs_)
         set(v2c_widl_descr_ "${_target} (${_build_platform} ${_build_type}): using Wine's ${V2C_WINE_WIDL_BIN} to compile IDL data files (${v2c_widl_outputs_})")
+        _v2c_msg_info("${_target}: ${v2c_widl_descr_} (command line: ${cmd_list_}, output: ${v2c_widl_outputs_}, depends: ${v2c_widl_depends_}).")
         add_custom_command(OUTPUT ${v2c_widl_outputs_}
           COMMAND ${cmd_list_}
           DEPENDS ${v2c_widl_depends_}
