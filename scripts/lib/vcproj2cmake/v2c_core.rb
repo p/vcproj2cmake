@@ -45,7 +45,9 @@ def load_configuration
   if not load_configuration_file(settings_file_user, str_descr, arr_descr_loaded)
     str_msg_extra = "#{str_descr} #{settings_file_user} not available, skipped"
   end
-  str_msg = "Read #{arr_descr_loaded.join(' and ')}"
+  # Use "Evaluated" verb rather than a tempus-unqualified "Read" -
+  # to make it non-ambiguous that the operation *did* happen.
+  str_msg = "Evaluated #{arr_descr_loaded.join(' and ')}"
   if not str_msg_extra.nil?
     str_msg += " (#{str_msg_extra})"
   end
@@ -4995,7 +4997,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def put_property(arr_prop_type, flag_append, prop_key, arr_prop_vals)
     arr_prop_parms = Array.new(arr_prop_type)
     arr_prop_parms.push('APPEND') if PROP_APPEND == flag_append
-    arr_prop_parms.concat([ 'PROPERTY', prop_key])
+    arr_prop_parms.push('PROPERTY', prop_key)
     write_command_list('set_property', array_to_string(arr_prop_parms), arr_prop_vals)
   end
   def put_property_source(source_list_expr, prop_key, arr_prop_vals)
