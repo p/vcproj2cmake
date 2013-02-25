@@ -150,13 +150,21 @@ Find.find(v2c_plugin_dir) { |f_plugin|
 
 # TODO: to be automatically filled in from parser plugins
 
-plugin_parser_vs10 = V2C_Core_Plugin_Info_Parser.new
+plugin_parser_vs10_vcxproj = V2C_Core_Plugin_Info_Parser.new
 
-plugin_parser_vs10.version = 1
-plugin_parser_vs10.parser_name = 'Visual Studio 10'
-plugin_parser_vs10.extension_name = 'vcxproj'
+plugin_parser_vs10_vcxproj.version = 1
+plugin_parser_vs10_vcxproj.parser_name = 'Visual Studio 10 (C++ .vcxproj)'
+plugin_parser_vs10_vcxproj.extension_name = 'vcxproj'
 
-V2C_Core_Add_Plugin_Parser(plugin_parser_vs10)
+V2C_Core_Add_Plugin_Parser(plugin_parser_vs10_vcxproj)
+
+plugin_parser_vs10_csproj = V2C_Core_Plugin_Info_Parser.new
+
+plugin_parser_vs10_csproj.version = 1
+plugin_parser_vs10_csproj.parser_name = 'Visual Studio 10 (C# .csproj)'
+plugin_parser_vs10_csproj.extension_name = 'csproj'
+
+V2C_Core_Add_Plugin_Parser(plugin_parser_vs10_csproj)
 
 plugin_parser_vs7_vfproj = V2C_Core_Plugin_Info_Parser.new
 
@@ -7258,6 +7266,9 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
     # Q&D parser switch...
     parser = nil # IMPORTANT: reset it!
     case parser_project_extension
+    when '.csproj'
+      log_warn 'Detected C# .csproj - not supported.'
+      parser = V2C_VS10ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
     when '.vcproj'
       parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
     when '.vfproj'

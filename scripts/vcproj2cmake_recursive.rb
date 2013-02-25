@@ -298,6 +298,7 @@ Find.find('./') do
 
   log_debug "entries: #{dir_entries}"
 
+  csproj_extension = 'csproj'
   vcproj_extension = 'vcproj'
   vcxproj_extension = 'vcxproj'
 
@@ -305,11 +306,12 @@ Find.find('./') do
   # In case of .vcproj type files, prefer xxx_vc8.vcproj,
   # but in cases of directories where this is not available, use a non-_vc8 file.
   # WARNING: ensure comma separation between array elements!
-  arr_proj_file_regex = [ \
+  arr_proj_file_regex = [
     "_vc10\.#{vcxproj_extension}$",
     "\.#{vcxproj_extension}$",
     "_vc8\.#{vcproj_extension}$",
-    "\.#{vcproj_extension}$" \
+    "\.#{vcproj_extension}$",
+    "\.#{csproj_extension}$",
   ]
 
   arr_dir_proj_files = search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex, case_insensitive_regex_match_option_flag)
