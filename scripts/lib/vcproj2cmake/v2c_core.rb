@@ -5308,6 +5308,7 @@ class V2C_GeneratorBase < V2C_LoggerBase
   def error_unknown_case_value(description, val)
     raise V2C_GeneratorError, "unknown/unsupported/corrupt #{description} case value! (#{val})"
   end
+  def generator_error_unknown_case(value); logger.error("Missing case (unsupported/corrupt?) for #{value}") end
 end
 
 class V2C_SyntaxGeneratorBase < V2C_GeneratorBase
@@ -5335,11 +5336,15 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   CMAKE_SOURCE_GROUP_HIERARCHY_SEPARATOR = '\\\\'
   # Some helper vars to cut down on string misspelling (provide one central
   # location where breakage will be quickly discovered)
+  NAME_CMAKE_BUILD_TYPE = 'CMAKE_BUILD_TYPE'
   NAME_CMAKE_CURRENT_SOURCE_DIR = 'CMAKE_CURRENT_SOURCE_DIR'
   NAME_CMAKE_CURRENT_BINARY_DIR = 'CMAKE_CURRENT_BINARY_DIR'
   NAME_CMAKE_MODULE_PATH = 'CMAKE_MODULE_PATH'
   NAME_CMAKE_SOURCE_DIR = 'CMAKE_SOURCE_DIR'
   NAME_SET_PROPERTY = 'set_property'
+  NAME_COMMAND = 'COMMAND'
+  NAME_STREQUAL = 'STREQUAL'
+  NAME_WIN32 = 'WIN32'
   WHITESPACE_REGEX_OBJ = %r{\s}
 
   # Separate logical paragraphs from each other.
@@ -5440,7 +5445,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     write_command_single_line('add_subdirectory', str_subdir_quoted)
   end
 
-  def get_var_conditional_command(command_name); [ 'COMMAND', command_name ] end
+  def get_var_conditional_command(command_name); [ NAME_COMMAND, command_name ] end
 
   def get_conditional_inverted(arr_conditional); arr_conditional.unshift('NOT') end
   def write_conditional_else(arr_conditional_params)
@@ -6245,10 +6250,10 @@ class V2C_CMakeV2CConditionGeneratorBase < V2C_CMakeV2CSyntaxGenerator
         build_type_cooked = prepare_string_literal(build_type)
         arr_cmake_build_type_condition = nil
         if config_multi_authoritative == build_type
-          arr_cmake_build_type_condition = [ 'CMAKE_CONFIGURATION_TYPES', 'OR', 'CMAKE_BUILD_TYPE', 'STREQUAL', build_type_cooked ]
+          arr_cmake_build_type_condition = [ 'CMAKE_CONFIGURATION_TYPES', 'OR', NAME_CMAKE_BUILD_TYPE, NAME_STREQUAL, build_type_cooked ]
         else
           # YES, this condition is supposed to NOT trigger in case of a multi-configuration generator
-          arr_cmake_build_type_condition = [ 'CMAKE_BUILD_TYPE', 'STREQUAL', build_type_cooked ]
+          arr_cmake_build_type_condition = [ NAME_CMAKE_BUILD_TYPE, NAME_STREQUAL, build_type_cooked ]
         end
         write_set_var_bool_conditional(get_buildcfg_var_name_of_condition(condition), arr_cmake_build_type_condition)
       }
@@ -6795,8 +6800,52 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       @localGenerator.write_build_attributes('target_link_libraries', linker_info_curr.arr_lib_dirs, map_lib_dirs_dep, @target.name, true)
     }
 
+    config_info_curr.tools.arr_prepostbuildlink_info.each { |prepostbuild_info_curr|
+      put_prepostbuildlink_event(@target.name, prepostbuild_info_curr)
+    }
+
     put_hook_post_target()
     return target_is_valid
+  end
+  def put_prepostbuildlink_event(target_name, prepostbuild_info)
+    # Q&D implementation - currently hardcodes a WIN32 conditional dependency, etc.
+    # (should iterate over a block of per-system conditional/cmd/text).
+    # Also, we should provide the option of user-side conditionals
+    # to optionally skip specific build events of a project target
+    # on certain platforms.
+    # And we should also support VS10 PreBuildEventUseInBuild etc. bool
+    # values - this could be done by generating the custom command
+    # into a function, to then be called within each of the
+    # potentially multiple conditionals generated from each of the
+    # conditional-specific PropertyGroup PreBuildEventUseInBuild flags.
+    empty_build_event = (prepostbuild_info.commandline.nil? and prepostbuild_info.message.nil?)
+    return if false != empty_build_event
+
+    str_cmake_build_event_type = nil
+    case prepostbuild_info.mode
+    when V2C_Tool_PrePostBuildLink_Info::VARIANT_PREBUILD
+      str_cmake_build_event_type = 'PRE_BUILD'
+    when V2C_Tool_PrePostBuildLink_Info::VARIANT_PRELINK
+      str_cmake_build_event_type = 'PRE_LINK'
+    when V2C_Tool_PrePostBuildLink_Info::VARIANT_POSTBUILD
+      str_cmake_build_event_type = 'POST_BUILD'
+    else
+      generator_error_unknown_case(prepostbuild_info.mode)
+    end
+    write_comment_at_level(COMMENT_LEVEL_STANDARD, "build/link event (#{str_cmake_build_event_type})")
+    arr_conditional = [ NAME_WIN32 ]
+    write_conditional_block(arr_conditional) do
+      command_arg = array_to_string(get_target_syntax_expression(target_name))
+      arr_func = [ str_cmake_build_event_type ]
+      gen_arr = ParameterArrayGenerator.new
+      gen_arr.add(NAME_COMMAND, prepostbuild_info.commandline)
+      gen_arr.add('COMMENT', prepostbuild_info.message)
+      arr_func.concat(gen_arr.array)
+      arr_func.push('VERBATIM') # not sure whether we really do want it...
+      write_command_list('add_custom_command', command_arg, arr_func)
+      write_conditional_else(arr_conditional)
+      gen_message_info("#{target_name}: skipping #{str_cmake_build_event_type} target event on this platform - TODO!")
+    end
   end
   def put_target_type(target, map_dependencies, target_info_curr, target_config_info_curr)
     target_is_valid = false
@@ -7772,7 +7821,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     # .vcproj to indicate tool specifics, thus these seem to
     # be settings for ANY PARTICULAR tool that is configured
     # on the Win32 side (.vcproj in general).
-    arr_conditional_platform = [ 'WIN32' ]
+    arr_conditional_platform = [ NAME_WIN32 ]
     write_conditional_block(arr_conditional_platform) do
       put_property_directory__compile_flags(attr_opts, true)
     end
