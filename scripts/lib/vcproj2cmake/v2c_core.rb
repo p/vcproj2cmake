@@ -1599,7 +1599,7 @@ EOF
       # there are things such as LIBRARY_OUTPUT_DIRECTORY_<CONFIG> target
       # properties, and these should be properly supported once someone
       # actually needs these specific non-default variable references to work...
-      config_var_replacement = CMAKE_PROJECT_BINARY_DIR_VAR_DEREF
+      config_var_replacement = vs7_config_var_trailing_slash(CMAKE_PROJECT_BINARY_DIR_VAR_DEREF)
     when 'TARGETNAME'
       # NOTE: $(TargetName) is available in both VS7/VS10,
       # however it changed its content (see
