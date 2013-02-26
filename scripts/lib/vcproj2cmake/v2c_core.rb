@@ -3363,6 +3363,7 @@ module V2C_VS10Defines
   TEXT_DISABLED = 'Disabled'
   TEXT_FALSE_LOWER = 'false' # Perhaps move to a common VS module
   TEXT_INCLUDE = 'Include'
+  TEXT_LABEL = 'Label'
 end
 
 module V2C_VS10Syntax
@@ -3409,6 +3410,9 @@ class V2C_VS10BaseElemParser < V2C_VS10ParserBase
       else
         get_base_elem().condition = V2C_Info_Condition.new(setting_value)
       end
+    when TEXT_LABEL
+      # We'll assume that we don't have to do anything here
+      # (Label will usually be evaluated by forwarder parsers only).
     else
       found = super
     end
@@ -3473,7 +3477,7 @@ class V2C_VS10ItemGroupProjectConfigurationDescriptionParser < V2C_VS10ParserBas
   end
 end
 
-class V2C_VS10ItemGroupProjectConfigurationsParser < V2C_VS10ParserBase
+class V2C_VS10ItemGroupProjectConfigurationsParser < V2C_VS10BaseElemParser
   private
 
   def get_project_configs; @info_elem end
@@ -3501,7 +3505,7 @@ module V2C_VS10FilterDefines
   TEXT_VS10_EXTENSIONS = 'Extensions'
 end
 
-class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
+class V2C_VS10ItemGroupElemFilterParser < V2C_VS10BaseElemParser
   private
   include V2C_VS10FilterDefines
   def parse_attribute(setting_key, setting_value)
@@ -3531,7 +3535,7 @@ class V2C_VS10ItemGroupElemFilterParser < V2C_VS10ParserBase
   def get_filter; @info_elem end
 end
 
-class V2C_VS10ItemGroupFiltersParser < V2C_VS10ParserBase
+class V2C_VS10ItemGroupFiltersParser < V2C_VS10BaseElemParser
   def get_filters; @info_elem end
   def parse_element(subelem_xml)
     found = be_optimistic()
@@ -3647,7 +3651,7 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
   #end
 end
 
-class V2C_VS10ItemGroupAnonymousParser < V2C_VS10ParserBase
+class V2C_VS10ItemGroupAnonymousParser < V2C_VS10BaseElemParser
   def parse
     found = FOUND_FALSE
     elem_first = @elem_xml.elements[1] # 1-based index!!
@@ -3683,7 +3687,7 @@ end
 class V2C_VS10ItemGroupForwarderParser < V2C_VS10ParserBase
   def parse
     found = be_optimistic()
-    itemgroup_label = @elem_xml.attributes['Label']
+    itemgroup_label = @elem_xml.attributes[TEXT_LABEL]
     logger.debug("Label #{itemgroup_label}!")
     item_group_parser = nil
     case itemgroup_label
@@ -4115,7 +4119,7 @@ end
 class V2C_VS10PropertyGroupForwarderParser < V2C_VS10BaseElemParser
   def parse
     found = be_optimistic()
-    propgroup_label = @elem_xml.attributes['Label']
+    propgroup_label = @elem_xml.attributes[TEXT_LABEL]
     logger.debug("Label #{propgroup_label}!")
     case propgroup_label
     # Future comment for anonymous PropertyGroup:
