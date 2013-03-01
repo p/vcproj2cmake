@@ -190,6 +190,7 @@
 			IntermediateDirectory="$(ConfigurationName)"
 			ConfigurationType="2"
 			CharacterSet="1"
+			WholeProgramOptimization="False"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"

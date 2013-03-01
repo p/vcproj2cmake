@@ -2042,7 +2042,10 @@ module V2C_VS7Syntax
   TEXT_NAME = 'Name'
   # In VS7, a boolean property appears to be representable
   # by "0", "1" values as well. FIXME: perhaps we're being imprecise here:
-  # we should make sure to implement precise handling for specific VS7/VS10 element/attribute types.
+  # we should make sure to implement precise handling
+  # for specific VS7/VS10 element/attribute types.
+  # Another example: VS7 WholeProgramOptimization attribute
+  # may be specified as either "0", "1" *or* "TRUE", "false" etc.
   def parse_boolean_property_value(str_value)
     success, value = parse_boolean_text(str_value)
     if true != success
@@ -2771,7 +2774,7 @@ class V2C_VS7ConfigurationBaseParser < V2C_VS7ParserBase
   def get_tools_info; get_config_info().tools end
   def parse_charset(str_charset); parse_integer(str_charset) end
   def parse_configuration_type(str_configuration_type); parse_integer(str_configuration_type) end
-  def parse_wp_optimization(str_opt); parse_integer(str_opt) end
+  def parse_wp_optimization(str_opt); get_boolean_value(str_opt) end
 end
 
 class V2C_VS7ProjectConfigurationParser < V2C_VS7ConfigurationBaseParser
