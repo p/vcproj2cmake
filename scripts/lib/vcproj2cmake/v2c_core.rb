@@ -733,6 +733,7 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Define_Base_Info
     @inline_function_expansion = INLINE_FUNCTION_EXPANSION_DEFAULT
     @minimal_rebuild_enable = false
     @multi_core_compilation_enable = false # TODO: translate into MSVC10 /MP flag...; Disabled by default is preferable (some builds might not have clean target dependencies...)
+    @omit_frame_pointers_enable = false # TODO: gcc equivalent: -fomit-frame-pointer
     @pdb_info = nil # V2C_PDB_Info
     @warnings_are_errors_enable = false # TODO: translate into MSVC /WX flag
     @show_includes_enable = false # Whether to show the filenames of included header files. TODO: translate into MSVC /showIncludes flag
@@ -756,6 +757,7 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Define_Base_Info
   attr_accessor :inline_function_expansion
   attr_accessor :minimal_rebuild_enable
   attr_accessor :multi_core_compilation_enable
+  attr_accessor :omit_frame_pointers_enable
   attr_accessor :pdb_info
   attr_accessor :warnings_are_errors_enable
   attr_accessor :show_includes_enable
@@ -2219,6 +2221,7 @@ module V2C_VSToolCompilerDefines
   VS_DEFAULT_SETTING_EXCEPTIONHANDLING = true # VS10 "Enable C++ Exceptions" default: "Yes (/EHsc)"
   TEXT_INLINEFUNCTIONEXPANSION = 'InlineFunctionExpansion'
   TEXT_MINIMALREBUILD = 'MinimalRebuild'
+  TEXT_OMITFRAMEPOINTERS = 'OmitFramePointers'
   VS_DEFAULT_SETTING_MINIMALREBUILD = false # VS10 default: "No (/Gm-)"
   TEXT_OPTIMIZATION = 'Optimization'
   # Note that ObjectFileName and ProgramDataBaseFileName (and others?)
@@ -2275,6 +2278,8 @@ class V2C_VSToolCompilerParser < V2C_VSToolDefineParserBase
       get_compiler_info().inline_function_expansion = parse_inline_function_expansion(setting_value)
     when TEXT_MINIMALREBUILD
       get_compiler_info().minimal_rebuild_enable = get_boolean_value(setting_value)
+    when TEXT_OMITFRAMEPOINTERS
+      get_compiler_info().omit_frame_pointers_enable = get_boolean_value(setting_value)
     when TEXT_OPTIMIZATION
       get_compiler_info().optimization = parse_optimization(setting_value)
     when TEXT_PROGRAMDATABASEFILENAME
