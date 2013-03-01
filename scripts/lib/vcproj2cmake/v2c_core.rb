@@ -4435,10 +4435,16 @@ class V2C_VS10ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
     if false != proj_file_parser.parse_file
       #proj_filters_file_parser = V2C_VS10ProjectFiltersFileParser.new(@proj_filename + '.filters', @arr_projects_new)
       p_parser_proj_file_filters = Pathname.new(@p_parser_proj_file.to_s + '.filters')
-      proj_filters_file_parser = V2C_VS10ProjectFileParser.new(p_parser_proj_file_filters, @arr_projects_new, true)
+      begin
+        proj_filters_file_parser = V2C_VS10ProjectFileParser.new(p_parser_proj_file_filters, @arr_projects_new, true)
 
-      proj_filters_file_parser.parse_file
-
+        proj_filters_file_parser.parse_file
+      # For .filters, swallow some exceptions (.filters files are *optional*)
+      rescue V2C_ProjectFileParserError => e
+        if not e.message.match(/open non-existent/)
+          raise
+        end
+      end
     end
   end
   def check_unhandled_file_types
