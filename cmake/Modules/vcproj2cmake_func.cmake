@@ -725,6 +725,12 @@ else(_v2c_generator_has_dynamic_platform_switching)
     if(platform_ok_)
       _v2c_msg_important_once("build_platform" "${_target}: vcproj2cmake chose to adopt the following project-defined build platform setting: ${V2C_BUILD_PLATFORM} (reason: ${platform_reason_}).")
     else(platform_ok_)
+      # One reason for this message may be having a mix of
+      # different project files with differing sets of build platform strings.
+      # Solution (.sln) files would contain a mapping from solution-global
+      # build platform to the respective project-specific setting,
+      # but at least for now we don't have a solution-global mechanism.
+      # Oh well...
       _v2c_msg_fatal_error("V2C_BUILD_PLATFORM contains invalid build platform setting (${build_platform_}), please correct! (valid candidates: ${platform_names_list_})")
     endif(platform_ok_)
   endfunction(_v2c_buildcfg_determine_platform_var _target)
