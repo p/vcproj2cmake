@@ -1,0 +1,12 @@
+#!/bin/sh
+
+git_dir="$(git rev-parse --git-dir)"
+git_repo_hooks_dir="$(pwd)/${git_dir}/hooks"
+
+. "${git_repo_hooks_dir}/git_hooks_shell_init_leadin"
+
+RUBY_BIN="$(which ruby)"
+
+[ -x "${RUBY_BIN}" ] && {
+  "${RUBY_BIN}" "${GIT_HOOKS_DIR}/scriptlets_prepare-commit-msg/grep_problematic_content.rb" || exit 1
+}

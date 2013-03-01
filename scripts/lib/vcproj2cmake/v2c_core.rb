@@ -4617,7 +4617,7 @@ class V2C_GenerateIntoTempFile
     # I'm not entirely certain yet whether exception scope granularity
     # is nice, but at least have one that's augmented with local context
     # information...
-  rescue Exception => e
+  rescue Exception
     raise V2C_GeneratorError.new("Exception while trying to generate #{@file_description} (temp file prefix #{@tempfile_prefix})")
   end
 end

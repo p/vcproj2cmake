@@ -671,6 +671,10 @@ $ git config --global rebase.autosquash true
 $ git config receive.fsckObjects true
 
 
+Please also strongly consider activating the git hook sample files
+contained in this project for your development activities.
+
+
 === Cross-platform development hints ===
 
 == Toolkit dependency management/reduction ==

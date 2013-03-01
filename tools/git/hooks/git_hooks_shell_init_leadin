@@ -1,0 +1,33 @@
+# To be source:d (".") by any git hook shell script
+# which intends to make use of this convenience initializer.
+
+
+run_scriptlet()
+{
+  scriptlet_path="${1}"
+
+  pwd_pre="$(pwd)"
+  . "${scriptlet_path}"
+  pwd_post="$(pwd)"
+
+  [ "${pwd_pre}" != "${pwd_post}" ] && {
+    echo "Scriptlet ${scriptlet_path} changed directories: pre ${pwd_pre}, post ${pwd_post}"
+    # Oh well, we can just correct it here anyway...
+    cd "${pwd_pre}"
+  }
+}
+
+git_dir="$(git rev-parse --git-dir)"
+GIT_REPO_ROOT_DIR="$(git rev-parse --show-toplevel)"
+
+# It's quite annoying to have git hooks executed even during rebase,
+# and to make matters worse rebase --no-verify here (1.7.10.4)
+# did not skip it either, thus we need to have a manual check :(
+rebase_merge_dir="${git_dir}/rebase-merge"
+[ -d "${rebase_merge_dir}" ] && {
+  echo "rebase directory ${rebase_merge_dir} existing (ongoing rebase?), skipping all git hooks!"
+  exit 0
+}
+
+git_hooks_subdir="tools/git/hooks"
+GIT_HOOKS_DIR="${GIT_REPO_ROOT_DIR}/${git_hooks_subdir}"
