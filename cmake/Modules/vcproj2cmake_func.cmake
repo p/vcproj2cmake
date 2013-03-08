@@ -1521,11 +1521,11 @@ function(v2c_target_config_charset_set _target _build_platform _build_type _char
 endfunction(v2c_target_config_charset_set _target _build_platform _build_type _charset)
 
 
-set(v2c_midl_handling_mode_win32 "Win32")
+set(v2c_midl_handling_mode_windows "Windows")
 set(v2c_midl_handling_mode_wine "Wine")
 set(v2c_midl_handling_mode_stubs "EmulatedStubs")
 if(WIN32)
-  set(v2c_midl_handling_mode_default_setting ${v2c_midl_handling_mode_win32})
+  set(v2c_midl_handling_mode_default_setting ${v2c_midl_handling_mode_windows})
 else(WIN32)
   find_program(V2C_WINE_WIDL_BIN widl
     DOC "Path to Wine's MIDL compiler binary (widl)."
@@ -1549,15 +1549,15 @@ else(WIN32)
     set(v2c_midl_handling_mode_default_setting ${v2c_midl_handling_mode_stubs})
   endif(V2C_WINE_WIDL_BIN)
 endif(WIN32)
-set(v2c_midl_doc_string "The mode to use for handling of IDL files [one of: ${v2c_midl_handling_mode_win32} - uses builtin Win32 MIDL handling / ${v2c_midl_handling_mode_wine} - uses Wine's widl IDL compiler / ${v2c_midl_handling_mode_stubs} - tries to come up with a sufficiently complete emulation stub to at least allow a successful project build [Code Coverage!]]")
+set(v2c_midl_doc_string "The mode to use for handling of IDL files [this string should be one of: ${v2c_midl_handling_mode_windows} - uses builtin Windows MIDL handling / ${v2c_midl_handling_mode_wine} - uses Wine's widl IDL compiler / ${v2c_midl_handling_mode_stubs} - tries to come up with a sufficiently complete emulation stub to at least allow a successful project build [Code Coverage!]]")
 set(V2C_MIDL_HANDLING_MODE "${v2c_midl_handling_mode_default_setting}" CACHE STRING "${v2c_midl_doc_string}")
 
-if(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_win32})
+if(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_windows})
   function(v2c_target_midl_compile _target _build_platform _build_type)
     # DUMMY - WIN32 (Visual Studio) already has its own implicit custom commands for MIDL generation
     # (plus, CMake's Visual Studio generator also already properly passes MIDL-related files to the setup...)
   endfunction(v2c_target_midl_compile _target _build_platform _build_type)
-else(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_win32})
+else(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_windows})
 
   # Note that these functions make use of some implicitly passed variables.
   function(_v2c_target_midl_create_dummy_header_file _target _header_file_location)
@@ -1757,7 +1757,7 @@ extern \"C\" {
       endif(v2c_target_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME)
     endif(${v2c_midl_mode_} STREQUAL ${v2c_midl_handling_mode_wine})
   endfunction(v2c_target_midl_compile _target _build_platform _build_type)
-endif(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_win32})
+endif(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_windows})
 
 function(v2c_target_pdb_configure _target _build_platform _build_type)
   v2c_buildcfg_check_if_platform_buildtype_active(${_target} "${_build_platform}" "${_build_type}" is_active_)
