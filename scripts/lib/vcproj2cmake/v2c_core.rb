@@ -7402,5 +7402,5 @@ end
 # Writes the final message.
 def v2c_convert_finished()
   log_info %{\
-Finished. You should make sure to have all important v2c settings includes such as vcproj2cmake_defs.cmake somewhere in your CMAKE_MODULE_PATH}
+Finished. You should make sure to have all important V2C settings includes such as vcproj2cmake_defs.cmake somewhere in your CMAKE_MODULE_PATH (probably copy them to <SOURCE_ROOT>/#{$v2c_module_path_root})}
 end
