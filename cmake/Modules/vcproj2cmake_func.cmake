@@ -193,18 +193,19 @@ if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
     # a hard error message which can be user-disabled if required.
 
     # Side note: this message may appear during an _initial_ configuration run
-    # at least on MSVS 2005 generator. I suppose that this initial error is ok,
+    # at least on VS2005/VS2010 generators.
+    # I suppose that this initial error is ok,
     # since CMake probably still needs to make up its mind as to which
     # configuration types (MinSizeRel, Debug etc.) are available.
     # Nope, turns out that this special case is more problematic than expected:
     # e.g. for ExternalProject_Add() uses,
-    # a FATAL_ERROR (as opposed to SEND_ERROR!) will cause CACHE vars to
-    # not get written - it will never succeed, due to infinite failure.
+    # signalling a FATAL_ERROR (as opposed to SEND_ERROR!) will cause CACHE vars
+    # to not get written - ergo it will never succeed, due to infinite failure.
     # And since even one initial failure might be undesired,
     # decide to downgrade it to a warning only.
     # Nope - our build platform/type infrastructure does need it to be
     # correct, thus do send an error (a warning may easily get missed).
-    _v2c_msg_send_error("A single-configuration generator appears to have been chosen (currently selected: ${CMAKE_GENERATOR}) yet subsequently the corresponding important CMAKE_BUILD_TYPE variable has not been specified - needs to be set properly, or actively ignored by setting V2C_WANT_SKIP_CMAKE_BUILD_TYPE_CHECK (not recommended).")
+    _v2c_msg_send_error("A single-configuration generator appears to have been chosen (currently selected: ${CMAKE_GENERATOR}) yet the corresponding important CMAKE_BUILD_TYPE variable has not been specified - needs to be set properly, or actively ignored by setting V2C_WANT_SKIP_CMAKE_BUILD_TYPE_CHECK (not recommended).")
   endif(NOT V2C_WANT_SKIP_CMAKE_BUILD_TYPE_CHECK) # user might not want this to happen...
 endif(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 
