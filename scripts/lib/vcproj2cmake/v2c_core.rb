@@ -1144,12 +1144,13 @@ module V2C_File_List_Types
   TYPE_INCLUDES = 2
   TYPE_RESOURCES = 3
   TYPE_MIDL = 4
+  TYPE_XSD = 5
 end
 
 class V2C_File_List_Info
   include V2C_File_List_Types
   def initialize(name, type = TYPE_NONE)
-    @name = name # VS10: One of None, ClCompile, ClInclude, ResourceCompile; VS7: the name of the filter that contains these files (FIXME: filter stuff is not really useful, should be assigning the name based on the tool type GUID! And then perhaps use the VS10 tool file type names [ClCompile, ClInclude etc.])
+    @name = name # VS10: One of None, ClCompile, ClInclude, ResourceCompile, Xsd; VS7: the name of the filter that contains these files (FIXME: filter stuff is not really useful, should be assigning the name based on the tool type GUID! And then perhaps use the VS10 tool file type names [ClCompile, ClInclude etc.])
     @type = type
     @arr_files = Array.new # V2C_Info_File elements
     @hash_files = Hash.new # V2C_Info_File elements
@@ -1208,7 +1209,9 @@ class V2C_File_List_Info
        'headers', # VS10: ClInclude
        'resources', # VS10: ResourceCompile
        #'midl' # VS10: Midl # MIDL is _not_ supposed to be here, I think (MIDL-related files are sorted within ClCompile/ClInclude categories...)
+       'xsd', # VS10: Xsd
      ]
+    # Hmm, not entirely sure whether this would be correct for TYPE_XSD:
     type = @type <= TYPE_RESOURCES ? @type : TYPE_NONE
     return list_types[type]
   end
@@ -3673,6 +3676,13 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
       type = V2C_File_List_Types::TYPE_RESOURCES
     when 'Midl'
       type = V2C_File_List_Types::TYPE_MIDL
+    when 'Xsd'
+      # Xsd appears to be a pretty much UNDOCUMENTED file type on MSVS2010.
+      # Removing/adding an Xsd ItemGroup element will cause
+      # a VS10 project tab "XML Data Generator Tool" to (dis)appear,
+      # which proves that it *is* a valid file type name.
+
+      type = V2C_File_List_Types::TYPE_XSD
     else
       logger.unhandled_functionality("file list name #{file_list_name}")
       type = V2C_File_List_Types::TYPE_NONE
@@ -3696,7 +3706,7 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10BaseElemParser
       when 'Filter'
         elem_parser = V2C_VS10ItemGroupFiltersParser.new(@elem_xml, get_project().filters)
         elem_parser.parse
-      when 'ClCompile', 'ClInclude', 'Midl', 'None', 'ResourceCompile'
+      when 'ClCompile', 'ClInclude', 'Midl', 'None', 'ResourceCompile', 'Xsd'
         elem_parser = V2C_VS10ItemGroupFilesParser.new(@elem_xml, elem_name, get_project().file_lists)
         elem_parser.parse
       else
