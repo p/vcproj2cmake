@@ -281,6 +281,9 @@ class Logger
 
   # "Ruby Exceptions", http://rubylearning.com/satishtalim/ruby_exceptions.html
   # NOTE: user side should probably re-raise() the exception in most cases...
+  # VERY useful discussion:
+  # "Does Ruby support exception wrapping (exception chaining)?"
+  #   http://www.ruby-forum.com/topic/148193#977439
   def unhandled_exception(e, action)
     log_error "unhandled exception occurred during #{action}! #{e.message}, #{e.backtrace.inspect}"
   end
@@ -477,7 +480,22 @@ end
 #   then generates project files by iterating over the targets via a newly generated target generator each.
 # target generator: generates targets. This is the one creating/producing the output file stream. Not provided by all generators (VS10 yes, VS7 no).
 
-class V2C_ParserError < StandardError
+# "Re: Does Ruby support exception wrapping (exception chaining)?"
+#   http://www.ruby-forum.com/topic/148193#982947
+class V2C_ChainedError < StandardError
+  attr_reader :original
+  def initialize(msg, original=$!)
+    msg_extended = msg
+    if not original.nil?
+      # Do use a newline (the inner error will be *large*)
+      msg_extended += " (inner error:\n#{original.message})"
+    end
+    super(msg_extended)
+    @original = original
+  end
+end
+
+class V2C_ParserError < V2C_ChainedError
 end
 
 class V2C_Info_Condition
@@ -3316,6 +3334,9 @@ class V2C_VS7ProjectFileXmlParser < V2C_VSProjectFileXmlParserBase
   end
 end
 
+class V2C_ProjectFileParserError < V2C_ParserError
+end
+
 # Project parser variant which works on file-based input
 class V2C_VSProjectFileParserBase < V2C_ParserBase
   def initialize(p_parser_proj_file, arr_projects_out)
@@ -4281,8 +4302,10 @@ class V2C_VS10ProjectFileParser < V2C_VSProjectFileParserBase
           success = true
         end
       }
-    rescue Errno::ENOENT => e
-      logger.debug "Exception trying to open non-existent project file @proj_filename (#{e.inspect})"
+    rescue Errno::ENOENT
+      raise V2C_ProjectFileParserError.new("Exception trying to open non-existent project file #{@proj_filename}")
+    rescue REXML::ParseException
+      raise V2C_ProjectFileParserError.new("Exception parsing project file #{@proj_filename}")
     end
     return success
   end
@@ -4573,13 +4596,8 @@ class V2C_GenerateIntoTempFile
   def generate
     tmpfile_path = nil
     Tempfile.open(@tempfile_prefix) { |tmpfile|
-      begin
-        textOut = V2C_TextStreamSyntaxGeneratorBase.new(tmpfile, @textstream_attributes)
-        yield textOut
-      rescue Exception => e
-        logger.unhandled_exception(e, "generating #{@file_description}")
-        raise
-      end
+      textOut = V2C_TextStreamSyntaxGeneratorBase.new(tmpfile, @textstream_attributes)
+      yield textOut
       tmpfile_path = tmpfile.path
     }
     # Since we're forced to fumble our source tree
@@ -4590,6 +4608,11 @@ class V2C_GenerateIntoTempFile
     # on a shared source on NFS mount.
     mover = V2C_CMakeFilePermanentizer.new(@file_description, tmpfile_path, @destination_file, @file_create_permissions)
     mover.process
+    # I'm not entirely certain yet whether exception scope granularity
+    # is nice, but at least have one that's augmented with local context
+    # information...
+  rescue Exception => e
+    raise V2C_GeneratorError.new("Exception while trying to generate #{@file_description} (temp file prefix #{@tempfile_prefix})")
   end
 end
 
@@ -4724,7 +4747,7 @@ rescue Errno::ENOENT
   return CMAKELISTS_FILE_TYPE_NONE
 end
 
-class V2C_GeneratorError < StandardError
+class V2C_GeneratorError < V2C_ChainedError
 end
 
 class V2C_GeneratorBase < V2C_LoggerBase
