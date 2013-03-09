@@ -209,6 +209,15 @@ if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 endif(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 
 
+# Provides an all-encompassing log message of the build environment vars
+# that CMake provides.
+function(_v2c_build_environment_log)
+  _v2c_msg_info("Build environment settings: CMAKE_GENERATOR ${CMAKE_GENERATOR}, CMAKE_EXTRA_GENERATOR ${CMAKE_EXTRA_GENERATOR}, UNIX/WIN32/CYGWIN ${UNIX}/${WIN32}/${CYGWIN}, APPLE/BORLAND/XCODE_VERSION ${APPLE}/${BORLAND}/${XCODE_VERSION}, MSVC/MSVC_IDE/MSVC_VERSION ${MSVC}/${MSVC_IDE}/${MSVC_VERSION}.")
+endfunction(_v2c_build_environment_log)
+
+_v2c_build_environment_log()
+
+
 function(_v2c_find_package_ruby _out_ruby_bin)
   if(NOT RUBY_EXECUTABLE) # avoid repeated checks (see cmake --trace)
     # NOTE: find_package() depends on a valid pre-existing project() line,
@@ -899,6 +908,9 @@ endfunction(_v2c_target_mark_as_internal _target)
 function(_v2c_source_groups_do_setup)
   # TODO: add a version check here, to determine whether source_group()
   # is supported by this CMake version at all...
+  # Uhoh, CMake MSVC_IDE var temporarily was broken
+  # ("16fa7b7 VS: Fix MSVC_IDE definition recently broken by refactoring"),
+  # possibly causing mis-detection. Not much to be done about it. :(
   if(MSVC_IDE)
     # MSVS supports file filters (hmm, but perhaps newer versions only?)
     set(v2c_source_groups_enabled_introspection_ ON)
@@ -919,7 +931,8 @@ function(_v2c_source_groups_do_setup)
     set(v2c_source_groups_enabled_default_setting_ ${v2c_source_groups_enabled_introspection_})
   else(DEFINED v2c_source_groups_enabled_introspection_)
     set(v2c_source_groups_enabled_default_setting_ OFF)
-    _v2c_msg_warning("Missing detection of the default source groups support setting for this build environment (CMAKE_GENERATOR ${CMAKE_GENERATOR}, CMAKE_EXTRA_GENERATOR ${CMAKE_EXTRA_GENERATOR}), please add the correct setting! Resorting to ${v2c_source_groups_enabled_default_setting_}.")
+    _v2c_msg_warning("Missing detection of the default source groups support setting for this build environment, please add the correct setting! Resorting to ${v2c_source_groups_enabled_default_setting_}.")
+    _v2c_msg_warning("Could not assign/detect a default source groups support setting for this build environment (CMAKE_GENERATOR ${CMAKE_GENERATOR}, CMAKE_EXTRA_GENERATOR ${CMAKE_EXTRA_GENERATOR}): unknown build environment, thus please enhance the detection algorithm! Resorting to ${v2c_source_groups_enabled_default_setting_}.")
   endif(DEFINED v2c_source_groups_enabled_introspection_)
   option(V2C_SOURCE_GROUPS_ENABLED "Whether to enable source groups (IDE file filter list trees) in this build environment. Default setting is automatically determined based on environment capabilities." ${v2c_source_groups_enabled_default_setting_})
   _v2c_msg_info("Support for project source file groups (file filters): ${V2C_SOURCE_GROUPS_ENABLED}.")
