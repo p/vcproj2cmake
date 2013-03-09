@@ -842,7 +842,7 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
     # whether this dependency is a library _file_ or a target name,
     # since we should be reliably able to decide whether we can add
     # "debug"/"optimized" keywords to CMake variables or
-    # target_link_library() parms.
+    # target_link_libraries() parms.
     # An alternative way of handling this (rather than the somewhat
     # special debug/optimized markup mechanism) might be to
     # create an IMPORTED target for those VS-side dependencies.
@@ -2842,7 +2842,6 @@ class V2C_VS7ConfigurationsParser < V2C_VS7ParserBase
 end
 
 class V2C_VS7FileParser < V2C_VS7ParserBase
-  VS7_IDL_FILE_TYPES_REGEX_OBJ = %r{_(i|p).c$}
   def initialize(file_xml, arr_file_infos_out)
     super(file_xml, arr_file_infos_out)
     @info_file = V2C_Info_File.new
@@ -6002,6 +6001,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         write_link_libraries(arr_dependencies, map_dependencies)
       }
     end # target_is_valid
+    logger.debug "TARGET_LINK_LIBRARIES: target_is_valid #{target_is_valid}, #{target_info_curr.tools.arr_linker_info.inspect}"
     return target_is_valid
   end
   def write_target_executable(target_name, string_sources_list)
