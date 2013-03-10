@@ -1903,7 +1903,7 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
   #   http://stackoverflow.com/questions/3058111/how-do-i-set-environment-variables-in-visual-studio-2010
   #   http://connect.microsoft.com/VisualStudio/feedback/details/606484/property-sheets-upgraded
   #   http://blogs.msdn.com/b/vcblog/archive/2010/02/16/project-settings-changes-with-vs2010.aspx
-  VS10_ITEM_METADATA_MACRO_MATCH_REGEX_OBJ = %r{%([^\s]*)}
+  VS10_ITEM_METADATA_MACRO_MATCH_REGEX_OBJ = %r{%\([^\s]*\)}
 
   # Hmm, \n at least appears in VS10 (DisableSpecificWarnings element), but in VS7 as well?
   # WS_VALUE is for entries containing (and preserving!) whitespace (no split on whitespace!).
