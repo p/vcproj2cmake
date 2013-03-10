@@ -7,6 +7,9 @@ pasted in open-coded form, I decided to create a hook scripts
 launcher script per each hook type, to then launch all hooks
 serially, in most frequently-failing and least-expensive to
 most-expensive order.
+Using scriptlets however means that use of exit() in such scripts
+should already be done in case of failure (otherwise all subsequent
+scriptlets will get skipped).
 
 The easiest way to activate hooks is to add symlinks pointing at the
 existing committed files in this repo, to the .git/hooks/ dir.

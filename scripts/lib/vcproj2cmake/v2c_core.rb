@@ -1822,7 +1822,7 @@ class V2C_XmlParserBase < V2C_ParserBase
       # And then of course telling things apart properly is impossible.
       # This looks like a collossal design issue. "Ruby, bad doggie, no bone!"
       # Oh well, seems it's possible to check .message for the specific error string.
-      if e.message.start_with?('invalid value for Integer')
+      if e.message.match(/^invalid value for Integer/)
         parser_error("encountered ArgumentError #{e.message} - probably integer parsing of #{setting_key} --> #{setting_value} failed", true)
       else
         raise

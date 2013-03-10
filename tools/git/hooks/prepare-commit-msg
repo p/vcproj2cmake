@@ -8,5 +8,6 @@ git_repo_hooks_dir="$(pwd)/${git_dir}/hooks"
 RUBY_BIN="$(which ruby)"
 
 [ -x "${RUBY_BIN}" ] && {
+  "${RUBY_BIN}" "${GIT_HOOKS_DIR}/scriptlets_prepare-commit-msg/run_vcproj2cmake_tests.rb" || exit 1
   "${RUBY_BIN}" "${GIT_HOOKS_DIR}/scriptlets_prepare-commit-msg/grep_problematic_content.rb" || exit 1
 }
