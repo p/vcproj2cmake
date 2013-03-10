@@ -7053,7 +7053,15 @@ end
 # - apart from the CMake generator having added its CMakeLists.txt to the source groups -
 # some people may have decided to manually list the CMakeLists.txt in their projects -
 # in which case the file is NOT a generated project file, however.
-VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{#{CMAKELISTS_FILE_NAME}}
+# Indeed, this is too problematic.
+# An alternative way to detect CMake-generated .vcxproj files
+# is to check for PreprocessorDefinitions having a CMAKE_INTDIR define added.
+# For even more precise detection, could calculate a final rating
+# by checking for content of CMakeLists.txt, CMAKE_INTDIR
+# *and* invocations of the CMake binary (for custom targets),
+# and some other characteristic strings.
+#VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{#{CMAKELISTS_FILE_NAME}}
+VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{\bPreprocessorDefinitions\b.*\bCMAKE_INTDIR=}
 def v2c_is_project_file_generated_by_cmake(str_proj_file)
   generated_file = false
   cmakelists_text = ''
