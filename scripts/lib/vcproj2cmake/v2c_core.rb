@@ -3380,7 +3380,12 @@ class V2C_VS7ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
   end
   def parse_project_files
     proj_file_parser = V2C_VS7ProjectFileParser.new(@p_parser_proj_file, @arr_projects_new)
-    proj_file_parser.parse_file
+    begin
+      proj_file_parser.parse_file
+    rescue Exception
+      # Make sure to have an annotation of the project file which bombed.
+      raise V2C_ProjectFileParserError.new("Exception parsing project file #{@p_parser_proj_file}")
+    end
   end
   def check_unhandled_file_types
     # FIXME: we don't handle now externally specified (.rules, .vsprops) custom build parts yet!
