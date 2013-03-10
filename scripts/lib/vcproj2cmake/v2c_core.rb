@@ -1018,11 +1018,11 @@ class V2C_Tool_PrePostBuildLink_Info < V2C_Tool_Base_Info
     super(tool_variant_specific_info)
     @mode = mode
     @message = nil # Text printed upon target execution
-    @commandline = nil # Command line to be executed
+    @arr_commandline = nil # Command lines to be executed
   end
   attr_reader :mode
   attr_accessor :message
-  attr_accessor :commandline
+  attr_accessor :arr_commandline
 end
 
 class V2C_Tool_PrePostBuildLink_Specific_Info < V2C_Tool_Specific_Info_Base
@@ -1765,7 +1765,9 @@ end
 CMAKE_CFG_INTDIR_VAR_DEREF = '${CMAKE_CFG_INTDIR}'
 CMAKE_PROJECT_BINARY_DIR_VAR_DEREF = '${PROJECT_BINARY_DIR}'
 CMAKE_PROJECT_NAME_VAR_DEREF = '${PROJECT_NAME}'
-def vs7_create_config_variable_translation(str_in, arr_config_var_handling)
+# vs7_only_flag specifies whether invoking code is VS7 classes,
+# i.e. whether to support VS7-only constructs (e.g. $(NoInherit)), too.
+def vs7_create_config_variable_translation(str_in, arr_config_var_handling, vs7_only_flag)
   str = str_in.clone
   # http://langref.org/all-languages/pattern-matching/searching/loop-through-a-string-matching-a-regex-and-performing-an-action-for-each-match
   str_scan_copy = str_in.clone # create a deep copy of string, to avoid "`scan': string modified (RuntimeError)"
@@ -1808,7 +1810,19 @@ def vs7_create_config_variable_translation(str_in, arr_config_var_handling)
 EOF
       arr_config_var_handling.push(config_var_emulation_code)
       config_var_replacement = '${v2c_VS_PlatformName}'
-      # InputName is said to be same as ProjectName in case input is the project.
+    when 'INHERIT', 'NOINHERIT'
+      # $(Inherit)/$(NoInherit) are mechanisms for e.g. include/library/define
+      # settings.
+      # Inherit (the default setting, BTW) means
+      # that settings of per-file entries
+      # will be enhanced by project-side settings,
+      # *at the position where Inherit is placed*.
+      # NoInherit overrides any Inherit.
+      # (No)Inherit, being user macros rather than env settings,
+      # really shouldn't be replaced by environment variable references,
+      # thus at least skip it for now and log a TODO.
+      log_todo "$(Inherit) / $(NoInherit) not supported yet."
+    # InputName is said to be same as ProjectName in case input is the project.
     when 'INPUTNAME', 'PROJECTNAME'
       config_var_replacement = CMAKE_PROJECT_NAME_VAR_DEREF
       # See ProjectPath reasoning below.
@@ -2210,7 +2224,7 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
   end
   def get_filesystem_location(path)
     # TODO: rather ad-hoc handling of VS7 vars, should get improved eventually.
-    path_translated = vs7_create_config_variable_translation(string_avoid_nil(path), @arr_config_var_dummy)
+    path_translated = vs7_create_config_variable_translation(string_avoid_nil(path), @arr_config_var_dummy, false)
 
     # TODO: should think of a way to do central verification
     # of existence of the file system paths found here near this helper.
@@ -3005,26 +3019,31 @@ class V2C_VSToolPrePostBuildLinkEventParser < V2C_VSToolParserBase
   # and perhaps this even means even doing strip_whitespace()
   # prior to handing content over to parse_element() implementation!
   def parse_commandline(str_in)
-    str_unescaped = string_unescape_from_xml(string_value_preprocess(str_in))
+    return nil if str_in.nil?
 
-    # This is problematic - generic build information data
-    # as gathered from original project files
-    # shouldn't contain any CMake-specific content yet.
-    # Since we only have a CMake generator for now,
-    # it does not really matter yet. Oh well...
-    arr_script_code = Array.new
-    str_translated = vs7_create_config_variable_translation(str_unescaped, arr_script_code)
+    arr_commandline_raw = str_in.split("\n")
+    array_collect_compact(arr_commandline_raw) do |commandline_raw|
+      str_unescaped = string_unescape_from_xml(string_value_preprocess(commandline_raw))
 
-    str_translated = nil if str_translated.empty?
+      # This is problematic - generic build information data
+      # as gathered from original project files
+      # shouldn't contain any CMake-specific content yet.
+      # Since we only have a CMake generator for now,
+      # it does not really matter yet. Oh well...
+      arr_script_code = Array.new
+      str_translated = vs7_create_config_variable_translation(str_unescaped, arr_script_code, false)
 
-    # Note that VS has a "\some\path\" syntax, i.e. it has a last backslash
-    # escape prior to closing quote, which is a very special case.
-    # We possibly ought to remove this quote-escaping "feature" here
-    # (since we're going towards other platforms),
-    # and it then ought to be re-added for VS generation
-    # (but CMake perhaps already does do that properly anyway...).
-    logger.debug "commandline is #{str_translated}"
-    str_translated
+      next if str_translated.empty?
+
+      # Note that VS has a "\some\path\" syntax, i.e. it has a last backslash
+      # escape prior to closing quote, which is a very special case.
+      # We possibly ought to remove this quote-escaping "feature" here
+      # (since we're going towards other platforms),
+      # and it then ought to be re-added for VS generation
+      # (but CMake perhaps already does do that properly anyway...).
+
+      str_translated
+    end
   end
   def parse_message(str_in)
     str = string_value_preprocess(str_in)
@@ -3039,7 +3058,7 @@ class V2C_VS7ToolPrePostBuildLinkEventToolParser < V2C_VSToolPrePostBuildLinkEve
     found = be_optimistic()
     case setting_key
     when 'CommandLine'
-      @info_elem.commandline = parse_commandline(setting_value)
+      @info_elem.arr_commandline = parse_commandline(setting_value)
     when 'Description'
       @info_elem.message = parse_message(setting_value)
     when TEXT_NAME
@@ -4436,7 +4455,7 @@ class V2C_VS10ToolPrePostBuildLinkEventParser < V2C_VSToolPrePostBuildLinkEventP
     setting_value = subelem_xml.text
     case setting_key
     when 'Command'
-      @info_elem.commandline = parse_commandline(setting_value)
+      @info_elem.arr_commandline = parse_commandline(setting_value)
     when 'Message'
       @info_elem.message = parse_message(setting_value)
     when TEXT_NAME
@@ -6818,7 +6837,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # into a function, to then be called within each of the
     # potentially multiple conditionals generated from each of the
     # conditional-specific PropertyGroup PreBuildEventUseInBuild flags.
-    empty_build_event = (prepostbuild_info.commandline.nil? and prepostbuild_info.message.nil?)
+    empty_build_event = (prepostbuild_info.arr_commandline.nil? and prepostbuild_info.message.nil?)
     return if false != empty_build_event
 
     str_cmake_build_event_type = nil
@@ -6838,8 +6857,17 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       command_arg = array_to_string(get_target_syntax_expression(target_name))
       arr_func = [ str_cmake_build_event_type ]
       gen_arr = ParameterArrayGenerator.new
-      gen_arr.add(NAME_COMMAND, prepostbuild_info.commandline)
-      gen_arr.add('COMMENT', prepostbuild_info.message)
+      # It seems VS10 can have build/link events with *only* message
+      # or command defined. Hmm, does CMake add_custom_command()
+      # also support that? If not, then we might need to add
+      # a suitable dummy command in case of message-only input.
+      arr_commandline = prepostbuild_info.arr_commandline
+      if not arr_commandline.nil?
+        arr_commandline.each do |commandline|
+          gen_arr.add(NAME_COMMAND, escape_content_for_cmake_string(commandline))
+        end
+      end
+      gen_arr.add('COMMENT', escape_content_for_cmake_string(prepostbuild_info.message))
       arr_func.concat(gen_arr.array)
       arr_func.push('VERBATIM') # not sure whether we really do want it...
       write_command_list('add_custom_command', command_arg, arr_func)
@@ -7799,14 +7827,14 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     # CMake dox currently don't offer such details... (yet!)
     return if arr_includes.empty?
     arr_includes_translated = arr_includes.collect { |elem_inc_dir|
-      vs7_create_config_variable_translation(elem_inc_dir, @arr_config_var_handling)
+      vs7_create_config_variable_translation(elem_inc_dir, @arr_config_var_handling, false)
     }
     write_build_attributes('include_directories', arr_includes_translated, map_includes, nil)
   end
 
   def write_link_directories(arr_lib_dirs, map_lib_dirs)
     arr_lib_dirs_translated = arr_lib_dirs.collect { |elem_lib_dir|
-      vs7_create_config_variable_translation(elem_lib_dir, @arr_config_var_handling)
+      vs7_create_config_variable_translation(elem_lib_dir, @arr_config_var_handling, false)
     }
     arr_lib_dirs_translated.push(get_dereferenced_variable_name('V2C_LIB_DIRS'))
     write_comment_at_level(COMMENT_LEVEL_VERBOSE,

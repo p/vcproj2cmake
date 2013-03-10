@@ -80,6 +80,18 @@
       <SuppressStartupBanner />
     </ClCompile>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup>
+    <PreBuildEvent>
+      <Command>
+      </Command>
+    </PreBuildEvent>
+    <PostBuildEvent>
+      <Command>echo hi there</Command>
+    </PostBuildEvent>
+    <PostBuildEvent>
+      <Message>Echoing hi there...</Message>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <AdditionalIncludeDirectories>.;..\Some\Weird\Space and\TrailingSlash\directory\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
