@@ -1863,8 +1863,9 @@ class V2C_XmlParserBase < V2C_ParserBase
     found = FOUND_FALSE # this base method will almost never "find" anything...
     return found
   end
-  def parse_post_hook
-    @called_base_parse_post_hook = true
+  def parse_verify
+    @called_base_parse_verify = true
+    FOUND_TRUE
   end
   def announce_missing_base_call(str_method)
     parser_error_logic("one of its classes forgot to service the #{str_method} base handler!")
@@ -1877,8 +1878,8 @@ class V2C_XmlParserBase < V2C_ParserBase
       if not @called_base_parse_attribute
         missing_call = 'parse_attribute'
       else
-        if not @called_base_parse_post_hook
-        missing_call = 'parse_post_hook'
+        if not @called_base_parse_verify
+        missing_call = 'parse_verify'
         end
       end
     end
@@ -1924,7 +1925,7 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
     @called_base_parse_element = false
     @called_base_parse_attribute = false
     @called_base_parse_setting = false
-    @called_base_parse_post_hook = false
+    @called_base_parse_verify = false
     @arr_config_var_dummy = Array.new
   end
   # THE MAIN PARSER ENTRY POINT.
@@ -1935,9 +1936,12 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
     # and yell loudly for any element which we don't know about!
     parse_attributes
     parse_elements
-    parse_post_hook
+    # This is e.g. an opportunity for the derived class
+    # to verify (and thus indicate) completeness of the data it collected
+    # while iterating through the XML hierarchy
+    found = parse_verify
     verify_calls
-    return FOUND_TRUE # FIXME don't assume success - add some missing checks...
+    found
   end
   def get_boolean_value(str_value)
     parse_boolean_property_value(str_value)
@@ -2776,11 +2780,13 @@ class V2C_VS7ConfigurationBaseParser < V2C_VS7ParserBase
     end
     return found
   end
-  def parse_post_hook
+  def parse_verify
+    found = super
     # While the conditional-related information is only available (parsed) once,
     # it needs to be passed to _both_ V2C_Target_Config_Build_Info _and_
     # V2C_Config_Base_Info:
     get_config_info().condition = get_target_config_info().condition
+    found
   end
   def get_target_config_info; @info_elem end
   def get_config_info; @config_info end
@@ -2896,7 +2902,7 @@ class V2C_VS7FileParser < V2C_VS7ParserBase
     if not excluded_from_build and included_in_build
       @add_to_build = true
     end
-    parse_post_hook
+    parse_verify
   end
 
   private
@@ -2926,10 +2932,12 @@ class V2C_VS7FileParser < V2C_VS7ParserBase
     end
     return found
   end
-  def parse_post_hook
+  def parse_verify
+    found = super
     if true == @add_to_build
       get_arr_file_infos().push(@info_file)
     end
+    found
   end
 end
 
@@ -3111,13 +3119,15 @@ class V2C_VS7ProjectGlobalParser < V2C_VS7ParserBase
     end
     return found
   end
-  def parse_post_hook
+  def parse_verify
+    found = super
     if nil != @name and nil != @value
       user_properties = get_user_properties()
       user_properties[@name] = @value
     else
       parser_error_syntax("Hmm, Name or Value attributes not found!? (Name: #{@name}, Value: #{@value})")
     end
+    found
   end
 end
 
@@ -3512,9 +3522,10 @@ class V2C_VS10ItemGroupProjectConfigurationDescriptionParser < V2C_VS10ParserBas
     end
     return found
   end
-  def parse_post_hook
-    super
+  def parse_verify
+    found = super
     logger.debug("build type #{get_config_entry().build_type}, platform #{get_config_entry().platform}")
+    found
   end
 end
 
@@ -3694,7 +3705,7 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
     end
     return type
   end
-  #def parse_post_hook
+  #def parse_verify
   #  log_fatal "file list: #{get_file_list().inspect}"
   #end
 end
@@ -4094,8 +4105,8 @@ class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10BaseElemParser
     if FOUND_FALSE == found; found = super end
     return found
   end
-  def parse_post_hook
-    super
+  def parse_verify
+    found = super
     if get_project().name.nil?
       # This can be seen e.g. with sbnc.vcxproj
       # (contains RootNamespace and NOT ProjectName),
@@ -4105,6 +4116,7 @@ class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10BaseElemParser
       parser_error_syntax('missing project name? Adopting root namespace...')
       get_project().name = get_project().root_namespace
     end
+    found
   end
 end
 
