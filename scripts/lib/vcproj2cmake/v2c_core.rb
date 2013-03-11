@@ -490,7 +490,7 @@ class V2C_ChainedError < StandardError
     msg_extended = msg
     if not original.nil?
       # Do use a newline (the inner error will be *large*)
-      msg_extended += " (inner error:\n#{original.message})"
+      msg_extended += " (inner error:\n#{original.message}\nBacktrace: #{original.backtrace.join("\n\t")})"
     end
     super(msg_extended)
     @original = original
@@ -4582,9 +4582,8 @@ end
 class V2C_CMakeFilePermanentizer < Util_TempFilePermanentizer
   include Logging
 
-  def initialize(description, input_file_location, output_file_fqpn, target_file_permissions)
+  def initialize(input_file_location, output_file_fqpn, target_file_permissions)
     super(input_file_location, output_file_fqpn, target_file_permissions)
-    @description = description
   end
   def process
     file_moved = false
@@ -4616,8 +4615,7 @@ end
 # since Fileutils.mv on an open file will barf on Windows (XP)).
 class V2C_GenerateIntoTempFile
   include Logging
-  def initialize(file_description, tempfile_prefix, destination_file)
-    @file_description = file_description
+  def initialize(tempfile_prefix, destination_file)
     @tempfile_prefix = tempfile_prefix
     @destination_file = destination_file
     textstream_attributes = V2C_TextStream_Attributes.new(
@@ -4641,13 +4639,8 @@ class V2C_GenerateIntoTempFile
     # we only write back the live CMakeLists.txt in case anything did change.
     # This is especially important in case of multiple concurrent builds
     # on a shared source on NFS mount.
-    mover = V2C_CMakeFilePermanentizer.new(@file_description, tmpfile_path, @destination_file, @file_create_permissions)
+    mover = V2C_CMakeFilePermanentizer.new(tmpfile_path, @destination_file, @file_create_permissions)
     mover.process
-    # I'm not entirely certain yet whether exception scope granularity
-    # is nice, but at least have one that's augmented with local context
-    # information...
-  rescue Exception
-    raise V2C_GeneratorError.new("Exception while trying to generate #{@file_description} (temp file prefix #{@tempfile_prefix})")
   end
 end
 
@@ -7074,6 +7067,8 @@ def v2c_is_project_file_generated_by_cmake(str_proj_file)
   return generated_file
 end
 
+class V2C_FileGeneratorError < V2C_ChainedError
+end
 
 class V2C_CMakeLocalFileGenerator < V2C_LoggerBase
   def initialize(p_v2c_script, p_master_project, p_generator_proj_file, arr_projects, flag_source_groups_enabled)
@@ -7093,7 +7088,7 @@ class V2C_CMakeLocalFileGenerator < V2C_LoggerBase
   end
   private
   def generate_local_projects(output_file_location)
-    temp_generator_local = V2C_GenerateIntoTempFile.new("local #{CMAKELISTS_FILE_NAME}", 'vcproj2cmake', output_file_location)
+    temp_generator_local = V2C_GenerateIntoTempFile.new('vcproj2cmake', output_file_location)
     temp_generator_local.generate { |textOutLocal|
       content_generator = V2C_CMakeLocalFileContentGenerator.new(textOutLocal, @p_local_dir, @p_master_project, @arr_projects, @script_location_relative_to_master)
       content_generator.generate
@@ -7108,17 +7103,21 @@ class V2C_CMakeLocalFileGenerator < V2C_LoggerBase
         generate_source_groups(temp_store_dir)
       end
     }
+  rescue Exception
+    raise V2C_FileGeneratorError.new("Exception while generating local #{CMAKELISTS_FILE_NAME} to #{output_file_location}.")
   end
   def source_groups_enabled; true == @flag_source_groups_enabled end
   def generate_per_project_source_groups(dest_dir, target_name, arr_filtered_file_lists)
     return if arr_filtered_file_lists.nil?
     sg_file_name = "source_groups_#{target_name}.cmake"
     output_file_location = File.join(dest_dir, sg_file_name)
-    temp_generator_sg = V2C_GenerateIntoTempFile.new("Source groups file for project #{target_name}", 'vcproj2cmake', output_file_location)
+    temp_generator_sg = V2C_GenerateIntoTempFile.new('vcproj2cmake', output_file_location)
     temp_generator_sg.generate { |textOutSG|
       content_generator = V2C_CMakeLocalSourceGroupFileContentGenerator.new(textOutSG, target_name, arr_filtered_file_lists)
       content_generator.generate
     }
+  rescue Exception
+    raise V2C_FileGeneratorError.new("Exception while generating source groups file for project #{target_name} to #{output_file_location}.")
   end
   def generate_source_groups(dest_dir)
     @arr_projects.each { |project_info|
@@ -7164,13 +7163,15 @@ end
 
 def v2c_source_root_write_projects_list_file(output_file_fqpn, output_file_permissions, arr_project_subdirs)
   # write into temporary file, to avoid corrupting previous file due to syntax error abort, disk space or failure issues
-  generate_projects_list = V2C_GenerateIntoTempFile.new('projects list file', 'vcproj2cmake_recursive', output_file_fqpn)
+  generate_projects_list = V2C_GenerateIntoTempFile.new('vcproj2cmake_recursive', output_file_fqpn)
   generate_projects_list.generate { |textOut|
     projects_list_generator = V2C_CMakeSyntaxGenerator.new(textOut)
     arr_project_subdirs.each { |subdir|
       projects_list_generator.add_subdirectory(subdir)
     }
   }
+rescue Exception
+  raise V2C_FileGeneratorError.new("Exception while generating projects list file to #{output_file_fqpn}.")
 end
 
 
@@ -7199,12 +7200,14 @@ class V2C_CMakeRootFileContentGenerator < V2C_CMakeLocalFileContentGenerator
 end
 
 def v2c_source_root_write_cmakelists_skeleton_file(p_master_project, p_script, path_cmakelists_txt, projects_list_file)
-  generate_skeleton = V2C_GenerateIntoTempFile.new("root skeleton #{CMAKELISTS_FILE_NAME}", 'vcproj2cmake_root_skeleton', path_cmakelists_txt)
+  generate_skeleton = V2C_GenerateIntoTempFile.new('vcproj2cmake_root_skeleton', path_cmakelists_txt)
   generate_skeleton.generate { |textOut|
     script_location_relative_to_master = p_script.relative_path_from(p_master_project)
     content_generator = V2C_CMakeRootFileContentGenerator.new(textOut, projects_list_file, script_location_relative_to_master)
     content_generator.generate
   }
+rescue Exception
+  raise V2C_FileGeneratorError.new("Exception while generating root skeleton #{CMAKELISTS_FILE_NAME} to #{path_cmakelists_txt}.")
 end
 
 # For collections of project configs,
