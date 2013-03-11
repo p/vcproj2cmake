@@ -835,6 +835,7 @@ module V2C_Linker_Defines
   SUBSYSTEM_WINDOWS_CE = 9 # VS10 "WindowsCE"
   MACHINE_NOT_SET = 0 # VS10: "Not Set", VS7: 0
   MACHINE_X86 = 1 # x86 / i386; VS7: 1
+  MACHINE_IA64 = 5 # IA64 (Titanium); VS7: 5
   MACHINE_X64 = 17 # VS7: 17
 end
 
@@ -2579,6 +2580,8 @@ class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
        machine = V2C_Linker_Defines::MACHINE_NOT_SET
      when 1
        machine = V2C_Linker_Defines::MACHINE_X86
+     when 5
+       machine = V2C_Linker_Defines::MACHINE_IA64
      when 17
        machine = V2C_Linker_Defines::MACHINE_X64
      else
@@ -3908,6 +3911,8 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
        machine = V2C_Linker_Defines::MACHINE_NOT_SET
      when 'MachineX86'
        machine = V2C_Linker_Defines::MACHINE_X86
+     when 'MachineIA64'
+       machine = V2C_Linker_Defines::MACHINE_IA64
      when 'MachineX64'
        machine = V2C_Linker_Defines::MACHINE_X64
      else
