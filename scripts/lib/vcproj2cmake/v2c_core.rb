@@ -2078,12 +2078,13 @@ class V2C_VS7ParserBase < V2C_VSXmlParserBase
   include V2C_VS7Syntax
 end
 
-class V2C_VSProjectSCCParser < V2C_ParserBase
+class V2C_VSProjectSCCParser < V2C_VSXmlParserBase
   def initialize(scc_info)
     @scc_info = scc_info
   end
   def register_scc(setting_key, setting_value)
     found = be_optimistic()
+    setting_value = strip_whitespace(setting_value)
     case setting_key
     # Hrmm, turns out having SccProjectName is no guarantee that both SccLocalPath and SccProvider
     # exist, too... (one project had SccProvider missing). HOWEVER,
