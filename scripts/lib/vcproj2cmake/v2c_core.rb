@@ -3902,7 +3902,7 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
      when 'MachineX64'
        machine = V2C_Linker_Defines::MACHINE_X64
      else
-       parser_todo_error("unknown target machine #{str_machine}")
+       parser_error_todo("unknown target machine #{str_machine}")
      end
      return machine
   end
