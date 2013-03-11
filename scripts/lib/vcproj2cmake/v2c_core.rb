@@ -1346,6 +1346,10 @@ end
 class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consistently get a condition element - but the VS10-side project info actually most likely does not have/use it!
   ORIG_ENV_SHORTNAME_MSVS7 = 'MSVS7'
   ORIG_ENV_SHORTNAME_MSVS10 = 'MSVS10'
+  KEYWORD_WIN32 = 'Win32Proj'
+  KEYWORD_ATL = 'ATLProj'
+  KEYWORD_MFC = 'MFCProj'
+  KEYWORD_MAKEFILE = 'MakeFileProj'
   def initialize
     @type = nil # project type
     # Interesting discussion about VS ProjectType:
@@ -3997,10 +4001,17 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
       found = super
     end
     if not item_def_group_parser.nil?
-      item_def_group_parser.parse
-      arr_info.push(info)
+      if FOUND_FALSE != item_def_group_parser.parse
+        arr_info.push(info)
+      end
     end
     return found
+  end
+  def parse_verify
+    found = FOUND_TRUE
+    tools_info = get_tools_info()
+    found = FOUND_FALSE if tools_info.arr_compiler_info.empty? and tools_info.arr_linker_info.empty? and tools_info.arr_midl_info.empty? and tools_info.arr_prepostbuildlink_info.empty?
+    found
   end
 end
 
@@ -4234,7 +4245,7 @@ class V2C_VS10ProjectParser < V2C_VSProjectParserBase
     when 'ItemDefinitionGroup'
       config_info_curr = V2C_Project_Config_Info.new
       elem_parser = V2C_VS10ItemDefinitionGroupParser.new(subelem_xml, config_info_curr)
-      if elem_parser.parse
+      if FOUND_FALSE != elem_parser.parse
         get_project().arr_config_info.push(config_info_curr)
       end
     when 'ProjectExtensions'
@@ -4335,7 +4346,7 @@ class V2C_VS10ProjectFileParser < V2C_VSProjectFileParserBase
         arr_projects_work = populate_existing_projects() ? @arr_projects_out : Array.new
         @proj_xml_parser = V2C_VS10ProjectFileXmlParser.new(doc_proj, arr_projects_work, @flag_populate_existing)
         #super.parse
-        if false != @proj_xml_parser.parse
+        if FOUND_FALSE != @proj_xml_parser.parse
           # Everything ok? Append to output...
           if not populate_existing_projects()
             @arr_projects_out.concat(arr_projects_work)
@@ -4527,9 +4538,15 @@ class V2C_ProjectValidator
     if @project_info.orig_environment_shortname.nil?; validation_error('original environment not set!?') end
     # FIXME: Disabled for TESTING only - should re-enable a fileset check once VS10 parsing is complete.
     #if @project_info.main_files.nil?; validation_error('no files!?') end
-    arr_config_info = @project_info.arr_config_info
-    if arr_config_info.nil? or arr_config_info.empty?
-      validation_error('no config information!?')
+    need_config_info = true
+    # An external-build Makefile config type does not need config information
+    # (compiler, linker, MIDL etc.)
+    need_config_info = false if @project_info.vs_keyword == V2C_Project_Info::KEYWORD_MAKEFILE
+    if false != need_config_info
+      arr_config_info = @project_info.arr_config_info
+      if arr_config_info.nil? or arr_config_info.empty?
+        validation_error('no config information for a project type which probably requires it!?')
+      end
     end
   end
   def validation_error(str_message)
@@ -6323,78 +6340,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
     put_hook_post_sources()
 
-    arr_config_info = project_info.arr_config_info
-
-    gen_condition_setup = V2C_CMakeV2CConditionGeneratorBase.new(@textOut)
-    gen_condition_setup.generate(arr_config_info)
-
-    arr_target_config_info = project_info.arr_target_config_info
-
-    target_is_valid = false
-
-    arr_config_info.each { |config_info_curr|
-      next_paragraph()
-
-      condition = config_info_curr.condition
-      gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, condition, false)
-      gen_condition.generate do
-        config_info_curr.tools.arr_compiler_info.each { |compiler_info_curr|
-          arr_includes = compiler_info_curr.get_include_dirs(false, false)
-          @localGenerator.write_include_directories(arr_includes, generator_base.map_includes)
-        }
-
-        # At this point (before target creation - much earlier than we
-        # would want to), we'll have to iterate through target configs
-        # for all settings which are target related but are (stupidly)
-        # NOT being applied as target properties (i.e. post-target-setup).
-        arr_target_config_info.each { |target_config_info_curr|
-          next if not condition.entails(target_config_info_curr.condition)
-        # FIXME: put_atl_mfc_config() does not need
-        # buildcfg condition i.e. should be outside of that block
-        # (already does own condition handling) - how to resolve this?
-          put_atl_mfc_config(target_config_info_curr)
-        }
-
-        # FIXME: hohumm, the position of this hook include is outdated, need to update it
-        # Well, there's a distinction between
-        # ("dirty") global settings (defined _prior_ to adding a target)
-        # and target-aggregated settings (properties),
-        # thus maybe we need different hooks for these two mechanisms.
-        # Well, but for now at least MAKE SURE TO ALWAYS KEEP IT RIGHT BEFORE
-        # adding the target! (to be able to manipulate _all_ prior settings
-        # if needed).
-        put_hook_post_definitions()
-
-        # Technical note: target type (library, executable, ...) in .vcproj can be configured per-config
-        # (or, in other words, different configs are capable of generating _different_ target _types_
-        # for the _same_ target), but in CMake this isn't possible since _one_ target name
-        # maps to _one_ target type and we _need_ to restrict ourselves to using the project name
-        # as the exact target name (we are unable to define separate PROJ_lib and PROJ_exe target names,
-        # since other .vcproj file contents always link to our target via the main project name only!!).
-        # Thus we need to declare the target _outside_ the scope of per-config handling :(
-
-        # create a target only in case we do have any meat at all
-        if project_info.have_build_units
-          arr_target_config_info.each { |target_config_info_curr|
-            next if not condition.entails(target_config_info_curr.condition)
-            target_is_valid = put_target_and_stuff(project_info, arr_sub_source_list_var_names, map_lib_dirs, map_lib_dirs_dep, map_dependencies, config_info_curr, target_config_info_curr)
-          }
-        end # target.have_build_units
-      end
-
-      # Generate all functions which already have their own conditional
-      # platform / build type handling here, outside of the
-      # buildcfg condition block handling...
-      # Note that some may be dependent on the target already having
-      # been established!
-      hook_up_midl_files(project_info.file_lists, config_info_curr)
-    } # [END per-config handling]
-
-    # Best add source_group() information only *after* quite likely
-    # having a valid target, since our helper function has a target argument
-    # which should best be an established target rather than being "name only".
-    put_v2c_target_source_groups_definitions_include(project_info.name)
-    next_paragraph()
+    # FIXME: these params are awfully repeated and an annoyance.
+    # Definitely needs refactoring!!
+    target_is_valid = write_project_target_config(project_info, arr_sub_source_list_var_names, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
 
     # Now that we likely _do_ have a valid target
     # (created by at least one of the Debug/Release/... build configs),
@@ -6405,7 +6353,10 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # UGH, now added yet another loop iteration.
     # FIXME This is getting waaaaay too messy, need to refactor it to have a
     # clean hierarchy.
+    # Yup, this stuff should perhaps be shoved into
+    # write_project_target_config(), too.
     if target_is_valid
+      arr_config_info = project_info.arr_config_info
       when_target_valid_scriptlet_block(@target.name) {
         arr_config_info.each { |config_info_curr|
           condition = config_info_curr.condition
@@ -6423,7 +6374,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
             print_marker_line('per-compiler_info')
 
-            arr_target_config_info.each { |target_config_info_curr|
+            project_info.arr_target_config_info.each { |target_config_info_curr|
               next if not condition.entails(target_config_info_curr.condition)
 
               hash_defines_augmented = compiler_info_curr.hash_defines.clone
@@ -6496,6 +6447,12 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
       # TODO: perhaps there are useful Xcode (XCODE_ATTRIBUTE_*) properties to convert?
     end # target_is_valid
+
+    # Best add source_group() information only *after* quite likely
+    # having a valid target, since our helper function has a target argument
+    # which should best be an established target rather than being "name only".
+    put_v2c_target_source_groups_definitions_include(project_info.name)
+    next_paragraph()
 
     arr_orig_proj_files = project_info.arr_p_original_project_files.collect { |orig_proj_file|
       orig_proj_file.relative_path_from(@project_dir)
@@ -6617,6 +6574,85 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   # _target_ generator specific method.
   def set_property(target_name, flag_append, property, arr_values)
     put_property(get_target_syntax_expression(target_name), flag_append, property, arr_values)
+  end
+  # Writes the build-specific parts (compile, link, resources, MIDL etc.)
+  # of the project target, i.e. the things that always need to be done
+  # whenever this is NOT a weird project type such as external Makefile.
+  def write_project_target_config(project_info, arr_sub_source_list_var_names, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
+    arr_config_info = project_info.arr_config_info
+
+    if arr_config_info.empty?
+      logger.warn "Empty config info for project #{project_info.name}: perhaps an external-build Makefile project?"
+      return false
+    end
+
+    # Generates the CMake syntax required for working conditionals
+    # of generated conditions code.
+    gen_condition_setup = V2C_CMakeV2CConditionGeneratorBase.new(@textOut)
+    gen_condition_setup.generate(arr_config_info)
+
+    arr_target_config_info = project_info.arr_target_config_info
+
+    target_is_valid = false
+
+    arr_config_info.each { |config_info_curr|
+      next_paragraph()
+
+      condition = config_info_curr.condition
+      gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, condition, false)
+      gen_condition.generate do
+        config_info_curr.tools.arr_compiler_info.each { |compiler_info_curr|
+          arr_includes = compiler_info_curr.get_include_dirs(false, false)
+          @localGenerator.write_include_directories(arr_includes, generator_base.map_includes)
+        }
+
+        # At this point (before target creation - much earlier than we
+        # would want to), we'll have to iterate through target configs
+        # for all settings which are target related but are (stupidly)
+        # NOT being applied as target properties (i.e. post-target-setup).
+        arr_target_config_info.each { |target_config_info_curr|
+          next if not condition.entails(target_config_info_curr.condition)
+        # FIXME: put_atl_mfc_config() does not need
+        # buildcfg condition i.e. should be outside of that block
+        # (already does own condition handling) - how to resolve this?
+          put_atl_mfc_config(target_config_info_curr)
+        }
+
+        # FIXME: hohumm, the position of this hook include is outdated, need to update it
+        # Well, there's a distinction between
+        # ("dirty") global settings (defined _prior_ to adding a target)
+        # and target-aggregated settings (properties),
+        # thus maybe we need different hooks for these two mechanisms.
+        # Well, but for now at least MAKE SURE TO ALWAYS KEEP IT RIGHT BEFORE
+        # adding the target! (to be able to manipulate _all_ prior settings
+        # if needed).
+        put_hook_post_definitions()
+
+        # Technical note: target type (library, executable, ...) in .vcproj can be configured per-config
+        # (or, in other words, different configs are capable of generating _different_ target _types_
+        # for the _same_ target), but in CMake this isn't possible since _one_ target name
+        # maps to _one_ target type and we _need_ to restrict ourselves to using the project name
+        # as the exact target name (we are unable to define separate PROJ_lib and PROJ_exe target names,
+        # since other .vcproj file contents always link to our target via the main project name only!!).
+        # Thus we need to declare the target _outside_ the scope of per-config handling :(
+
+        # create a target only in case we do have any meat at all
+        if project_info.have_build_units
+          arr_target_config_info.each { |target_config_info_curr|
+            next if not condition.entails(target_config_info_curr.condition)
+            target_is_valid = put_target_and_stuff(project_info, arr_sub_source_list_var_names, map_lib_dirs, map_lib_dirs_dep, map_dependencies, config_info_curr, target_config_info_curr)
+          }
+        end # target.have_build_units
+      end
+
+      # Generate all functions which already have their own conditional
+      # platform / build type handling here, outside of the
+      # buildcfg condition block handling...
+      # Note that some may be dependent on the target already having
+      # been established!
+      hook_up_midl_files(project_info.file_lists, config_info_curr)
+    } # [END per-config handling]
+    target_is_valid
   end
   def write_func_v2c_project_post_setup(project_name, arr_proj_files)
     # This function invokes CMakeLists.txt rebuilder only
