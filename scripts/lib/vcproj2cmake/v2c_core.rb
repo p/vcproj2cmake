@@ -1584,7 +1584,10 @@ def vs7_create_config_variable_translation(str_in, arr_config_var_handling)
     # Thus both should map to the special ${CMAKE_CFG_INTDIR} mechanism.
     when 'CONFIGURATION', 'CONFIGURATIONNAME'
       config_var_replacement = CMAKE_CFG_INTDIR_VAR_DEREF
-    when 'PLATFORMNAME'
+    # I assume that both Configuration vs. ConfigurationName
+    # and Platform vs. PlatformName have more or less the same meaning,
+    # respectively.
+    when 'PLATFORM', 'PLATFORMNAME'
       config_var_emulation_code = <<EOF
   if(NOT v2c_VS_PlatformName)
     if(CMAKE_CL_64)
