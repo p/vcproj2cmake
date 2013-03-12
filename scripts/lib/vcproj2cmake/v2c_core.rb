@@ -900,6 +900,16 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
   attr_accessor :uac_manifest_enable
   attr_accessor :arr_lib_dirs
   attr_accessor :arr_tool_variant_specific_info
+  # For executables, indicates whether it's a Windows GUI application,
+  # i.e. whether the linker setup needs to provide a WinMain() entry point.
+  def need_WinMain()
+    need_winmain = false
+    case @subsystem
+    when SUBSYSTEM_WINDOWS, SUBSYSTEM_WINDOWS_CE
+      need_winmain = true
+    end
+    need_winmain
+  end
 end
 
 # For TypeLibrary file naming info, visit
@@ -4857,6 +4867,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   NAME_CMAKE_CURRENT_BINARY_DIR = 'CMAKE_CURRENT_BINARY_DIR'
   NAME_CMAKE_MODULE_PATH = 'CMAKE_MODULE_PATH'
   NAME_CMAKE_SOURCE_DIR = 'CMAKE_SOURCE_DIR'
+  NAME_SET_PROPERTY = 'set_property'
   WHITESPACE_REGEX_OBJ = %r{\s}
 
   # Separate logical paragraphs from each other.
@@ -4992,10 +5003,6 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     write_command_list_single_line(str_function_name_prefixed, nil)
     next_paragraph()
   end
-  # http://www.cmake.org/Wiki/CMake/Language_Syntax says
-  # one can use any of TRUE/FALSE, ON/OFF, YES/NO,
-  # thus we'll obviously choose the shortest solution.
-  def get_keyword_bool(setting); false != setting ? 'ON' : 'OFF' end
   def write_set_var(var_name, setting)
     write_command_list('set', var_name, [ setting ])
   end
@@ -5054,7 +5061,12 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     arr_prop_parms = Array.new(arr_prop_type)
     arr_prop_parms.push('APPEND') if PROP_APPEND == flag_append
     arr_prop_parms.push('PROPERTY', prop_key)
-    write_command_list('set_property', array_to_string(arr_prop_parms), arr_prop_vals)
+    write_command_list(NAME_SET_PROPERTY, array_to_string(arr_prop_parms), arr_prop_vals)
+  end
+  def put_property_bool(arr_prop_type, prop_key, flag)
+    arr_prop_parms = Array.new(arr_prop_type)
+    arr_prop_parms.push('PROPERTY', prop_key, get_keyword_bool(flag))
+    write_command_list_single_line(NAME_SET_PROPERTY, arr_prop_parms)
   end
   def put_property_source(source_list_expr, prop_key, arr_prop_vals)
     put_property([ 'SOURCE', source_list_expr ], PROP_SET, prop_key, arr_prop_vals)
@@ -5112,6 +5124,12 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
 
   def path_join(a, b); cmake_path_join(a, b) end
   private
+  # http://www.cmake.org/Wiki/CMake/Language_Syntax says
+  # one can use any of TRUE/FALSE, ON/OFF, YES/NO,
+  # thus we'll obviously choose the shortest solution.
+  # Private method since it's innermost syntax layer
+  # (to be used by other helpers only).
+  def get_keyword_bool(setting); false != setting ? 'ON' : 'OFF' end
   # Generates CMake commands matching the common COMMAND / endCOMMAND pair.
   def gen_scoped_cmake_command(cmake_command, arr_params)
     write_command_list_single_line(cmake_command, arr_params)
@@ -6052,9 +6070,15 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       target_is_valid = write_target_type(target_config_info_curr.cfg_type)
     end
 
-    # write target_link_libraries() in case there's a valid target
+    # In case there's a valid target,
+    # optionally mark as needing WinMain() (Win32 non-Console executables)
+    # and write target_link_libraries().
     if target_is_valid
       target_info_curr.tools.arr_linker_info.each { |linker_info_curr|
+        if V2C_TargetConfig_Defines::CFG_TYPE_APP == target_config_info_curr.cfg_type
+          write_WinMain() if false != linker_info_curr.need_WinMain()
+        end
+
         arr_dependencies = linker_info_curr.arr_dependencies.collect { |dep| dep.dependency }
         write_link_libraries(arr_dependencies, map_dependencies)
       }
@@ -6063,7 +6087,12 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     return target_is_valid
   end
   def write_target_executable(target_name, string_sources_list)
-    write_command_list_single_line('add_executable', [ target_name, 'WIN32', string_sources_list ])
+    # We will NOT add the WIN32 param here -
+    # subsequently setting the WIN32_EXECUTABLE property
+    # (iff appropriate for the target type!) is *much* more flexible
+    # (think per-config conditionals etc.) than inflexibly specifying it
+    # right at target instantiation.
+    write_command_list_single_line('add_executable', [ target_name, string_sources_list ])
   end
 
   def write_target_library_dynamic(target_name, string_sources_list)
@@ -6132,6 +6161,10 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       raise V2C_GeneratorError, "#{target_name}: project type #{cfg_type} not supported."
     end
     return target_is_valid
+  end
+  def write_WinMain()
+    arr_target_prop = get_target_syntax_expression(@target.name)
+    put_property_bool(arr_target_prop, 'WIN32_EXECUTABLE', true)
   end
 
   def put_hook_post_target
