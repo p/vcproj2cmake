@@ -3393,6 +3393,10 @@ class V2C_VSProjectFileParserBase < V2C_ParserBase
     @arr_projects_out = arr_projects_out
     @proj_xml_parser = nil
   end
+  def raise_project_error()
+    # Make sure to have an annotation of the project file which bombed.
+    raise V2C_ProjectFileParserError.new("Exception parsing project file #{@p_parser_proj_file}")
+  end
 end
 
 class V2C_VS7ProjectFileParser < V2C_VSProjectFileParserBase
@@ -3404,6 +3408,8 @@ class V2C_VS7ProjectFileParser < V2C_VSProjectFileParserBase
       #super.parse
       @proj_xml_parser.parse
     }
+  rescue Exception
+    raise_project_error()
   end
 end
 
@@ -3413,12 +3419,7 @@ class V2C_VS7ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
   end
   def parse_project_files
     proj_file_parser = V2C_VS7ProjectFileParser.new(@p_parser_proj_file, @arr_projects_new)
-    begin
-      proj_file_parser.parse_file
-    rescue Exception
-      # Make sure to have an annotation of the project file which bombed.
-      raise V2C_ProjectFileParserError.new("Exception parsing project file #{@p_parser_proj_file}")
-    end
+    proj_file_parser.parse_file
   end
   def check_unhandled_file_types
     # FIXME: we don't handle now externally specified (.rules, .vsprops) custom build parts yet!
@@ -4375,8 +4376,8 @@ class V2C_VS10ProjectFileParser < V2C_VSProjectFileParserBase
       }
     rescue Errno::ENOENT
       raise V2C_ProjectFileParserError.new("Exception trying to open non-existent project file #{@proj_filename}")
-    rescue REXML::ParseException
-      raise V2C_ProjectFileParserError.new("Exception parsing project file #{@proj_filename}")
+    rescue Exception
+      raise_project_error()
     end
     return success
   end
