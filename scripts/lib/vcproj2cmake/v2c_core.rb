@@ -2042,6 +2042,7 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
 
   private
 
+  WHITESPACE_REGEX = %r{\s+}
   def parse_boolean_text(str_value)
     bool_out = false
     success = true # be optimistic :)
@@ -2054,7 +2055,7 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
       else
         # Seems empty (whitespace-only) string is VS equivalent to false, right?
         # http://stackoverflow.com/a/1634814/1541578
-        str_value_cooked = str_value.gsub(/\s+/, '')
+        str_value_cooked = str_value.gsub(WHITESPACE_REGEX, '')
         if str_value_cooked.empty?
           bool_out = false
           success = true
@@ -4938,6 +4939,12 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def write_list_quoted(list_var_name, arr_elems)
     write_command_list_quoted('set', list_var_name, arr_elems)
   end
+  def put_list_of_lists(list_var_name, arr_sub_list_var_names)
+    arr_sub_list_names_deref = arr_sub_list_var_names.collect do |sub_list_name|
+      get_dereferenced_variable_name(sub_list_name)
+    end
+    write_list_quoted(list_var_name, arr_sub_list_names_deref)
+  end
   # Special helper to invoke functions which act on a specific object
   # (e.g. target) given as first param.
   def write_invoke_config_object_function_quoted(str_function, str_object, arr_args_func)
@@ -5368,6 +5375,7 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
   # VS_GLOBAL_PREFIX_NAME is located in generator base since it's used
   # for at least both TARGET and DIRECTORY property scopes.
   VS_GLOBAL_PREFIX_NAME = 'VS_GLOBAL_'
+  def format_global_prefix(sub); VS_GLOBAL_PREFIX_NAME + sub end
   def write_vcproj2cmake_func_comment()
     write_comment_at_level(COMMENT_LEVEL_STANDARD, "See function implementation/docs in #{VCPROJ2CMAKE_FUNC_CMAKE_LOCATION}")
   end
@@ -5955,11 +5963,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     }
   end
   def put_source_vars(arr_sub_source_list_var_names)
-    arr_source_vars = arr_sub_source_list_var_names.collect { |sources_elem|
-	get_dereferenced_variable_name(sources_elem)
-    }
     next_paragraph()
-    write_list_quoted('SOURCES', arr_source_vars)
+    put_list_of_lists('SOURCES', arr_sub_source_list_var_names)
   end
   def put_hook_post_sources; @localGenerator.put_customization_hook_from_cmake_var('V2C_HOOK_POST_SOURCES') end
   def put_hook_post_definitions
@@ -6128,10 +6133,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # http://www.ros.org/wiki/rosbuild/CMakeLists ,
     # https://kermit.cse.wustl.edu/project/robotics/browser/trunk/vendor/ros/core/rosbuild/rosbuild.cmake?rev=3
     # to be able to detect non-C++ file types within a source file list
-    # and add a hook to handle them specially.
+    # (useful for input which does not provide sufficiently type-specific
+    # separation of files) and add a hook to handle them specially.
 
     target_name = @target.name
-    string_sources_list = '${SOURCES}'
+    string_sources_list = get_dereferenced_variable_name('SOURCES')
 
     # see VCProjectEngine ConfigurationTypes enumeration
     case cfg_type
@@ -6295,7 +6301,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def set_property_project_types(target_name, project_types)
     # This one does NOT follow VS_GLOBAL_* pattern i.e.
     # VS_GLOBAL_ProjectTypes (property does not use same case as VS side).
-    set_property(target_name, PROP_SET, "#{VS_GLOBAL_PREFIX_NAME}PROJECT_TYPES", [ project_types ])
+    set_property(target_name, PROP_SET, format_global_prefix('PROJECT_TYPES'), [ project_types ])
   end
   def set_properties_user_properties(target_name, user_properties)
     user_properties.each_pair { |key, value|
@@ -6306,7 +6312,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # i.e. they are NOT to be treated in the knowledge
       # of some of them happening to be filesystem items.
       cmake_value = escape_content_for_cmake_string(value)
-      set_property(target_name, PROP_SET, VS_GLOBAL_PREFIX_NAME + key, [ cmake_value ])
+      set_property(target_name, PROP_SET, format_global_prefix(key), [ cmake_value ])
     }
   end
   def set_properties_vs_scc(target_name, scc_info_in)
