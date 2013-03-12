@@ -2275,8 +2275,13 @@ class V2C_VSToolCompilerParser < V2C_VSToolDefineParserBase
 
   include V2C_VSToolCompilerDefines
   def get_compiler_info; @info_elem end
-  def allocate_precompiled_header_info(compiler_info)
-    get_compiler_info().precompiled_header_info ||= V2C_Precompiled_Header_Info.new
+  def provide_precompiled_header_info(compiler_info)
+    precompiled_header_info = compiler_info.precompiled_header_info
+    if precompiled_header_info.nil?
+      precompiled_header_info = V2C_Precompiled_Header_Info.new
+      compiler_info.precompiled_header_info = precompiled_header_info
+    end
+    precompiled_header_info
   end
   def parse_setting(setting_key, setting_value)
     found = be_optimistic()
@@ -2403,14 +2408,11 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
     when TEXT_NAME
       compiler_info.name = setting_value
     when TEXT_PRECOMPILEDHEADERFILE_BINARY
-      allocate_precompiled_header_info(compiler_info)
-      compiler_info.precompiled_header_info.header_binary_name = get_filesystem_location(setting_value)
+      provide_precompiled_header_info(compiler_info).header_binary_name = get_filesystem_location(setting_value)
     when TEXT_PRECOMPILEDHEADERFILE_SOURCE
-      allocate_precompiled_header_info(compiler_info)
-      compiler_info.precompiled_header_info.header_source_name = get_filesystem_location(setting_value)
+      provide_precompiled_header_info(compiler_info).header_source_name = get_filesystem_location(setting_value)
     when TEXT_USEPRECOMPILEDHEADER
-      allocate_precompiled_header_info(compiler_info)
-      compiler_info.precompiled_header_info.use_mode = parse_use_precompiled_header(setting_value)
+      provide_precompiled_header_info(compiler_info).use_mode = parse_use_precompiled_header(setting_value)
     when TEXT_WARNASERROR
       compiler_info.warnings_are_errors_enable = get_boolean_value(setting_value)
     else
@@ -3820,23 +3822,21 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
     found = be_optimistic()
     setting_key = subelem_xml.name
     setting_value = subelem_xml.text
+    compiler_info = get_compiler_info()
     case setting_key
     when 'MultiProcessorCompilation'
-      get_compiler_info().multi_core_compilation_enable = get_boolean_value(setting_value)
+      compiler_info.multi_core_compilation_enable = get_boolean_value(setting_value)
     when 'ObjectFileName'
        # TODO: support it - but with a CMake out-of-tree build this setting is very unimportant methinks.
        skipped_element_warn(setting_key)
     when TEXT_PRECOMPILEDHEADER
-      allocate_precompiled_header_info(get_compiler_info())
-      get_compiler_info().precompiled_header_info.use_mode = parse_use_precompiled_header(setting_value)
+      provide_precompiled_header_info(compiler_info).use_mode = parse_use_precompiled_header(setting_value)
     when TEXT_PRECOMPILEDHEADERFILE
-      allocate_precompiled_header_info(get_compiler_info())
-      get_compiler_info().precompiled_header_info.header_source_name = get_filesystem_location(setting_value)
+      provide_precompiled_header_info(compiler_info).header_source_name = get_filesystem_location(setting_value)
     when TEXT_PRECOMPILEDHEADEROUTPUTFILE
-      allocate_precompiled_header_info(get_compiler_info())
-      get_compiler_info().precompiled_header_info.header_binary_name = get_filesystem_location(setting_value)
+      provide_precompiled_header_info(compiler_info).header_binary_name = get_filesystem_location(setting_value)
     when TEXT_TREATWARNINGASERROR
-      get_compiler_info().warnings_are_errors_enable = get_boolean_value(setting_value)
+      compiler_info.warnings_are_errors_enable = get_boolean_value(setting_value)
     else
       found = super
     end
