@@ -2533,8 +2533,7 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
       next if skip_vs10_percent_sign_var(elem_lib_dep)
       elem_lib_dep_fs = get_filesystem_location(elem_lib_dep)
       next if elem_lib_dep_fs.nil?
-      dependency_name = File.basename(elem_lib_dep_fs, '.lib')
-      arr_dependencies.push(V2C_Dependency_Info.new(dependency_name))
+      arr_dependencies.push(V2C_Dependency_Info.new(elem_lib_dep_fs))
     }
   end
   def parse_data_execution_prevention_enable(str_data_execution_prevention_enable)
@@ -6080,8 +6079,27 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
           write_WinMain() if false != linker_info_curr.need_WinMain()
         end
 
-        arr_dependencies = linker_info_curr.arr_dependencies.collect { |dep| dep.dependency }
-        write_link_libraries(arr_dependencies, map_dependencies)
+        arr_dependency_names = linker_info_curr.arr_dependencies.collect do |dep|
+          dependency_path = dep.dependency
+          # We'll strip the path (plus system-specific .lib extension)
+          # from the dependency,
+          # since CMake has a high-level "target name" dependency operation,
+          # and dependency_mappings.txt currently is expected to map
+          # from name-only to a destination expression.
+          # We might actually want to give up name-only handling eventually,
+          # since it's possibly undesired information loss.
+          # A prime example of trouble would be dependencies on two libraries
+          # in different paths yet same name!! (I would consider
+          # this to be a pathological case - but with full paths kept in MSVS
+          # it most likely works).
+          # We'll do that handling here rather than within helper getters of
+          # data classes: e.g. .lib extension is very system-specific,
+          # and this place here has much more knowledge to figure out details
+          # of the originating system...
+          dependency_name = File.basename(dependency_path, '.lib')
+          dependency_name
+        end
+        write_link_libraries(arr_dependency_names, map_dependencies)
       }
     end # target_is_valid
     logger.debug "TARGET_LINK_LIBRARIES: target_is_valid #{target_is_valid}, #{target_info_curr.tools.arr_linker_info.inspect}"
