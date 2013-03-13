@@ -5482,23 +5482,22 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     #hash_ensure_sorted(platform_defs)
   end
 
-  V2C_COMPILER_MSVC_REGEX_OBJ = %r{^MSVC}
-  def map_compiler_name_to_cmake_platform_conditional(compiler_name)
-    arr_conditional_compiler_platform = nil
+  V2C_TOOL_MSVC_REGEX_OBJ = %r{^MSVC}
+  # Given a tool ID name, tries to derive
+  # a sufficiently closely matching suitable CMake if(...) conditional.
+  # For now, let's assume that compiler / linker name mappings are the same:
+  # BTW, we probably don't have much use for the CMAKE_LINKER variable anywhere, right?
+  def map_tool_name_to_cmake_platform_conditional(tool_name)
+    arr_conditional_tool_platform = nil
     # For a number of platform indentifier variables,
     # see "CMake Useful Variables" http://www.cmake.org/Wiki/CMake_Useful_Variables
-    case compiler_name
-    when V2C_COMPILER_MSVC_REGEX_OBJ
-      arr_conditional_compiler_platform = [ 'MSVC' ]
+    case tool_name
+    when V2C_TOOL_MSVC_REGEX_OBJ
+      arr_conditional_tool_platform = [ 'MSVC' ]
     else
-      logger.unhandled_functionality "unknown (unsupported) compiler name #{logger.escape_item(compiler_name)}!"
+      logger.unhandled_functionality "unknown (unsupported) tool (compiler/linker) name #{logger.escape_item(tool_name)}!"
     end
-    return arr_conditional_compiler_platform
-  end
-  def map_linker_name_to_cmake_platform_conditional(linker_name)
-    # For now, let's assume that compiler / linker name mappings are the same:
-    # BTW, we probably don't have much use for the CMAKE_LINKER variable anywhere, right?
-    return map_compiler_name_to_cmake_platform_conditional(linker_name)
+    return arr_conditional_tool_platform
   end
   def do_configure_atl_mfc_flag(target_name, condition, use_of_atl, use_of_mfc)
     # CMAKE_MFC_FLAG setting is supposed to be done _before_
@@ -6464,7 +6463,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
               # Original compiler flags are MSVC-only, of course.
               # TODO: provide an automatic conversion towards gcc?
               compiler_info_curr.arr_tool_variant_specific_info.each { |compiler_specific|
-                arr_conditional_compiler_platform = map_compiler_name_to_cmake_platform_conditional(compiler_specific.tool_id)
+                arr_conditional_compiler_platform = map_tool_name_to_cmake_platform_conditional(compiler_specific.tool_id)
                 # I don't think we need this (we have per-target properties), thus we'll NOT write it!
                 #if not attr_opts.nil?
                 #  local_generator.write_directory_property_compile_flags(attr_options)
@@ -6484,7 +6483,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
           } # config_info_curr.tools.arr_compiler_info.each
           tools.arr_linker_info.each { |linker_info_curr|
             linker_info_curr.arr_tool_variant_specific_info.each { |linker_specific|
-              arr_conditional_linker_platform = map_linker_name_to_cmake_platform_conditional(linker_specific.tool_id)
+              arr_conditional_linker_platform = map_tool_name_to_cmake_platform_conditional(linker_specific.tool_id)
               # Probably more linker flags support needed? (mention via
               # CMAKE_SHARED_LINKER_FLAGS / CMAKE_MODULE_LINKER_FLAGS / CMAKE_EXE_LINKER_FLAGS
               # depending on target type, and make sure to filter out options
