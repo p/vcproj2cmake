@@ -188,7 +188,7 @@ def number_of_processors
     return `grep processor /proc/cpuinfo| wc -l`.to_i
   elsif RUBY_PLATFORM =~ /darwin/
     return `sysctl -n hw.logicalcpu`.to_i
-  elsif RUBY_PLATFORM =~ /win32/
+  elsif RUBY_PLATFORM =~ /(win32|i386-mingw32)/
     # this works for windows 2000 or greater
     require 'win32ole'
     wmi = WIN32OLE.connect("winmgmts://")
