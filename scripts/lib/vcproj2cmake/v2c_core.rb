@@ -7238,7 +7238,7 @@ end
 # *and* invocations of the CMake binary (for custom targets),
 # and some other characteristic strings.
 #VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{#{CMAKELISTS_FILE_NAME}}
-VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{\bPreprocessorDefinitions\b.*\bCMAKE_INTDIR=}
+VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{(\bPreprocessorDefinitions\b.*\bCMAKE_INTDIR=|\bCMakeFiles\b)}
 def v2c_is_project_file_generated_by_cmake(str_proj_file)
   generated_file = false
   cmakelists_text = ''
