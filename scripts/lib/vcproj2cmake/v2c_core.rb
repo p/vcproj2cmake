@@ -1967,7 +1967,7 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
 
     # TODO: should think of a way to do central verification
     # of existence of the file system paths found here near this helper.
-    path_cooked = normalize_path(path_translated.strip)
+    path_cooked = normalize_path(strip_whitespace(path_translated))
     logger.debug "path_translated #{path_translated}, path_cooked #{path_cooked}"
     return path_cooked.empty? ? nil : path_cooked
   end
@@ -1986,6 +1986,11 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
     #puts "guid_match #{guid_match.inspect} #{guid_match[1]}"
     return guid_match[1]
   end
+  # Have a clean central helper for all operations
+  # that might be required for VS XML entry stripping -
+  # some VS XML elements contain leading/trailing whitespace (which may
+  # just as well be a newline spanning from starting tag to ending tag)
+  def strip_whitespace(str_in); str_in.strip end
   def split_values_list(str_value)
     arr_str = str_value.split(VS_VALUE_SEPARATOR_REGEX_OBJ)
     #arr_str.each { |str| logger.debug "SPLIT #{str}" }
@@ -3898,7 +3903,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
     'Use'
   ]
   def parse_use_precompiled_header(str_use_precompiled_header)
-    return string_to_index(ARR_USE_PCH, str_use_precompiled_header.strip, 0)
+    return string_to_index(ARR_USE_PCH, strip_whitespace(str_use_precompiled_header), 0)
   end
   ARR_WARN_LEVEL = [
     'TurnOffAllWarnings', # /W0
