@@ -622,6 +622,12 @@ class V2C_Tool_Base_Info
   attr_accessor :suppress_startup_banner_enable
   attr_accessor :show_progress_enable
   attr_accessor :arr_tool_variant_specific_info
+  def get_suitable_specific_info
+    if not arr_tool_variant_specific_info.empty?
+      specific_info = arr_tool_variant_specific_info[0]
+    end
+    specific_info
+  end
 end
 
 class V2C_Tool_Define_Base_Info < V2C_Tool_Base_Info
@@ -809,12 +815,17 @@ class V2C_Tool_Linker_Specific_Info_MSVC10 < V2C_Tool_Linker_Specific_Info_MSVC
 end
 
 class V2C_Dependency_Info
-  def initialize(dependency)
-    @dependency = dependency # string (filename path or target name)
-    @is_target_name = false
+  DEP_TYPE_LIBRARY = 1
+  DEP_TYPE_OBJECT = 2
+  DEP_TARGET_NAME_ONLY = 4
+  def initialize(dependency, flags)
+    @dependency = dependency # string (library or object path or target name)
+    @flags = flags
   end
   attr_accessor :dependency
-  attr_accessor :is_target_name
+  attr_accessor :flags
+  def is_library_type(); ((@flags & DEP_TYPE_LIBRARY) != 0) end
+  def is_object_type(); ((@flags & DEP_TYPE_OBJECT) != 0) end
 end
 
 module V2C_Linker_Defines
@@ -2527,15 +2538,28 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
     return found
   end
 
+  MSVC_OBJ_REGEX = %r{\.obj$}
   def parse_additional_dependencies(attr_deps, arr_dependencies)
     return if attr_deps.empty?
+    have_obj = false
     split_values_list_discard_empty(attr_deps).each { |elem_lib_dep|
       logger.debug "!!!!! elem_lib_dep #{elem_lib_dep}"
       next if skip_vs10_percent_sign_var(elem_lib_dep)
       elem_lib_dep_fs = get_filesystem_location(elem_lib_dep)
+      # Do nil check *after* any potential illegal path filtering!
       next if elem_lib_dep_fs.nil?
-      arr_dependencies.push(V2C_Dependency_Info.new(elem_lib_dep_fs))
+      # We need to differentiate between .lib:s and .obj:s -
+      # while some build environments allow listing both libs and objs
+      # as dependencies, e.g. CMake allows linking to libs only,
+      # and objs are expected to be passed as source input instead!
+      is_obj = elem_lib_dep_fs.clone.downcase.match(MSVC_OBJ_REGEX)
+      have_obj ||= is_obj
+      flags = is_obj ? V2C_Dependency_Info::DEP_TYPE_OBJECT : V2C_Dependency_Info::DEP_TYPE_LIBRARY
+      arr_dependencies.push(V2C_Dependency_Info.new(elem_lib_dep_fs, flags))
     }
+    if false != have_obj
+      parser_warn_syntax("It seems your AdditionalDependencies element contains non-library parts (object files), perhaps as a third-party obj file/header combo. While we added support for that (listing such files as a target's sources in CMake), it's perhaps better to link the object into a static library and then cleanly link to that library instead (e.g. CMake has generic internal handling of system-specific library extensions, while handling of system-specific object file extensions seems to be less generic). Also, be advised that MSVS10 seems to know an ItemGroup element type named Object, probably to be used for external object files, so this likely is a more suitable place to add object files to.")
+    end
   end
   def parse_data_execution_prevention_enable(str_data_execution_prevention_enable)
     get_boolean_value(str_data_execution_prevention_enable)
@@ -5368,6 +5392,7 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
   NAME_V2C_CONFIG_DIR_LOCAL = 'V2C_CONFIG_DIR_LOCAL'
   NAME_V2C_MASTER_PROJECT_SOURCE_DIR = 'V2C_MASTER_PROJECT_SOURCE_DIR'
   NAME_V2C_MASTER_PROJECT_BINARY_DIR = 'V2C_MASTER_PROJECT_BINARY_DIR'
+  NAME_V2C_SOURCE_LIST_PREFIX = 'SOURCES_files_'
   # CMake issue: VS_GLOBAL is somewhat of a misnomer for the case
   # of user-custom (i.e. non-official) settings,
   # since VS7 Globals are not the same thing as VS10 Globals,
@@ -5775,7 +5800,7 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
     end
     return arr_local_sources
   end
-  def write_sources_list(source_list_name, arr_sources, var_prefix = 'SOURCES_files_')
+  def write_sources_list(source_list_name, arr_sources, var_prefix = NAME_V2C_SOURCE_LIST_PREFIX)
     source_files_list_var_name = var_prefix + source_list_name
     write_list_quoted(source_files_list_var_name, arr_sources)
     return source_files_list_var_name
@@ -5961,6 +5986,43 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       #puts "file_list.name #{file_list.name}, arr_generated #{arr_generated}"
     }
   end
+  def put_obj_files_as_sources(project_info, arr_sub_source_list_var_names)
+    # FIXME: set EXTERNAL_OBJECT property, too?
+    project_info.arr_config_info.each do |config_info_curr|
+      condition = config_info_curr.condition
+      tools = config_info_curr.tools
+      tools.arr_linker_info.each do |linker_info_curr|
+        arr_obj = linker_info_curr.arr_dependencies.collect do |dep|
+          next if not dep.is_object_type()
+          dep.dependency
+        end
+        arr_obj.compact!
+        if not arr_obj.empty?
+          # Since that .obj handling remains totally platform-specific
+          # for now, add a conditional to have it applied on original
+          # platform only.
+          arr_conditional_linker = nil
+          linker_specific_info = linker_info_curr.get_suitable_specific_info()
+          if not linker_specific_info.nil?
+            arr_conditional_linker = map_tool_name_to_cmake_platform_conditional(linker_specific_info.tool_id)
+          end
+          write_conditional_block(arr_conditional_linker) do
+            # Hmmhmm... I'm afraid this generated code here
+            # should be moved into a vcproj2cmake_func helper, too...
+            gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, condition, false)
+            gen_condition.generate do
+              var_name_obj_sources = NAME_V2C_SOURCE_LIST_PREFIX + 'obj_deps'
+              write_list_quoted(var_name_obj_sources, arr_obj)
+              put_property_source(get_dereferenced_variable_name(var_name_obj_sources), 'EXTERNAL_OBJECT', [ get_keyword_bool(true) ])
+              arr_sub_source_list_var_names.push(var_name_obj_sources)
+            end
+          write_conditional_else(arr_conditional_linker)
+            gen_message_info("Platform-specific (condition: #{arr_conditional_linker.join(" ")}) .obj files not supported yet on this foreign platform!")
+          end
+        end
+      end
+    end
+  end
   def put_source_vars(arr_sub_source_list_var_names)
     next_paragraph()
     put_list_of_lists('SOURCES', arr_sub_source_list_var_names)
@@ -6047,6 +6109,10 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
     # first add source reference, then do linker setup, then create target
 
+    # HACK: due to obj files potentially listed in per-config
+    # AdditionalDependencies, the relevant source list name may have been
+    # added multiple times, thus need uniq here.
+    arr_sub_source_list_var_names.uniq!
     put_source_vars(arr_sub_source_list_var_names)
 
     # write link_directories() (BEFORE establishing a target!)
@@ -6084,6 +6150,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         end
 
         arr_dependency_names = linker_info_curr.arr_dependencies.collect do |dep|
+          next if not dep.is_library_type()
           dependency_path = dep.dependency
           # We'll strip the path (plus system-specific .lib extension)
           # from the dependency,
@@ -6103,6 +6170,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
           dependency_name = File.basename(dependency_path, '.lib')
           dependency_name
         end
+        arr_dependency_names.compact!
         write_link_libraries(arr_dependency_names, map_dependencies)
       }
     end # target_is_valid
@@ -6401,6 +6469,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_sub_source_list_var_names = Array.new
 
     put_file_list(project_info, arr_sub_source_list_var_names)
+
+    put_obj_files_as_sources(project_info, arr_sub_source_list_var_names)
 
     put_include_dir_project_source_dir(project_info.name)
 
