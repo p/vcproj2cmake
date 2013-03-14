@@ -7337,7 +7337,7 @@ class V2C_CMakeLocalFileGenerator < V2C_LoggerBase
   end
   def source_groups_enabled; true == @flag_source_groups_enabled end
   def generate_per_project_source_groups(dest_dir, target_name, arr_filtered_file_lists)
-    return if arr_filtered_file_lists.nil?
+    return if arr_filtered_file_lists.nil? or arr_filtered_file_lists.empty?
     sg_file_name = "source_groups_#{target_name}.cmake"
     output_file_location = File.join(dest_dir, sg_file_name)
     temp_generator_sg = V2C_GenerateIntoTempFile.new('vcproj2cmake', output_file_location)
