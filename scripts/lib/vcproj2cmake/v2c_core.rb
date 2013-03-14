@@ -3633,6 +3633,12 @@ module V2C_VS10Defines
   TEXT_FALSE_LOWER = 'false' # Perhaps move to a common VS module
   TEXT_INCLUDE = 'Include'
   TEXT_LABEL = 'Label'
+  TEXT_CLCOMPILE = 'ClCompile'
+  TEXT_CLINCLUDE = 'ClInclude'
+  TEXT_RESOURCECOMPILE = 'ResourceCompile'
+  TEXT_NONE = 'None'
+  TEXT_MIDL = 'Midl'
+  TEXT_XSD = 'Xsd'
 end
 
 module V2C_VS10Syntax
@@ -3900,17 +3906,17 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
   def get_file_list_type(file_list_name)
     type = V2C_File_List_Types::TYPE_NONE
     case file_list_name
-    when 'None'
+    when TEXT_NONE
       type = V2C_File_List_Types::TYPE_NONE
-    when 'ClCompile'
+    when TEXT_CLCOMPILE
       type = V2C_File_List_Types::TYPE_COMPILES
-    when 'ClInclude'
+    when TEXT_CLINCLUDE
       type = V2C_File_List_Types::TYPE_INCLUDES
-    when 'ResourceCompile'
+    when TEXT_RESOURCECOMPILE
       type = V2C_File_List_Types::TYPE_RESOURCES
-    when 'Midl'
+    when TEXT_MIDL
       type = V2C_File_List_Types::TYPE_MIDL
-    when 'Xsd'
+    when TEXT_XSD
       # Xsd appears to be a pretty much UNDOCUMENTED file type on MSVS2010.
       # Removing/adding an Xsd ItemGroup element will cause
       # a VS10 project tab "XML Data Generator Tool" to (dis)appear,
@@ -3940,7 +3946,7 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10BaseElemParser
       when 'Filter'
         elem_parser = V2C_VS10ItemGroupFiltersParser.new(@elem_xml, get_project().filters)
         elem_parser.parse
-      when 'ClCompile', 'ClInclude', 'Midl', 'None', 'ResourceCompile', 'Xsd'
+      when TEXT_CLCOMPILE, TEXT_CLINCLUDE, TEXT_RESOURCECOMPILE, TEXT_NONE, TEXT_MIDL, TEXT_XSD
         elem_parser = V2C_VS10ItemGroupFilesParser.new(@elem_xml, elem_name, get_project().file_lists)
         elem_parser.parse
       else
@@ -4197,16 +4203,16 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
     info = nil
     log_debug(setting_key)
     case setting_key
-    when 'ClCompile'
+    when TEXT_CLCOMPILE
       arr_info = get_tools_info().arr_compiler_info
       info = V2C_Tool_Compiler_Info.new(V2C_Tool_Compiler_Specific_Info_MSVC10.new)
       item_def_group_parser = V2C_VS10ToolCompilerParser.new(subelem_xml, info)
-    #when 'ResourceCompile'
+    #when TEXT_RESOURCECOMPILE
     when 'Link'
       arr_info = get_tools_info().arr_linker_info
       info = V2C_Tool_Linker_Info.new(V2C_Tool_Linker_Specific_Info_MSVC10.new)
       item_def_group_parser = V2C_VS10ToolLinkerParser.new(subelem_xml, info)
-    when 'Midl'
+    when TEXT_MIDL
       arr_info = get_tools_info().arr_midl_info
       info = V2C_Tool_MIDL_Info.new(V2C_Tool_MIDL_Specific_Info_MSVC10.new)
       item_def_group_parser = V2C_VS10ToolMIDLParser.new(subelem_xml, info)
