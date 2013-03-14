@@ -2463,7 +2463,6 @@ module V2C_VSToolLinkerDefines
   TEXT_ENABLECOMDATFOLDING = 'EnableCOMDATFolding'
   TEXT_GENERATEDEBUGINFORMATION = 'GenerateDebugInformation'
   TEXT_GENERATEMAPFILE = 'GenerateMapFile'
-  TEXT_IGNORESPECIFICDEFAULTLIBRARIES = 'IgnoreSpecificDefaultLibraries'
   TEXT_LINKINCREMENTAL = 'LinkIncremental'
   TEXT_MAPFILENAME = 'MapFileName'
   TEXT_MODULEDEFINITIONFILE = 'ModuleDefinitionFile'
@@ -2508,8 +2507,6 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
       linker_info.generate_debug_information_enable = get_boolean_value(setting_value)
     when TEXT_GENERATEMAPFILE
       linker_info.generate_map_file_enable = parse_generate_map_file_enable(setting_value)
-    when TEXT_IGNORESPECIFICDEFAULTLIBRARIES
-      linker_info.arr_ignore_specific_default_libraries = parse_ignore_specific_default_libraries(setting_value)
     when TEXT_MAPFILENAME
       linker_info.map_file_name = parse_map_file_name(setting_value)
     when TEXT_MODULEDEFINITIONFILE
@@ -2601,6 +2598,7 @@ end
 
 module V2C_VS7ToolLinkerDefines
   include V2C_VSToolLinkerDefines
+  TEXT_IGNOREDEFAULTLIBRARYNAMES = 'IgnoreDefaultLibraryNames'
   include V2C_VS7ToolSyntax
 end
 
@@ -2616,6 +2614,8 @@ class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
     found = be_optimistic()
     linker_info = get_linker_info()
     case setting_key
+    when TEXT_IGNOREDEFAULTLIBRARYNAMES
+      get_linker_info().arr_ignore_specific_default_libraries = parse_ignore_specific_default_libraries(setting_value)
     when TEXT_LINKINCREMENTAL
       linker_info.link_incremental = parse_link_incremental(setting_value)
     when TEXT_NAME
@@ -3956,6 +3956,7 @@ end
 module V2C_VS10ToolLinkerSyntax
   include V2C_VS10ToolSyntax
   include V2C_VSToolLinkerDefines
+  TEXT_IGNORESPECIFICDEFAULTLIBRARIES = 'IgnoreSpecificDefaultLibraries'
   include V2C_Linker_Defines
 end
 
@@ -3963,16 +3964,16 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
   include V2C_VS10ToolLinkerSyntax
   private
 
-  #def parse_setting(setting_key, setting_value)
-  #  found = be_optimistic()
-  #  case setting_key
-  #  when TEXT_OPTIMIZEREFERENCES
-  #    get_linker_info().optimize_references_enable = get_boolean_value(setting_value)
-  #  else
-  #    found = super
-  #  end
-  #  return found
-  #end
+  def parse_setting(setting_key, setting_value)
+    found = be_optimistic()
+    case setting_key
+    when TEXT_IGNORESPECIFICDEFAULTLIBRARIES
+      get_linker_info().arr_ignore_specific_default_libraries = parse_ignore_specific_default_libraries(setting_value)
+    else
+      found = super
+    end
+    return found
+  end
   def parse_comdat_folding(str_comdat_folding); get_boolean_value(str_comdat_folding) end
   def parse_optimize_references(setting_value); get_boolean_value(setting_value) end
   def parse_per_user_redirection_enable(str_per_user_redirection_enable)

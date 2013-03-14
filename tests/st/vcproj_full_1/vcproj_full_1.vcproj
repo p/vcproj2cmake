@@ -68,6 +68,7 @@
 				AdditionalOptions="/dynamicbase"
 				OutputFile="$(OutDir)\$(ProjectName)_debug.dll"
 				LinkIncremental="2"
+				IgnoreDefaultLibraryNames="LIBCMT.lib,LIBC;LIBCMTD;MSVCRT;;,,"
 				GenerateDebugInformation="true"
 				StripPrivateSymbols="$(TargetDir)$(TargetName).pdbstripped"
 				SubSystem="2"
