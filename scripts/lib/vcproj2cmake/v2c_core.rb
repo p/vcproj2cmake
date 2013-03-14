@@ -4068,7 +4068,7 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
   def parse_verify
     found = FOUND_TRUE
     tools_info = get_tools_info()
-    found = FOUND_FALSE if tools_info.arr_compiler_info.empty? and tools_info.arr_linker_info.empty? and tools_info.arr_midl_info.empty? and tools_info.arr_prepostbuildlink_info.empty?
+    found = FOUND_FALSE if tools_info.arr_compiler_info.empty? and tools_info.arr_linker_info.empty? and tools_info.arr_midl_info.empty?
     found
   end
 end
