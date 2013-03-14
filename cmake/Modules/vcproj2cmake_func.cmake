@@ -483,11 +483,40 @@ function(_v2c_fs_item_make_relative_to_path _in _path _out)
   set(${_out} "${out_}" PARENT_SCOPE)
 endfunction(_v2c_fs_item_make_relative_to_path _in _path _out)
 
-macro(_v2c_fs_file_touch _file)
-  # Let's hope file(APPEND "") successfully updates the timestamp only,
-  # otherwise resort to execute_process() cmake -E touch_nocreate.
+# Does a file(APPEND <empty_string>) -
+# this will update stat's "Change" timestamp (will NOT update "Modify"!).
+macro(_v2c_fs_file_touch_nocreate_change _file)
   file(APPEND "${_file}" "")
-endmacro(_v2c_fs_file_touch _file)
+endmacro(_v2c_fs_file_touch_nocreate_change _file)
+
+# Does a cmake -E touch_nocreate, will update stat's "Change"
+# *and* "Modify" timestamps, as required by build target chain
+# dependency calculations.
+macro(_v2c_fs_file_touch_nocreate_change_modify _file)
+  # FIXME: is there an internal CMake command which would manage
+  # to update "Modify" timestamp, rather than having to expensively
+  # spawn an external CMake?? file(WRITE "foo") does do that,
+  # but that *actually* modifies file content, which is undesireable...
+  # OK, so let's shove it into a separate helper, clearly marked as
+  # content-changing (which does not matter for stamp files...).
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E touch_nocreate "${_file}")
+endmacro(_v2c_fs_file_touch_nocreate_change_modify _file)
+
+# Uses file(WRITE "TOUCHED BY VCPROJ2CMAKE") to *actually* mark a
+# file as "Modified", USING A DISRUPTIVE WRITE ACTION.
+# Useful since it ought to be much faster than an annoying external
+# execute_process(). But turns out performance is not *that* different...
+macro(_v2c_fs_file_touch_nocreate_change_modify_DISRUPTS_CONTENT _file)
+  if(EXISTS "${_file}")
+    file(WRITE "${_file}" "TOUCHED BY VCPROJ2CMAKE")
+  endif(EXISTS "${_file}")
+endmacro(_v2c_fs_file_touch_nocreate_change_modify_DISRUPTS_CONTENT _file)
+
+macro(_v2c_stamp_file_touch _file)
+  # For stamp files, there's no risk in touching them disruptively...
+  _v2c_fs_file_touch_nocreate_change_modify_DISRUPTS_CONTENT("${_file}")
+  #_v2c_fs_file_touch_nocreate_change_modify("${_file}")
+endmacro(_v2c_stamp_file_touch _file)
 
 function(_v2c_stamp_file_location_assign _stamp_file_name _out_stamp_file_location)
   _v2c_var_ensure_defined(_out_stamp_file_location)
@@ -1010,19 +1039,22 @@ endfunction(_v2c_target_source_group_define _target _sg_name _sg_regex _sg_files
 function(_v2c_pre_touch_output_file _target_pseudo_output_file _actual_output_file _file_dependencies_list)
   # Don't inhibit a rebuild if the output file does not even exist yet:
   if(NOT EXISTS "${_actual_output_file}")
+    #message("${_actual_output_file} not existing.")
     return()
   endif(NOT EXISTS "${_actual_output_file}")
-  set(needs_remake_ false)
+  set(needs_remake_ OFF)
   foreach(dep_ ${_file_dependencies_list})
     if("${dep_}" IS_NEWER_THAN "${_actual_output_file}")
-      set(needs_remake_ true)
+      set(needs_remake_ ON)
       break()
     endif("${dep_}" IS_NEWER_THAN "${_actual_output_file}")
   endforeach(dep_ ${_file_dependencies_list})
   if(NOT needs_remake_)
     # We don't need a remake, thus update the pseudo output stamp file:
-    _v2c_msg_info("${_actual_output_file} is current (no remake needed).")
-    _v2c_fs_file_touch("${_target_pseudo_output_file}")
+    set(msg_touch_ "${_actual_output_file} is current (no remake needed).")
+    #set(msg_touch_ "${msg_touch_} Touching pseudo output (${_target_pseudo_output_file}).")
+    _v2c_msg_info("${msg_touch_}")
+    _v2c_stamp_file_touch("${_target_pseudo_output_file}")
   endif(NOT needs_remake_)
 endfunction(_v2c_pre_touch_output_file _target_pseudo_output_file _actual_output_file _file_dependencies_list)
 
@@ -1160,12 +1192,10 @@ if(v2c_cmakelists_rebuilder_available)
     # CLEAN_NO_CUSTOM], yet we crucially need to preserve it
     # since it hosts this very CMakeLists.txt rebuilder mechanism...
     set(cmakelists_update_this_cmakelists_updated_stamp_file_ "${CMAKE_CURRENT_BINARY_DIR}/cmakelists_rebuilder_done.stamp")
-    # To avoid an annoying needless rebuild of the conversion
-    # after an external script conversion run,
+    # To avoid an annoying needless build-time rerun of the conversion run
+    # after a prior external script conversion run,
     # update timestamp of output file if possible.
-    # Wellll... on certain environments this does NOT happen in the first place.
-    # Needs more investigation.
-    #_v2c_pre_touch_output_file("${cmakelists_update_this_cmakelists_updated_stamp_file_}" "${_cmakelists_file}" "${_dir_orig_proj_files_list}")
+    _v2c_pre_touch_output_file("${cmakelists_update_this_cmakelists_updated_stamp_file_}" "${_cmakelists_file}" "${_dir_orig_proj_files_list}")
     list(GET _dir_orig_proj_files_list 0 orig_proj_file_main_) # HACK
     if("${orig_proj_file_main_}" STREQUAL "${_dir_orig_proj_files_list}")
     else("${orig_proj_file_main_}" STREQUAL "${_dir_orig_proj_files_list}")
