@@ -1216,19 +1216,75 @@ class V2C_Info_File
   end
 end
 
-module V2C_File_List_Types
-  TYPE_NONE = 0
-  TYPE_COMPILES = 1
-  TYPE_INCLUDES = 2
-  TYPE_RESOURCES = 3
-  TYPE_MIDL = 4
-  TYPE_XSD = 5
+class File_List_Descr
+  def initialize(type_name, type_description)
+    # name: short name
+    @type_name = type_name
+
+    # description: longer human-readable description
+    @type_description = type_description
+  end
+  attr_reader :type_name
+  attr_reader :type_description
 end
+
+# I'm not sure whether it's still a good idea to have fixed indices
+# for item types, since VS uses a theoretically limitless number
+# of text string elements. So perhaps we should do a string-based
+# hash instead (with then possibly ending up adopting exactly the VS
+# strings as item names :-P),
+# and expose a type-based interface at the outside then.
+module V2C_File_List_Types
+  # WARNING: keep indices symmetric with its use in methods below!
+  TYPE_CL_COMPILES = 0
+  TYPE_CL_INCLUDES = 1
+  TYPE_CL_NODEPENDENCIES = 2
+  TYPE_MIDL = 3
+  TYPE_EMBEDDED_RESOURCES = 4
+  TYPE_RESOURCES_RC = 5
+  TYPE_RESOURCES = 6
+  TYPE_OBJECTS = 7
+  TYPE_LIBRARIES = 8
+  TYPE_XSD = 9
+  TYPE_MANAGED_RESOURCES_RC = 10
+  TYPE_MANIFEST = 11
+  TYPE_CUSTOM_BUILD = 12
+  TYPE_CS_REFERENCE = 13 # .csproj only? Semi-/Undocumented? --> TARGET prop VS_DOTNET_REFERENCES?
+  TYPE_CS_BOOTSTRAPPERPACKAGE = 14 # .csproj only?
+  TYPE_CS_WEBREFERENCES = 15 # .csproj only?
+  TYPE_CS_WEBREFERENCEURL = 16 # .csproj only?
+  TYPE_NONE = 17 # KEEP LAST ELEMENT
+end
+
+FILE_LIST_DESCRIPTIONS = [
+  File_List_Descr.new('sources', 'C/C++ Compiler'), # VS10: ClCompile
+  File_List_Descr.new('headers', 'C/C++ Header'), # VS10: ClInclude
+  File_List_Descr.new('no_dependencies', 'C/C++ No Dependencies'), # VS10: ClNoDependencies
+  File_List_Descr.new('midl', 'MIDL tool'), # VS10: Midl
+  # I'm not quite sure what the difference between VS10 EmbeddedResource and _EmbedManagedResourceFile is...
+  File_List_Descr.new('resources_rc_embedded', 'Managed resource compiler'), # VS10: EmbeddedResource
+  File_List_Descr.new('resources_rc', 'Resource compiler'), # VS10: ResourceCompile
+  File_List_Descr.new('resources', 'Resource'), # VS10: Resource
+  File_List_Descr.new('objects', 'Object'), # VS10: Object
+  File_List_Descr.new('libraries', 'Library'), # VS10: Library
+  File_List_Descr.new('xsd', 'XML Data Generator Tool'), # VS10: Xsd
+  File_List_Descr.new('resources_rc_managed', 'Compiled Managed Resource'), # VS10: _EmbedManagedResourceFile
+  File_List_Descr.new('manifest', 'Manifest Tool'), # VS10: Manifest
+  File_List_Descr.new('custom_build', 'Custom Build Tool'), # CustomBuild
+  File_List_Descr.new('reference', 'Probably a .csproj reference entry'), # VS10: Reference
+  File_List_Descr.new('bootstrapper_package', 'Probably a .csproj bootstrapper package entry'), # VS10: BootstrapperPackage
+  File_List_Descr.new('web_references', 'Probably a .csproj WebReferences entry'), # VS10: WebReferences
+  File_List_Descr.new('web_reference_url', 'Probably a .csproj WebReferenceUrl entry'), # VS10: WebReferenceUrl
+  File_List_Descr.new('none', 'Does not participate in build'), # VS10: None
+]
 
 class V2C_File_List_Info
   include V2C_File_List_Types
   def initialize(name, type = TYPE_NONE)
-    @name = name # VS10: One of None, ClCompile, ClInclude, ResourceCompile, Xsd; VS7: the name of the filter that contains these files (FIXME: filter stuff is not really useful, should be assigning the name based on the tool type GUID! And then perhaps use the VS10 tool file type names [ClCompile, ClInclude etc.])
+    # name member:
+    # VS10: e.g. None, ClCompile, ClInclude, ResourceCompile, Object, Xsd;
+    # VS7: the name of the filter that contains these files (FIXME: filter stuff is not really useful, should be assigning the name based on the tool type GUID! And then perhaps use the VS10 tool file type names [ClCompile, ClInclude etc.])
+    @name = name
     @type = type
     @arr_files = Array.new # V2C_Info_File elements
     @hash_files = Hash.new # V2C_Info_File elements
@@ -1281,17 +1337,12 @@ class V2C_File_List_Info
     return nil
   end
   def get_list_type_name()
-    list_types =
-     [ 'unknown', # VS10: None
-       'sources', # VS10: ClCompile
-       'headers', # VS10: ClInclude
-       'resources', # VS10: ResourceCompile
-       #'midl' # VS10: Midl # MIDL is _not_ supposed to be here, I think (MIDL-related files are sorted within ClCompile/ClInclude categories...)
-       'xsd', # VS10: Xsd
-     ]
-    # Hmm, not entirely sure whether this would be correct for TYPE_XSD:
-    type = @type <= TYPE_RESOURCES ? @type : TYPE_NONE
-    return list_types[type]
+    FILE_LIST_DESCRIPTIONS[get_type(type)].type_name
+  end
+  # Returns a human-readable description string,
+  # referencing the descriptions that MSVS10 uses.
+  def get_list_type_description()
+    FILE_LIST_DESCRIPTIONS[get_type(type)].type_description
   end
   def get_generated_files
     array_collect_compact(@arr_files) do |file_info|
@@ -1300,6 +1351,8 @@ class V2C_File_List_Info
       file_info.path_relative
     end
   end
+  private
+  def get_type(type); @type <= TYPE_NONE ? @type : TYPE_NONE end
 end
 
 class V2C_File_Lists_Container
@@ -3633,12 +3686,31 @@ module V2C_VS10Defines
   TEXT_FALSE_LOWER = 'false' # Perhaps move to a common VS module
   TEXT_INCLUDE = 'Include'
   TEXT_LABEL = 'Label'
+
   TEXT_CLCOMPILE = 'ClCompile'
   TEXT_CLINCLUDE = 'ClInclude'
-  TEXT_RESOURCECOMPILE = 'ResourceCompile'
-  TEXT_NONE = 'None'
+  # ClNoDependencies is more or less undocumented...
+  # I guess (due to this functionality being used
+  # for exclusion of ad-hoc unrelated virus scanner status files)
+  # that these files constitute a list of items *actively*
+  # excluded from compile tracking (tracker.exe / tracker.dll).
+  TEXT_CLNODEPENDENCIES = 'ClNoDependencies'
   TEXT_MIDL = 'Midl'
+  TEXT_EMBEDDEDRESOURCE = 'EmbeddedResource'
+  TEXT_RESOURCECOMPILE = 'ResourceCompile'
+  TEXT_RESOURCE = 'Resource'
+  TEXT_OBJECT = 'Object'
+  TEXT_LIBRARY = 'Library'
   TEXT_XSD = 'Xsd'
+  # Yup, there's an underscore here...
+  TEXT__EMBEDMANAGEDRESOURCEFILE = '_EmbedManagedResourceFile'
+  TEXT_MANIFEST = 'Manifest'
+  TEXT_CUSTOMBUILD = 'CustomBuild'
+  TEXT_NONE = 'None'
+  TEXT_REFERENCE = 'Reference'
+  TEXT_BOOTSTRAPPERPACKAGE = 'BootstrapperPackage'
+  TEXT_WEBREFERENCES = 'WebReferences'
+  TEXT_WEBREFERENCEURL = 'WebReferenceUrl'
 end
 
 module V2C_VS10Syntax
@@ -3906,23 +3978,45 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
   def get_file_list_type(file_list_name)
     type = V2C_File_List_Types::TYPE_NONE
     case file_list_name
-    when TEXT_NONE
-      type = V2C_File_List_Types::TYPE_NONE
     when TEXT_CLCOMPILE
-      type = V2C_File_List_Types::TYPE_COMPILES
+      type = V2C_File_List_Types::TYPE_CL_COMPILES
     when TEXT_CLINCLUDE
-      type = V2C_File_List_Types::TYPE_INCLUDES
-    when TEXT_RESOURCECOMPILE
-      type = V2C_File_List_Types::TYPE_RESOURCES
+      type = V2C_File_List_Types::TYPE_CL_INCLUDES
+    when TEXT_CLNODEPENDENCIES
+      type = V2C_File_List_Types::TYPE_CL_NODEPENDENCIES
+      logger.unhandled_functionality("VS10 item list type #{TEXT_CLNODEPENDENCIES} is special (skips dependency tracking) - not sure whether our support is correct here...")
     when TEXT_MIDL
       type = V2C_File_List_Types::TYPE_MIDL
+    when TEXT_EMBEDDEDRESOURCE
+      type = V2C_File_List_Types::TYPE_EMBEDDED_RESOURCES
+    when TEXT_RESOURCECOMPILE
+      type = V2C_File_List_Types::TYPE_RESOURCES_RC
+    when TEXT_RESOURCE
+      type = V2C_File_List_Types::TYPE_RESOURCES
+    when TEXT_OBJECT
+      type = V2C_File_List_Types::TYPE_OBJECTS
+    when TEXT_LIBRARY
+      type = V2C_File_List_Types::TYPE_LIBRARIES
     when TEXT_XSD
-      # Xsd appears to be a pretty much UNDOCUMENTED file type on MSVS2010.
       # Removing/adding an Xsd ItemGroup element will cause
-      # a VS10 project tab "XML Data Generator Tool" to (dis)appear,
-      # which proves that it *is* a valid file type name.
-
+      # a MSVS10 project tab "XML Data Generator Tool" to (dis)appear.
       type = V2C_File_List_Types::TYPE_XSD
+    when TEXT__EMBEDMANAGEDRESOURCEFILE
+      type = V2C_File_List_Types::TYPE_MANAGED_RESOURCES_RC
+    when TEXT_MANIFEST
+      type = V2C_File_List_Types::TYPE_MANIFEST
+    when TEXT_CUSTOMBUILD
+      type = V2C_File_List_Types::TYPE_CUSTOM_BUILD
+    when TEXT_NONE
+      type = V2C_File_List_Types::TYPE_NONE
+    when TEXT_REFERENCE
+      type = V2C_File_List_Types::TYPE_CS_REFERENCE
+    when TEXT_BOOTSTRAPPERPACKAGE
+      type = V2C_File_List_Types::TYPE_CS_BOOTSTRAPPERPACKAGE
+    when TEXT_WEBREFERENCES
+      type = V2C_File_List_Types::TYPE_CS_WEBREFERENCES
+    when TEXT_WEBREFERENCEURL
+      type = V2C_File_List_Types::TYPE_CS_WEBREFERENCEURL
     else
       logger.unhandled_functionality("file list name #{file_list_name}")
       type = V2C_File_List_Types::TYPE_NONE
@@ -3945,15 +4039,11 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10BaseElemParser
       case elem_name
       when 'Filter'
         elem_parser = V2C_VS10ItemGroupFiltersParser.new(@elem_xml, get_project().filters)
-        elem_parser.parse
-      when TEXT_CLCOMPILE, TEXT_CLINCLUDE, TEXT_RESOURCECOMPILE, TEXT_NONE, TEXT_MIDL, TEXT_XSD
+      else # Treat *all* other (not specially handled) entries as files!
         elem_parser = V2C_VS10ItemGroupFilesParser.new(@elem_xml, elem_name, get_project().file_lists)
-        elem_parser.parse
-      else
-        # We should NOT call base method, right? This is an _override_ of the
-        # standard method, and we expect to be able to parse it fully,
-        # thus signal failure.
-        found = FOUND_FALSE
+      end
+      if not elem_parser.nil?
+        found = elem_parser.parse
       end
     end
     return found
