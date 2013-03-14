@@ -6285,11 +6285,11 @@ class V2C_CMakeFileListGenerator_VS10 < V2C_CMakeFileListGeneratorBase
     @file_list = file_list
     @parent_source_group = parent_source_group
   end
-  def generate; put_file_list(@file_list) end
+  def generate; generate_file_list(@file_list) end
 
   private
 
-  def put_file_list(file_list)
+  def generate_file_list(file_list)
     arr_local_sources = filter_files(file_list.arr_files)
     source_files_variable = write_sources_list(file_list.name, arr_local_sources)
     register_new_source_list_variable(source_files_variable)
@@ -6335,7 +6335,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
   # File-related TODO:
   # should definitely support the following CMake properties, as needed:
-  # PUBLIC_HEADER (cmake --help-property PUBLIC_HEADER), PRIVATE_HEADER, HEADER_FILE_ONLY
+  # PUBLIC_HEADER (cmake --help-property PUBLIC_HEADER), PRIVATE_HEADER, HEADER_FILE_ONLY, EXTERNAL_OBJECT
   # and possibly the PUBLIC_HEADER option of the INSTALL(TARGETS) command.
   def put_file_list(project_info, arr_sub_source_list_var_names)
     # We currently have some unclean (separate) parsing of file list and source group info,
@@ -6436,7 +6436,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       end
     end
   end
-  def put_source_vars(arr_sub_source_list_var_names)
+  def put_source_vars_combined_list(arr_sub_source_list_var_names)
     next_paragraph()
     put_list_of_lists('SOURCES', arr_sub_source_list_var_names)
     # Side note: CMAKE_<LANG>_IGNORE_EXTENSIONS is a related variable
@@ -6528,7 +6528,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # AdditionalDependencies, the relevant source list name may have been
     # added multiple times, thus need uniq here.
     arr_sub_source_list_var_names.uniq!
-    put_source_vars(arr_sub_source_list_var_names)
+    put_source_vars_combined_list(arr_sub_source_list_var_names)
 
     # write link_directories() (BEFORE establishing a target!)
     config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
