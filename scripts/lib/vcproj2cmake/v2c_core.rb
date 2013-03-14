@@ -2172,6 +2172,8 @@ end
 
 class V2C_VSToolParserBase < V2C_VSXmlParserBase
   VS_ADDOPT_VALUE_SEPARATOR_REGEX_OBJ = %r{[;\s]}
+  # IgnoreDefaultLibraryNames (VS7) seems to use both ; and , as entry separators.
+  VS_NODEFAULTLIB_VALUE_SEPARATOR_REGEX_OBJ = %r{[;,\s]}
   private
 
   include V2C_VSToolDefines
@@ -2187,6 +2189,21 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
     end
     return found
   end
+  # Low-level helper for generic parsing of most (all?) VS multi-entry
+  # property elements.
+  def split_vs_tool_property_elements(str_property_value, regex)
+    arr_elems = []
+    if not str_property_value.empty?
+      arr_elems = str_property_value.split(regex).collect { |elem|
+        # skip_vs10_percent_sign_var() most likely is a temporary HACK,
+        # but for now we decide to not support these specifics.
+        next if skip_vs10_percent_sign_var(elem)
+        elem
+      }
+      arr_elems.compact!
+    end
+    arr_elems
+  end
   def parse_additional_options(arr_flags, attr_options)
     # Oh well, we might eventually want to provide a full-scale
     # translation of various compiler switches to their
@@ -2198,11 +2215,7 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
     # simply make reverse use of existing translation table in CMake source.
     # FIXME: can we use the full set of VS_VALUE_SEPARATOR_REGEX_OBJ
     # for AdditionalOptions content, too?
-    arr_flags = attr_options.split(VS_ADDOPT_VALUE_SEPARATOR_REGEX_OBJ).collect { |opt|
-      next if skip_vs10_percent_sign_var(opt)
-      opt
-    }
-    arr_flags.compact!
+    split_vs_tool_property_elements(attr_options, VS_ADDOPT_VALUE_SEPARATOR_REGEX_OBJ)
   end
   def parse_fs_item_list(attr_fs_items, arr_fs_items)
     return if attr_fs_items.empty?
@@ -2576,7 +2589,7 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
     get_boolean_value(str_generate_map_file_enable)
   end
   def parse_ignore_specific_default_libraries(str_ignore_specific_default_libraries)
-    str_ignore_specific_default_libraries.split()
+    split_vs_tool_property_elements(str_ignore_specific_default_libraries, VS_NODEFAULTLIB_VALUE_SEPARATOR_REGEX_OBJ)
   end
   def parse_map_file_name(str_map_file_name)
     get_filesystem_location(str_map_file_name)
@@ -6552,6 +6565,14 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
             write_precompiled_header(condition, compiler_info_curr.precompiled_header_info)
 
           } # config_info_curr.tools.arr_compiler_info.each
+
+          # TODO: perhaps that stuff ought to be grouped in a cleaner way:
+          # for each platform-specific linker, figure out the combined set of
+          # flags (both open-coded and from high-level [booleans etc.]),
+          # then write out the combined set in one go.
+          # OTOH it's perhaps nice to write out open-coded flags and
+          # translated-from-high-level flags separately (since the property
+          # write does specify APPEND this is no problem).
           tools.arr_linker_info.each { |linker_info_curr|
             linker_info_curr.arr_tool_variant_specific_info.each { |linker_specific|
               arr_conditional_linker_platform = map_tool_name_to_cmake_platform_conditional(linker_specific.tool_id)
@@ -6560,6 +6581,29 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
               # depending on target type, and make sure to filter out options
               # pre-defined by CMake platform setup modules)
               write_property_link_flags(condition, linker_specific.arr_flags, arr_conditional_linker_platform)
+
+              # Very dirty MSVC-specific HACK to make some stuff work.
+              # This part should go into a platform-specific-linker generator
+              # (with a nice base class virtuals hierarchy)
+              # for translation of linker_info_curr high-level data to an array
+              # of open-coded linker flags.
+              # This generator of course will generate linker args
+              # and *not* CMake code instead, since that way
+              # it will be reusable by other build env generators, too.
+              if linker_specific.tool_id.match(V2C_TOOL_MSVC_REGEX_OBJ)
+                arr_nodefaultlib = []
+                arr_ignore = linker_info_curr.arr_ignore_specific_default_libraries
+                arr_ignore.each do |nodefaultlib|
+                  # We'll use File.basename() since that has a nice way
+                  # to split off .lib extension.
+                  # Nope, we don't need to strip off .lib.
+                  #nodefaultlib_arg = File.basename(nodefaultlib, '.lib')
+                  nodefaultlib_arg = nodefaultlib
+                  linker_arg_nodefaultlib = "/NODEFAULTLIB:#{nodefaultlib_arg}"
+                  arr_nodefaultlib.push(linker_arg_nodefaultlib)
+                end
+                write_property_link_flags(condition, arr_nodefaultlib, arr_conditional_linker_platform)
+              end
             } # linker.tool_specific.each
           } # arr_linker_info.each
         } # config_info_curr
