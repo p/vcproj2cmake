@@ -5437,14 +5437,52 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     v2c_converter_script_location = path_join(get_dereferenced_variable_name(NAME_V2C_MASTER_PROJECT_SOURCE_DIR), script_location_relative_to_master)
     gen_put_converter_script_location(v2c_converter_script_location)
   end
-  def put_include_dir_project_source_dir(target_name)
+  def put_include_dir_precompiled_header(target_name, cmake_path_to_header)
     # AFAIK .vcproj implicitly adds the project root to standard include path
     # (for automatic stdafx.h resolution etc.), thus add this
     # (and make sure to add it with high priority, i.e. use BEFORE).
     # For now sitting in LocalGenerator and not per-target handling since this setting is valid for the entire directory.
     next_paragraph()
-    arr_directories = [ get_dereferenced_variable_name('PROJECT_SOURCE_DIR') ]
-    put_include_directories(target_name, arr_directories, V2C_Include_Dir_Defines::BEFORE)
+    arr_include_path_to_pch_header = [ cmake_path_to_header ]
+    # Turns out MSVC with PCH enabled does NOT implicitly add the project
+    # directory to include paths - rather, *only* the usual and
+    # *required* '#include "stdafx.h"' form will successfully reach
+    # the project's stdafx.h content regardless of whether the
+    # directory it resides in is in include path
+    # (and perhaps it can even be in a directory other than the project root?).
+    # IOW we shouldn't add a manual project root include dir either
+    # whenever we can help it, to not introduce any troubling differences in setup.
+    # It seems we need this for PCH in gcc (an explicit project root include dir),
+    # but then we should do this include dir generation *only* in case
+    # PCH Use (or Create??) is requested, and if so do this always
+    # (on *all* compilers - some of which might not need it)
+    # - reason: consistent builds (prevent build mismatch failure on *some* platforms!)
+    # Note that having this include dir activated applies
+    # to cases (platforms) where PCH is switched off/unavailable, too!
+    # (since stdafx.h always needs to remain reachable - BTW with PCH
+    # switched off on MSVC, the *forced* static syntax of '#include "stdafx.h"'
+    # will still *fail* to reach the non-PCH "stdafx.h" - OUCH!).
+    # The conclusion might be to keep projects structured as one
+    # directory-per-project (main directory) only,
+    # but that's possibly not beneficial for modularity.
+    # Since disabled PCH will fail on MSVC, too (in case of weird
+    # layout), the conclusion is that we really only need to provide
+    # the include path for other compilers in case PCH *is* configured as active
+    # by this project config.
+    header_location = "project directory"
+    #header_location = "location of the precompiled header"
+    write_comment_at_level(COMMENT_LEVEL_STANDARD,
+      "Add the #{header_location} as a full include dir.\n" \
+      "In case of precompiled headers that's definitely required for some compilers\n" \
+      "(gcc), since MSVC implicitly provides inclusion of the PCH header\n" \
+      "whereas they don't."
+    )
+    # We could have created a vcproj2cmake_func helper which
+    # figures out: which compiler, which setting needed (reference to
+    # file or adding include path), then does it.
+    # However since build consistency across platforms is much more important,
+    # we better *always* add a full include path.
+    put_include_directories(target_name, arr_include_path_to_pch_header, V2C_Include_Dir_Defines::BEFORE)
   end
   def write_invoke_config_object_v2c_function_quoted(str_function, str_object, arr_args_func)
     write_vcproj2cmake_func_comment()
@@ -6486,7 +6524,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
     put_obj_files_as_sources(project_info, arr_sub_source_list_var_names)
 
-    put_include_dir_project_source_dir(project_info.name)
+    # FIXME: should move this PCH-side include dir generation
+    # right into PCH function (and generate only in case PCH is active),
+    # but that's currently not possible since PCH may be configured
+    # via per-file attributes, which we don't support yet (FIXME!!).
+    put_include_dir_precompiled_header(project_info.name, get_dereferenced_variable_name('PROJECT_SOURCE_DIR'))
 
     put_hook_post_sources()
 
