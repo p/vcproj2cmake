@@ -456,7 +456,7 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
     # See also http://stackoverflow.com/a/1076445
     log_info 'Recursively converting projects, multi-process.'
     workPackage.each { |arr_work_units_per_worker|
-      fork {
+      pid = fork {
         # Nope, does not seem to be true - anyway,
         # we'll keep this code since I'm not entirely sure...
         #begin
@@ -467,6 +467,7 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
         #  puts "EXCEPTION!! #{e.inspect} #{e.backtrace}"
         #end
       }
+      log_info("Worker PID #{pid} forked.")
     }
     log_info 'Waiting for all worker processes to finish...'
     results = Process.waitall
@@ -477,7 +478,7 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
     results.each { |result|
       worker_exitstatus = result[1].exitstatus
       if 0 != worker_exitstatus
-        log_error "Worker had non-zero exit status (#{worker_exitstatus}), exiting!"
+        log_error "Worker (PID #{result[0]}) indicated failure (non-zero exit status #{worker_exitstatus}), exiting!"
         # Side note: be sure to read
         # http://www.bigfastblog.com/ruby-exit-exit-systemexit-and-at_exit-blunder
         exit worker_exitstatus
@@ -493,6 +494,7 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
 
     for arr_work_units_per_worker in workPackage
       threads << Thread.new(arr_work_units_per_worker) { |arr_work_units|
+        log_info "Thread #{Thread.current.object_id} started."
         execute_work_units(unitGlobal, arr_work_units)
       }
     end
@@ -507,7 +509,7 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
         # since continuing (i.e. merely breaking out of the loop)
         # while having a thread running and remaining in unknown state
         # may cause really un-"nice" issues.
-        log_warn "Worker thread still running after #{thread_wait_seconds} seconds!? Exiting!"
+        log_warn "Worker thread (ID #{aThread.object_id}, (#{aThread.inspect}) still running after #{thread_wait_seconds} seconds!? Exiting!"
         exit 1
       end
     }
