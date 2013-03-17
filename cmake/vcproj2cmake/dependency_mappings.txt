@@ -78,7 +78,9 @@ zdll:=${ZLIB_LIBRARIES}
 # foo library is Win32-only
 foo:WIN32
 ###########################################################################
-# translation of project-specific libraries from their debug-postfix _names_ to actual _target_ expression
+# Translation of project-specific libraries from their debug-postfix _names_
+# to actual _target_ expression (for mappings for dependencies that are
+# actually *built* within your own source tree hierarchy).
 bar:WIN32
 bar_d:WIN32=bar
 baz_u:WIN32=baz

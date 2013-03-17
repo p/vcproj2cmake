@@ -488,7 +488,7 @@ end
 
 def push_platform_defn(platform_defs, platform, defn_value)
   #log_debug "adding #{defn_value} on platform #{platform}"
-  if platform_defs[platform].nil?; platform_defs[platform] = Array.new end
+  platform_defs[platform] ||= Array.new
   platform_defs[platform].push(defn_value)
 end
 
@@ -1323,6 +1323,7 @@ class V2C_Info_Filter
   # in order to be able to tell apart from directory separators
   # which might be used for file entries within the file group.
   # Ruby seems to need escaping here, too (duplicate amount)
+  # BTW, in CMake this is *configurable* (SOURCE_GROUP_DELIMITER variable).
   V2C_SOURCE_GROUP_HIERARCHY_SEPARATOR = '\\\\\\\\'
   def initialize
     # Human-readable name of the filter. Sub entries (in tree view)
@@ -2039,7 +2040,7 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
   def strip_guid(guid)
     guid_match = VS_GUID_MATCH_REGEX_OBJ.match(guid)
     if guid_match.nil?
-      parser_error("Could not match against project GUID value #{guid}, please report!", false)
+      parser_error("Could not match your GUID input value #{guid} against #{VS_GUID_MATCH_REGEX_OBJ.inspect} - either the value is incorrect, or if our check is incomplete then please report!", false)
       return nil
     end
     #puts "guid_match #{guid_match.inspect} #{guid_match[1]}"
@@ -2620,7 +2621,7 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
 
   MSVC_OBJ_REGEX = %r{\.obj$}
   def parse_additional_dependencies(attr_deps, arr_dependencies)
-    have_obj = false
+    have_any_objs = false
     split_values_list_discard_empty(attr_deps).each { |elem_lib_dep|
       logger.debug "!!!!! elem_lib_dep #{elem_lib_dep}"
       next if skip_vs10_percent_sign_var(elem_lib_dep)
@@ -2632,11 +2633,11 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
       # as dependencies, e.g. CMake allows linking to libs only,
       # and objs are expected to be passed as source input instead!
       is_obj = elem_lib_dep_fs.clone.downcase.match(MSVC_OBJ_REGEX)
-      have_obj ||= is_obj
+      have_any_objs ||= is_obj
       flags = is_obj ? V2C_Dependency_Info::DEP_TYPE_OBJECT : V2C_Dependency_Info::DEP_TYPE_LIBRARY
       arr_dependencies.push(V2C_Dependency_Info.new(elem_lib_dep_fs, flags))
     }
-    if false != have_obj
+    if false != have_any_objs
       parser_warn_syntax("It seems your AdditionalDependencies element contains non-library parts (object files), perhaps as a third-party obj file/header combo. While we added support for that (listing such files as a target's sources in CMake), it's perhaps better to link the object into a static library and then cleanly link to that library instead (e.g. CMake has generic internal handling of system-specific library extensions, while handling of system-specific object file extensions seems to be less generic). Also, be advised that MSVS10 seems to know an ItemGroup element type named Object, probably to be used for external object files, so this likely is a more suitable place to add object files to.")
     end
   end
@@ -5316,7 +5317,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   end
   # FIXME: I believe array_to_cmake_list() is broken, thus should be avoided:
   # 1. CMake is broken, does not escape ';' in list element payload data
-  #    properly (see CMake bug #13806)
+  #    properly (see vcproj2cmake_func.cmake parts about CMake bug #13806)
   # 2. *first* quoting should be done per-element and *then* join()ed
   # Thus it's probably preferable to avoid ';'-separated CMake list style
   # and instead use ' '-separated element enumeration (with elements quoted
@@ -6076,7 +6077,7 @@ class V2C_ToolFlagsGenerator_Linker_MSVC < V2C_ToolFlagsGenerator_Base
       # Nope, we don't need to strip off .lib.
       #nodefaultlib_arg = File.basename(nodefaultlib, '.lib')
       nodefaultlib_arg = nodefaultlib
-      linker_arg_nodefaultlib = "/NODEFAULTLIB:#{nodefaultlib_arg}"
+      linker_arg_nodefaultlib = '/NODEFAULTLIB:' + nodefaultlib_arg
       arr_nodefaultlib.push(linker_arg_nodefaultlib)
     end
     arr_nodefaultlib
@@ -6305,6 +6306,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # In case there's a valid target,
     # optionally mark as needing WinMain() (Win32 non-Console executables)
     # and write target_link_libraries().
+    # TODO: for Console ConfigurationType, it might be useful to already
+    # automatically provide the semi-standard _CONSOLE define:
+    # http://stackoverflow.com/questions/4839181/is-there-a-define-associated-with-the-subsystem
     if target_is_valid
       target_info_curr.tools.arr_linker_info.each { |linker_info_curr|
         if V2C_TargetConfig_Defines::CFG_TYPE_APP == target_config_info_curr.cfg_type
@@ -7448,7 +7452,7 @@ end
 # *and* invocations of the CMake binary (for custom targets),
 # and some other characteristic strings.
 #VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{#{CMAKELISTS_FILE_NAME}}
-VCPROJ_DEF_CONTENT_CMAKE_REGEX_OBJ = %r{\bCMAKE_INTDIR=}
+VCPROJ_DEF_CONTENT_CMAKE_INTDIR_REGEX_OBJ = %r{\bCMAKE_INTDIR=}
 VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{(\bPreprocessorDefinitions\b.*\bCMAKE_INTDIR=|\bCMakeFiles\b)}
 def v2c_is_project_file_generated_by_cmake_grep(str_proj_file)
   generated_file = false
@@ -7470,7 +7474,7 @@ def v2c_vcproj_look_for_cmake_content(str_proj_file)
       project_xml.elements.each('Configurations/Configuration') { |config_xml|
         config_xml.elements.each('Tool[@Name="VCCLCompilerTool"]') { |compiler_xml|
           attr_defines = compiler_xml.attributes['PreprocessorDefinitions']
-          if attr_defines.to_s.match(VCPROJ_DEF_CONTENT_CMAKE_REGEX_OBJ)
+          if attr_defines.to_s.match(VCPROJ_DEF_CONTENT_CMAKE_INTDIR_REGEX_OBJ)
             is_cmake = true
             break
           end
@@ -7489,7 +7493,7 @@ def v2c_vcxproj_look_for_cmake_content(str_proj_file)
       project_xml.elements.each('ItemDefinitionGroup') { |itemdef_xml|
         itemdef_xml.elements.each('ClCompile') { |compiler_xml|
           attr_defines = compiler_xml.elements['PreprocessorDefinitions']
-          if attr_defines.to_s.match(VCPROJ_DEF_CONTENT_CMAKE_REGEX_OBJ)
+          if attr_defines.to_s.match(VCPROJ_DEF_CONTENT_CMAKE_INTDIR_REGEX_OBJ)
             is_cmake = true
             break
           end

@@ -28,7 +28,7 @@ end
 files_changed = `git diff --cached --name-only --diff-filter=ACM`.split("\n")
 #puts "files_changed #{files_changed.inspect}"
 
-REGEX_FILE_RUBY = %r{.*\.rb$}
+REGEX_FILE_RUBY = %r{\.rb$}
 files_ruby = files_changed.collect do |file|
   next if not file.match(REGEX_FILE_RUBY)
   file
@@ -65,4 +65,4 @@ end
 
 #git_hook_fail_pseudo
 
-git_hook_ok "Test run of converter successful!"
+git_hook_ok "No problematic content found: successful!"

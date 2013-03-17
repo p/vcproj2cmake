@@ -254,7 +254,7 @@ if true == $v2c_parser_proj_files_case_insensitive_match
 end
 log_info "Doing case-#{str_case_match_type}SENSITIVE matching on project file candidates!"
 
-DETECT_MAC_OS_RESOURCE_FORK_FILES_REGEX_OBJ = %r{^\._.*}
+DETECT_MAC_OS_RESOURCE_FORK_FILES_REGEX_OBJ = %r{^\._}
 Find.find('./') do
   |f|
   next if not test(?d, f)
