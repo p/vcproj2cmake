@@ -281,7 +281,7 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
-				RelativePath=".\sources1\source_a.c"
+				RelativePath=".\..\files\sources1\source_a.c"
 				>
 				<FileConfiguration
 					Name="Debug|Win32"
@@ -309,7 +309,7 @@
 				</FileConfiguration>
 			</File>
 			<File
-				RelativePath=".\sources1\source_b.cpp"
+				RelativePath=".\..\files\sources1\source_b.cpp"
 				>
 				<FileConfiguration
 					Name="Debug|Win32"
@@ -343,11 +343,11 @@
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
 			<File
-				RelativePath=".\sources1\source_a.h"
+				RelativePath=".\..\files\sources1\source_a.h"
 				>
 			</File>
 			<File
-				RelativePath=".\sources1\source_b.hpp"
+				RelativePath=".\..\files\sources1\source_b.hpp"
 				>
 			</File>
 		</Filter>
@@ -357,7 +357,7 @@
 			UniqueIdentifier="{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}"
 			>
 			<File
-				RelativePath=".\version.rc"
+				RelativePath=".\..\files\version.rc"
 				>
 				<FileConfiguration
 					Name="Debug|Win32"
