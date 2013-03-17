@@ -5994,6 +5994,35 @@ class V2C_CMakeFileListGenerator_VS10 < V2C_CMakeFileListGeneratorBase
   end
 end
 
+class V2C_ToolFlagsGenerator_Base < V2C_LoggerBase
+end
+
+class V2C_ToolFlagsGenerator_Linker_MSVC < V2C_ToolFlagsGenerator_Base
+  def generate(linker_info)
+    arr_flags = []
+    arr_flags.concat(generate_nodefaultlib(linker_info.arr_ignore_specific_default_libraries))
+    logger.todo('Generation of many other linker settings not supported yet!')
+
+    arr_flags.compact!
+    arr_flags
+  end
+  private
+  def generate_nodefaultlib(arr_ignore_specific_default_libraries)
+    arr_nodefaultlib = []
+    arr_ignore = arr_ignore_specific_default_libraries
+    arr_ignore.each do |nodefaultlib|
+      # We'll use File.basename() since that has a nice way
+      # to split off .lib extension.
+      # Nope, we don't need to strip off .lib.
+      #nodefaultlib_arg = File.basename(nodefaultlib, '.lib')
+      nodefaultlib_arg = nodefaultlib
+      linker_arg_nodefaultlib = "/NODEFAULTLIB:#{nodefaultlib_arg}"
+      arr_nodefaultlib.push(linker_arg_nodefaultlib)
+    end
+    arr_nodefaultlib
+  end
+end
+
 class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def initialize(target, project_dir, localGenerator, textOut)
     super(textOut)
@@ -6410,7 +6439,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       end
     end
   end
-  def write_property_link_flags(condition, arr_flags, arr_conditional)
+  def write_property_link_flags(condition, arr_flags, arr_conditional, comment)
     return if arr_flags.empty?
     next_paragraph()
     gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, condition, false)
@@ -6419,6 +6448,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         arr_target_expr = get_target_syntax_expression(@target.name)
         build_type = condition.get_build_type()
         property_name = get_name_of_per_config_type_property('LINK_FLAGS', build_type)
+        write_comment_at_level(COMMENT_LEVEL_STANDARD, comment)
         put_property(arr_target_expr, PROP_APPEND, property_name, arr_flags)
       end
     end
@@ -6643,7 +6673,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
               # CMAKE_SHARED_LINKER_FLAGS / CMAKE_MODULE_LINKER_FLAGS / CMAKE_EXE_LINKER_FLAGS
               # depending on target type, and make sure to filter out options
               # pre-defined by CMake platform setup modules)
-              write_property_link_flags(condition, linker_specific.arr_flags, arr_conditional_linker_platform)
+              write_property_link_flags(condition, linker_specific.arr_flags, arr_conditional_linker_platform, 'Original set of linker-specific flags')
 
               # Very dirty MSVC-specific HACK to make some stuff work.
               # This part should go into a platform-specific-linker generator
@@ -6653,19 +6683,10 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
               # This generator of course will generate linker args
               # and *not* CMake code instead, since that way
               # it will be reusable by other build env generators, too.
-              if V2C_Ruby_Compat::string_start_with(linker_specific.tool_id, 'MSVC')
-                arr_nodefaultlib = []
-                arr_ignore = linker_info_curr.arr_ignore_specific_default_libraries
-                arr_ignore.each do |nodefaultlib|
-                  # We'll use File.basename() since that has a nice way
-                  # to split off .lib extension.
-                  # Nope, we don't need to strip off .lib.
-                  #nodefaultlib_arg = File.basename(nodefaultlib, '.lib')
-                  nodefaultlib_arg = nodefaultlib
-                  linker_arg_nodefaultlib = "/NODEFAULTLIB:#{nodefaultlib_arg}"
-                  arr_nodefaultlib.push(linker_arg_nodefaultlib)
-                end
-                write_property_link_flags(condition, arr_nodefaultlib, arr_conditional_linker_platform)
+              linker_flags_generator = linker_flags_generator_factory(linker_specific.tool_id)
+              if not linker_flags_generator.nil?
+                arr_flags = linker_flags_generator.generate(linker_info_curr)
+                write_property_link_flags(condition, arr_flags, arr_conditional_linker_platform, 'Set of linker flags translated from project link settings')
               end
             } # linker.tool_specific.each
           } # arr_linker_info.each
@@ -6897,6 +6918,16 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       hook_up_midl_files(project_info.file_lists, config_info_curr)
     } # [END per-config handling]
     target_is_valid
+  end
+  def linker_flags_generator_factory(tool_id)
+    generator = nil
+    case tool_id
+    when V2C_TOOL_MSVC_REGEX_OBJ
+      generator = V2C_ToolFlagsGenerator_Linker_MSVC.new
+    else
+      error_unknown_case_value('platform-specific linker (flag conversion generator)', tool_id)
+    end
+    generator
   end
   def write_func_v2c_project_post_setup(project_name, arr_proj_files)
     # This function invokes CMakeLists.txt rebuilder only
