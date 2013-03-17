@@ -111,7 +111,7 @@ excl_regex_recursive = generate_multi_regex('', arr_excl_dir_expr_skip_recursive
 def dir_entries_grep_skip_broken(dir_entries, regex)
   dir_entries.grep(regex)
 rescue ArgumentError => e
-  if not e.message.start_with?('invalid byte sequence')
+  if not V2C_Ruby_Compat::string_start_with(e.message, 'invalid byte sequence')
     raise
   end
   # Hrmpf, *some* entry failed. Rescue operations,
@@ -123,7 +123,7 @@ rescue ArgumentError => e
         result = entry
       end
     rescue ArgumentError => e
-      if e.message.start_with?('invalid byte sequence')
+      if V2C_Ruby_Compat::string_start_with(e.message, 'invalid byte sequence')
         log_error "Dir entry #{entry} has invalid (foreign?) encoding (#{e.message}), skipping!"
         result = nil
       else

@@ -6,6 +6,27 @@ require 'vcproj2cmake/util_file' # V2C_Util_File.cmp()
 
 $VERBOSE=true
 
+
+# RUBY VERSION COMPAT STUFF
+
+if (RUBY_VERSION < '1.9') # FIXME exact version where it got introduced?
+  def rc_string_start_with(candidate, str_start)
+    nil != candidate.match(/^#{str_start}/)
+  end
+else
+  def rc_string_start_with(candidate, str_start)
+    candidate.start_with?(str_start) # SYNTAX_CHECK_WHITELIST
+  end
+end
+
+module V2C_Ruby_Compat
+  alias string_start_with rc_string_start_with
+  module_function :string_start_with
+end
+
+
+
+
 V2C_LOG_LEVEL_OFF = 0
 V2C_LOG_LEVEL_FATAL = 1
 V2C_LOG_LEVEL_ERROR = 2
@@ -1858,7 +1879,7 @@ class V2C_XmlParserBase < V2C_ParserBase
       # And then of course telling things apart properly is impossible.
       # This looks like a collossal design issue. "Ruby, bad doggie, no bone!"
       # Oh well, seems it's possible to check .message for the specific error string.
-      if e.message.match(/^invalid value for Integer/)
+      if V2C_Ruby_Compat::string_start_with('invalid value for Integer')
         parser_error("encountered ArgumentError #{e.message} - probably integer parsing of #{setting_key} --> #{setting_value} failed", true)
       else
         raise
@@ -6632,7 +6653,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
               # This generator of course will generate linker args
               # and *not* CMake code instead, since that way
               # it will be reusable by other build env generators, too.
-              if linker_specific.tool_id.match(V2C_TOOL_MSVC_REGEX_OBJ)
+              if V2C_Ruby_Compat::string_start_with(linker_specific.tool_id, 'MSVC')
                 arr_nodefaultlib = []
                 arr_ignore = linker_info_curr.arr_ignore_specific_default_libraries
                 arr_ignore.each do |nodefaultlib|

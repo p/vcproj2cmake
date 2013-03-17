@@ -42,8 +42,8 @@ def problem_needs_ruby_19(keyword)
 end
 
 REGEX_PROBLEMATIC = [
-   Problematic_keyword.new(%r{\bstart_with\?}, problem_needs_ruby_19('String.start_with (use .match(/^.../) instead)')),
-   Problematic_keyword.new(%r{\bend_with\?}, problem_needs_ruby_19('String.end_with (use .match(/...$/) instead)'))
+   Problematic_keyword.new(%r{\bstart_with\?}, problem_needs_ruby_19('String.start_with (use our string_start_with compat helper instead)')),
+   Problematic_keyword.new(%r{\bend_with\?}, problem_needs_ruby_19('String.end_with (use our string_end_with compat helper instead)'))
 ]
 
 REGEX_SYNTAX_CHECK_WHITELIST = %r{\bSYNTAX_CHECK_WHITELIST\b}
