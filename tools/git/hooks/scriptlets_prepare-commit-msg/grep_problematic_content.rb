@@ -46,8 +46,12 @@ REGEX_PROBLEMATIC = [
    Problematic_keyword.new(%r{\bend_with\?}, problem_needs_ruby_19('String.end_with (use .match(/...$/) instead)'))
 ]
 
+REGEX_SYNTAX_CHECK_WHITELIST = %r{\bSYNTAX_CHECK_WHITELIST\b}
 files_ruby.each do |rb_file|
   IO.foreach(rb_file) do |line_raw|
+    # Whitelist all lines which contain an explicit intended-to-whitelist marker
+    next if line_raw.match(REGEX_SYNTAX_CHECK_WHITELIST)
+
     # Split off irrelevant comment parts:
     line, comment = line_raw.chomp.split('#')
 
