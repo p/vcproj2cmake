@@ -77,7 +77,7 @@ include(vcproj2cmake_defs)
 if(V2C_FUNC_DEFINED)
   return()
 endif(V2C_FUNC_DEFINED)
-set(V2C_FUNC_DEFINED true)
+set(V2C_FUNC_DEFINED ON)
 
 # We definitely should make use of cmake_parse_arguments() wherever possible,
 # since this will relax our V2C function interface stability requirements
@@ -348,9 +348,9 @@ function(_v2c_scc_do_setup)
   if(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION)
     string(LENGTH "${CMAKE_SOURCE_DIR}/" src_len_)
     string(SUBSTRING "${CMAKE_BINARY_DIR}/" 0 ${src_len_} bin_test_)
-    set(bin_tree_somewhere_within_source_ false)
+    set(bin_tree_somewhere_within_source_ OFF)
     if("${bin_test_}" STREQUAL "${CMAKE_SOURCE_DIR}/")
-      set(bin_tree_somewhere_within_source_ true)
+      set(bin_tree_somewhere_within_source_ ON)
     endif("${bin_test_}" STREQUAL "${CMAKE_SOURCE_DIR}/")
     if(bin_tree_somewhere_within_source_)
       if(CMAKE_BINARY_DIR STREQUAL CMAKE_SOURCE_DIR)
@@ -511,9 +511,9 @@ function(_v2c_fs_item_make_relative_to_path _in _path _out)
   _v2c_var_set_empty(out_)
   if(_in)
     string(SUBSTRING "${_in}" 0 1 in_leadchar_)
-    set(absolute_ FALSE)
+    set(absolute_ OFF)
     if(in_leadchar_ STREQUAL "/" OR in_leadchar_ STREQUAL "\\")
-      set(absolute_ TRUE)
+      set(absolute_ ON)
     endif(in_leadchar_ STREQUAL "/" OR in_leadchar_ STREQUAL "\\")
     if(absolute_)
       set(out_ "${_in}")
@@ -594,7 +594,7 @@ set(_v2c_cmake_version_this "${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}.${CMA
 
 set(cmake_version_include_dirs_prop_insufficient "2.8.7")
 if("${_v2c_cmake_version_this}" VERSION_GREATER "${cmake_version_include_dirs_prop_insufficient}")
-  set(_v2c_feat_cmake_include_dirs_prop true)
+  set(_v2c_feat_cmake_include_dirs_prop ON)
 endif("${_v2c_cmake_version_this}" VERSION_GREATER "${cmake_version_include_dirs_prop_insufficient}")
 
 
@@ -671,20 +671,20 @@ endfunction(_v2c_buildcfg_get_magic_conditional_name _target _build_platform _bu
 
 if(CMAKE_CONFIGURATION_TYPES)
   function(_v2c_buildcfg_define_magic_conditional _target _build_platform _build_type _var_out)
-    set(val_ FALSE)
+    set(val_ OFF)
     _v2c_var_my_get(BUILD_PLATFORM build_platform_)
     if("${build_platform_}" STREQUAL "${_build_platform}")
-      set(val_ TRUE)
+      set(val_ ON)
     endif("${build_platform_}" STREQUAL "${_build_platform}")
     set(${_var_out} ${val_} PARENT_SCOPE)
   endfunction(_v2c_buildcfg_define_magic_conditional _target _build_platform _build_type _var_out)
 else(CMAKE_CONFIGURATION_TYPES)
   function(_v2c_buildcfg_define_magic_conditional _target _build_platform _build_type _var_out)
-    set(val_ FALSE)
+    set(val_ OFF)
     _v2c_var_my_get(BUILD_PLATFORM build_platform_)
     if("${build_platform_}" STREQUAL "${_build_platform}")
       if(CMAKE_BUILD_TYPE STREQUAL "${_build_type}")
-        set(val_ TRUE)
+        set(val_ ON)
       endif(CMAKE_BUILD_TYPE STREQUAL "${_build_type}")
     endif("${build_platform_}" STREQUAL "${_build_platform}")
     set(${_var_out} ${val_} PARENT_SCOPE)
@@ -729,7 +729,7 @@ endfunction(v2c_buildcfg_check_if_platform_buildtype_active _target _build_platf
 # the build for,
 # otherwise (for supporting generators, of which there currently are NONE)
 # provide dummy.
-set(_v2c_generator_has_dynamic_platform_switching FALSE)
+set(_v2c_generator_has_dynamic_platform_switching OFF)
 if(_v2c_generator_has_dynamic_platform_switching)
   function(v2c_platform_build_setting_configure _target)
     # DUMMY (not needed on certain generators)
@@ -1283,7 +1283,7 @@ if(v2c_cmakelists_rebuilder_available)
     # TODO: do we have to set_source_files_properties(GENERATED) on ${_cmakelists_file}?
 
     if(NOT TARGET update_cmakelists_ALL__internal_collector)
-      set(need_init_main_targets_this_time_ true)
+      set(need_init_main_targets_this_time_ ON)
 
       # This is the lower-level target which encompasses all .vcproj-based
       # sub projects (always separate this from external higher-level
@@ -1506,7 +1506,7 @@ if(v2c_want_pch_support)
       return()
     endif(NOT _header_file OR NOT EXISTS "${header_file_location_}")
 
-    set(_v2c_have_pch_support_ FALSE)
+    set(_v2c_have_pch_support_ OFF)
 
     # This module defines PCH functions such as add_precompiled_header().
     # It _needs_ to be included *after* a project() declaration,
@@ -1517,7 +1517,7 @@ if(v2c_want_pch_support)
 
     if(PCHSupport_FOUND)
       if(COMMAND add_precompiled_header)
-        set(_v2c_have_pch_support_ TRUE)
+        set(_v2c_have_pch_support_ ON)
       endif(COMMAND add_precompiled_header)
     endif(PCHSupport_FOUND)
     if(NOT _v2c_have_pch_support_)
@@ -1540,18 +1540,18 @@ if(v2c_want_pch_support)
     set(pch_create_ 1)
     set(pch_use_ 2)
 
-    set(do_create_ FALSE)
-    set(do_use_ FALSE)
+    set(do_create_ OFF)
+    set(do_use_ OFF)
     if(_use EQUAL ${pch_create_})
-      set(do_create_ TRUE)
+      set(do_create_ ON)
     endif(_use EQUAL ${pch_create_})
     if(_use EQUAL ${pch_use_})
-      set(do_use_ TRUE)
+      set(do_use_ ON)
     endif(_use EQUAL ${pch_use_})
     if(do_use_)
       _v2c_msg_warning("v2c_target_add_precompiled_header: HACK: target ${_target} configured to *Use* a header - modifying into *Create* since our per-file handling is too weak (FIXME).")
-      set(do_use_ FALSE)
-      set(do_create_ TRUE)
+      set(do_use_ OFF)
+      set(do_create_ ON)
     endif(do_use_)
     _v2c_var_my_get(WANT_PCH_PRECOMPILED_HEADER_WARNINGS want_pch_warnings_)
     _v2c_var_set_empty(do_warn_)
@@ -1951,9 +1951,9 @@ endif(NOT V2C_INSTALL_ENABLE)
 # Example: V2C_INSTALL_ENABLE_${_target}, or
 #          V2C_INSTALL_ENABLE_TARGETS_LIST contains ${_target}
 function(_v2c_target_install_get_flag__helper _target _var_prefix _result_out)
-  set(flag_result_ false)
+  set(flag_result_ OFF)
   if(${_var_prefix}_${_target})
-    set(flag_result_ true)
+    set(flag_result_ ON)
   else(${_var_prefix}_${_target})
     _v2c_list_check_item_contained_exact("${_target}" "${${_var_prefix}_TARGETS_LIST}" flag_result_)
   endif(${_var_prefix}_${_target})
@@ -1963,10 +1963,10 @@ endfunction(_v2c_target_install_get_flag__helper _target _var_prefix _result_out
 
 # Determines whether a specific target is allowed to be installed.
 function(_v2c_target_install_is_enabled__helper _target _install_enabled_out)
-  set(install_enabled_ false)
+  set(install_enabled_ OFF)
   # v2c-based installation globally enabled?
   if(V2C_INSTALL_ENABLE)
-    # First, adopt all-targets setting, then, in case all-targets setting was false,
+    # First, adopt all-targets setting, then, in case all-targets setting was OFF,
     # check whether specific setting is enabled.
     # Finally, if we think we're allowed to install it,
     # make sure to check a skip flag _last_, to veto the operation.
@@ -1977,7 +1977,7 @@ function(_v2c_target_install_is_enabled__helper _target _install_enabled_out)
     if(install_enabled_)
       _v2c_target_install_get_flag__helper(${_target} "V2C_INSTALL_SKIP" v2c_install_skip_)
       if(v2c_install_skip_)
-        set(install_enabled_ false)
+        set(install_enabled_ OFF)
       endif(v2c_install_skip_)
     endif(install_enabled_)
     if(NOT install_enabled_)
