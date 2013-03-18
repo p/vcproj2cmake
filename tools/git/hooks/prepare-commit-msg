@@ -11,3 +11,11 @@ RUBY_BIN="$(which ruby)"
   "${RUBY_BIN}" "${GIT_HOOKS_DIR}/scriptlets_prepare-commit-msg/run_vcproj2cmake_tests.rb" || exit 1
   "${RUBY_BIN}" "${GIT_HOOKS_DIR}/scriptlets_prepare-commit-msg/grep_problematic_content.rb" || exit 1
 }
+
+# Add an optional hook to execute potentially available local tests
+local_tests_sh="${git_repo_hooks_dir}/run_vcproj2cmake_tests_local.sh"
+[ -f "${local_tests_sh}" ] && {
+  . "${local_tests_sh}"
+}
+
+exit 0
