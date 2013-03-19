@@ -209,6 +209,14 @@ if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
   endif(NOT V2C_WANT_SKIP_CMAKE_BUILD_TYPE_CHECK) # user might not want this to happen...
 endif(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 
+# Escapes semi-colon payload content in strings,
+# to work around CMake bug #13806.
+macro(_v2c_list_semicolon_bug_workaround _in_var _out_var)
+  string(REPLACE ";" "\\;" out_ "${${_in_var}}")
+  #message("_in: ${${_in_var}}, out_: ${out_}")
+  set(${_out_var} "${out_}")
+endmacro(_v2c_list_semicolon_bug_workaround _in _out)
+
 
 # Provides an all-encompassing log message of the build environment vars
 # that CMake provides.
@@ -1017,24 +1025,35 @@ function(_v2c_target_source_groups_definitions_include _target)
   _v2c_include_optional_invoke("${temp_store_dir_}/source_groups_${_target}.cmake")
 endfunction(_v2c_target_source_groups_definitions_include _target)
 
-function(_v2c_target_source_group_define _target _sg_name _sg_regex _sg_files)
+# Defines the actual CMake source_group() part.
+# Note that it will get passed variable *names* rather than *content*,
+# to have the variables dereferenced within this cache-hot(?) central helper
+# rather than expensively by each caller.
+function(_v2c_target_source_group_define _target _sg_name_varname _sg_regex_varname _sg_files_varname)
   _v2c_var_set_empty(parms_)
   # FIXME: older CMake versions have different source_group() signature -
   # add support for it (probably best done by conditionally enabling
   # an entirely *separate* variant of this function).
-  list(APPEND parms_list_ "${_sg_name}")
+  set(sg_name_ "${${_sg_name_varname}}")
+  set(sg_regex_ "${${_sg_regex_varname}}")
+  set(sg_files_ "${${_sg_files_varname}}")
+  list(APPEND sg_parms_list_ "${sg_name_}")
   # Regex is *optional*.
-  if(_sg_regex)
-    list(APPEND parms_list_ REGULAR_EXPRESSION "${_sg_regex}")
-  endif(_sg_regex)
+  if(sg_regex_)
+    # Explicitly manually escape regex list
+    # (CMake expects REGULAR_EXPRESSION data to be single-argument).
+    _v2c_list_semicolon_bug_workaround(sg_regex_ sg_regex_escaped_)
+    list(APPEND sg_parms_list_ REGULAR_EXPRESSION "${sg_regex_escaped_}")
+  endif(sg_regex_)
   # Files also seems to be *optional*.
-  if (_sg_files)
-    list(APPEND parms_list_ FILES "${_sg_files}")
-  endif (_sg_files)
+  if(sg_files_)
+    list(APPEND sg_parms_list_ FILES "${sg_files_}")
+  endif(sg_files_)
   # This might be a place to include() an optional user hook
   # for source list evaluation/modification.
-  source_group(${parms_list_})
-endfunction(_v2c_target_source_group_define _target _sg_name _sg_regex _sg_files)
+  #message("source_group ${_target}: ${sg_parms_list_}")
+  source_group(${sg_parms_list_})
+endfunction(_v2c_target_source_group_define _target _sg_name_varname _sg_regex_varname _sg_files_varname)
 
 function(_v2c_pre_touch_output_file _target_pseudo_output_file _actual_output_file _file_dependencies_list)
   # Don't inhibit a rebuild if the output file does not even exist yet:
