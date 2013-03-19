@@ -209,6 +209,33 @@ if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
   endif(NOT V2C_WANT_SKIP_CMAKE_BUILD_TYPE_CHECK) # user might not want this to happen...
 endif(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 
+# Small helper to query some variables which might not be defined.
+# Used to avoid --warn-uninitialized warnings.
+macro(_v2c_var_set_if_defined _var_name _out_var_name)
+  set(${_out_var_name} "")
+  if(DEFINED ${_var_name})
+    set(${${_out_var_name}} "${${_var_name}}")
+  endif(DEFINED ${_var_name})
+endmacro(_v2c_var_set_if_defined _var_name _out_var_name)
+
+# FIXME: move more list helpers to this early place
+# since they're independent lowlevel infrastructure used by other parts.
+function(_v2c_list_check_item_contained_exact _item _list _found_out)
+  set(found_ OFF)
+  if(_list) # not empty/unset?
+    if("${_list}" MATCHES ${_item}) # shortcut :)
+      foreach(list_item_ ${_list})
+        if(${_item} STREQUAL ${list_item_})
+          set(found_ ON)
+          break()
+        endif(${_item} STREQUAL ${list_item_})
+      endforeach(list_item_ ${_list})
+    endif("${_list}" MATCHES ${_item})
+  endif(_list)
+  set(${_found_out} ${found_} PARENT_SCOPE)
+endfunction(_v2c_list_check_item_contained_exact _item _list _found_out)
+
+
 # Escapes semi-colon payload content in strings,
 # to work around CMake bug #13806.
 macro(_v2c_list_semicolon_bug_workaround _in_var _out_var)
@@ -285,17 +312,38 @@ function(v2c_project_original_guid_desired_get _target _out_flag)
   set(${_out_flag} ${want_orig_guid_assigned_} PARENT_SCOPE)
 endfunction(v2c_project_original_guid_desired_get _target _out_flag)
 
+# Helper to give an approximate estimate on whether the build
+# environment supports certain features
+# (e.g. SCM integration / source group filters / target folders).
+# Useful to figure out initial defaults of related feature support options.
+# Currently rather lame-a** (sorry) implementation only.
+# Alternative implementations might be to have expensive heuristics
+# to set an initial CACHE var (global property?) to be queried subsequently,
+# or better, depending on platform to set (know) v2c_platform_feature_FOO
+# boolean variables in advance,
+# to then directly query via this helper.
+function(_v2c_build_env_has_feature _feature _out_flag)
+  set(features_ SCC SOURCE_GROUPS TARGET_FOLDERS)
+  _v2c_list_check_item_contained_exact(${_feature} "${features_}" known_gui_request_)
+  set(have_feature_ OFF)
+  # All unknown request types will get brushed off with OFF for now...
+  if(known_gui_request_)
+    set(have_feature_ ON) # be optimistic :)
+    # Have a check for TUI-only (most uses of Ninja, Makefile) builds.
+    set(generator_tui_list_ "Ninja" "Unix Makefiles")
+    foreach(gen_ ${generator_tui_list_})
+      if("${CMAKE_GENERATOR}" STREQUAL "${gen_}")
+        set(have_feature_ OFF)
+        break()
+      endif("${CMAKE_GENERATOR}" STREQUAL "${gen_}")
+    endforeach(gen_ ${generator_tui_list_})
+  endif(known_gui_request_)
+  set(${_out_flag} ${have_feature_} PARENT_SCOPE)
+endfunction(_v2c_build_env_has_feature _feature _out_flag)
+
 # For gory VS2010 SCM details, see main doc (README).
 function(_v2c_scc_do_setup)
-  set(v2c_want_scc_default_setting_ ON)
-  # Have a check for TUI-only (most uses of Ninja, Makefile) builds.
-  set(generator_no_scc_wanted_list_ "Ninja" "Unix Makefiles")
-  foreach(gen_ ${generator_no_scc_wanted_list_})
-    if("${CMAKE_GENERATOR}" STREQUAL "${gen_}")
-      set(v2c_want_scc_default_setting_ OFF)
-      break()
-    endif("${CMAKE_GENERATOR}" STREQUAL "${gen_}")
-  endforeach(gen_ ${generator_no_scc_wanted_list_})
+  _v2c_build_env_has_feature(SCC v2c_want_scc_default_setting_)
   option(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION "Enable re-use of any existing SCC (source control management) integration/binding info for projects (e.g. on Visual Studio)" {v2c_want_scc_default_setting_})
   if(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION)
     string(LENGTH "${CMAKE_SOURCE_DIR}/" src_len_)
@@ -375,21 +423,6 @@ function(_v2c_flatten_name _in _out)
   set("${_out}" "${out_}" PARENT_SCOPE)
 endfunction(_v2c_flatten_name _in _out)
 
-
-function(_v2c_list_check_item_contained_exact _item _list _found_out)
-  set(found_ FALSE)
-  if(_list) # not empty/unset?
-    if("${_list}" MATCHES ${_item}) # shortcut :)
-      foreach(list_item_ ${_list})
-        if(${_item} STREQUAL ${list_item_})
-          set(found_ TRUE)
-          break()
-        endif(${_item} STREQUAL ${list_item_})
-      endforeach(list_item_ ${_list})
-    endif("${_list}" MATCHES ${_item})
-  endif(_list)
-  set(${_found_out} ${found_} PARENT_SCOPE)
-endfunction(_v2c_list_check_item_contained_exact _item _list _found_out)
 
 function(_v2c_list_locate_similar_entry _list _key _match_out)
   if(_list) # not empty/unset?
@@ -921,19 +954,32 @@ endfunction(_v2c_config_do_setup)
 
 _v2c_config_do_setup()
 
-set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+_v2c_build_env_has_feature(TARGET_FOLDERS v2c_want_ide_target_folders_default_setting)
+option(V2C_WANT_IDE_TARGET_FOLDERS "Sort many vcproj2cmake-specific targets below a vcproj2cmake IDE target folder. Especially useful for very large solutions." ${v2c_want_ide_target_folders_default_setting})
+# This option is less important and rarely relevant, thus hide it:
+mark_as_advanced(V2C_WANT_IDE_TARGET_FOLDERS)
 
-function(_v2c_target_file_under _target _category)
-  if(TARGET ${_target})
-    set(folder_name_ "vcproj2cmake")
-    if(_category)
-      set(folder_name_full_ "${folder_name_}/${_category}")
-    else(_category)
-      set(folder_name_full_ "${folder_name_}")
-    endif(_category)
-    set_property(TARGET ${_target} PROPERTY FOLDER "${folder_name_full_}")
-  endif(TARGET ${_target})
-endfunction(_v2c_target_file_under _target _category)
+if(V2C_WANT_IDE_TARGET_FOLDERS)
+  # *We* will touch (activate) IDE target folders setting
+  # iff *we* want it.
+  set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
+  function(_v2c_target_file_under _target _category)
+    if(TARGET ${_target})
+      set(folder_v2c_ "vcproj2cmake")
+      if(_category)
+        set(folder_location_full_ "${folder_v2c_}/${_category}")
+      else(_category)
+        set(folder_location_full_ "${folder_v2c_}")
+      endif(_category)
+      set_property(TARGET ${_target} PROPERTY FOLDER "${folder_location_full_}")
+    endif(TARGET ${_target})
+  endfunction(_v2c_target_file_under _target _category)
+else(V2C_WANT_IDE_TARGET_FOLDERS)
+  function(_v2c_target_file_under _target _category)
+    # DUMMY!
+  endfunction(_v2c_target_file_under _target _category)
+endif(V2C_WANT_IDE_TARGET_FOLDERS)
 
 function(_v2c_target_mark_as_internal _target)
   _v2c_target_file_under("${_target}" "INTERNAL")
@@ -956,14 +1002,7 @@ function(_v2c_source_groups_do_setup)
     # Let's assume Xcode also supports that.
     set(v2c_source_groups_enabled_introspection_ ON)
   else()
-    # Have a check for TUI-only (most uses of Ninja, Makefile) builds.
-    set(generator_no_sg_wanted_list_ "Ninja" "Unix Makefiles")
-    foreach(gen_ ${generator_no_sg_wanted_list_})
-      if("${CMAKE_GENERATOR}" STREQUAL "${gen_}")
-        set(v2c_source_groups_enabled_introspection_ OFF)
-        break()
-      endif("${CMAKE_GENERATOR}" STREQUAL "${gen_}")
-    endforeach(gen_ ${generator_no_sg_wanted_list_})
+    _v2c_build_env_has_feature(SOURCE_GROUPS v2c_source_groups_enabled_introspection_)
   endif(MSVC_IDE)
   if(DEFINED v2c_source_groups_enabled_introspection_)
     set(v2c_source_groups_enabled_default_setting_ ${v2c_source_groups_enabled_introspection_})
@@ -1095,6 +1134,10 @@ endfunction(_v2c_projects_find_valid_target _projects_list _target_out)
 # whether rebuilder setup was successful:
 _v2c_config_get_unchecked(cmakelists_update_check_stamp_file_v1 v2c_cmakelists_rebuilder_available)
 if(v2c_cmakelists_rebuilder_available)
+  function(_v2c_target_mark_as_rebuilder _target)
+    _v2c_target_file_under("${_target}" "cmakelists_rebuilder")
+  endfunction(_v2c_target_mark_as_rebuilder _target)
+
   function(_v2c_cmakelists_rebuild_recursively _v2c_scripts_base_path _v2c_cmakelists_rebuilder_deps_common_list)
     set(cmakelists_target_rebuild_all_name_ update_cmakelists_rebuild_recursive_ALL)
     if(TARGET ${cmakelists_target_rebuild_all_name_})
@@ -1260,6 +1303,7 @@ if(v2c_cmakelists_rebuilder_available)
     endif(TARGET ${target_cmakelists_update_this_projdir_name_})
     #add_custom_target(${target_cmakelists_update_this_projdir_name_} DEPENDS "${_cmakelists_file}")
     add_custom_target(${target_cmakelists_update_this_projdir_name_} ALL DEPENDS "${cmakelists_update_this_cmakelists_updated_stamp_file_}")
+    _v2c_target_mark_as_rebuilder(${target_cmakelists_update_this_projdir_name_})
 #    add_dependencies(${target_cmakelists_update_this_projdir_name_} update_cmakelists_rebuild_happened)
 
     add_dependencies(update_cmakelists_ALL__internal_collector ${target_cmakelists_update_this_projdir_name_})
@@ -1269,6 +1313,7 @@ if(v2c_cmakelists_rebuilder_available)
     foreach(proj_ ${_directory_projects_list})
       set(tgt_name_ update_cmakelists_${proj_})
       add_custom_target(${tgt_name_})
+      _v2c_target_mark_as_rebuilder(${tgt_name_})
       add_dependencies(${tgt_name_} ${target_cmakelists_update_this_projdir_name_})
     endforeach(proj_ ${_directory_projects_list})
 
