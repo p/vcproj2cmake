@@ -632,6 +632,15 @@ and possibly superiour to the vcproj2cmake configuration effort in certain ways.
 Untested, however (any feedback?).
 
 
+gyp
+http://code.google.com/p/gyp/w/
+http://code.google.com/p/gyp/wiki/GypVsCMake
+Some people say that it's quite a bit less featureful than CMake,
+and I would tend to believe that.
+Anyway, this is a different solution that might just happen to be
+what you're looking for...
+
+
 https://github.com/sakra/cotire/ (compile time reducer)
 is a CMake module that speeds up the build process of CMake based build systems
 by fully automating techniques as precompiled header usage
@@ -675,7 +684,39 @@ Please also strongly consider activating the git hook sample files
 contained in this project for your development activities.
 
 
-=== Cross-platform development hints ===
+== vcproj2cmake parser/generator implementation introduction ==
+
+The core implementation of vcproj2cmake (currently contained in
+scripts/lib/vcproj2cmake/v2c_core.rb, an almost single full file,
+somewhat intentional to ease deployment) contains:
+- parser classes (Visual Studio only - read content of .vc[x]proj files)
+- data classes (for storing the build configuration data gathered by the
+  parser classes)
+- generator classes (CMake only - generate CMakeLists.txt files as
+  required to re-establish the build configuration defined by the original
+  project files)
+  There are base classes which know how to generate CMake-specific syntax,
+  derived classes which augment the CMake syntax by V2C-specific content
+  (our custom functions, etc.), and then various generator classes which
+  make use of this CMake/V2C generator functionality (e.g. a local-dir class,
+  a project generator class, or generation of a somewhat special
+  source root directory CMakeLists.txt file).
+  The local-directory CMakeLists.txt file generator class will take an array
+  of project info, i.e. the number of project files (.vc[x]proj) contained
+  within that *original* directory, and given this array of projects will
+  generate a local CMakeLists.txt file each, which defines those
+  potentially multiple projects.
+
+As one can now imagine, V2C has a relatively well-separated implementation
+(parser / configuration container / generator, with various partial
+helper classes for certain areas).
+V2C could thus be relatively easily improved to be a Universal Build Converter
+for conversion between an almost arbitrary number of build environments,
+simply by adding e.g. a QtCreator project file parser, or an autoconf
+or a Makefile generator, or many others.
+
+
+=== Cross-platform development hints for your projects ===
 
 == Toolkit dependency management/reduction ==
 
