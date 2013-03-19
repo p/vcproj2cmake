@@ -528,8 +528,8 @@ function(_v2c_fs_item_make_relative_to_path _in _path _out)
   set(${_out} "${out_}" PARENT_SCOPE)
 endfunction(_v2c_fs_item_make_relative_to_path _in _path _out)
 
-# Does a file(APPEND <empty_string>) -
-# this will update stat's "Change" timestamp (will NOT update "Modify"!).
+# Does a file(APPEND ) - this will update stat's "Change" timestamp
+# (will NOT update "Modify"!).
 macro(_v2c_fs_file_touch_nocreate_change _file)
   file(APPEND "${_file}" "")
 endmacro(_v2c_fs_file_touch_nocreate_change _file)
@@ -550,7 +550,7 @@ endmacro(_v2c_fs_file_touch_nocreate_change_modify _file)
 # Uses file(WRITE "TOUCHED BY VCPROJ2CMAKE") to *actually* mark a
 # file as "Modified", USING A DISRUPTIVE WRITE ACTION.
 # Useful since it ought to be much faster than an annoying external
-# execute_process(). But turns out performance is not *that* different...
+# execute_process(). Turns out performance is not *that* different...
 macro(_v2c_fs_file_touch_nocreate_change_modify_DISRUPTS_CONTENT _file)
   if(EXISTS "${_file}")
     file(WRITE "${_file}" "TOUCHED BY VCPROJ2CMAKE")
