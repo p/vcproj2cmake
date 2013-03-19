@@ -297,7 +297,7 @@ class Logger
   def escape_item(file); "\"#{file}\"" end
 
   def error(str); log_error(formatter(str)) end
-  def fixme(str); log_error(formatter('FIXME: ' + str)) end
+  def fixme(str); log_warn(formatter('FIXME: ' + str)) end
   def warn(str); log_warn(formatter(str)) end
   def info(str); log_info(formatter(str)) end
   def debug(str); log_debug(formatter(str)) end
