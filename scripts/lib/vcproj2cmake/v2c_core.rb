@@ -2033,13 +2033,27 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
   # some VS XML elements contain leading/trailing whitespace (which may
   # just as well be a newline spanning from starting tag to ending tag)
   def strip_whitespace(str_in); str_in.strip end
+  # E.g. a VS value list can be nil in case of completely empty value
+  # or empty element ("<element />").
+  # We'll have to handle this special case gracefully,
+  # and this place seems to be right where we need to handle it.
+  # And rather than having to add an extra
+  # return something if in.nil?
+  # line, use this helper which can be placed
+  # right at the use site of an input argument.
+  def string_avoid_nil(str_in)
+    str_in.nil? ? '' : str_in
+  end
   def split_values_list(str_value)
-    arr_str = str_value.split(VS_VALUE_SEPARATOR_REGEX_OBJ)
+    # nil check to be done *within* this method,
+    # not general avoidance prior to it
+    # (other handlers actually might want to expressly discern nil args!).
+    arr_str = string_avoid_nil(str_value).split(VS_VALUE_SEPARATOR_REGEX_OBJ)
     #arr_str.each { |str| logger.debug "SPLIT #{str}" }
     return arr_str
   end
   def split_values_list_preserve_ws(str_value)
-    arr_str = str_value.split(VS_WS_VALUE_SEPARATOR_REGEX_OBJ)
+    arr_str = string_avoid_nil(str_value).split(VS_WS_VALUE_SEPARATOR_REGEX_OBJ)
     #arr_str.each { |str| logger.debug "SPLIT #{str}" }
     return arr_str
   end
@@ -2214,8 +2228,9 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
   # property elements.
   def split_vs_tool_property_elements(str_property_value, regex)
     arr_elems = []
-    if not str_property_value.empty?
-      arr_elems = str_property_value.split(regex).collect { |elem|
+    value = string_avoid_nil(str_property_value)
+    if not value.empty?
+      arr_elems = value.split(regex).collect { |elem|
         # skip_vs10_percent_sign_var() most likely is a temporary HACK,
         # but for now we decide to not support these specifics.
         next if skip_vs10_percent_sign_var(elem)
@@ -2239,7 +2254,6 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
     split_vs_tool_property_elements(attr_options, VS_ADDOPT_VALUE_SEPARATOR_REGEX_OBJ)
   end
   def parse_fs_item_list(attr_fs_items, arr_fs_items)
-    return if attr_fs_items.empty?
     split_values_list_preserve_ws_discard_empty(attr_fs_items).each { |elem|
       next if skip_vs10_percent_sign_var(elem)
       elem_fs = get_filesystem_location(elem)
@@ -2571,7 +2585,6 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
 
   MSVC_OBJ_REGEX = %r{\.obj$}
   def parse_additional_dependencies(attr_deps, arr_dependencies)
-    return if attr_deps.empty?
     have_obj = false
     split_values_list_discard_empty(attr_deps).each { |elem_lib_dep|
       logger.debug "!!!!! elem_lib_dep #{elem_lib_dep}"
