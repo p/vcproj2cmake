@@ -7395,8 +7395,9 @@ end
 # *and* invocations of the CMake binary (for custom targets),
 # and some other characteristic strings.
 #VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{#{CMAKELISTS_FILE_NAME}}
+VCPROJ_DEF_CONTENT_CMAKE_REGEX_OBJ = %r{\bCMAKE_INTDIR=}
 VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{(\bPreprocessorDefinitions\b.*\bCMAKE_INTDIR=|\bCMakeFiles\b)}
-def v2c_is_project_file_generated_by_cmake(str_proj_file)
+def v2c_is_project_file_generated_by_cmake_grep(str_proj_file)
   generated_file = false
   cmakelists_text = ''
   File.open(str_proj_file, 'r') { |f_vcproj|
@@ -7407,6 +7408,86 @@ def v2c_is_project_file_generated_by_cmake(str_proj_file)
   end
   return generated_file
 end
+
+def v2c_vcproj_look_for_cmake_content(str_proj_file)
+  is_cmake = false
+  File.open(str_proj_file) { |io|
+    doc = REXML::Document.new io
+    doc.elements.each('VisualStudioProject') { |project_xml|
+      project_xml.elements.each('Configurations/Configuration') { |config_xml|
+        config_xml.elements.each('Tool[@Name="VCCLCompilerTool"]') { |compiler_xml|
+          attr_defines = compiler_xml.attributes['PreprocessorDefinitions']
+          if attr_defines.to_s.match(VCPROJ_DEF_CONTENT_CMAKE_REGEX_OBJ)
+            is_cmake = true
+            break
+          end
+        }
+      }
+    }
+  }
+  is_cmake
+end
+
+def v2c_vcxproj_look_for_cmake_content(str_proj_file)
+  is_cmake = false
+  File.open(str_proj_file) { |io|
+    doc = REXML::Document.new io
+    doc.elements.each('Project') { |project_xml|
+      project_xml.elements.each('ItemDefinitionGroup') { |itemdef_xml|
+        itemdef_xml.elements.each('ClCompile') { |compiler_xml|
+          attr_defines = compiler_xml.elements['PreprocessorDefinitions']
+          if attr_defines.to_s.match(VCPROJ_DEF_CONTENT_CMAKE_REGEX_OBJ)
+            is_cmake = true
+            break
+          end
+        }
+      }
+    }
+  }
+  is_cmake
+end
+
+# New variant to check for a CMake-generated project file:
+# Doing a raw open() of a text file is NOT a good idea since it will default
+# to UTF-8 whereas the encoding (and some content!) might actually be
+# (specified as) CP1252 --> exception, crash&burn.
+# Thus better use native XML parsing instead, which hopefully directly
+# knows to choose the correct encoding.
+# Implementation is somewhat dirty, but right now it's much more important
+# to not have any encoding issues...
+VCPROJ_EXT_REGEX_OBJ = %r{\.vcproj$}
+VCXPROJ_EXT_REGEX_OBJ = %r{\.vcxproj$}
+def v2c_is_project_file_generated_by_cmake_xml(str_proj_file)
+  is_cmake = false
+  case str_proj_file
+  when VCPROJ_EXT_REGEX_OBJ
+    is_cmake = v2c_vcproj_look_for_cmake_content(str_proj_file)
+  when VCXPROJ_EXT_REGEX_OBJ
+    is_cmake = v2c_vcxproj_look_for_cmake_content(str_proj_file)
+  else
+    puts "ERROR: unsupported project file type #{str_proj_file}!"
+  end
+  is_cmake
+end
+
+# Originally I wanted to do analysis via encoding-aware XML parser,
+# but that is so dog slow (10s+ for a processing of about 30s)
+# that I decided to go for the initial fast-grep then XML-after-crash route.
+def v2c_is_project_file_generated_by_cmake(str_proj_file)
+  is_cmake = false
+  begin
+    is_cmake = v2c_is_project_file_generated_by_cmake_grep(str_proj_file)
+  rescue Exception => e
+    # If a rough UTF-8 grep crashed&burned, then switch to full XML parsing
+    if V2C_Ruby_Compat::string_start_with(e.message, 'invalid byte sequence')
+      is_cmake = v2c_is_project_file_generated_by_cmake_xml(str_proj_file)
+    else
+      raise
+    end
+  end
+  is_cmake
+end
+
 
 class V2C_FileGeneratorError < V2C_ChainedError
 end
