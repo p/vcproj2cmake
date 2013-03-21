@@ -2005,7 +2005,7 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
   end
   def get_filesystem_location(path)
     # TODO: rather ad-hoc handling of VS7 vars, should get improved eventually.
-    path_translated = vs7_create_config_variable_translation(path, @arr_config_var_dummy)
+    path_translated = vs7_create_config_variable_translation(string_avoid_nil(path), @arr_config_var_dummy)
 
     # TODO: should think of a way to do central verification
     # of existence of the file system paths found here near this helper.

@@ -87,6 +87,10 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies></AdditionalDependencies>
     </Link>
+    <Midl>
+      <TypeLibraryName>.\Debug/vcxproj_full_1.tlb</TypeLibraryName>
+      <HeaderFileName />
+    </Midl>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
