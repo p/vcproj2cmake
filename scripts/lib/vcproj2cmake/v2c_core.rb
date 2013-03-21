@@ -1780,6 +1780,9 @@ require 'rexml/document'
 # Should probably rework the core of our classes to use the StreamListener,
 # and hopefully keep servicing our existing overrides.
 
+class V2C_XmlParserError < V2C_ChainedError
+end
+
 class V2C_XmlParserBase < V2C_ParserBase
   def unknown_attribute(key, value); unknown_something_key_value('attribute', key, value) end
   def unknown_element_key(name); unknown_something('element', name) end
@@ -1796,22 +1799,30 @@ class V2C_XmlParserBase < V2C_ParserBase
 
   def parse_attributes
     @elem_xml.attributes.each_attribute { |attr_xml|
-      logger.debug "ATTR: #{attr_xml.name}"
-      if not call_parse_attribute(attr_xml)
-        if not call_parse_setting(attr_xml.name, attr_xml.value)
-          unknown_attribute(attr_xml.name, attr_xml.value)
+      begin
+        logger.debug "ATTR: #{attr_xml.name}"
+        if not call_parse_attribute(attr_xml)
+          if not call_parse_setting(attr_xml.name, attr_xml.value)
+            unknown_attribute(attr_xml.name, attr_xml.value)
+          end
         end
+      rescue Exception
+        raise V2C_XmlParserError, "parse_attributes(\"#{attr_xml.name}\", \"#{attr_xml.value}\") failed"
       end
     }
   end
   def parse_elements
     @elem_xml.elements.each { |subelem_xml|
       logger.debug "ELEM: #{subelem_xml.name}"
-      if not call_parse_element(subelem_xml)
-        logger.debug "call_parse_element #{subelem_xml.name} failed"
-        if not call_parse_setting(subelem_xml.name, subelem_xml.text)
-          unknown_element(subelem_xml.name, subelem_xml.text)
+      begin
+        if not call_parse_element(subelem_xml)
+          logger.debug "call_parse_element #{subelem_xml.name} failed"
+          if not call_parse_setting(subelem_xml.name, subelem_xml.text)
+            unknown_element(subelem_xml.name, subelem_xml.text)
+          end
         end
+      rescue Exception
+        raise V2C_XmlParserError, "parse_elements(\"#{subelem_xml.name}\", \"#{subelem_xml.text}\") failed"
       end
     }
   end
