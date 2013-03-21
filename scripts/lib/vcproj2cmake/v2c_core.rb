@@ -2009,7 +2009,7 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
 
     # TODO: should think of a way to do central verification
     # of existence of the file system paths found here near this helper.
-    path_cooked = normalize_path(strip_whitespace(path_translated))
+    path_cooked = normalize_path(string_value_preprocess(path_translated))
     logger.debug "path_translated #{path_translated}, path_cooked #{path_cooked}"
     return path_cooked.empty? ? nil : path_cooked
   end
@@ -2043,6 +2043,11 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
   # right at the use site of an input argument.
   def string_avoid_nil(str_in)
     str_in.nil? ? '' : str_in
+  end
+  # Standard handler for VS project string value content.
+  # Prevents nil input and strips whitespace.
+  def string_value_preprocess(str_in)
+    strip_whitespace(string_avoid_nil(str_in))
   end
   def split_values_list(str_value)
     # nil check to be done *within* this method,
@@ -2146,7 +2151,7 @@ class V2C_VSProjectSCCParser < V2C_VSXmlParserBase
   end
   def register_scc(setting_key, setting_value)
     found = be_optimistic()
-    setting_value = strip_whitespace(setting_value)
+    setting_value = string_value_preprocess(setting_value)
     case setting_key
     # Hrmm, turns out having SccProjectName is no guarantee that both SccLocalPath and SccProvider
     # exist, too... (one project had SccProvider missing). HOWEVER,
@@ -3985,7 +3990,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
     'Use'
   ]
   def parse_use_precompiled_header(str_use_precompiled_header)
-    return string_to_index(ARR_USE_PCH, strip_whitespace(str_use_precompiled_header), 0)
+    return string_to_index(ARR_USE_PCH, string_value_preprocess(str_use_precompiled_header), 0)
   end
   ARR_WARN_LEVEL = [
     'TurnOffAllWarnings', # /W0
