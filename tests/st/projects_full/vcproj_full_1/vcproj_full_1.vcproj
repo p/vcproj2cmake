@@ -43,7 +43,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="0"
 				AdditionalIncludeDirectories="&quot;$(ProjectDir)\runtime&quot;;&quot;$(DSTROOT)\AppleInternal\include&quot;;&quot;$(SRCROOT)\AppleInternal\include&quot;"
-				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;VCPROJ_FULL_1_EXPORTS;__WIN32__;_CRT_SECURE_NO_DEPRECATE;BRACKETS_ESCAPE_TEST=my(brackets)test"
+				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;VCPROJ_FULL_1_EXPORTS;__WIN32__;_CRT_SECURE_NO_DEPRECATE;BRACKETS_ESCAPE_TEST=my(brackets)test;$(NOINHERIT)"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"

@@ -5404,7 +5404,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   end
   COMPILE_DEF_NEEDS_CMAKE_ESCAPING_REGEX_OBJ = %r{[\(\)]+}
   def cmake_escape_compile_definitions(arr_compile_defn)
-    arr_compile_defn.collect do |compile_defn|
+    arr_compile_defn.each do |compile_defn|
       # Need to escape the value part of the key=value definition:
       if COMPILE_DEF_NEEDS_CMAKE_ESCAPING_REGEX_OBJ.match(compile_defn)
         escape_char(compile_defn, '\\(')
@@ -5412,6 +5412,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
       end
       compile_defn
     end
+    arr_compile_defn
   end
   def get_target_syntax_expression(target_name); [ 'TARGET', target_name ] end
   def when_target_valid_scriptlet_block(target_name)
@@ -6648,7 +6649,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
               # TODO: this might be relocatable to a common generator base helper method.
               arr_defs_assignments = Array.new
               hash_ensure_sorted_each(hash_defines_augmented).each { |key, value|
-                str_define = value.empty? ? key : "#{key}=#{value}"
+                str_define = value.empty? ? key.dup : "#{key}=#{value}"
                 arr_defs_assignments.push(str_define)
               }
               write_property_compile_definitions(condition, arr_defs_assignments, map_defines)
