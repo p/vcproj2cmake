@@ -3304,7 +3304,7 @@ class V2C_VS7ToolFilesParser < V2C_VS7ParserBase
   end
   def parse_element(subelem_xml)
     found = be_optimistic()
-    log_debug "TOOLFILES: #{subelem_xml.name}, #{subelem_xml.value}"
+    log_debug "TOOLFILES: #{subelem_xml.name}, #{subelem_xml.text}"
     return found
   end
 end

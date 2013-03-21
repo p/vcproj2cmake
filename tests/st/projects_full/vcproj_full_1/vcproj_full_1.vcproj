@@ -13,6 +13,9 @@
 		/>
 	</Platforms>
 	<ToolFiles>
+                <DefaultToolFile
+                        FileName="masm.rules"
+                />
 	</ToolFiles>
 	<Configurations>
 		<Configuration
