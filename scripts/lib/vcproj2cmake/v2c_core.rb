@@ -1879,7 +1879,7 @@ class V2C_XmlParserBase < V2C_ParserBase
       # And then of course telling things apart properly is impossible.
       # This looks like a collossal design issue. "Ruby, bad doggie, no bone!"
       # Oh well, seems it's possible to check .message for the specific error string.
-      if V2C_Ruby_Compat::string_start_with('invalid value for Integer')
+      if V2C_Ruby_Compat::string_start_with(e.message, 'invalid value for Integer')
         parser_error("encountered ArgumentError #{e.message} - probably integer parsing of #{setting_key} --> #{setting_value} failed", true)
       else
         raise
@@ -2494,7 +2494,7 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
   def parse_debug_information_format(str_debug_information_format)
     return parse_integer(str_debug_information_format)
   end
-  def parse_exception_handling(setting_value); parse_integer(setting_value) end
+  def parse_exception_handling(setting_value); parse_boolean_property_value(setting_value) end
   def parse_inline_function_expansion(setting_value); parse_integer(setting_value) end
   def parse_optimization(setting_value); parse_integer(setting_value) end
   def parse_runtime_library(setting_value); parse_integer(setting_value) end
