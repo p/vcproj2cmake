@@ -2401,27 +2401,10 @@ class V2C_VSToolCompilerParser < V2C_VSToolDefineParserBase
     when TEXT_OPTIMIZATION
       get_compiler_info().optimization = parse_optimization(setting_value)
     when TEXT_PROGRAMDATABASEFILENAME
-      pdb_filename_path_combo = get_filesystem_location(setting_value)
-      pdb_info = V2C_PDB_Info.new
-      # Hmm, seems the trailing slash behaviour of
-      # Pathname.dirname/basename is exactly what we DON'T want -
-      # for trailing-slash args in (some?) VS config content we probably
-      # want it to end up as dirname, with basename *empty*.
-      # IOW,
-      # "./testdir/" --> "./testdir/" | ""
-      # as opposed to Pathname's
-      # "./testdir/" --> "." | "testdir"
-      trailing_char = pdb_filename_path_combo[-1, 1]
-      if '/' == trailing_char
-        pdb_info.output_dir = pdb_filename_path_combo
-	pdb_info.filename = ''
-      else
-        p_pdb_filename_path_combo = Pathname.new(pdb_filename_path_combo)
-        pdb_info.output_dir = p_pdb_filename_path_combo.dirname.to_s
-        pdb_info.filename = p_pdb_filename_path_combo.basename.to_s
+      pdb_info = get_compiler_info().pdb_info || V2C_PDB_Info.new
+      if false != parse_pdb_info(pdb_info, setting_value)
+        get_compiler_info().pdb_info = pdb_info
       end
-      logger.debug "pdb_filename_path_combo #{pdb_filename_path_combo}, pdb_info.output_dir #{pdb_info.output_dir} pdb_info.filename #{pdb_info.filename}"
-      get_compiler_info().pdb_info = pdb_info
     when TEXT_RUNTIMELIBRARY
       get_compiler_info().runtime_library_variant = parse_runtime_library(setting_value)
     when TEXT_RUNTIMETYPEINFO
@@ -2455,6 +2438,30 @@ class V2C_VSToolCompilerParser < V2C_VSToolDefineParserBase
   end
   def parse_disable_specific_warnings(arr_disable_warnings, attr_disable_warnings)
     arr_disable_warnings.replace(split_values_list_discard_empty(attr_disable_warnings))
+  end
+  def parse_pdb_info(pdb_info, setting_value)
+    pdb_filename_path_combo = get_filesystem_location(setting_value)
+    return false if pdb_filename_path_combo.nil?
+
+    # Hmm, seems the trailing slash behaviour of
+    # Pathname.dirname/basename is exactly what we DON'T want -
+    # for trailing-slash args in (some?) VS config content we probably
+    # want it to end up as dirname, with basename *empty*.
+    # IOW,
+    # "./testdir/" --> "./testdir/" | ""
+    # as opposed to Pathname's
+    # "./testdir/" --> "." | "testdir"
+    trailing_char = pdb_filename_path_combo[-1, 1]
+    if '/' == trailing_char
+      pdb_info.output_dir = pdb_filename_path_combo
+      pdb_info.filename = ''
+    else
+      p_pdb_filename_path_combo = Pathname.new(pdb_filename_path_combo)
+      pdb_info.output_dir = p_pdb_filename_path_combo.dirname.to_s
+      pdb_info.filename = p_pdb_filename_path_combo.basename.to_s
+    end
+    logger.debug "pdb_filename_path_combo #{pdb_filename_path_combo}, pdb_info.output_dir #{pdb_info.output_dir} pdb_info.filename #{pdb_info.filename}"
+    true
   end
 end
 
