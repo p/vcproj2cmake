@@ -310,7 +310,7 @@ class Logger
   def unhandled_exception(e, action)
     log_error "unhandled exception occurred during #{action}! #{e.message}, #{e.backtrace.inspect}"
   end
-  def unhandled_functionality(str_description); error 'unhandled functionality: ' + str_description end
+  def unhandled_functionality(str_description); fixme 'unhandled functionality: ' + str_description end
 
   private
   # I don't know WTH @class_name is not initialized. Probably an init order issue or whatever the heck is happening here. Oh well...
@@ -1513,7 +1513,7 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
       # There seem to be *NO* ObjectiveC specifics here...
       # (simply implicitly compiler-detected via file extension?)
       if @arr_languages.empty?
-        logger.error 'Could not figure out any pre-set programming language types (FIXME?) - will let auto-detection do its thing...'
+        logger.fixme 'Could not figure out any pre-set programming language types - will let auto-detection do its thing...'
         # We'll explicitly keep the array _empty_ (rather than specifying 'NONE'),
         # to give it another chance via CMake's language auto-detection mechanism.
       end
