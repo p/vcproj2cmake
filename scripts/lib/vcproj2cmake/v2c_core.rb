@@ -5661,8 +5661,8 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     #   http://www.mail-archive.com/cmake@cmake.org/msg38677.html
 
     if 1 == $v2c_generate_self_contained_file
-      gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, condition, false)
-      gen_condition.generate do
+      gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
+      gen_condition.generate(condition) do
         #if use_of_mfc > V2C_TargetConfig_Defines::MFC_FALSE
           write_set_var('CMAKE_MFC_FLAG', use_of_mfc)
         #end
@@ -5848,15 +5848,14 @@ class V2C_CMakeV2CConditionGeneratorBase < V2C_CMakeV2CSyntaxGenerator
 end
 
 class V2C_CMakeV2CConditionGenerator < V2C_CMakeV2CConditionGeneratorBase
-  def initialize(textOut, condition, flag_skip_build_cfg_type_parts)
+  def initialize(textOut, flag_skip_build_cfg_type_parts)
     super(textOut)
-    @condition = condition
     # Flag to indicate that we don't want the build platform/type part
     # of the condition (probably since that will be handled elsewhere).
     @flag_skip_build_cfg_type_parts = flag_skip_build_cfg_type_parts
   end
-  def generate
-    write_condition_block(@condition) do
+  def generate(condition)
+    write_condition_block(condition) do
       yield
     end
   end
@@ -6168,8 +6167,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
           write_conditional_block(arr_conditional_linker) do
             # Hmmhmm... I'm afraid this generated code here
             # should be moved into a vcproj2cmake_func helper, too...
-            gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, condition, false)
-            gen_condition.generate do
+            gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
+            gen_condition.generate(condition) do
               var_name_obj_sources = NAME_V2C_SOURCE_LIST_PREFIX + 'obj_deps'
               write_list_quoted(var_name_obj_sources, arr_obj)
               put_property_source(get_dereferenced_variable_name(var_name_obj_sources), 'EXTERNAL_OBJECT', [ get_keyword_bool(true) ])
@@ -6246,7 +6245,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     args_generator.add('PDB_NAME', pdb_info.filename)
     write_invoke_object_conditional_v2c_function('v2c_target_pdb_configure', target_name, condition, args_generator.array)
   end
-  def configure_pdb(pdb_info, condition)
+  def configure_pdb(condition, pdb_info)
     put_v2c_target_pdb_configure(@target.name, condition, pdb_info)
   end
   def put_atl_mfc_config(target_config_info)
@@ -6468,8 +6467,12 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # the container for the list of _actual_ dependencies as stated by the project
     all_platform_defs = Hash.new
     parse_platform_conversions(all_platform_defs, arr_defs_assignments, map_defs, false)
-    gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, condition, false)
-    gen_condition.generate do
+    gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
+    # While below there's COMPILE_DEFINITIONS_DEBUG/_RELEASE etc.,
+    # we do need to generate the condition since it also contains *platform*
+    # conditions, and some VS conditions might contain further specifics
+    # (Exists(...)).
+    gen_condition.generate(condition) do
       build_type = condition.get_build_type()
       hash_ensure_sorted_each(all_platform_defs).each { |key, arr_platdefs|
         #logger.info "key #{key}, arr_platdefs: #{arr_platdefs}"
@@ -6482,8 +6485,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def write_property_compile_flags(condition, arr_flags, arr_conditional)
     return if arr_flags.empty?
     next_paragraph()
-    gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, condition, false)
-    gen_condition.generate do
+    gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
+    gen_condition.generate(condition) do
       write_conditional_block(arr_conditional) do
         # FIXME!!! It appears that while CMake source has COMPILE_DEFINITIONS_<CONFIG>,
         # it does NOT provide a per-config COMPILE_FLAGS property! Need to verify ASAP
@@ -6499,8 +6502,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def write_property_link_flags(condition, arr_flags, arr_conditional, comment)
     return if arr_flags.empty?
     next_paragraph()
-    gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, condition, false)
-    gen_condition.generate do
+    gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
+    gen_condition.generate(condition) do
       write_conditional_block(arr_conditional) do
         arr_target_expr = get_target_syntax_expression(@target.name)
         build_type = condition.get_build_type()
@@ -6695,7 +6698,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
               condition_target = target_config_info_curr.condition
               write_property_compile_definitions(condition_target, arr_defs_assignments, map_defines)
               if not compiler_info_curr.pdb_info.nil?
-                configure_pdb(compiler_info_curr.pdb_info, condition)
+                configure_pdb(condition, compiler_info_curr.pdb_info)
               end
               # Original compiler flags are MSVC-only, of course.
               # TODO: provide an automatic conversion towards gcc?
@@ -6924,8 +6927,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       next_paragraph()
 
       condition = config_info_curr.condition
-      gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, condition, false)
-      gen_condition.generate do
+      gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
+      gen_condition.generate(condition) do
         config_info_curr.tools.arr_compiler_info.each { |compiler_info_curr|
           arr_includes = compiler_info_curr.get_include_dirs(false, false)
           @localGenerator.write_include_directories(arr_includes, generator_base.map_includes)
