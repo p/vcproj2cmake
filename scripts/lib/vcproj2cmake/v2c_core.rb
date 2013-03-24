@@ -597,6 +597,12 @@ class V2C_Info_Condition
   end
 end
 
+# Helper to handle non-condition (nil) cases.
+def condition_entails(this, other)
+  return true if this.nil?
+  this.entails(other)
+end
+
 # @brief Mostly used to manage the condition element...
 class V2C_Info_Elem_Base
   def initialize
@@ -5771,18 +5777,22 @@ class V2C_CMakeV2CConditionGeneratorBase < V2C_CMakeV2CSyntaxGenerator
     # target property, depending on a pre-determined support flag
     # for proper include dirs setting.
 
-    # HACK global var (multi-thread unsafety!)
-    # Thus make sure to have a local copy, for internal modifications.
-    config_multi_authoritative = $config_multi_authoritative.clone
-    if config_multi_authoritative.empty?
-      # Hrmm, we used to fetch this via REXML next_element,
-      # which returned the _second_ setting (index 1)
-      # i.e. Release in a certain file,
-      # while we now get the first config, Debug, in that file.
-      config_multi_authoritative = arr_config_info[0].condition.get_build_type()
-    end
-
     if 1 == $v2c_generate_self_contained_file
+
+      # HACK global var (multi-thread unsafety!)
+      # Thus make sure to have a local copy, for internal modifications.
+      config_multi_authoritative = $config_multi_authoritative.clone
+      if config_multi_authoritative.empty?
+
+        if nil != arr_config_info[0].condition
+          # Hrmm, we used to fetch this via REXML next_element,
+          # which returned the _second_ setting (index 1)
+          # i.e. Release in a certain file,
+          # while we now get the first config, Debug, in that file.
+          config_multi_authoritative = arr_config_info[0].condition.get_build_type()
+        end
+      end
+
       arr_config_info.each { |config_info_curr|
         condition = config_info_curr.condition
         build_type = condition.get_build_type()
@@ -5843,9 +5853,13 @@ class V2C_CMakeV2CConditionGenerator < V2C_CMakeV2CConditionGeneratorBase
   # check - things such as file existence checks [hmm, would these be
   # CMake configure time or build run time??]).
   def write_condition_block(condition)
-    var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
-    write_conditional_block([ var_v2c_want_buildcfg_curr ]) do
+    if condition.nil?
       yield
+    else
+      var_v2c_want_buildcfg_curr = get_buildcfg_var_name_of_condition(condition)
+      write_conditional_block([ var_v2c_want_buildcfg_curr ]) do
+        yield
+      end
     end
   end
 end
@@ -6559,7 +6573,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     write_invoke_config_object_v2c_function_quoted('v2c_target_set_properties_vs_scc', target_name, arr_args_func)
   end
 
-  def add_target_config_specific_definitions(condition, target_config_info, hash_defines)
+  def add_target_config_specific_definitions(target_config_info, hash_defines)
+    condition = target_config_info.condition
+
     # Hrmm, are we even supposed to be doing this?
     # On Windows I guess UseOfMfc in generated VS project files
     # would automatically cater for it, and all other platforms
@@ -6648,11 +6664,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
             print_marker_line('per-compiler_info')
 
             project_info.arr_target_config_info.each { |target_config_info_curr|
-              next if not condition.entails(target_config_info_curr.condition)
+              next if not condition_entails(condition, target_config_info_curr.condition)
 
               hash_defines_augmented = compiler_info_curr.hash_defines.clone
 
-              add_target_config_specific_definitions(condition, target_config_info_curr, hash_defines_augmented)
+              add_target_config_specific_definitions(target_config_info_curr, hash_defines_augmented)
               # Convert hash into array as required by the definitions helper function
               # (it's probably a good idea to provide "cooked" "key=value" entries
               # for more complete matching possibilities
@@ -6663,7 +6679,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
                 str_define = value.empty? ? key.dup : "#{key}=#{value}"
                 arr_defs_assignments.push(str_define)
               }
-              write_property_compile_definitions(condition, arr_defs_assignments, map_defines)
+              condition_target = target_config_info_curr.condition
+              write_property_compile_definitions(condition_target, arr_defs_assignments, map_defines)
               if not compiler_info_curr.pdb_info.nil?
                 configure_pdb(compiler_info_curr.pdb_info, condition)
               end
@@ -6675,7 +6692,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
                 #if not attr_opts.nil?
                 #  local_generator.write_directory_property_compile_flags(attr_options)
                 #end
-                write_property_compile_flags(condition, compiler_specific.arr_flags, arr_conditional_compiler_platform)
+                write_property_compile_flags(condition_target, compiler_specific.arr_flags, arr_conditional_compiler_platform)
               } # compiler.tool_specific.each
             } # arr_target_config_info.each
 
@@ -6906,7 +6923,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         # for all settings which are target related but are (stupidly)
         # NOT being applied as target properties (i.e. post-target-setup).
         arr_target_config_info.each { |target_config_info_curr|
-          next if not condition.entails(target_config_info_curr.condition)
+          next if not condition_entails(condition, target_config_info_curr.condition)
         # FIXME: put_atl_mfc_config() does not need
         # buildcfg condition i.e. should be outside of that block
         # (already does own condition handling) - how to resolve this?
@@ -6934,7 +6951,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         # create a target only in case we do have any meat at all
         if project_info.have_build_units
           arr_target_config_info.each { |target_config_info_curr|
-            next if not condition.entails(target_config_info_curr.condition)
+            next if not condition_entails(condition, target_config_info_curr.condition)
             target_is_valid = put_target_and_stuff(project_info, arr_sub_source_list_var_names, map_lib_dirs, map_lib_dirs_dep, map_dependencies, config_info_curr, target_config_info_curr)
           }
         end # target.have_build_units
