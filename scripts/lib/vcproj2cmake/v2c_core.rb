@@ -2463,6 +2463,12 @@ class V2C_VSToolCompilerParser < V2C_VSToolDefineParserBase
     logger.debug "pdb_filename_path_combo #{pdb_filename_path_combo}, pdb_info.output_dir #{pdb_info.output_dir} pdb_info.filename #{pdb_info.filename}"
     true
   end
+  def parse_precompiled_header_binary_name(setting_value)
+    get_filesystem_location(setting_value)
+  end
+  def parse_precompiled_header_source_name(setting_value)
+    get_filesystem_location(setting_value)
+  end
 end
 
 module V2C_VS7ToolSyntax
@@ -2497,9 +2503,9 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
     when TEXT_NAME
       compiler_info.name = setting_value
     when TEXT_PRECOMPILEDHEADERFILE_BINARY
-      provide_precompiled_header_info(compiler_info).header_binary_name = get_filesystem_location(setting_value)
+      provide_precompiled_header_info(compiler_info).header_binary_name = parse_precompiled_header_binary_name(setting_value)
     when TEXT_PRECOMPILEDHEADERFILE_SOURCE
-      provide_precompiled_header_info(compiler_info).header_source_name = get_filesystem_location(setting_value)
+      provide_precompiled_header_info(compiler_info).header_source_name = parse_precompiled_header_source_name(setting_value)
     when TEXT_USEPRECOMPILEDHEADER
       provide_precompiled_header_info(compiler_info).use_mode = parse_use_precompiled_header(setting_value)
     when TEXT_WARNASERROR
@@ -3932,9 +3938,9 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
     when TEXT_PRECOMPILEDHEADER
       provide_precompiled_header_info(compiler_info).use_mode = parse_use_precompiled_header(setting_value)
     when TEXT_PRECOMPILEDHEADERFILE
-      provide_precompiled_header_info(compiler_info).header_source_name = get_filesystem_location(setting_value)
+      provide_precompiled_header_info(compiler_info).header_source_name = parse_precompiled_header_source_name(setting_value)
     when TEXT_PRECOMPILEDHEADEROUTPUTFILE
-      provide_precompiled_header_info(compiler_info).header_binary_name = get_filesystem_location(setting_value)
+      provide_precompiled_header_info(compiler_info).header_binary_name = parse_precompiled_header_binary_name(setting_value)
     when TEXT_TREATWARNINGASERROR
       compiler_info.warnings_are_errors_enable = get_boolean_value(setting_value)
     else
