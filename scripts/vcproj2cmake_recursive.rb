@@ -457,6 +457,7 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
     log_info 'Recursively converting projects, multi-process.'
     workPackage.each { |arr_work_units_per_worker|
       pid = fork {
+        log_info("Process ID #{Process.pid()} started.")
         # Nope, does not seem to be true - anyway,
         # we'll keep this code since I'm not entirely sure...
         #begin
