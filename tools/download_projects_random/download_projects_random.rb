@@ -34,9 +34,11 @@ def url_transform_to_blob_variant(url)
   # http://sourceforge.net/apps/trac/mpc-hc/changeset/3213/trunk/src/apps/mplayerc/mpcresources/mpcresources.vcxproj
   # http://trac.mysvn.ru/ghazan/myranda/changeset/1990/trunk/plugins/AVS/avs_10.vcxproj
   # http://iguanaworks.net/projects/IguanaIR/changeset/714/tags/software/usb_ir-0.30/win32/usb_ir.vcproj
+  # http://eraser.heidi.ie/trac/browser/tags/6.0.6.1376/Eraser.Util.Unlocker/Eraser.Util.Unlocker.vcproj
   is_trac = (url.match(/^http:\/\/sourceforge\.net.*\btrac\b/) || url.match(/\btrac\b/) || url.match(/\bchangeset\b.*\b(trunk|tags)\b/))
   if is_trac
     url = url.sub(%r{\/changeset\/}, '\/export\/')
+    url = url.sub(%r{\/browser\/}, '\/export\/HEAD\/')
   end
   # https://hg.splayer.org/splayer/src/e8ee4613a0ce638c3d5eb474c2b160f0ec61f135/src/apps/mplayerc/mplayerc_vs2005.vcxproj
   if url.match(/^https:\/\/hg.*/)
@@ -53,7 +55,14 @@ end
 
 # Get a Nokogiri::HTML:Document for the page we're interested in...
 
-filetype = rand(100) > 50 ? 'vcxproj' : 'vcproj'
+ARR_FILETYPES = [
+  'vcxproj',
+  'vcproj',
+  'csproj'
+]
+
+i = rand(ARR_FILETYPES.length)
+filetype = ARR_FILETYPES[i]
 randomize_search_arg = rand(2000).to_s
 
 google_search_url = "http://www.google.com/search?as_q=#{randomize_search_arg}&q=filetype:#{filetype}"
@@ -133,13 +142,12 @@ def download_urls_into_prefixed_dirs(arr_urls, dir_prefix)
   end
 end
 
-REGEX_VCPROJ = %r{\.vcproj$}
-REGEX_VCXPROJ = %r{\.vcxproj$}
+REGEX_PROJ = %r{\.(vcproj|vcxproj|csproj)$}
 def find_project_files(proj_root)
   arr_projs = []
   Find.find(proj_root) do |f|
     next if not File.file?(f)
-    if f.match(REGEX_VCXPROJ) or f.match(REGEX_VCPROJ)
+    if f.match(REGEX_PROJ)
       arr_projs.push(f)
     end
   end
@@ -156,12 +164,26 @@ def detect_broken_files(arr_projs)
   arr_broken = arr_projs.collect do |proj_file|
     ok = true
     open(proj_file) do |f|
-      ARR_REGEX_BROKEN_FILE.each do |regex|
-        result = f.grep(regex)
-        if not result.empty?
-          puts "project file #{proj_file} is BROKEN (regex #{regex}, result #{result})"
-          ok = false
-          break
+      begin
+        ARR_REGEX_BROKEN_FILE.each do |regex|
+          result = f.grep(regex)
+          if not result.empty?
+            puts "project file #{proj_file} is BROKEN (regex #{regex}, result #{result})"
+            ok = false
+            break
+          end
+        end
+      rescue Exception => e
+        if e.message.match(/^invalid byte sequence/)
+          # OK, we've got a dilemma here:
+          # This is probably caused by evaluating non-UTF-8 content as UTF-8.
+          # While the XML parser would properly support various encodings,
+          # a simple UTF-8 text grep will bail. Thus indicate success,
+          # to try to have the converter convert the file properly.
+          # The clean solution would be to use existing helpers in the converter.
+          ok = true
+        else
+          raise
         end
       end
     end
