@@ -6601,13 +6601,16 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # Plus, defining _AFXEXT already includes the _AFXDLL setting
     # (MFC will define it implicitly),
     # thus it's quite likely that our current handling is somewhat incorrect.
-    if target_config_info.use_of_mfc == V2C_TargetConfig_Defines::MFC_DYNAMIC
-      # FIXME: need to add a compiler flag lookup entry
-      # to compiler-specific info as well!
-      # (in case of MSVC it would yield: /MD [dynamic] or /MT [static])
-      hash_defines['_AFXEXT'] = ''
-      hash_defines['_AFXDLL'] = ''
-    end
+    # Indeed, it seems we're NOT supposed to add these defines - they're
+    # manually being added by a project config, thus simply transparently
+    # pass through anything which the project specifies!!
+    #if target_config_info.use_of_mfc == V2C_TargetConfig_Defines::MFC_DYNAMIC
+    #  # FIXME: need to add a compiler flag lookup entry
+    #  # to compiler-specific info as well!
+    #  # (in case of MSVC it would yield: /MD [dynamic] or /MT [static])
+    #  hash_defines['_AFXEXT'] = ''
+    #  hash_defines['_AFXDLL'] = ''
+    #end
     charset_type = 'SBCS'
     case target_config_info.charset
     when V2C_TargetConfig_Defines::CHARSET_SBCS
