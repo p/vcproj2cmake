@@ -77,6 +77,7 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <PreprocessorDefinitions>MyDef;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <SuppressStartupBanner />
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
