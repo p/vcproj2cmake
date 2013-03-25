@@ -5400,8 +5400,10 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     arr_prop_parms.push('PROPERTY', prop_key, get_keyword_bool(flag))
     write_command_list_single_line(NAME_SET_PROPERTY, arr_prop_parms)
   end
-  def put_property_source(source_list_expr, prop_key, arr_prop_vals)
-    put_property([ 'SOURCE', source_list_expr ], PROP_SET, prop_key, arr_prop_vals)
+  def put_property_source(arr_file_elems, prop_key, arr_prop_vals)
+    arr_arg_sources = [ 'SOURCE' ]
+    arr_arg_sources.concat(arr_file_elems)
+    put_property(arr_arg_sources, PROP_SET, prop_key, arr_prop_vals)
   end
   def put_property_source_bool(arr_file_elems, prop_key, prop_bool)
     str_bool = get_keyword_bool(prop_bool)
@@ -5414,7 +5416,8 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     file_list_var = "SOURCES_GENERATED_#{file_list_description}"
     write_list_quoted(file_list_var, arr_generated_files)
     str_generated = get_keyword_bool(is_generated)
-    put_property_source(get_dereferenced_variable_name(file_list_var), 'GENERATED', [ str_generated ])
+    arr_file_elems = [ get_dereferenced_variable_name(file_list_var) ]
+    put_property_source(arr_file_elems, 'GENERATED', [ str_generated ])
   end
   # We'll enforce generating source_group() with a source list var _name_
   # parameter (since in many cases there are *many* files grouped here,
