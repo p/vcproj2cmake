@@ -6418,7 +6418,34 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         put_file_list_marked_as_generated(file_list.name, arr_generated, true)
       end
       #puts "file_list.name #{file_list.name}, arr_generated #{arr_generated}"
+      arr_file_elems = [ get_dereferenced_variable_name(source_files_variable) ]
+      qualify_file_list(arr_file_elems, file_list.type)
     }
+  end
+  # Flags certain file list types with certain CMake properties.
+  def qualify_file_list(arr_file_elems, file_list_type)
+    # We'll decide to mark files unconditionally, no matter whether the
+    # extension of some of these files already indicates
+    # the corresponding type. As long as this actually works, we're fine.
+    case file_list_type
+    when V2C_File_List_Types::TYPE_CL_COMPILES
+      # OK, we'll NOT set this one - currently we don't have any specific
+      # knowledge yet about the language (C, CXX, Fortran?? etc.),
+      # thus we'll just pass it into the compiler/tool unqualified for now.
+      #file_list_set_language_source_property(arr_file_elems, 'C')
+    when V2C_File_List_Types::TYPE_CL_INCLUDES
+      file_list_mark_as_header_files(arr_file_elems, true)
+    when V2C_File_List_Types::TYPE_MIDL
+      file_list_mark_as_idl_files(arr_file_elems)
+    when V2C_File_List_Types::TYPE_RESOURCES_RC, V2C_File_List_Types::TYPE_MANAGED_RESOURCES_RC
+      file_list_mark_as_resource_files(arr_file_elems)
+    when V2C_File_List_Types::TYPE_CS_BOOTSTRAPPERPACKAGE
+      # quite likely not supported by CMake?
+    when V2C_File_List_Types::TYPE_NONE
+      # There's nothing to be done here, right?
+    else
+      generator_error_unknown_case('File list type ' + file_list_type.to_s)
+    end
   end
   def put_obj_files_as_sources(project_info, arr_sub_source_list_var_names)
     project_info.arr_config_info.each do |config_info_curr|
@@ -6458,6 +6485,25 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   end
   def file_list_mark_as_external_objects(arr_file_elems, is_external_obj)
     put_property_source_bool(arr_file_elems, 'EXTERNAL_OBJECT', is_external_obj)
+  end
+  def file_list_mark_as_header_files(arr_file_elems, is_header_file)
+    put_property_source_bool(arr_file_elems, 'HEADER_FILE_ONLY', is_header_file)
+  end
+  def file_list_mark_as_resource_files(arr_file_elems)
+    file_list_set_language_source_property(arr_file_elems, 'RC')
+  end
+  def file_list_mark_as_def_files(arr_file_elems)
+    # CMake VS7 local generator has some DEF language handling.
+    # Not sure whether this is what we can or should do.
+    file_list_set_language_source_property(arr_file_elems, 'DEF')
+  end
+  def file_list_mark_as_idl_files(arr_file_elems)
+    # CMake VS7 local generator has some IDL language handling.
+    # Not sure whether this is what we can or should do.
+    file_list_set_language_source_property(arr_file_elems, 'IDL')
+  end
+  def file_list_set_language_source_property(arr_file_elems, lang)
+    put_property_source(arr_file_elems, 'LANGUAGE', [ lang ])
   end
   def put_source_vars_combined_list(arr_sub_source_list_var_names)
     next_paragraph()
