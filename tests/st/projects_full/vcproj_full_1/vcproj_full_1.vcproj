@@ -313,7 +313,7 @@
 				</FileConfiguration>
 			</File>
 			<File
-				RelativePath=".\..\files\sources1\source_b.cpp"
+				RelativePath=".\..\files\sources1\source b.cpp"
 				>
 				<FileConfiguration
 					Name="Debug|Win32"
@@ -347,7 +347,7 @@
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
 			<File
-				RelativePath=".\..\files\sources1\source_a.h"
+				RelativePath=".\..\files\sources1\source a.h"
 				>
 			</File>
 			<File
