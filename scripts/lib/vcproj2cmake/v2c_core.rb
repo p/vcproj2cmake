@@ -6294,10 +6294,9 @@ class V2C_CMakeFileListsGenerator_VS7 < V2C_CMakeFileListGeneratorBase
 end
 
 class V2C_CMakeFileListGenerator_VS10 < V2C_CMakeFileListGeneratorBase
-  def initialize(textOut, project_name, project_dir, file_list, parent_source_group, arr_sub_sources_for_parent)
+  def initialize(textOut, project_name, project_dir, file_list, arr_sub_sources_for_parent)
     super(textOut, project_name, project_dir, arr_sub_sources_for_parent, false)
     @file_list = file_list
-    @parent_source_group = parent_source_group
   end
   def generate; generate_file_list(@file_list) end
 
@@ -6363,7 +6362,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       put_file_list_source_group_recursive(project_info.name, project_info.main_files, nil, arr_sub_source_list_var_names)
     end
 
-    put_file_list_vs10(project_info.name, project_info.file_lists, nil, arr_sub_source_list_var_names)
+    put_file_list_vs10(project_info.name, project_info.file_lists, arr_sub_source_list_var_names)
 
     if not arr_sub_source_list_var_names.empty?
       # add a ${V2C_SOURCES} variable to the list, to be able to append
@@ -6384,7 +6383,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     filelist_generator = V2C_CMakeFileListsGenerator_VS7.new(@textOut, project_name, @project_dir, files_str, parent_source_group, arr_sub_sources_for_parent)
     filelist_generator.generate
   end
-  def put_file_list_vs10(project_name, file_lists, parent_source_group, arr_sub_sources_for_parent)
+  def put_file_list_vs10(project_name, file_lists, arr_sub_sources_for_parent)
     if file_lists.nil?
       puts "ERROR: WHAT THE HELL, NO FILES!?"
       return
@@ -6404,7 +6403,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # the resource files list (VS10: ResourceCompile list) to the target.
     file_lists.arr_file_lists.each { |file_list|
       arr_dummy = [] # TODO: temporary dummy, to satisfy existing crap (remove!)
-      filelist_generator = V2C_CMakeFileListGenerator_VS10.new(@textOut, project_name, @project_dir, file_list, parent_source_group, arr_dummy)
+      filelist_generator = V2C_CMakeFileListGenerator_VS10.new(@textOut, project_name, @project_dir, file_list, arr_dummy)
       source_files_variable = filelist_generator.generate
       arr_sub_sources_for_parent.push(source_files_variable)
       arr_generated = file_list.get_generated_files
