@@ -6193,7 +6193,10 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
     end
     return arr_local_sources
   end
-  def write_sources_list(source_list_name, arr_sources, var_prefix = NAME_V2C_SOURCE_LIST_PREFIX)
+  def write_sources_list(source_list_name, source_list_description, arr_sources, var_prefix = NAME_V2C_SOURCE_LIST_PREFIX)
+    if not source_list_description.nil?
+      write_comment_at_level(COMMENT_LEVEL_STANDARD, "File list: " + source_list_description)
+    end
     source_files_list_var_name = var_prefix + source_list_name
     write_list_quoted(source_files_list_var_name, arr_sources)
     return source_files_list_var_name
@@ -6265,7 +6268,7 @@ class V2C_CMakeFileListsGenerator_VS7 < V2C_CMakeFileListGeneratorBase
 
     # process our hierarchy's own files
     if not arr_local_sources.nil?
-      source_files_list_var_name = write_sources_list(source_group_var_suffix, arr_local_sources)
+      source_files_list_var_name = write_sources_list(source_group_var_suffix, nil, arr_local_sources)
       # create source_group() of our local files
       if not parent_source_group.nil?
         # use list of filters if available: have it generated as source_group(REGULAR_EXPRESSION "regex" ...).
@@ -6304,7 +6307,11 @@ class V2C_CMakeFileListGenerator_VS10 < V2C_CMakeFileListGeneratorBase
 
   def generate_file_list(file_list)
     arr_local_sources = filter_files(file_list.arr_files)
-    source_files_variable = write_sources_list(file_list.name, arr_local_sources)
+    source_files_variable = write_sources_list(
+      file_list.name,
+      file_list.get_list_type_description(),
+      arr_local_sources
+    )
     source_files_variable
   end
 end
