@@ -4250,8 +4250,9 @@ class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10BaseElemParser
       # (contains RootNamespace and NOT ProjectName),
       # despite sbnc.vcproj containing Name and NOT RootNamespace. WEIRD.
       # Couldn't find any hint how this case should be handled,
-      # which setting to adopt then. FIXME check on MSVS.
-      parser_error_syntax('missing project name? Adopting root namespace...')
+      # which setting to adopt then. OK, some internet descriptions
+      # seem to confirm that it's pretty normal, so downgrade to debug log...
+      logger.debug('missing project name? Adopting root namespace...')
       get_project().name = get_project().root_namespace
     end
     found
