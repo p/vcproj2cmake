@@ -5121,8 +5121,11 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def write_set_var(var_name, setting)
     write_command_list('set', var_name, [ setting ])
   end
+  def write_set_var_single_line(var_name, setting)
+    write_command_list_single_line('set', [ var_name, setting ])
+  end
   def write_set_var_bool(var_name, setting)
-    write_set_var(var_name, get_keyword_bool(setting))
+    write_set_var_single_line(var_name, get_keyword_bool(setting))
   end
   def write_set_var_bool_conditional(var_name, arr_condition_params)
     # We'll use the set-false/if/set-true/endif syntax rather than
