@@ -259,6 +259,17 @@ endmacro(_v2c_var_set_if_defined _var_name _out_var_name)
 
 # FIXME: move more list helpers to this early place
 # since they're independent lowlevel infrastructure used by other parts.
+set(v2c_have_list_find ON) # list(FIND ) is >= CMake 2.4.2 or some such.
+if(v2c_have_list_find)
+function(_v2c_list_check_item_contained_exact _item _list _found_out)
+  set(found_ OFF)
+  list(FIND _list "${_item}" find_pos_)
+  if(find_pos_ GREATER -1)
+    set(found_ ON)
+  endif(find_pos_ GREATER -1)
+  set(${_found_out} ${found_} PARENT_SCOPE)
+endfunction(_v2c_list_check_item_contained_exact _item _list _found_out)
+else(v2c_have_list_find)
 function(_v2c_list_check_item_contained_exact _item _list _found_out)
   set(found_ OFF)
   if(_list) # not empty/unset?
@@ -273,6 +284,7 @@ function(_v2c_list_check_item_contained_exact _item _list _found_out)
   endif(_list)
   set(${_found_out} ${found_} PARENT_SCOPE)
 endfunction(_v2c_list_check_item_contained_exact _item _list _found_out)
+endif(v2c_have_list_find)
 
 
 # Escapes semi-colon payload content in strings,
