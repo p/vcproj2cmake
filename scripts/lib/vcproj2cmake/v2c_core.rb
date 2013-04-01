@@ -4938,6 +4938,14 @@ end
 
 class V2C_GeneratorBase < V2C_LoggerBase
   def generator_error(str_description); logger.error(str_description) end
+  def ensure_string_nonempty(str_test)
+    if str_test.nil? or str_test.empty?
+      raise V2C_GeneratorError, 'detected invalid string'
+    end
+  end
+  def error_unknown_case_value(description, val)
+    raise V2C_GeneratorError, "unknown/unsupported/corrupt #{description} case value! (#{val})"
+  end
 end
 
 class V2C_SyntaxGeneratorBase < V2C_GeneratorBase
@@ -4948,14 +4956,6 @@ class V2C_SyntaxGeneratorBase < V2C_GeneratorBase
   COMMENT_LEVEL_ALL = 4 # highly verbose, many comments
   def initialize(textOut)
     @textOut = textOut
-  end
-  def ensure_string_nonempty(str_test)
-    if str_test.nil? or str_test.empty?
-      raise V2C_GeneratorError, 'detected invalid string'
-    end
-  end
-  def error_unknown_case_value(description, val)
-    raise V2C_GeneratorError, "unknown/unsupported/corrupt #{description} case value! (#{val})"
   end
 end
 
@@ -7549,7 +7549,10 @@ end
 class V2C_FileGeneratorError < V2C_ChainedError
 end
 
-class V2C_CMakeLocalFileGenerator < V2C_LoggerBase
+class V2C_FileGeneratorBase < V2C_GeneratorBase
+end
+
+class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
   def initialize(p_v2c_script, p_master_project, p_generator_proj_file, arr_projects, flag_source_groups_enabled)
     @p_master_project = p_master_project
 
