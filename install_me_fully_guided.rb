@@ -85,19 +85,30 @@ cmakecache_location = "#{build_install_dir}/CMakeCache.txt"
 
 
 # First, evaluate a possibly pre-existing entry:
-cmake_wizard_bin = grep_cmakecache_variable_value(cmakecache_location, 'CMAKE_EDIT_COMMAND')
+cmake_wizard_bin_cache = grep_cmakecache_variable_value(cmakecache_location, 'CMAKE_EDIT_COMMAND')
+if cmake_wizard_bin_cache.nil?
+  arr_cmake_wizard_candidate_names = [ 'cmake-gui', 'ccmake' ]
+  arr_cmake_wizard_candidate_names.each do |wiz_bin|
+    begin
+      output = `#{wiz_bin} --help`
+      if $?.success?
+        cmake_wizard_bin = wiz_bin
+        break
+      end
+    rescue Errno::ENOENT # seems to happen on Windows yet not on Linux
+      # simply ignore it, and try next candidate
+    end
+  end
+else
+  cmake_wizard_bin = cmake_wizard_bin_cache
+end
+
 if cmake_wizard_bin.nil?
-  cmake_wizard_bin = 'ccmake'
+  cmake_wizard_bin = 'cmake -i'
+  log_error "could not run #{cmake_wizard_bin_cache} - perhaps it is not installed. On Debian-based Linux, installing the cmake-curses-gui package might help. Now falling back to using #{cmake_wizard_bin}."
 end
 
-# Hmm, we probably should also support the Qt-based GUI.
-output = `#{cmake_wizard_bin} --help`
-if not $?.success?
-  cmake_wizard_bin='cmake -i'
-  log_error "could not run #{cmake_wizard_bin} - perhaps it is not installed. On Debian-based Linux, installing the cmake-curses-gui package might help. Now falling back to using #{cmake_wizard_bin}."
-end
-
-log_info 'About to prepare the build tree (CMake configure run) which is required for installation of vcproj2cmake components. Please setup configuration as needed there, then proceed (do CMake Configure run multiple times, and finally press Generate).'
+log_info "About to prepare the build tree (CMake configure run) which is required for installation of vcproj2cmake components, using CMake wizard binary #{cmake_wizard_bin}. Please setup configuration as needed there, then proceed (do CMake Configure run multiple times, and finally press Generate)."
 do_delay(10)
 system "#{cmake_wizard_bin} ../"
 if not $?.success?
