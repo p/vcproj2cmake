@@ -606,8 +606,12 @@ if not arr_project_subdirs.empty?
   # we should include only those entries where each directory
   # now actually does contain a CMakeLists.txt file.
   projects_list_file_name = 'all_sub_projects.txt'
-  projects_list_file_rel = File.join(v2c_path_config.get_rel_config_dir_temp_store(), projects_list_file_name)
-  projects_list_file = File.join(v2c_path_config.get_abs_config_dir_source_root_temp_store(), projects_list_file_name)
+  generated_items_dir = File.join(v2c_path_config.get_abs_config_dir_source_root_temp_store(), 'generated_items')
+  V2C_Util_File.mkdir_p(generated_items_dir)
+  projects_list_file = File.join(generated_items_dir, projects_list_file_name)
+  p_projects_list_file = Pathname.new(projects_list_file)
+  p_source_root = Pathname.new(source_root)
+  projects_list_file_rel = p_projects_list_file.relative_path_from(p_source_root)
   v2c_source_root_write_projects_list_file(projects_list_file, $v2c_generator_file_create_permissions, arr_project_subdirs)
 end
 
