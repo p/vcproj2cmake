@@ -586,19 +586,26 @@ macro(_v2c_fs_file_touch_nocreate_change_modify _file)
   execute_process(COMMAND "${CMAKE_COMMAND}" -E touch_nocreate "${_file}")
 endmacro(_v2c_fs_file_touch_nocreate_change_modify _file)
 
+macro(_v2c_fs_file_touch_change_modify_DISRUPTS_CONTENT _file)
+    file(WRITE "${_file}" "TOUCHED BY VCPROJ2CMAKE")
+endmacro(_v2c_fs_file_touch_change_modify_DISRUPTS_CONTENT _file)
+
 # Uses file(WRITE "TOUCHED BY VCPROJ2CMAKE") to *actually* mark a
 # file as "Modified", USING A DISRUPTIVE WRITE ACTION.
 # Useful since it ought to be much faster than an annoying external
 # execute_process(). Turns out performance is not *that* different...
 macro(_v2c_fs_file_touch_nocreate_change_modify_DISRUPTS_CONTENT _file)
   if(EXISTS "${_file}")
-    file(WRITE "${_file}" "TOUCHED BY VCPROJ2CMAKE")
+    _v2c_fs_file_touch_change_modify_DISRUPTS_CONTENT("${_file}")
   endif(EXISTS "${_file}")
 endmacro(_v2c_fs_file_touch_nocreate_change_modify_DISRUPTS_CONTENT _file)
 
 macro(_v2c_stamp_file_touch _file)
   # For stamp files, there's no risk in touching them disruptively...
-  _v2c_fs_file_touch_nocreate_change_modify_DISRUPTS_CONTENT("${_file}")
+  # (and skipping existence check, too, since once we decided to touch it,
+  # we already do know that certain build activity is undesired
+  # and thus the file *should* get touched at all costs)
+  _v2c_fs_file_touch_change_modify_DISRUPTS_CONTENT("${_file}")
   #_v2c_fs_file_touch_nocreate_change_modify("${_file}")
 endmacro(_v2c_stamp_file_touch _file)
 
@@ -1411,6 +1418,8 @@ if(v2c_cmakelists_rebuilder_available)
           ${_V2C_CMAKE_VERBATIM}
         )
         add_custom_target(update_cmakelists_abort_build_after_update DEPENDS "${cmakelists_update_check_stamp_file_v1_}")
+	# Pre-touch file since we do NOT need this abort on initial build run:
+        _v2c_stamp_file_touch("${cmakelists_update_check_stamp_file_v1_}")
 
         add_custom_command(OUTPUT "${update_cmakelists_abort_build_after_update_cleanup_stamp_file_v1_}"
           COMMAND "${CMAKE_COMMAND}" -E remove -f "${cmakelists_update_check_did_abort_public_marker_file_v1_}"
