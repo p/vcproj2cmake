@@ -5396,6 +5396,10 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def put_property_source(source_list_expr, prop_key, arr_prop_vals)
     put_property([ 'SOURCE', source_list_expr ], PROP_SET, prop_key, arr_prop_vals)
   end
+  def put_property_source_bool(arr_file_elems, prop_key, prop_bool)
+    str_bool = get_keyword_bool(prop_bool)
+    put_property_source(arr_file_elems, prop_key, [ str_bool ])
+  end
   def put_property_directory__compile_flags(attr_opts, flag_append)
     put_property([ 'DIRECTORY' ], flag_append, 'COMPILE_FLAGS', [ attr_opts ])
   end
@@ -6400,7 +6404,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     }
   end
   def put_obj_files_as_sources(project_info, arr_sub_source_list_var_names)
-    # FIXME: set EXTERNAL_OBJECT property, too?
     project_info.arr_config_info.each do |config_info_curr|
       condition = config_info_curr.condition
       tools = config_info_curr.tools
@@ -6426,7 +6429,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
             gen_condition.generate(condition) do
               var_name_obj_sources = NAME_V2C_SOURCE_LIST_PREFIX + 'obj_deps'
               write_list_quoted(var_name_obj_sources, arr_obj)
-              put_property_source(get_dereferenced_variable_name(var_name_obj_sources), 'EXTERNAL_OBJECT', [ get_keyword_bool(true) ])
+              arr_file_elems = [ get_dereferenced_variable_name(var_name_obj_sources) ]
+              file_list_mark_as_external_objects(arr_file_elems, true)
               arr_sub_source_list_var_names.push(var_name_obj_sources)
             end
           write_conditional_else(arr_conditional_linker)
@@ -6435,6 +6439,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         end
       end
     end
+  end
+  def file_list_mark_as_external_objects(arr_file_elems, is_external_obj)
+    put_property_source_bool(arr_file_elems, 'EXTERNAL_OBJECT', is_external_obj)
   end
   def put_source_vars_combined_list(arr_sub_source_list_var_names)
     next_paragraph()
