@@ -220,8 +220,8 @@ ENDMACRO(_PCH_GATHER_EXISTING_COMPILE_DEFINITIONS_FROM_SCOPE _out_compile_defs_l
 
 MACRO(_PCH_WRITE_PCHDEP_CXX _targetName _include_file _out_dephelp)
 
-  SET(pch_dephelp_fqpn_ ${CMAKE_CURRENT_BINARY_DIR}/${_targetName}_pch_dephelp.cxx)
-  FILE(WRITE  ${pch_dephelp_fqpn_}.in
+  SET(pch_dephelp_fqpn_ "${CMAKE_CURRENT_BINARY_DIR}/${_targetName}_pch_dephelp.cxx")
+  FILE(WRITE "${pch_dephelp_fqpn_}.in"
 "#include \"${_include_file}\"
 int testfunction()
 {
@@ -232,9 +232,9 @@ int testfunction()
   # use configure_file() to avoid re-touching the live file
   # _every_ time thus causing eternal rebuilds
   # (configure_file() does know to skip if unchanged)
-  configure_file(${pch_dephelp_fqpn_}.in ${pch_dephelp_fqpn_} COPYONLY)
+  configure_file("${pch_dephelp_fqpn_}.in" "${pch_dephelp_fqpn_}" COPYONLY)
 
-  SET(${_out_dephelp} ${pch_dephelp_fqpn_})
+  SET(${_out_dephelp} "${pch_dephelp_fqpn_}")
 
 ENDMACRO(_PCH_WRITE_PCHDEP_CXX )
 
@@ -247,7 +247,7 @@ MACRO(_PCH_GET_COMPILE_FLAGS_PCH_CREATE _out_cflags _header _pch _pch_creator_cx
 	  # thus this argument is not used... right!?
 	  SET(cflags_pch_create_ -x c++-header -o ${_pch} ${_header})
 	ELSE(CMAKE_COMPILER_IS_GNUCXX)
-		SET(cflags_pch_create_ /c /Fp${_pch} /Yc${_header} ${_pch_creator_cxx}
+		SET(cflags_pch_create_ /c /Fp\"${_pch}\" /Yc\"${_header}\" ${_pch_creator_cxx}
 		)
 		#/out:${_pch}
 
@@ -363,8 +363,8 @@ endmacro(_pch_get_default_output_location_name _targetName _input _out_output)
 
 # Existing legacy public API (unfortunate naming).
 MACRO(GET_PRECOMPILED_HEADER_OUTPUT _targetName _input _output)
-  _pch_get_default_output_location_name(${_targetName} ${_input} output_)
-  set(${_output} ${output_})
+  _pch_get_default_output_location_name(${_targetName} "${_input}" output_)
+  set(${_output} "${output_}")
 ENDMACRO(GET_PRECOMPILED_HEADER_OUTPUT _targetName _input _output)
 
 # Detects "<var>-NOTFOUND" content, erases it.
@@ -394,7 +394,7 @@ MACRO(ADD_PRECOMPILED_HEADER_TO_TARGET _targetName _input _pch_output_to_use )
 
   # to do: test whether compiler flags match between target  _targetName
   # and _pch_output_to_use
-  GET_FILENAME_COMPONENT(_name ${_input} NAME)
+  GET_FILENAME_COMPONENT(_name "${_input}" NAME)
 
   # BUG FIX: a non-option invocation will cause ARGN def to be skipped!!
   set(dowarn_ 0)
@@ -406,13 +406,13 @@ MACRO(ADD_PRECOMPILED_HEADER_TO_TARGET _targetName _input _pch_output_to_use )
   endif(${ARGN})
 
 
-  FILE(TO_NATIVE_PATH ${_pch_output_to_use} _pch_output_to_use_native)
+  FILE(TO_NATIVE_PATH "${_pch_output_to_use}" _pch_output_to_use_native)
 
-  _PCH_GET_COMPILE_FLAGS_PCH_USE(_target_cflags_use ${_name} ${_pch_output_to_use_native} ${dowarn_})
+  _PCH_GET_COMPILE_FLAGS_PCH_USE(_target_cflags_use "${_name}" "${_pch_output_to_use_native}" ${dowarn_})
   _pch_target_compile_flags_add(${_targetName} ${_target_cflags_use})
 
   ADD_CUSTOM_TARGET(pch_Generate_${_targetName}
-    DEPENDS	${_pch_output_to_use}
+    DEPENDS	"${_pch_output_to_use}"
     )
 
   ADD_DEPENDENCIES(${_targetName} pch_Generate_${_targetName} )
@@ -450,13 +450,13 @@ MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
     ENDIF("${ARGN}" STREQUAL "0")
   endif(${ARGN})
 
-  GET_FILENAME_COMPONENT(_name ${_input} NAME)
-  GET_FILENAME_COMPONENT(_path ${_input} PATH)
-  _pch_get_default_output_location_name( ${_targetName} ${_input} output_)
+  GET_FILENAME_COMPONENT(_name "${_input}" NAME)
+  GET_FILENAME_COMPONENT(_path "${_input}" PATH)
+  _pch_get_default_output_location_name( ${_targetName} "${_input}" output_)
 
-  GET_FILENAME_COMPONENT(_outdir ${output_} PATH)
+  GET_FILENAME_COMPONENT(_outdir "${output_}" PATH)
 
-  _PCH_WRITE_PCHDEP_CXX(${_targetName} ${_input} _pch_dephelp_cxx)
+  _PCH_WRITE_PCHDEP_CXX(${_targetName} "${_input}" _pch_dephelp_cxx)
   GET_TARGET_PROPERTY(_targetType ${_PCH_current_target} TYPE)
   IF(${_targetType} STREQUAL SHARED_LIBRARY)
     set(lib_type_arg_ "SHARED")
@@ -465,7 +465,7 @@ MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
   ENDIF(${_targetType} STREQUAL SHARED_LIBRARY)
   ADD_LIBRARY(${_targetName}_pch_dephelp ${lib_type_arg_} ${_pch_dephelp_cxx})
 
-  FILE(MAKE_DIRECTORY ${_outdir})
+  FILE(MAKE_DIRECTORY "${_outdir}")
 
 
   _PCH_GATHER_EXISTING_COMPILE_FLAGS_FROM_SCOPE(_compile_FLAGS)
@@ -482,24 +482,24 @@ MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
   # [provide a helper macro to do such things]
   # For details see CMake issue 0009219
   # "CMAKE_CFG_INTDIR docs says it expands to IntDir, but it expands to OutDir".
-  set(header_file_copy_in_binary_dir_ ${CMAKE_CURRENT_BINARY_DIR}/${_name})
-  SET_SOURCE_FILES_PROPERTIES(${header_file_copy_in_binary_dir_} PROPERTIES GENERATED 1)
+  set(header_file_copy_in_binary_dir_ "${CMAKE_CURRENT_BINARY_DIR}/${_name}")
+  SET_SOURCE_FILES_PROPERTIES("${header_file_copy_in_binary_dir_}" PROPERTIES GENERATED 1)
   ADD_CUSTOM_COMMAND(
-   OUTPUT	${header_file_copy_in_binary_dir_}
-   COMMAND ${CMAKE_COMMAND} -E copy  ${_input} ${header_file_copy_in_binary_dir_} # ensure same directory! Required by gcc
-   DEPENDS ${_input}
+   OUTPUT "${header_file_copy_in_binary_dir_}"
+   COMMAND "${CMAKE_COMMAND}" -E copy ${_input} ${header_file_copy_in_binary_dir_} # ensure same directory! Required by gcc
+   DEPENDS "${_input}"
   )
 
-  _PCH_GET_COMPILE_COMMAND_PCH_CREATE(_compile_command_pch_create  ${header_file_copy_in_binary_dir_} ${output_} "")
+  _PCH_GET_COMPILE_COMMAND_PCH_CREATE(_compile_command_pch_create  "${header_file_copy_in_binary_dir_}" "${output_}" "")
 
   _pch_msg_debug("_compile_FLAGS: ${_compile_FLAGS}\n_compiler_decorated_DEFS: ${_compiler_decorated_DEFS}")
   _pch_msg_debug("_input ${_input}\noutput_ ${output_}" )
   _pch_msg_debug("COMMAND ${_compile_command_pch_create}")
 
   ADD_CUSTOM_COMMAND(
-    OUTPUT ${output_}
+    OUTPUT "${output_}"
     COMMAND ${_compile_command_pch_create}
-    DEPENDS ${_input}   ${header_file_copy_in_binary_dir_} ${_targetName}_pch_dephelp
+    DEPENDS "${_input}"   "${header_file_copy_in_binary_dir_}" ${_targetName}_pch_dephelp
     VERBATIM
    )
 
@@ -600,7 +600,7 @@ MACRO(ADD_NATIVE_PRECOMPILED_HEADER _targetName _input)
 
 			# When building out-of-tree, PCH may not be located -
 			# use full path instead.
-			GET_FILENAME_COMPONENT(fullPath ${_input} ABSOLUTE)
+			GET_FILENAME_COMPONENT(fullPath "${_input}" ABSOLUTE)
 
 			SET_TARGET_PROPERTIES(${_targetName} PROPERTIES XCODE_ATTRIBUTE_GCC_PREFIX_HEADER "${fullPath}")
 			SET_TARGET_PROPERTIES(${_targetName} PROPERTIES XCODE_ATTRIBUTE_GCC_PRECOMPILE_PREFIX_HEADER "YES")
@@ -608,7 +608,7 @@ MACRO(ADD_NATIVE_PRECOMPILED_HEADER _targetName _input)
 		else (CMAKE_GENERATOR MATCHES Xcode)
 
 			#Fallback to the "old" PCH support
-			#ADD_PRECOMPILED_HEADER(${_targetName} ${_input} ${dowarn_})
+			#ADD_PRECOMPILED_HEADER(${_targetName} "${_input}" ${dowarn_})
 		endif(CMAKE_GENERATOR MATCHES Xcode)
 	endif(CMAKE_GENERATOR MATCHES Visual*)
 
