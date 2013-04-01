@@ -7342,7 +7342,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
   end
 end
 
-class V2C_CMakeLocalSourceGroupFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
+class V2C_CMakeSourceGroupFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
   def initialize(textOut, target_name, arr_filtered_file_lists)
     super(textOut)
     @target_name = target_name
@@ -7592,7 +7592,7 @@ class V2C_CMakeLocalFileGenerator < V2C_LoggerBase
     output_file_location = File.join(dest_dir, sg_file_name)
     temp_generator_sg = V2C_GenerateIntoTempFile.new('vcproj2cmake', output_file_location)
     temp_generator_sg.generate { |textOutSG|
-      content_generator = V2C_CMakeLocalSourceGroupFileContentGenerator.new(textOutSG, target_name, arr_filtered_file_lists)
+      content_generator = V2C_CMakeSourceGroupFileContentGenerator.new(textOutSG, target_name, arr_filtered_file_lists)
       content_generator.generate
     }
   rescue Exception
