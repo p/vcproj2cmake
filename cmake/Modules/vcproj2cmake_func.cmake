@@ -59,9 +59,7 @@
 
 
 # TODO:
-# - should add a _v2c_parse_arguments() macro
-#   (available at http://www.cmake.org/Wiki/CMakeMacroParseArguments ),
-#   to then be used by several of our functions here
+# - ??
 
 
 #!! EMERGENCY FIX: reinclude vcproj2cmake_defs since v2c_func currently
@@ -79,11 +77,6 @@ if(V2C_FUNC_DEFINED)
 endif(V2C_FUNC_DEFINED)
 set(V2C_FUNC_DEFINED ON)
 
-# We definitely should make use of cmake_parse_arguments() wherever possible,
-# since this will relax our V2C function interface stability requirements
-# (optionally available parameters simply would be skipped if not
-# provided, thus a suddenly changed function featureset often would not matter).
-include(CMakeParseArguments) # strong CMake version dependency (>= 2.8.3?)
 
 
 # # # # #   MOST IMPORTANT HELPER FUNCTIONS   # # # # #
@@ -142,6 +135,52 @@ function(_v2c_var_my_unverified_get _var_name _out_value)
   endif(DEFINED ${var_name_})
   set(${_out_value} "${value_}" PARENT_SCOPE)
 endfunction(_v2c_var_my_unverified_get _var_name _out_value)
+
+# Local version of a helper for function argument parsing, taken from
+# http://www.cmake.org/Wiki/CMakeMacroParseArguments ,  to avoid
+# a dependency on standard CMake module CMakeParseArguments.cmake (>= 2.8.3!).
+# We definitely should make use of a parse_arguments function wherever possible,
+# since this will relax our V2C function interface stability requirements
+# (optionally available parameters simply would be skipped if not
+# provided, thus a suddenly changed function featureset often would not matter).
+macro(_v2c_parse_arguments_local prefix arg_names option_names)
+  set(DEFAULT_ARGS)
+  foreach(arg_name ${arg_names})
+    set(${prefix}_${arg_name})
+  endforeach(arg_name)
+  foreach(option ${option_names})
+    set(${prefix}_${option} FALSE)
+  endforeach(option)
+
+  set(current_arg_name DEFAULT_ARGS)
+  set(current_arg_list)
+  foreach(arg ${ARGN})
+    set(larg_names ${arg_names})
+    list(FIND larg_names "${arg}" is_arg_name)
+    #message("parse_arg arg ${arg} pos ${is_arg_name} larg_names ${larg_names}")
+    if (is_arg_name GREATER -1)
+      set(${prefix}_${current_arg_name} ${current_arg_list})
+      set(current_arg_name ${arg})
+      set(current_arg_list)
+    else (is_arg_name GREATER -1)
+      set(loption_names ${option_names})
+      list(FIND loption_names "${arg}" is_option)
+      #message("parse_arg arg ${arg} option ${is_option} loption_names ${loption_names}")
+      if (is_option GREATER -1)
+        set(${prefix}_${arg} TRUE)
+      else (is_option GREATER -1)
+        set(current_arg_list ${current_arg_list} ${arg})
+      endif (is_option GREATER -1)
+    endif(is_arg_name GREATER -1)
+  endforeach(arg)
+  set(${prefix}_${current_arg_name} ${current_arg_list})
+endmacro(_v2c_parse_arguments_local)
+
+# Switch compat helper, for optional future switching
+# between local version and standard module.
+macro(v2c_parse_arguments _prefix _options _one_value_args _multi_value_args)
+  _v2c_parse_arguments_local("${_prefix}" "${_one_value_args}" "${_options}" ${ARGN})
+endmacro(v2c_parse_arguments _prefix _options _one_value_args _multi_value_args)
 
 macro(_v2c_msg_info _msg)
   message(STATUS "${V2C_CMAKE_CONFIGURE_PROMPT}${_msg}")
@@ -1736,7 +1775,7 @@ ${c_section_end_}
     set(options VALIDATE_ALL_PARAMETERS)
     set(oneValueArgs TARGET_ENVIRONMENT IDL_FILE_NAME HEADER_FILE_NAME INTERFACE_IDENTIFIER_FILE_NAME PROXY_FILE_NAME TYPE_LIBRARY_NAME DLL_DATA_FILE_NAME)
     _v2c_var_set_empty(multiValueArgs)
-    cmake_parse_arguments(v2c_target_midl_compile "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+    v2c_parse_arguments(v2c_target_midl_compile "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
     _v2c_fs_item_make_relative_to_path("${v2c_target_midl_compile_IDL_FILE_NAME}" "${PROJECT_SOURCE_DIR}" idl_file_location_)
     if(NOT EXISTS "${idl_file_location_}")
       _v2c_msg_warning("IDL file ${idl_file_location_} not found - bailing out...")
@@ -1862,7 +1901,7 @@ function(v2c_target_pdb_configure _target _build_platform _build_type)
   if(is_active_)
     _v2c_var_set_empty(options multiValueArgs)
     set(oneValueArgs PDB_OUTPUT_DIRECTORY PDB_NAME)
-    cmake_parse_arguments(v2c_target_pdb_configure "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+    v2c_parse_arguments(v2c_target_pdb_configure "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     # These target properties are said to be CMake >= 2.8.10 only.
     # No version check added here since setting them in vain

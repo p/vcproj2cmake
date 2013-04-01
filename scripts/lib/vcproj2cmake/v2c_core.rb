@@ -7087,13 +7087,14 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
       "please see http://www.cmake.org/Wiki/CMake_Released_Versions\n" \
       "(and page CMake_Version_Compatibility_Matrix)."
     )
-    #str_cmake_minimum_version = '2.6'
-    #str_cmake_minimum_version_reason = 'set_property(... COMPILE_DEFINITIONS_* ...)'
-    # FIXME: find an on-demand solution for this
-    # (such as providing that code in our own module file),
-    # to get the requirement down to a suitably older CMake version.
-    str_cmake_minimum_version = '2.8.3'
-    str_cmake_minimum_version_reason = 'CMakeParseArguments module'
+    # Keep a whole list of various requirements and their version,
+    # to know which of our dependencies carries which penalty.
+    str_cmake_minimum_version = '2.6'
+    str_cmake_minimum_version_reason = 'set_property(... COMPILE_DEFINITIONS_* ...)'
+    # CMakeParseArguments is a very modern dependency,
+    # thus I got rid of it:
+    #str_cmake_minimum_version = '2.8.3'
+    #str_cmake_minimum_version_reason = 'CMakeParseArguments module'
     write_comment_at_level(COMMENT_LEVEL_MINIMUM,
       ">= #{str_cmake_minimum_version} due to crucial #{str_cmake_minimum_version_reason}"
     )
