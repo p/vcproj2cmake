@@ -243,17 +243,19 @@ MACRO(_PCH_GATHER_EXISTING_COMPILE_DEFINITIONS_FROM_SCOPE _out_compile_defs_list
   # COMPILE_DEFINITIONS prop lists definitions *without* compiler-specific
   # -D prefix (which is exactly what I expect a compiler-abstracted part to do!!).
   GET_DIRECTORY_PROPERTY(dir_defs_ COMPILE_DEFINITIONS)
-  _pch_msg_debug("CMAKE_CURRENT_LIST_DIR ${CMAKE_CURRENT_LIST_DIR}")
   _pch_normalize_notfound_var_content(dir_defs_)
-  _pch_msg_debug("dir_defs_ ${dir_defs_}")
   _pch_append_string_items_to_list(pch_all_compile_defs_list_ dir_defs_)
   GET_TARGET_PROPERTY(target_defs_ ${_PCH_current_target} COMPILE_DEFINITIONS)
   _pch_normalize_notfound_var_content(target_defs_)
-  _pch_msg_debug("target_defs_ ${target_defs_}")
   _pch_append_string_items_to_list(pch_all_compile_defs_list_ target_defs_)
-  _pch_msg_debug("pch_all_compile_defs_list_ ${pch_all_compile_defs_list_}")
   set(${_out_compile_defs_list} "${pch_all_compile_defs_list_}")
-  _pch_msg_debug("_out_compile_defs_list ${${_out_compile_defs_list}}")
+  _pch_msg_debug(
+"CMAKE_CURRENT_LIST_DIR ${CMAKE_CURRENT_LIST_DIR}
+dir_defs_ ${dir_defs_}
+target_defs_ ${target_defs_}
+pch_all_compile_defs_list_ ${pch_all_compile_defs_list_}
+_out_compile_defs_list ${${_out_compile_defs_list}}"
+  )
 ENDMACRO(_PCH_GATHER_EXISTING_COMPILE_DEFINITIONS_FROM_SCOPE _out_compile_defs_list)
 
 MACRO(_PCH_WRITE_PCHDEP_CXX _targetName _include_file _out_dephelp)
@@ -575,9 +577,11 @@ function(_pch_add_precompiled_header _targetName _header)
 
   _PCH_GET_COMPILE_COMMAND_PCH_CREATE(compile_command_pch_create_ "${header_file_copy_in_binary_dir_}" "${output_}" "")
 
-  _pch_msg_debug("_compile_FLAGS: ${_compile_FLAGS}\n_compiler_decorated_DEFS: ${_compiler_decorated_DEFS}")
-  _pch_msg_debug("_header ${_header}\noutput_ ${output_}" )
-  _pch_msg_debug("COMMAND ${compile_command_pch_create_}")
+  _pch_msg_debug(
+"_compile_FLAGS: ${_compile_FLAGS}\n_compiler_decorated_DEFS: ${_compiler_decorated_DEFS}
+_header ${_header}\noutput_ ${output_}
+COMMAND ${compile_command_pch_create_}"
+  )
 
   if(pch_need_dephelp_target_)
     ADD_CUSTOM_COMMAND(
