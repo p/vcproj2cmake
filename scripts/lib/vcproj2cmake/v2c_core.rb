@@ -7466,6 +7466,7 @@ end
 # and some other characteristic strings.
 #VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{#{CMAKELISTS_FILE_NAME}}
 VCPROJ_DEF_CONTENT_CMAKE_INTDIR_REGEX_OBJ = %r{\bCMAKE_INTDIR=}
+VCXPROJ_CMAKEFILES_REGEX_OBJ = %r{\bCMakeFiles\b}
 VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{(\bPreprocessorDefinitions\b.*\bCMAKE_INTDIR=|\bCMakeFiles\b)}
 def v2c_is_project_file_generated_by_cmake_grep(str_proj_file)
   generated_file = false
@@ -7487,11 +7488,15 @@ def v2c_vcproj_look_for_cmake_content(str_proj_file)
       project_xml.elements.each('Configurations/Configuration') { |config_xml|
         config_xml.elements.each('Tool[@Name="VCCLCompilerTool"]') { |compiler_xml|
           attr_defines = compiler_xml.attributes['PreprocessorDefinitions']
-          if attr_defines.to_s.match(VCPROJ_DEF_CONTENT_CMAKE_INTDIR_REGEX_OBJ)
-            is_cmake = true
-            break
+          if not attr_defines.nil?
+            if attr_defines.to_s.match(VCPROJ_DEF_CONTENT_CMAKE_INTDIR_REGEX_OBJ)
+              is_cmake = true
+              break
+            end
           end
         }
+        # http://stackoverflow.com/questions/5286861/how-to-break-from-nested-loops-in-ruby
+        break if is_cmake
       }
     }
   }
@@ -7506,11 +7511,29 @@ def v2c_vcxproj_look_for_cmake_content(str_proj_file)
       project_xml.elements.each('ItemDefinitionGroup') { |itemdef_xml|
         itemdef_xml.elements.each('ClCompile') { |compiler_xml|
           attr_defines = compiler_xml.elements['PreprocessorDefinitions']
-          if attr_defines.to_s.match(VCPROJ_DEF_CONTENT_CMAKE_INTDIR_REGEX_OBJ)
-            is_cmake = true
-            break
+          if not attr_defines.nil?
+            if attr_defines.to_s.match(VCPROJ_DEF_CONTENT_CMAKE_INTDIR_REGEX_OBJ)
+              is_cmake = true
+              break
+            end
           end
         }
+        # http://stackoverflow.com/questions/5286861/how-to-break-from-nested-loops-in-ruby
+        break if is_cmake
+      }
+      break if is_cmake
+      project_xml.elements.each('ItemGroup') { |itemgroup_xml|
+        itemgroup_xml.elements.each('CustomBuild') { |cbuild_xml|
+          attr_add_in = cbuild_xml.elements['AdditionalInputs']
+          if not attr_add_in.nil?
+            if attr_add_in.to_s.match(VCXPROJ_CMAKEFILES_REGEX_OBJ)
+              is_cmake = true
+              break
+            end
+          end
+        }
+        # http://stackoverflow.com/questions/5286861/how-to-break-from-nested-loops-in-ruby
+        break if is_cmake
       }
     }
   }
