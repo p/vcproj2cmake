@@ -30,16 +30,16 @@ converter_bin = "#{git_repo_root_dir}/scripts/vcproj2cmake_recursive.rb"
 # TODO: should probably create test scripts specific to (within) that area,
 # which are then responsible for doing a clean reproducible test run each.
 
-pwd_prev = Dir.pwd
-Dir.chdir(tests_dir)
-output = `#{converter_bin} . 2>&1`
-
+output = nil
 test_failed_st_reason = nil
-if not $?.success?
-  test_failed_st_reason = "script indicated failure (exit code: #{$?.exitstatus})"
-end
 
-Dir.chdir(pwd_prev)
+Dir.chdir(tests_dir) do |path|
+  output = `#{converter_bin} #{path} 2>&1`
+
+  if not $?.success?
+    test_failed_st_reason = "script indicated failure (exit code: #{$?.exitstatus})"
+  end
+end
 
 if not test_failed_st_reason.nil?
   git_hook_fail(test_failed_st_reason)
