@@ -5209,8 +5209,10 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
       # WARNING: need to keep as separate array elements (whitespace separator would lead to bogus quoting!)
       # And _need_ to keep manually quoted,
       # since we receive this as a ;-separated list and need to pass it on unmodified.
-      str_regex_list = array_to_cmake_list(arr_filters)
-      arr_elems.push('REGULAR_EXPRESSION', str_regex_list)
+      if array_is_valid_list_content(arr_filters)
+        str_regex_list = array_to_cmake_list(arr_filters)
+        arr_elems.push('REGULAR_EXPRESSION', str_regex_list)
+      end
     end
     arr_elems.push('FILES', get_dereferenced_variable_name(source_files_list_var_name))
     # Use multi-line method since source_group() arguments can be very long.
@@ -5315,6 +5317,15 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def element_manual_quoting(elem)
     return "\"#{elem}\""
   end
+  # Oh well... I don't know whether this helper is useful,
+  # but it's probably useful to have a helper which indicates
+  # whether an array has valid non-empty content for a CMake list.
+  def array_is_valid_list_content(arr_in)
+    # Indicate failure in case of either nil or empty single-elem.
+    return false if arr_in.nil?
+    return false if arr_in.join(';').empty?
+    true
+  end
   # FIXME: I believe array_to_cmake_list() is broken, thus should be avoided:
   # 1. CMake is broken, does not escape ';' in list element payload data
   #    properly (see vcproj2cmake_func.cmake parts about CMake bug #13806)
@@ -5331,13 +5342,19 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def array_to_string(arr_params)
     arr_params.nil? ? '' : arr_params.join(' ')
   end
-  # Escapes payload content passed in
-  # as needed to enable subsequent use as a CMake string
-  # by the CMake generators.
   REGEX_OBJ_SEMICOLON = %r{;}
   REGEX_OBJ_DOUBLEQUOTE = %r{"}
   REGEX_OBJ_DOLLAR_SIGN = %r{\$}
+  # Escapes payload content passed in
+  # as needed to enable subsequent use as a CMake string
+  # by the CMake generators.
+  # Be sure to call it on raw foreign input only,
+  # i.e. *prior* to already having augmented that content with
+  # CMake syntax (variable references etc.)
   def escape_content_for_cmake_string(in_string)
+    # Since we're a simple short interim helper,
+    # simply pass on nil input... (hopefully this is a good policy)
+    return nil if in_string.nil?
     str = in_string.clone
     # Hmm, any other special chars to be escaped here?
     escape_backslash(str)
@@ -6010,11 +6027,7 @@ class V2C_CMakeFileListsGenerator_VS7 < V2C_CMakeFileListGeneratorBase
       # create source_group() of our local files
       if not parent_source_group.nil?
         # use list of filters if available: have it generated as source_group(REGULAR_EXPRESSION "regex" ...).
-        arr_filters = nil
-        if not filter_info.nil?
-          arr_filters = filter_info.arr_scfilter
-        end
-        put_source_group(this_source_group, arr_filters, source_files_list_var_name)
+        put_source_group(this_source_group, filter_info.arr_scfilter, source_files_list_var_name)
       end
     end
     if not source_files_list_var_name.nil? or not arr_my_sub_sources.empty?
