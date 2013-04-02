@@ -681,7 +681,15 @@ $ git config receive.fsckObjects true
 
 
 Please also strongly consider activating the git hook sample files
-contained in this project for your development activities.
+contained in this project for your development activities,
+in order to have a certain amount of testing guaranteed.
+
+
+A repeated conversion run over the entire source tree should NEVER lead to
+another forced initial CMake configure run when launching a build (well, unless the hour
+timestamp in the generated CMakeLists.txt happened to change),
+since all generated files are expected to be written back to the prior file
+*only* in case there actually was any change in generated content.
 
 
 == vcproj2cmake parser/generator implementation introduction ==
