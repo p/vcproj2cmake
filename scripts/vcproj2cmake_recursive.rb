@@ -609,5 +609,5 @@ if not arr_project_subdirs.empty?
 end
 
 # Finally, create a skeleton fallback file if needed.
-v2c_source_root_ensure_usable_cmakelists_skeleton_file(unitGlobal.script_location, source_root, projects_list_file_rel)
+v2c_source_root_ensure_usable_cmakelists_skeleton_file(unitGlobal.script_location, source_root, projects_list_file_rel.to_s)
 v2c_convert_finished()
