@@ -287,11 +287,11 @@ endmacro(_v2c_list_semicolon_bug_workaround _in _out)
 # Provides an all-encompassing log message of the build environment vars
 # that CMake provides.
 function(_v2c_build_environment_log)
-  set(query_vars_ BORLAND CMAKE_EXTRA_GENERATOR XCODE_VERSION)
+  set(query_vars_ BORLAND CMAKE_EXTRA_GENERATOR XCODE_VERSION MSVC MSVC_IDE MSVC_VERSION)
   foreach(var_ in ${query_vars_})
     _v2c_var_set_if_defined(${var_} my_${var_})
   endforeach(var_ in ${query_vars_})
-  _v2c_msg_info("Build environment settings: CMAKE_GENERATOR ${CMAKE_GENERATOR}, CMAKE_EXTRA_GENERATOR ${my_CMAKE_EXTRA_GENERATOR}, UNIX/WIN32/CYGWIN ${UNIX}/${WIN32}/${CYGWIN}, APPLE/BORLAND/XCODE_VERSION ${APPLE}/${my_BORLAND}/${my_XCODE_VERSION}, MSVC/MSVC_IDE/MSVC_VERSION ${MSVC}/${MSVC_IDE}/${MSVC_VERSION}.")
+  _v2c_msg_info("Build environment settings: CMAKE_GENERATOR ${CMAKE_GENERATOR}, CMAKE_EXTRA_GENERATOR ${my_CMAKE_EXTRA_GENERATOR}, UNIX/WIN32/CYGWIN ${UNIX}/${WIN32}/${CYGWIN}, APPLE/BORLAND/XCODE_VERSION ${APPLE}/${my_BORLAND}/${my_XCODE_VERSION}, MSVC/MSVC_IDE/MSVC_VERSION ${my_MSVC}/${my_MSVC_IDE}/${my_MSVC_VERSION}.")
 endfunction(_v2c_build_environment_log)
 
 _v2c_build_environment_log()
