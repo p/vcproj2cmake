@@ -7843,8 +7843,8 @@ class V2C_CMakeRootFileContentGenerator < V2C_CMakeLocalFileContentGenerator
     @projects_list_file = projects_list_file
   end
   def generate_footer
-    next_paragraph()
     put_projects_list_file_include()
+    next_paragraph()
     super
   end
   def put_projects_list_file_include
@@ -7852,9 +7852,11 @@ class V2C_CMakeRootFileContentGenerator < V2C_CMakeLocalFileContentGenerator
       "Includes the generated file that adds all sub directories\n" \
       "which contain projects converted by V2C."
     )
-    # TODO: once vcproj2cmake_func.cmake is available at this point in
-    # time, should invoke a V2C helper macro instead which does that.
-    write_include(@projects_list_file)
+    # FIXME: asymmetric:
+    # self-contained mode (write_include()) adopts specific location,
+    # whereas the V2C helper function properly knows the location internally.
+    #write_include(@projects_list_file)
+    write_command_single_line('v2c_build_sub_projects_include', nil)
   end
 end
 

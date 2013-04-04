@@ -42,6 +42,11 @@
 #   - please note that macros (being a rather global scope)
 #     should try hard to have their local variables specifically-namespaced
 #     (prefer prepending a v2c_ prefix)
+# *V2C_DOCS_POLICY_OFFICIAL_API*
+#   All functions with this markup are "official" user-side APIs:
+#   a leading-underscore _v2c_* function prefix indicates
+#   unstable internal functions, whereas v2c_* are relatively public ones
+#   (semi-stable protocol)
 
 # Important backwards compatibility comment:
 # Since this file will usually end up in the main custom module path
@@ -1164,6 +1169,20 @@ function(_v2c_fs_generated_items_dir_relpath_get _out_generated_items_dir_relpat
   set(generated_items_dir_ "${temp_store_dir_}/generated_items")
   set(${_out_generated_items_dir_relpath} "${generated_items_dir_}" PARENT_SCOPE)
 endfunction(_v2c_fs_generated_items_dir_relpath_get _out_generated_items_dir_relpath)
+
+
+# Includes (optionally) the generated file which adds (usually all of)
+# the sub project directories within the directory hierarchy
+# which contain projects converted by V2C
+# (as originating from a recursive project crawl or possibly .sln solution).
+# *V2C_DOCS_POLICY_OFFICIAL_API* since this macro might even need to get
+# invoked by user-side custom-written root CMakeLists.txt files.
+# *V2C_DOCS_POLICY_MACRO* (uses include())
+macro(v2c_build_sub_projects_include)
+  _v2c_fs_generated_items_dir_relpath_get(v2c_fs_item_)
+  set(v2c_fs_item_ "${v2c_fs_item_}/all_sub_projects.txt")
+  _v2c_include_optional_invoke("${v2c_fs_item_}")
+endmacro(v2c_build_sub_projects_include)
 
 
 # Indicates whether source groups for a project target ought to be
