@@ -21,8 +21,6 @@
 #   converted CMakeLists.txt files
 # - implement many flexible base helper functions (list manipulation, ...),
 #   ordered from most basic to most complex (depending on basic helpers)
-# - function prefix: _v2c_* indicates internal functions, whereas v2c_* are
-#   relatively public ones
 # - prefer _upper-case_ V2C prefix for _cache variables_ such as V2C_BUILD_PLATFORM,
 #   to ensure that they're all sorted under The One True upper-case "V2C" prefix
 #   in "grouped view" mode of CMake GUI (dito for properties)
@@ -41,6 +39,9 @@
 #   - otherwise scoping is broken (newly established function scope)
 #   - calls include() (which should remain able to define things in user-side scope!)
 #   - helper sets externally obeyed variables!
+#   - please note that macros (being a rather global scope)
+#     should try hard to have their local variables specifically-namespaced
+#     (prefer prepending a v2c_ prefix)
 
 # Important backwards compatibility comment:
 # Since this file will usually end up in the main custom module path
@@ -71,7 +72,7 @@
 include(vcproj2cmake_defs)
 
 
-# Avoid useless repeated parsing of static-data function definitions
+# Include blocker (avoid repeated parsing of static-data function definitions)
 if(V2C_FUNC_DEFINED)
   return()
 endif(V2C_FUNC_DEFINED)
@@ -420,8 +421,8 @@ endfunction(_v2c_scc_do_setup)
 _v2c_scc_do_setup()
 
 function(_v2c_scc_ide_integration_desired_get _out_flag)
-  _v2c_var_ensure_defined(V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION)
-  set(${_out_flag} ${V2C_WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION} PARENT_SCOPE)
+  _v2c_var_my_get(WANT_SCC_SOURCE_CONTROL_IDE_INTEGRATION out_flag_)
+  set(${_out_flag} ${out_flag_} PARENT_SCOPE)
 endfunction(_v2c_scc_ide_integration_desired_get _out_flag)
 
 function(_v2c_pch_do_setup)
@@ -668,9 +669,8 @@ macro(v2c_project_conversion_info_set _target _timestamp_utc _orig_environment)
   set(${_target}_v2c_converted_from "${_orig_environment}")
 endmacro(v2c_project_conversion_info_set _target _timestamp_utc _orig_environment)
 
-# Assigns the original project GUID to a project
-# if desired (rather than having a newly generated random GUID
-# assigned by CMake).
+# Assigns the original project GUID to a project if desired
+# (rather than having a newly generated random GUID assigned by CMake).
 macro(v2c_project_indicate_original_guid _target _guid)
   # TODO!! should try to establish *common* helper with *consistent* naming
   # and handling for checking target-specific enable/disable of certain
@@ -936,6 +936,11 @@ function(_v2c_config_do_setup_rebuilder)
     # See also
     # "Re: Makefile: 'abort' command? / 'elseif' to go with ifeq/else/endif?
     #   (Make newbie)" http://www.mail-archive.com/help-gnu-utils@gnu.org/msg00736.html
+    # Note that on MSVS trying to abort does NOT work, since probably only a
+    # sub target gets aborted yet other non-dependent targets will continue
+    # execution. Thus it might be tolerable to resort to something like
+    # http://stackoverflow.com/questions/9510552/how-to-cancel-visual-studio-build-using-command-line
+    # No, in fact http://einaregilsson.com/stop-build-on-first-error-in-visual-studio-2010/ describes a solution to getting an entire build stopped on failure.
     if(UNIX)
       # WARNING: make sure to fetch and always use the binary's full path,
       # since otherwise we'd end up with a simple "false" string
@@ -1363,7 +1368,7 @@ if(v2c_cmakelists_rebuilder_available)
     # add_custom_target() wrapper which already does the required FOLDER sorting, too.
     set(target_cmakelists_update_this_projdir_name_ update_cmakelists_DIR_${dependent_target_main_})
     if(TARGET ${target_cmakelists_update_this_projdir_name_})
-      _v2c_msg_fatal_error("Already existing target ${target_cmakelists_update_this_projdir_name_}!? This might be due to the project target (${dependent_target_main_}) already having been defined by a similar project file in another directory. If so, I'd recommend moving some duplicate project files to where the sun don't shine. If the problem isn't clear-cut, please report.")
+      _v2c_msg_fatal_error("Already existing target ${target_cmakelists_update_this_projdir_name_}!? This quite likely happened due to the project target (${dependent_target_main_}) already having been defined by a similar project file in another directory. If so, I'd recommend project-excluding some duplicate project files or moving them to where the sun don't shine. If the problem isn't clear-cut, please report.")
     endif(TARGET ${target_cmakelists_update_this_projdir_name_})
     #add_custom_target(${target_cmakelists_update_this_projdir_name_} DEPENDS "${_cmakelists_file}")
     add_custom_target(${target_cmakelists_update_this_projdir_name_} ALL DEPENDS "${cmakelists_update_this_cmakelists_updated_stamp_file_}")
@@ -1473,18 +1478,18 @@ endif(v2c_cmakelists_rebuilder_available)
 # rather than whether it's *actually* initialized
 # (we might have a delay-init of rebuilder, but we need to have the location
 # properly recorded by non-rebuilder layers already!).
-v2c_rebuilder_enabled(v2c_cmakelists_rebuilder_enabled)
-if(v2c_cmakelists_rebuilder_enabled)
+v2c_rebuilder_enabled(_v2c_cmakelists_rebuilder_enabled)
+if(_v2c_cmakelists_rebuilder_enabled)
   # *V2C_DOCS_POLICY_MACRO*
   macro(v2c_converter_script_set_location _location)
     # user override mechanism (don't prevent specifying a custom location of this script)
     _v2c_var_set_default_if_not_set(V2C_SCRIPT_LOCATION "${_location}")
   endmacro(v2c_converter_script_set_location _location)
-else(v2c_cmakelists_rebuilder_enabled)
+else(_v2c_cmakelists_rebuilder_enabled)
   macro(v2c_converter_script_set_location _location)
     # DUMMY!
   endmacro(v2c_converter_script_set_location _location)
-endif(v2c_cmakelists_rebuilder_enabled)
+endif(_v2c_cmakelists_rebuilder_enabled)
 
 # *V2C_DOCS_POLICY_MACRO*
 # Currently a specific-naming-only helper.
@@ -1681,6 +1686,14 @@ function(v2c_target_config_charset_set _target _build_platform _build_type _char
 endfunction(v2c_target_config_charset_set _target _build_platform _build_type _charset)
 
 
+# TODO: there are actually more MIDL compilers out there,
+# e.g. http://manpages.ubuntu.com/manpages/lucid/man1/pidl.1p.html
+# http://linuxfinances.info/info/corbaalternatives.html
+# http://osdir.com/ml/network.samba.java/2005-11/msg00005.html
+# http://fixunix.com/samba/189798-re-midlc-midl-compatible-idl-compiler.html
+# http://www.linuxmisc.com/16-linux-development/f40d368a72a80d4c.htm
+# TODO: should also service an optional user callback,
+# for completely user-custom MIDL handling.
 set(v2c_midl_handling_mode_windows "Windows")
 set(v2c_midl_handling_mode_wine "Wine")
 set(v2c_midl_handling_mode_stubs "EmulatedStubs")
@@ -2186,7 +2199,7 @@ endfunction(_v2c_directory_register_project _target)
 # vcproj2cmake.rb converter rebuilder invocation.
 function(v2c_project_post_setup _project _orig_proj_files_list)
   _v2c_directory_register_project(${_project})
-  _v2c_var_set_empty(orig_proj_files_w_source_dir_list_)
+  _v2c_var_empty_parent_scope_bug_workaround(orig_proj_files_w_source_dir_list_)
   _v2c_list_create_prefix_suffix_expanded_version("${_orig_proj_files_list}" "${CMAKE_CURRENT_SOURCE_DIR}/" "" orig_proj_files_w_source_dir_list_)
   # Some projects are header-only and thus don't add an actual target
   # where our target-related properties could be set at,
