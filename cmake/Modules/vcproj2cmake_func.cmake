@@ -1840,6 +1840,23 @@ function(v2c_target_config_charset_set _target _build_platform _build_type _char
 endfunction(v2c_target_config_charset_set _target _build_platform _build_type _charset)
 
 
+# Provides a mechanism for the user to grab a .def file
+# as declared by the project.
+# Might be useful for cases where .def file mechanism
+# doesn't already implicitly get handled by the specific CMake platform
+# but rather needs to be handled manually.
+macro(_v2c_target_linker_def_file _target _build_platform _build_type _def_file)
+  if(COMMAND v2c_user_callback_target_linker_def_file_v1)
+    # Hmm, not sure yet where exactly to do the build platform/type conditional
+    # dance. Quite likely we should NOT do it here, but rather pass *all*
+    # configs to the user, and the *user* would then have to invoke our
+    # conditional helpers if needed,
+    # to determine whether that configuration *actually* is currently relevant.
+    v2c_user_callback_target_linker_def_file_v1(${_target} "${_build_platform}" "${_build_type}" "${_def_file}")
+  endif(COMMAND v2c_user_callback_target_linker_def_file_v1)
+endmacro(_v2c_target_linker_def_file _target _build_platform _build_type _def_file)
+
+
 # TODO: there are actually more MIDL compilers out there,
 # e.g. http://manpages.ubuntu.com/manpages/lucid/man1/pidl.1p.html
 # http://linuxfinances.info/info/corbaalternatives.html
