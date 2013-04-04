@@ -7857,9 +7857,6 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
       if ($v2c_validate_vcproj_abort_on_error > 0)
         raise # escalate the problem
       end
-    rescue Exception => e
-      logger.unhandled_exception(e, 'project validation')
-      raise
     end
     (false == project_valid)
   }
