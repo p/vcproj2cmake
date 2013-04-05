@@ -1704,6 +1704,13 @@ EOF
       # "Visual Studio 2010 - $(TargetName) macro" http://social.msdn.microsoft.com/Forums/en/vcprerelease/thread/3c03e730-6a0e-4ee4-a0d6-6a5c3ce4343c )
       # Might want to have a switch depending on whether input was
       # .vcproj or .vcxproj.
+      # Ouch, PROJECT_NAME is not really a precisely matching mapping.
+      # Link.OutputFile has default value $(OutDir)$(TargetName)$(TargetExt)
+      # which on CMake side would likely be properties [*OUTPUT_DIRECTORY*][*OUTPUT_NAME* - *_POSTFIX][SUFFIX].
+      # Now have fun trying to map these things usefully...
+      # Possibly for some paths/content which makes use of these macros
+      # we need to use context-specific syntax to gather the expected value...
+      # (or perhaps even genex [generator expressions]?)
       config_var_replacement = CMAKE_PROJECT_NAME_VAR_DEREF
     when 'TARGETPATH'
       config_var_emulation_code = ''
