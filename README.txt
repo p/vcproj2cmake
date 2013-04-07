@@ -169,6 +169,22 @@ see the PDF file contained within the root of the continuously evolving
 https://github.com/TheErk/CMake-tutorial repository.
 
 
+== Performance ==
+
+On a nowadays somewhat measly Core2Duo machine using RHEL 5 /
+CMake 2.8.10 / Ninja generator,
+a VS project hierarchy with "at least many dozen" projects currently
+(mid-2013) will usually require 12 seconds for the initial convert by
+a fully multi-processing vcproj2cmake_recursive.rb.
+Each CMake (re-)configure run (possibly triggered by changes of any
+file related to the build config) of that converted installation
+currently takes 25 seconds (up from maybe 8 to 10 seconds in earlier times).
+This is with V2C_INSTALL_ENABLE active -
+with some options inactive and/or evaluation overhead cleverly reduced,
+I can imagine being able to get it back down to below 20s.
+However, since converter feature count is bound to improve,
+I'm afraid there won't be much opportunity to get back down below 20s.
+
 
 === Installation notes ===
 
@@ -770,6 +786,7 @@ shortcomings, among these:
 	return *other* case insensitive results for *different* case sensitive input)
 - no three-way-merges via common base version, i.e. base-less merge
   http://jamesmckay.net/2011/01/baseless-merges-in-team-foundation-server-why/
+  (uncertain whether this is still true nowadays)
 - no disconnected SCM operation (server connection required;
   server is managing client state on server side
   [and BTW their solution of working "disconnected" is annoyingly cumbersome
@@ -804,6 +821,12 @@ shortcomings, among these:
     despite both original blobs emphatically NOT containing any embedded NUL
     [quite likely the root cause is a string handling off-by-1 in
     TFS's merge code!]
+- does not support sub modules (as supported by git, SVN, CVS etc.)
+  Rather, one is expected to do wild branching between various Team Projects.
+  For strongly upstream-based mix-and-match bundling-type project organisation
+  (AFAICT The Way It Should Be), this sounds like h*ll.
+  Sub modules are an important way to divide-and-conquer, as mentioned by
+  http://git.661346.n2.nabble.com/Git-performance-results-on-a-large-repository-td7250867.html
 
 For a very revealing discussion with many experienced SCM/ALM people,
 you may look at
