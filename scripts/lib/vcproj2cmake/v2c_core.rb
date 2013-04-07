@@ -1533,6 +1533,38 @@ class V2C_File_Filters_Group_Info
   attr_accessor :arr_files
 end
 
+class V2C_Info_Property < V2C_Info_Elem_Base
+  def initialize(name)
+    @name = name
+  end
+  attr_reader :name
+end
+
+class V2C_Group_Base < V2C_Info_Elem_Base
+  def initialize
+    @label = nil
+  end
+  attr_accessor :label
+end
+
+class V2C_Property_Group < V2C_Group_Base
+  def initialize
+    @properties = Hash.new # maps to an *array* of property elements each
+  end
+  def add_property(property)
+    property_name = property.name
+    arr_this_property = @properties[property_name]
+    if arr_this_property.nil?
+      arr_this_property = Array.new
+      @properties[property_name] = arr_this_property
+    end
+    arr_this_property.push(property)
+  end
+  # At least for VS10, any additional matching subsequent properties
+  # will *override* prior ones.
+  def get_property_candidates(property_name); @properties[property_name] end
+end
+
 
 # Well, in fact in Visual Studio, "target" and "project"
 # seem to be pretty much synonymous...
@@ -1580,6 +1612,7 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
     # (to enable Qt integration, etc.):
     @vs_keyword = nil
     @scc_info = V2C_SCC_Info.new
+    @anonymous_properties = V2C_Property_Group.new # VS10 un-Label:ed PropertyGroup
     @user_properties = Hash.new # VS7/VS10 user-custom settings (listed in Globals section on VS7)
     @build_platform_configs = V2C_Build_Platform_Configs.new # VS10 only: manages settings such as e.g. Configuration "Release", Platform "Win32", strings "Release|Win32", ...
     @arr_target_config_info = Array.new # V2C_Target_Config_Build_Info
@@ -1612,6 +1645,7 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
   attr_accessor :version
   attr_accessor :vs_keyword
   attr_accessor :scc_info
+  attr_accessor :anonymous_properties
   attr_accessor :user_properties
   attr_accessor :build_platform_configs
   attr_accessor :arr_config_info
@@ -1621,6 +1655,9 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
   attr_accessor :arr_filtered_file_lists
   attr_accessor :main_files
   attr_accessor :have_build_units
+
+  def get_property_anonymous(condition, property_name)
+  end
 end
 
 class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
@@ -4648,6 +4685,44 @@ class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10BaseElemParser
   end
 end
 
+class V2C_VS10PropertyGroupAnonymousParser < V2C_VS10BaseElemParser
+  def parse_setting(setting_key, setting_value)
+    found = be_optimistic()
+    case setting_key
+    when 'OutDir'
+    else
+      found = FOUND_FALSE
+    end
+    if FOUND_FALSE == found; found = super end
+    return found
+  end
+  def parse
+    found = FOUND_FALSE
+    elem_first = @elem_xml.elements[1] # 1-based index!!
+    if not elem_first.nil?
+      found = be_optimistic()
+      elem_name = elem_first.name
+      elem_parser = nil
+      case elem_name
+      when 'Filter'
+        elem_parser = V2C_VS10ItemGroupFiltersParser.new(@elem_xml, get_project().filters)
+      else # Treat *all* other (not specially handled) entries as files!
+        elem_parser = V2C_VS10ItemGroupFilesParser.new(@elem_xml, elem_name, get_project().file_lists)
+      end
+      if not elem_parser.nil?
+        found = elem_parser.parse
+      else
+        found = super
+      end
+    end
+    return found
+  end
+
+  private
+
+  def get_project; @info_elem end
+end
+
 class V2C_VS10UserPropertiesParser < V2C_VS10BaseElemParser
   private
 
@@ -4724,7 +4799,7 @@ class V2C_VS10PropertyGroupForwarderParser < V2C_VS10BaseElemParser
       propgroup_parser = V2C_VS10PropertyGroupGlobalsParser.new(@elem_xml, get_project())
       found = propgroup_parser.parse
     when nil
-      propgroup_parser = V2C_VS10PropertyGroupAnonymousParser.new(@elem_xml, get_project())
+      propgroup_parser = V2C_VS10PropertyGroupAnonymousParser.new(@elem_xml, get_project().anonymous_properties)
     else
       found = FOUND_FALSE
     end
