@@ -7078,6 +7078,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         end
         write_link_libraries(arr_dependency_names, map_dependencies)
       }
+      # arr_target_output_name = get_target_output_names()
+      # arr_target_output_name.each do |output_name|
+      # # Perhaps we should add an output_name.name != target_name check here.
+      #   write_property_output_name(output_name.condition, output_name.name)
+      # end
     end # target_is_valid
     logger.debug "TARGET_LINK_LIBRARIES: target_is_valid #{target_is_valid}, #{target_info_curr.tools.arr_linker_info.inspect}"
     return target_is_valid
@@ -7247,12 +7252,16 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
     gen_condition.generate(condition) do
       write_conditional_block(arr_conditional) do
-        arr_target_expr = get_target_syntax_expression(@target.name)
-        build_type = condition.get_build_type()
-        property_name = get_name_of_per_config_type_property('LINK_FLAGS', build_type)
         write_comment_at_level(COMMENT_LEVEL_STANDARD, comment)
-        put_property(arr_target_expr, PROP_APPEND, property_name, arr_flags)
+        set_property_per_config(condition, @target.name, PROP_APPEND, 'LINK_FLAGS', arr_flags)
       end
+    end
+  end
+  def write_property_output_name(condition, output_name)
+    gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
+    gen_condition.generate(condition) do
+      set_property_per_config(condition, @target.name, PROP_SET, 'OUTPUT_NAME', [ output_name ])
+      next_paragraph()
     end
   end
   def write_link_libraries(arr_dependencies, map_dependencies)
