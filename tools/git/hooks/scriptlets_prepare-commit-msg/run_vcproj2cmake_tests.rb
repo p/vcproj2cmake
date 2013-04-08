@@ -37,7 +37,7 @@ Dir.chdir(tests_dir) do |path|
   output = `#{converter_bin} #{path} 2>&1`
 
   if not $?.success?
-    test_failed_st_reason = "script indicated failure (exit code: #{$?.exitstatus})"
+    test_failed_st_reason = "converter script indicated failure (exit code: #{$?.exitstatus}, output #{output})"
   end
 end
 
