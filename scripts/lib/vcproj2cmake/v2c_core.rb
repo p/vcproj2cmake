@@ -6620,18 +6620,22 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # But then I guess there are other build environments on Windows
     # which would need us handling it here manually, so let's just keep it for now.
     # Plus, defining _AFXEXT already includes the _AFXDLL setting
-    # (MFC will define it implicitly),
+    # (MFC toolkit will define it implicitly),
     # thus it's quite likely that our current handling is somewhat incorrect.
-    # Indeed, it seems we're NOT supposed to add these defines - they're
-    # manually being added by a project config, thus simply transparently
-    # pass through anything which the project specifies!!
-    #if target_config_info.use_of_mfc == V2C_TargetConfig_Defines::MFC_DYNAMIC
-    #  # FIXME: need to add a compiler flag lookup entry
-    #  # to compiler-specific info as well!
-    #  # (in case of MSVC it would yield: /MD [dynamic] or /MT [static])
-    #  hash_defines['_AFXEXT'] = ''
-    #  hash_defines['_AFXDLL'] = ''
-    #end
+    # Very detailed info:
+    # "Using and Writing DLLs with MFC"
+    #   http://cygnus.redirectme.net/ProMFC_5/ch12_6.htm
+    if target_config_info.use_of_mfc == V2C_TargetConfig_Defines::MFC_DYNAMIC
+      # FIXME: need to add a compiler flag lookup entry
+      # to compiler-specific info as well!
+      # (in case of MSVC it would yield: /MD [dynamic] or /MT [static])
+      # _AFXEXT should most likely *not* be added here -
+      # while _AFXDLL gets defined implicitly by the environment when
+      # UseOfMfc == Dynamic (thus we do have to add it implicitly here, too),
+      # _AFXEXT is an *explicit* manual project-side define.
+      #hash_defines['_AFXEXT'] = ''
+      hash_defines['_AFXDLL'] = ''
+    end
     charset_type = 'SBCS'
     case target_config_info.charset
     when V2C_TargetConfig_Defines::CHARSET_SBCS
