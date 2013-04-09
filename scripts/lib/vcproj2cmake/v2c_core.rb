@@ -423,6 +423,14 @@ def log_hash(hash)
   }
 end
 
+# Comment-only helper:
+# Array.concat() is required for cases where you would want to
+# assign array entries to an *out* array argument of a method.
+# A simply assign will *not* work (variable restricted to inner scope).
+def array_external_concat(arr_out, arr_new)
+  arr_out.concat(arr_new)
+end
+
 # Helper for Ruby 1.8 unsorted hash vs. Ruby 1.9 sorted hash.
 # We _definitely_ want output files to be generated from sorted hashes,
 # since they _are required_ to end up with reproducible, identical content -
@@ -2276,14 +2284,42 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
     # for AdditionalOptions content, too?
     split_vs_tool_property_elements(attr_options, VS_ADDOPT_VALUE_SEPARATOR_REGEX_OBJ)
   end
-  def parse_fs_item_list(attr_fs_items, arr_fs_items)
-    split_values_list_preserve_ws_discard_empty(attr_fs_items).each { |elem|
+  def parse_list_fs_items(attr_fs_items)
+    arr_fs_items = split_values_list_preserve_ws_discard_empty(attr_fs_items).collect do |elem|
       next if skip_vs10_percent_sign_var(elem)
       elem_fs = get_filesystem_location(elem)
       next if elem_fs.nil?
       #logger.info "fs item is '#{elem_fs}'"
-      arr_fs_items.push(elem_fs)
-    }
+      elem_fs
+    end
+    arr_fs_items.compact!
+    arr_fs_items
+  end
+  def parse_list_fs_files(attr_fs_items)
+    parse_list_fs_items(attr_fs_items)
+  end
+  def parse_list_fs_dirs(attr_fs_items)
+    arr_fs_items = parse_list_fs_items(attr_fs_items)
+    arr_fs_items.each do |elem_fs|
+      bail_on_trailing_slash(elem_fs, 'VS directory element')
+    end
+    arr_fs_items
+  end
+  def bail_on_trailing_slash(path, path_descr)
+    last_char = path[-1,1]
+    return if last_char != '/'
+    message = "#{path_descr} #{path} contains a trailing (back)slash. For additional directory elements, FIX: Fatal Error LNK1561: Entry Point Must Be Defined http://support.microsoft.com/kb/140597 advises against doing so (for *these* element types). Also, this is problematic for the case of \"..\\some\\quoted dir\\\" getting mistaken as \\\" quote-escaped."
+    # http://connect.microsoft.com/VisualStudio/feedback/details/500197/additionalincludedirectories-in-vsprops-files-not-properly-converted
+    parser_error_syntax_semi_compatible(message)
+    # TODO: should add a method for an inverted check for e.g.
+    # OutDir and IntDir once they're supported - those *do* need it!
+    # http://www.pseale.com/blog/IHateYouOutDirParameter.aspx
+  end
+  def get_additional_directory_element_checked(path_expr)
+    path_elem = get_filesystem_location(path_expr)
+    return nil if path_elem.nil?
+    bail_on_trailing_slash(path_elem, 'additional directory element')
+    path_elem
   end
 end
 
@@ -2429,7 +2465,7 @@ class V2C_VSToolCompilerParser < V2C_VSToolDefineParserBase
   def parse_additional_include_directories(arr_include_dirs_out, attr_incdir)
     split_values_list_preserve_ws_discard_empty(attr_incdir).each { |elem_inc_dir|
       next if skip_vs10_percent_sign_var(elem_inc_dir)
-      elem_inc_dir_fs = get_filesystem_location(elem_inc_dir)
+      elem_inc_dir_fs = get_additional_directory_element_checked(elem_inc_dir)
       next if elem_inc_dir_fs.nil?
       #logger.info "include is '#{elem_inc_dir}'"
       info_inc_dir = V2C_Info_Include_Dir.new
@@ -2645,10 +2681,12 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
     get_boolean_value(str_data_execution_prevention_enable)
   end
   def parse_delay_load_dlls(str_delay_load_dlls, arr_delay_load_dlls)
-    parse_fs_item_list(str_delay_load_dlls, arr_delay_load_dlls)
+    arr_delay_load_dlls_new = parse_list_fs_files(str_delay_load_dlls)
+    array_external_concat(arr_delay_load_dlls, arr_delay_load_dlls_new)
   end
   def parse_additional_library_directories(attr_lib_dirs, arr_lib_dirs)
-    parse_fs_item_list(attr_lib_dirs, arr_lib_dirs)
+    arr_lib_dirs_new = parse_list_fs_dirs(attr_lib_dirs)
+    array_external_concat(arr_lib_dirs, arr_lib_dirs_new)
   end
   # See comment at compiler-side method counterpart
   # It seems VS7 linker arguments are separated by whitespace --> empty split() argument.
