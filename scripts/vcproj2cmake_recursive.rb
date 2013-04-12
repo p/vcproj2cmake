@@ -119,7 +119,7 @@ rescue ArgumentError => e
   end
   # Hrmpf, *some* entry failed. Rescue operations,
   # by going through each entry manually and logging/skipping broken ones.
-  dir_entries_projects = dir_entries.collect { |entry|
+  array_collect_compact(dir_entries) do |entry|
     result = nil
     begin
       if not regex.match(entry).nil?
@@ -134,9 +134,7 @@ rescue ArgumentError => e
       end
     end
     result
-  }
-  dir_entries_projects.compact!
-  dir_entries_projects # *explicit* return (compact! has nil return!!)
+  end
 end
 
 # Filters suitable project files in a directory's entry list.
@@ -347,7 +345,7 @@ Find.find('./') do
     next if false == want_new_cmakelists_file
   end
 
-  arr_proj_files = arr_dir_proj_files.collect { |projfile|
+  arr_proj_files = array_collect_compact(arr_dir_proj_files) do |projfile|
     suggest_specific_naming = false
     if true == suggest_specific_naming
       if projfile =~ /.#{vcproj_extension}$/i
@@ -364,10 +362,7 @@ Find.find('./') do
       next
     end
     str_proj_file
-  }
-
-  # Filter out nil entries (caused by "next" above)
-  arr_proj_files.compact!
+  end
 
   next if arr_proj_files.nil?
 

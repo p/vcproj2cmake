@@ -434,6 +434,17 @@ def array_external_concat(arr_out, arr_new)
   arr_out.concat(arr_new)
 end
 
+# Helper to codify the fastest method (collect -> compact!) described at
+# http://stackoverflow.com/questions/5152098/skip-over-iteration-in-enumerablecollect
+# Saves two lines (compact!, return) per each use. Call overhead unknown.
+def array_collect_compact(arr_in)
+  arr_out = arr_in.collect do |elem|
+    yield elem
+  end
+  arr_out.compact!
+  arr_out
+end
+
 # Helper for Ruby 1.8 unsorted hash vs. Ruby 1.9 sorted hash.
 # We _definitely_ want output files to be generated from sorted hashes,
 # since they _are required_ to end up with reproducible, identical content -
@@ -1283,13 +1294,11 @@ class V2C_File_List_Info
     return list_types[type]
   end
   def get_generated_files
-    arr_generated = @arr_files.collect { |file_info|
+    array_collect_compact(@arr_files) do |file_info|
       #puts "#{file_info.path_relative} #{file_info.is_generated}"
       next if false == file_info.is_generated
       file_info.path_relative
-    }
-    arr_generated.compact!
-    return arr_generated
+    end
   end
 end
 
@@ -2295,13 +2304,12 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
     arr_elems = []
     value = string_avoid_nil(str_property_value)
     if not value.empty?
-      arr_elems = value.split(regex).collect { |elem|
+      arr_elems = array_collect_compact(value.split(regex)) do |elem|
         # skip_vs10_percent_sign_var() most likely is a temporary HACK,
         # but for now we decide to not support these specifics.
         next if skip_vs10_percent_sign_var(elem)
         elem
-      }
-      arr_elems.compact!
+      end
     end
     arr_elems
   end
@@ -2319,15 +2327,13 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
     split_vs_tool_property_elements(attr_options, VS_ADDOPT_VALUE_SEPARATOR_REGEX_OBJ)
   end
   def parse_list_fs_items(attr_fs_items)
-    arr_fs_items = split_values_list_preserve_ws_discard_empty(attr_fs_items).collect do |elem|
+    array_collect_compact(split_values_list_preserve_ws_discard_empty(attr_fs_items)) do |elem|
       next if skip_vs10_percent_sign_var(elem)
       elem_fs = get_filesystem_location(elem)
       next if elem_fs.nil?
       #logger.info "fs item is '#{elem_fs}'"
       elem_fs
     end
-    arr_fs_items.compact!
-    arr_fs_items
   end
   def parse_list_fs_files(attr_fs_items)
     parse_list_fs_items(attr_fs_items)
@@ -6038,7 +6044,7 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
   def filter_files(arr_file_infos)
     arr_local_sources = nil
     if not arr_file_infos.nil?
-      arr_local_sources = arr_file_infos.collect { |file|
+      arr_local_sources = array_collect_compact(arr_file_infos) do |file|
         f = file.path_relative
 
 	# We fully expect ALL non-generated files to already be available!
@@ -6073,8 +6079,7 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
         end
 
         f
-      }
-      arr_local_sources.compact!
+      end
     end
     return arr_local_sources
   end
@@ -6466,7 +6471,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
           write_WinMain() if false != linker_info_curr.need_WinMain()
         end
 
-        arr_dependency_names = linker_info_curr.arr_dependencies.collect do |dep|
+        arr_dependency_names = array_collect_compact(linker_info_curr.arr_dependencies) do |dep|
           next if not dep.is_library_type()
           dependency_path = dep.dependency
           # We'll strip the path (plus system-specific .lib extension)
@@ -6487,7 +6492,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
           dependency_name = File.basename(dependency_path, '.lib')
           dependency_name
         end
-        arr_dependency_names.compact!
         write_link_libraries(arr_dependency_names, map_dependencies)
       }
     end # target_is_valid
