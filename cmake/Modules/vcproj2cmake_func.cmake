@@ -1856,6 +1856,47 @@ macro(_v2c_target_linker_def_file _target _build_platform _build_type _def_file)
   endif(COMMAND v2c_user_callback_target_linker_def_file_v1)
 endmacro(_v2c_target_linker_def_file _target _build_platform _build_type _def_file)
 
+# CMake unfortunately currently fails to add the MIDL output files
+# directory (hardcoded as $(IntDir) by VS generator) to the compiler-side
+# include directories. This is a CMake bug which needs to be fixed (FIXME).
+# CMake's Tests/VSMidl/ even manually adds these directories rather than
+# realizing that this must be implicitly done by generator side. Doh.
+# (the code here is derived from what this test does)
+# TODO: add CMake version check once CMake starts to have support.
+set(_v2c_feat_cmake_missing_midl_include_dir ON)
+if(_v2c_feat_cmake_missing_midl_include_dir)
+  if(MSVC)
+    if(MSVC_VERSION GREATER 1200)
+      set(_v2c_midl_include_mode INTERMEDIATE_DIR)
+    else(MSVC_VERSION GREATER 1200)
+      # midl generated headers end up directly in CMAKE_CURRENT_BINARY_DIR
+      # with VS6 builds.
+      set(_v2c_midl_include_mode CURRENT_BINARY_DIR)
+    endif(MSVC_VERSION GREATER 1200)
+  else(MSVC)
+    # For now assume that all non-MSVC place them in current binary dir:
+    set(_v2c_midl_include_mode CURRENT_BINARY_DIR)
+  endif(MSVC)
+else(_v2c_feat_cmake_missing_midl_include_dir)
+  set(_v2c_midl_include_mode NONE)
+endif(_v2c_feat_cmake_missing_midl_include_dir)
+
+if(_v2c_midl_include_mode STREQUAL INTERMEDIATE_DIR)
+  function(_v2c_target_midl_include_output_directory _target)
+    include_directories("${CMAKE_CURRENT_BINARY_DIR}/\$(IntDir)")
+  endfunction(_v2c_target_midl_include_output_directory _target)
+else(_v2c_midl_include_mode STREQUAL CURRENT_BINARY_DIR)
+  function(_v2c_target_midl_include_output_directory _target)
+    include_directories("${CMAKE_CURRENT_BINARY_DIR}")
+  endfunction(_v2c_target_midl_include_output_directory _target)
+else(_v2c_midl_include_mode STREQUAL NONE)
+  function(_v2c_target_midl_include_output_directory _target)
+    # DUMMY
+  endfunction(_v2c_target_midl_include_output_directory _target)
+else()
+  _v2c_msg_fatal_error("Unknown MIDL include dir mode ${_v2c_midl_include_mode}")
+endif(_v2c_midl_include_mode STREQUAL INTERMEDIATE_DIR)
+
 
 # TODO: there are actually more MIDL compilers out there,
 # e.g. http://manpages.ubuntu.com/manpages/lucid/man1/pidl.1p.html
@@ -1900,6 +1941,9 @@ if(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_windows})
   function(v2c_target_midl_compile _target _build_platform _build_type)
     # DUMMY - WIN32 (Visual Studio) already has its own implicit custom commands for MIDL generation
     # (plus, CMake's Visual Studio generator also already properly passes MIDL-related files to the setup...)
+    # Wellll... but at least we need to add the generated IID / proxy files
+    # output directory as the compiler-side include directory:
+    _v2c_target_midl_include_output_directory(${_target})
   endfunction(v2c_target_midl_compile _target _build_platform _build_type)
 else(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_windows})
 
