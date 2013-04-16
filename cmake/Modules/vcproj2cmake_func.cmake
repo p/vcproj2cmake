@@ -30,6 +30,9 @@
 #   should always be kept in sync)
 # - all variable accesses should be wrapped by accessor functions
 #   (access to non-existent CMake functions/variables will be signalled/ignored!)
+# - sufficiently complex features should optionally offer complete disabling,
+#   since performance is awfully crucial for multi-dozen projects setups!
+#   (alternate between live functions and fast completely empty function stubs)
 # - content should not cause any --warn-uninitialized output
 
 # Policy descriptions:
@@ -726,6 +729,10 @@ if("${_v2c_cmake_version_this}" VERSION_GREATER "${cmake_version_include_dirs_pr
   set(_v2c_feat_cmake_include_dirs_prop ON)
 endif("${_v2c_cmake_version_this}" VERSION_GREATER "${cmake_version_include_dirs_prop_insufficient}")
 
+option(V2C_WANT_FILELIST_TYPE_DEVIATION_SUPPORT "Enable support of project filelist compiler language type deviation support" ON)
+option(V2C_WANT_PDB_SUPPORT "Enable support of PDB (Program DataBase) debug information files" ON)
+option(V2C_WANT_INSTALL_SUPPORT "Activate infrastructure for configurable installation of V2C targets" ON)
+
 
 # # # # #   PROJECT INFO   # # # # #
 
@@ -1211,6 +1218,8 @@ endmacro(v2c_build_sub_projects_include)
 # IOW, by properly defining the corresponding deviation variables in advance,
 # one could e.g. switch certain resource-compile file types to being handled
 # by a "RC_OTHER" language i.e. by CMAKE_RC_OTHER_COMPILER.
+_v2c_var_my_get(WANT_FILELIST_TYPE_DEVIATION_SUPPORT v2c_want_filelist_type_deviation_support)
+if(v2c_want_filelist_type_deviation_support)
 function(_v2c_target_filelist_type_language_deviation_get _target _fl_type_magic _out_language)
   set(language_ "")
   set(lang_var_name_ V2C_LANGUAGE_${_fl_type_magic}) # "FL_FOO"
@@ -1225,6 +1234,11 @@ function(_v2c_target_filelist_type_language_deviation_get _target _fl_type_magic
   endforeach(lvn_ ${lang_var_name_} ${lang_var_name_}_${_target})
   set(${_out_language} "${language_}" PARENT_SCOPE)
 endfunction(_v2c_target_filelist_type_language_deviation_get _target _fl_type_magic _out_language)
+else(v2c_want_filelist_type_deviation_support)
+function(_v2c_target_filelist_type_language_deviation_get _target _fl_type_magic _out_language)
+  # DUMMY
+endfunction(_v2c_target_filelist_type_language_deviation_get _target _fl_type_magic _out_language)
+endif(v2c_want_filelist_type_deviation_support)
 
 # For various file lists defined by an original project,
 # passes them through this function to be able to do some special
@@ -2149,6 +2163,8 @@ extern \"C\" {
   endfunction(v2c_target_midl_compile _target _build_platform _build_type)
 endif(V2C_MIDL_HANDLING_MODE STREQUAL ${v2c_midl_handling_mode_windows})
 
+_v2c_var_my_get(WANT_PDB_SUPPORT _v2c_want_pdb_support)
+if(_v2c_want_pdb_support)
 function(v2c_target_pdb_configure _target _build_platform _build_type)
   v2c_buildcfg_check_if_platform_buildtype_active(${_target} "${_build_platform}" "${_build_type}" is_active_)
   if(is_active_)
@@ -2176,6 +2192,11 @@ function(v2c_target_pdb_configure _target _build_platform _build_type)
     endif(v2c_target_pdb_configure_PDB_OUTPUT_DIRECTORY)
   endif(is_active_)
 endfunction(v2c_target_pdb_configure _target _build_platform _build_type)
+else(_v2c_want_pdb_support)
+function(v2c_target_pdb_configure _target _build_platform _build_type)
+  # DUMMY
+endfunction(v2c_target_pdb_configure _target _build_platform _build_type)
+endif(_v2c_want_pdb_support)
 
 
 _v2c_scc_ide_integration_desired_get(v2c_flag_scc_integration_)
@@ -2222,28 +2243,9 @@ else(v2c_flag_scc_integration_)
 endif(v2c_flag_scc_integration_)
 
 
-if(NOT V2C_INSTALL_ENABLE)
-  if(NOT V2C_INSTALL_ENABLE_SILENCE_WARNING)
-    # You should make sure to provide install() handling
-    # which is explicitly per-target
-    # (by using our vcproj2cmake helper functions, or externally taking
-    # care of per-target install() handling) - it is very important
-    # to _explicitly_ install any targets we create in converted vcproj2cmake files,
-    # and _not_ simply "copy-install" entire library directories,
-    # since that would cause some target-specific CMake install handling
-    # to get lost (e.g. CMAKE_INSTALL_RPATH tweaking will be done in case of
-    # proper target-specific install() only!)
-    #
-    # V2C_INSTALL_ENABLE ideally is a variable that's being set *outside*
-    # of all inner (V2C-side) scope layers, i.e. you've got a CMake-enabled
-    # source tree which has a root which defines the configuration basis
-    # (basic environment checks, user-side cache variables, V2C settings, ...)
-    # and *then* includes the entire V2C-converted hierarchy as a sub part.
-    # http://stackoverflow.com/questions/3766740/overriding-a-default-option-value-in-cmake-from-a-parent-cmakelists-txt might be helpful.
-    _v2c_msg_warning("${CMAKE_CURRENT_LIST_FILE}: vcproj2cmake-supplied install handling not activated - targets _need_ to be installed properly one way or another!")
-  endif(NOT V2C_INSTALL_ENABLE_SILENCE_WARNING)
-endif(NOT V2C_INSTALL_ENABLE)
-
+set(_v2c_install_of_targets_not_enabled ON)
+_v2c_var_my_get(WANT_INSTALL_SUPPORT _v2c_want_install_support)
+if(_v2c_want_install_support)
 # Helper to cleanly evaluate target-specific setting or, failing that,
 # whether target is mentioned in a global list.
 # Example: V2C_INSTALL_ENABLE_${_target}, or
@@ -2367,6 +2369,41 @@ function(v2c_target_install _target)
   _v2c_msg_info("v2c_target_install: install(${install_params_values_list_})")
   install(${install_params_values_list_})
 endfunction(v2c_target_install _target)
+
+  if(V2C_INSTALL_ENABLE)
+    set(_v2c_install_of_targets_not_enabled OFF)
+  endif(V2C_INSTALL_ENABLE)
+else(_v2c_want_install_support)
+function(v2c_target_install _target)
+  # DUMMY
+endfunction(v2c_target_install _target)
+endif(_v2c_want_install_support)
+
+# Log an install warning in case either install infrastructure
+# is completely disabled, or dynamic enable flag is not active (yet).
+set(_v2c_log_install_warning OFF)
+if(_v2c_install_of_targets_not_enabled AND NOT V2C_INSTALL_ENABLE_SILENCE_WARNING)
+  set(_v2c_log_install_warning ON)
+endif(_v2c_install_of_targets_not_enabled AND NOT V2C_INSTALL_ENABLE_SILENCE_WARNING)
+if(_v2c_log_install_warning)
+  # You should make sure to provide install() handling
+  # which is explicitly per-target
+  # (by using our vcproj2cmake helper functions, or externally taking
+  # care of per-target install() handling) - it is very important
+  # to _explicitly_ install any targets we create in converted vcproj2cmake files,
+  # and _not_ simply "copy-install" entire library directories,
+  # since that would cause some target-specific CMake install handling
+  # to get lost (e.g. CMAKE_INSTALL_RPATH tweaking will be done in case of
+  # proper target-specific install() only!)
+  #
+  # V2C_INSTALL_ENABLE ideally is a variable that's being set *outside*
+  # of all inner (V2C-side) scope layers, i.e. you've got a CMake-enabled
+  # source tree which has a root which defines the configuration basis
+  # (basic environment checks, user-side cache variables, V2C settings, ...)
+  # and *then* includes the entire V2C-converted hierarchy as a sub part.
+  # http://stackoverflow.com/questions/3766740/overriding-a-default-option-value-in-cmake-from-a-parent-cmakelists-txt might be helpful.
+  _v2c_msg_warning("${CMAKE_CURRENT_LIST_FILE}: vcproj2cmake-supplied install handling not activated - targets _need_ to be installed properly one way or another!")
+endif(_v2c_log_install_warning)
 
 # The all-in-one helper method for post setup steps
 # (install handling, VS properties, CMakeLists.txt rebuilder, ...).
