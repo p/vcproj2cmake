@@ -1781,9 +1781,8 @@ ${c_section_end_}
       return()
     endif(NOT is_active_)
 
-    set(options VALIDATE_ALL_PARAMETERS)
-    set(oneValueArgs TARGET_ENVIRONMENT IDL_FILE_NAME HEADER_FILE_NAME INTERFACE_IDENTIFIER_FILE_NAME PROXY_FILE_NAME TYPE_LIBRARY_NAME DLL_DATA_FILE_NAME)
-    _v2c_var_set_empty(multiValueArgs)
+    set(oneValueArgs TARGET_ENVIRONMENT IDL_FILE_NAME HEADER_FILE_NAME INTERFACE_IDENTIFIER_FILE_NAME PROXY_FILE_NAME TYPE_LIBRARY_NAME DLL_DATA_FILE_NAME VALIDATE_ALL_PARAMETERS)
+    _v2c_var_set_empty(options multiValueArgs)
     v2c_parse_arguments(v2c_target_midl_compile "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
     _v2c_fs_item_make_relative_to_path("${v2c_target_midl_compile_IDL_FILE_NAME}" "${PROJECT_SOURCE_DIR}" idl_file_location_)
     if(NOT EXISTS "${idl_file_location_}")
