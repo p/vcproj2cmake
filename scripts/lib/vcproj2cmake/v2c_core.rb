@@ -1107,6 +1107,9 @@ class V2C_Tool_MIDL_Info < V2C_Tool_Define_Base_Info
     @type_library_name = nil
     @validate_all_parameters = false
   end
+  def clone
+    Marshal::load(Marshal.dump(self))
+  end
   attr_accessor :dll_data_file_name
   attr_accessor :header_file_name
   attr_accessor :iface_id_file_name
@@ -1314,6 +1317,67 @@ class V2C_Info_File
       @filter = file_other.filter
     end
   end
+end
+
+def fs_location_get_filename_part_wo_ext(location)
+  ext = File.extname(location)
+  File.basename(location, ext)
+end
+
+class V2C_ItemMetadataProviderBase
+  def initialize(item)
+    @item = item
+  end
+  def translate(metadata_key)
+    # TODO: perhaps useful to provide a caching layer,
+    # since sometimes there are repeated requests.
+    do_translate(metadata_key)
+  end
+  private
+  def do_translate(metadata_key)
+    # For very large case/when ranges,
+    # it might be useful to do a hash <-> method mechanism instead,
+    # if that can be implemented in a faster way.
+    metadata = nil
+    log_error "Unsupported item metadata key #{metadata_key}"
+    metadata
+  end
+end
+
+class V2C_ItemMetadataProviderFile < V2C_ItemMetadataProviderBase
+  def do_translate(metadata_key)
+    metadata = nil
+    case metadata_key
+    when 'Extension'
+      metadata = File.extname(@item.path_relative)
+    when 'Filename'
+      metadata = fs_location_get_filename_part_wo_ext(@item.path_relative)
+    when 'FullPath'
+      # Hmm, do we need a FQPN, and is that more than path_relative?
+      metadata = @item.path_relative
+    else
+      metadata = super
+    end
+    metadata
+  end
+end
+
+def v2c_item_metadata_get(item, metadata_key)
+  metadata = nil
+  # Keep knowledge of how to assemble specifics
+  # of the externally requested data outside of data container classes...
+  class_name = item.class.name
+  provider = nil
+  case class_name
+  when 'V2C_Info_File'
+    provider = V2C_ItemMetadataProviderFile.new(item)
+  end
+  if not provider.nil?
+    metadata = provider.translate(metadata_key)
+  else
+    log_error "Unsupported class #{class_name}"
+  end
+  metadata
 end
 
 class File_List_Descr
@@ -2253,6 +2317,40 @@ class V2C_XmlParserBase < V2C_ParserBase
   end
 end
 
+def transform_var_string(str, var_expr_regex)
+  # Probably cannot use three groups (prefix, var, suffix) for matching
+  # since we definitely need reliable non-greedy matching.
+  arr_vars = str.scan(var_expr_regex)
+  #puts "str #{str} arr_vars #{arr_vars.inspect} regex #{var_expr_regex}"
+  result = ''
+  arr_vars.each do |var|
+    pre = str.index(var)
+    post = pre + var.length
+    prefix = str[0, pre]
+    var_name = var[2, var.length-3]
+    var_value = yield var_name
+    #puts "pre #{pre} post #{post} prefix #{prefix} var name #{var_name} value #{var_value}"
+    str.slice!(0, post)
+    result << prefix << var_value
+  end
+  # And append the (potentially entire) remaining string:
+  result << str
+  result
+end
+
+# Not sure which one of those two more closely matches VS variable specs...
+#REGEX_PART_VAR_BRACKETS = '\([[:alnum:]_]*\)'
+REGEX_PART_VAR_BRACKETS = '\([^\)]*\)'
+VS10_ITEM_METADATA_MACRO_VAR_DEREF_SIGN = '%'
+VS10_ITEM_METADATA_MACRO_VAR_MATCH_REGEX_OBJ = %r{#{VS10_ITEM_METADATA_MACRO_VAR_DEREF_SIGN}#{REGEX_PART_VAR_BRACKETS}}
+def vs10_transform_item_metadata_macro_string(str)
+  # Shortcut :)
+  return str if str.nil? or not str.include?('%')
+  transform_var_string(str, VS10_ITEM_METADATA_MACRO_VAR_MATCH_REGEX_OBJ) do |var|
+    yield var
+  end
+end
+
 class V2C_VSXmlParserBase < V2C_XmlParserBase
   # Hmm, \n at least appears in VS10 (DisableSpecificWarnings element), but in VS7 as well?
   # WS_VALUE is for entries containing (and preserving!) whitespace (no split on whitespace!).
@@ -2302,12 +2400,11 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
   #   http://stackoverflow.com/questions/3058111/how-do-i-set-environment-variables-in-visual-studio-2010
   #   http://connect.microsoft.com/VisualStudio/feedback/details/606484/property-sheets-upgraded
   #   http://blogs.msdn.com/b/vcblog/archive/2010/02/16/project-settings-changes-with-vs2010.aspx
-  VS10_ITEM_METADATA_MACRO_MATCH_REGEX_OBJ = %r{%\([^\s]*\)}
   def skip_vs10_item_metadata_macro_var(str_var)
     # shortcut :)
     return false if not str_var.include?('%')
 
-    return false if not VS10_ITEM_METADATA_MACRO_MATCH_REGEX_OBJ.match(str_var)
+    return false if not VS10_ITEM_METADATA_MACRO_VAR_MATCH_REGEX_OBJ.match(str_var)
     logger.fixme("skipping unhandled VS10 variable (#{str_var})")
     return true
   end
@@ -6947,14 +7044,15 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     args_generator.add('VALIDATE_ALL_PARAMETERS', midl_info.validate_all_parameters.to_s)
     write_invoke_object_conditional_v2c_function('v2c_target_midl_compile', target_name, condition, args_generator.array)
   end
-  TOOL_CONTEXT_STR = Struct.new(:file_list_input, :tool_info, :tool_type)
+  TOOL_CONTEXT_STR = Struct.new(:tool_processor, :file_list_input, :tool_type)
   def hook_up_tools(file_lists, config_info)
     arr_tool_context = Array.new
     file_list_midl = file_lists.lookup_from_list_type(V2C_File_List_Info::TYPE_MIDL)
     # Hmm, perhaps it's actually incorrect to skip IDL files
     # when no MIDL info provided (--> assume defaults??).
     config_info.tools.arr_midl_info.each do |midl_info|
-      arr_tool_context.push(TOOL_CONTEXT_STR.new(file_list_midl, midl_info, 0)) # FIXME add tool types
+      #puts "generator midl_info #{midl_info.inspect}"
+      arr_tool_context.push(TOOL_CONTEXT_STR.new(V2C_ToolProcessorMIDL.new(midl_info), file_list_midl, 0)) # FIXME add tool types
     end
 
     arr_tool_context.each do |tool_context|
@@ -6969,13 +7067,14 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def do_hookup_tools(target_name, condition, tool_context)
     file_list_input = tool_context.file_list_input
     return if file_list_input.nil?
-    tool_info = tool_context.tool_info
+    processor = tool_context.tool_processor
     tool_type = tool_context.tool_type
     arr_input_files = file_list_input.arr_files
     arr_input_files.each do |input_file|
+      tool_info_result = processor.transform([ input_file ])
       case tool_type
       when 0
-        put_v2c_target_midl_compile(target_name, condition, tool_info, input_file.path_relative)
+        put_v2c_target_midl_compile(target_name, condition, tool_info_result, input_file.path_relative)
       else
         error_unknown_case_value('tool type', tool_type)
       end
@@ -8580,6 +8679,62 @@ def v2c_source_root_ensure_usable_cmakelists_skeleton_file(project_converter_scr
   end
 end
 
+class V2C_ToolProcessorBase < V2C_LoggerBase
+  def initialize(tool_info_template)
+    @tool_info_template = tool_info_template
+  end
+  # Drives the tool (virtual, simulated operation) once,
+  # given an input file (or potentially several, within a single run).
+  def process(arr_input_files)
+    # Rather than having each derived class provide a flat array of
+    # "output locations" to then be transformed here,
+    # better let each derived class transform an entire tool_info
+    # into a resulting metadata-augmented tool_info.
+    # Reasoning being that certain tool_info members might have
+    # more interesting metadata capabilities, thus derived classes
+    # should be free to implement that additional requirement.
+    tool_info_result = transform(arr_input_files)
+    tool_info_result.get_output_locations_patterns()
+  end
+  def transform(arr_items)
+    # Clones the original metadata-reference-polluted data,
+    # then calls the derived helper to transform the copy.
+    tool_info_result = @tool_info_template.clone
+    do_transform(tool_info_result, arr_items)
+    tool_info_result
+  end
+  def do_transform(tool_info, arr_items)
+    raise_error_abstract_base_method
+  end
+  private
+  def transform_metadata(item, str)
+    # Abstraction helper for currently rather dirty handling:
+    # this post-process class ought to be *fully VS-independent* -
+    # this would be achieved by having translated the parser-specific variables
+    # into data-layer-specific V2C variables
+    # which we would then be able to precisely evaluate here.
+    # As long as we don't have our own generic variable representation
+    # we'll have to take such dirty shortcuts which directly call
+    # into vs10 helpers.
+    vs10_transform_item_metadata_macro_string(str) do |var|
+      v2c_item_metadata_get(item, var)
+    end
+  end
+end
+
+class V2C_ToolProcessorMIDL < V2C_ToolProcessorBase
+  private
+  def do_transform(tool_info, arr_items)
+    input_file = arr_items[0]
+    tool_info.dll_data_file_name = transform_metadata(input_file, tool_info.dll_data_file_name)
+    tool_info.header_file_name = transform_metadata(input_file, tool_info.header_file_name)
+    tool_info.iface_id_file_name = transform_metadata(input_file, tool_info.iface_id_file_name)
+    tool_info.proxy_file_name = transform_metadata(input_file, tool_info.proxy_file_name)
+    tool_info.type_library_name = transform_metadata(input_file, tool_info.type_library_name)
+    #logger.warn "tool_info #{tool_info.inspect}"
+  end
+end
+
 # This class is tasked with doing important analysis work
 # on *generic* V2C-side project data
 # (e.g. marking files created by MIDL instructions as generated, etc.)
@@ -8590,28 +8745,70 @@ class V2C_ProjectPostProcess < V2C_LoggerBase
     @project_info = project_info
   end
   def process
-    mark_files_as_generated(@project_info)
+    mark_files_as_generated(@project_info.file_lists, @project_info.arr_config_info)
     process_filtered_file_lists(@project_info)
     detect_build_units(@project_info)
     return true
   end
   private
-  def mark_files_as_generated(project_info)
-    # Mark some files as generated (MIDL etc.).
+  def mark_files_as_generated(file_lists, arr_config_info)
+    # Mark some files as generated (e.g. output files as produced by MIDL etc.).
+    # FIXME: update implementation to have generic iteration
+    # through all tool types rather than MIDL-only.
+    # And the implementation in here is very Q&D anyway
+    # (needs to be split up into clean sub handling...).
+    # One could argue that marking files as generated could be done by
+    # a generator-side class as well, but this is not what a generator class
+    # is for (it is supposed to do the transgression from for-generation data
+    # to generated syntax), and such activity should not be required to be
+    # per-generator-implemented code.
+
+    # The list of candidate files can be found in the Compile and Include type at least,
+    # since compiler input files may potentially be files that were
+    # output files of other tools.
+    arr_list_types = [ V2C_File_List_Info::TYPE_CL_COMPILES, V2C_File_List_Info::TYPE_CL_INCLUDES ]
+    arr_lists_build = array_collect_compact(arr_list_types) do |list_type|
+      file_lists.lookup_from_list_type(list_type)
+    end
+    return if arr_lists_build.empty?
+
+    build_tool_name = 'MIDL' # TODO: aggregate this more elegantly automatically
+    file_list_midl = file_lists.lookup_from_list_type(V2C_File_List_Info::TYPE_MIDL)
+    file_list_tool_input = file_list_midl
+    return if file_list_tool_input.nil?
+    input_files = file_list_tool_input.arr_files
     arr_generated_files = Array.new
-    project_info.arr_config_info.each { |config_info|
-      arr_midl_info = config_info.tools.arr_midl_info
-      arr_midl_info.each { |midl_info|
-        arr_generated_files.concat(midl_info.get_output_locations_patterns())
-      }
-    }
-    arr_generated_files.compact.each { |candidate|
-      info_file = project_info.file_lists.lookup_from_file_name(candidate)
-      if not info_file.nil?
-        info_file.enable_attribute(V2C_Info_File::ATTR_GENERATED)
+    arr_config_info.each do |config_info|
+      arr_tool_info = config_info.tools.arr_midl_info
+      input_files.each do |input_file_info|
+        arr_input_files = [ input_file_info ]
+        arr_tool_info.each do |tool_info|
+          processor = V2C_ToolProcessorMIDL.new(tool_info)
+          arr_generated_files.concat(processor.process(arr_input_files))
+        end
       end
-      #puts "candidate #{candidate} info_file #{info_file.inspect}"
-    }
+    end
+    # TODO_PERFORMANCE: we're possibly doing more loop work here than needed...
+    # (implement breakout on success?).
+    arr_generated_files.each do |candidate|
+      arr_lists_build.each do |file_list_build|
+        info_file = file_list_build.get_file(candidate)
+        if info_file.nil?
+          file_list_build.arr_files.each do |file|
+            logger.debug "file is #{file.path_relative} candidate #{candidate}"
+            if file.path_relative == candidate
+              info_file = file
+              break
+            end
+          end
+        end
+        if not info_file.nil?
+          logger.info "Marking file #{info_file.path_relative} as generated (reason: output file of build tool #{build_tool_name})"
+          info_file.enable_attribute(V2C_Info_File::ATTR_GENERATED)
+        end
+        logger.debug "candidate #{candidate} info_file #{info_file.inspect}"
+      end
+    end
   end
   def process_filtered_file_lists(project_info)
     return if not project_info.arr_filtered_file_lists.nil?
