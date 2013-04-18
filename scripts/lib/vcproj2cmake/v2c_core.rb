@@ -705,6 +705,10 @@ class V2C_Tool_Base_Info
   end
 end
 
+def raise_error_abstract_base_method
+  raise NotImplementedError.new('Abstract base method.')
+end
+
 class V2C_Tool_Define_Base_Info < V2C_Tool_Base_Info
   def initialize(tool_variant_specific_info)
     super(tool_variant_specific_info)
@@ -713,6 +717,26 @@ class V2C_Tool_Define_Base_Info < V2C_Tool_Base_Info
   end
   attr_accessor :output_directory
   attr_accessor :hash_defines
+  # Returns an array of the output locations (or file patterns)
+  # as specific to this tool type.
+  def get_output_locations_patterns
+    arr_outfiles = get_output_files_patterns()
+    arr_outfiles.compact!
+    arr_out = nil
+    if @output_directory.nil?
+      arr_out = arr_outfiles
+    else
+      arr_out = arr_outfiles.collect do |outfile|
+        File.join(@output_directory, outfile)
+      end
+    end
+    arr_out
+  end
+  # Helper to return an array of output files patterns
+  # as specific to this tool type. Ought to be derived per-tool-type.
+  def get_output_files_patterns
+    raise_error_abstract_base_method
+  end
 end
 
 class V2C_Tool_Specific_Info_Base
@@ -1091,6 +1115,9 @@ class V2C_Tool_MIDL_Info < V2C_Tool_Define_Base_Info
   attr_accessor :target_environment
   attr_accessor :type_library_name
   attr_accessor :validate_all_parameters
+  def get_output_files_patterns
+    [ @header_file_name, @iface_id_file_name, @proxy_file_name, @type_library_name ]
+  end
 end
 
 module V2C_TargetConfig_Defines
@@ -8562,7 +8589,7 @@ class V2C_ProjectPostProcess < V2C_LoggerBase
     project_info.arr_config_info.each { |config_info|
       arr_midl_info = config_info.tools.arr_midl_info
       arr_midl_info.each { |midl_info|
-        arr_generated_files.push(midl_info.header_file_name, midl_info.iface_id_file_name, midl_info.proxy_file_name, midl_info.type_library_name)
+        arr_generated_files.concat(midl_info.get_output_locations_patterns())
       }
     }
     arr_generated_files.compact.each { |candidate|
