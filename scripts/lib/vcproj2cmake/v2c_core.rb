@@ -708,8 +708,10 @@ end
 class V2C_Tool_Define_Base_Info < V2C_Tool_Base_Info
   def initialize(tool_variant_specific_info)
     super(tool_variant_specific_info)
+    @output_directory = nil
     @hash_defines = Hash.new
   end
+  attr_accessor :output_directory
   attr_accessor :hash_defines
 end
 
@@ -2574,6 +2576,7 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
 end
 
 module V2C_VSToolDefineDefines
+  TEXT_OUTPUTDIRECTORY = 'OutputDirectory'
   TEXT_PREPROCESSORDEFINITIONS = 'PreprocessorDefinitions'
 end
 
@@ -2585,6 +2588,8 @@ class V2C_VSToolDefineParserBase < V2C_VSToolParserBase
     found = be_optimistic()
     tool_info = get_define_tool_info()
     case setting_key
+    when TEXT_OUTPUTDIRECTORY
+      tool_info.output_directory = get_filesystem_location(setting_value)
     when TEXT_PREPROCESSORDEFINITIONS
       parse_preprocessor_definitions(tool_info.hash_defines, setting_value)
     else
