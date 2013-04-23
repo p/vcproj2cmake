@@ -235,6 +235,9 @@ end
 # But at least let's optionally allow the user to precisely specify which configuration
 # (empty [first config], "Debug", "Release", ...) he wants to have
 # these settings taken from.
+# NOTE: this is NOT true for include directories: newer CMake versions
+# do have genex support for various INCLUDE_DIRECTORIES properties,
+# thus per-config switching *is* doable.
 $config_multi_authoritative = ''
 
 FILENAME_MAP_DEF = File.join($v2c_config_dir_local, 'define_mappings.txt')
@@ -529,6 +532,12 @@ end
 class V2C_ParserError < V2C_ChainedError
 end
 
+# Manages a build condition expression.
+# Currently VS2010 syntax only, but further abstraction is *very* worthwhile.
+# Examples of more interesting MSVS2010 (well, msbuild) conditions:
+# '%(_OutputFileFromLib.FullPath)' != '$([System.IO.Path]::GetFullPath($(TargetPath)))'
+# '%(PreLinkEvent.Message)' != ''
+# '@(BuildMacro)' != ''
 class V2C_Info_Condition
   def initialize(str_condition = nil)
     @str_condition = str_condition
@@ -909,7 +918,7 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
     @arr_delay_load_dlls = Array.new
     @generate_debug_information_enable = false
     @generate_map_file_enable = false
-    @arr_ignore_specific_default_libraries = Array.new
+    @arr_ignore_specific_default_libraries = Array.new # probably related to CMAKE_<LANG>_STANDARD_LIBRARIES..... variables
     @link_incremental = 0 # 1 means NO, thus 2 probably means YES?
     @map_file_name = nil
     @module_definition_file = nil
@@ -918,6 +927,8 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
     @per_user_redirection_enable = false
     @randomized_base_address_enable = false
     @register_output_enable = false
+    # CMAKE_<lang>_STACK_SIZE probably is the equivalent
+    # for linker stack size settings.
     @strip_private_symbols_file = nil
     @subsystem = SUBSYSTEM_CONSOLE
     @target_machine = MACHINE_NOT_SET
@@ -5286,7 +5297,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     arr_args.push('SYSTEM') if (flags & V2C_Include_Dir_Defines::SYSTEM > 0)
     arr_args.push('BEFORE') if (flags & V2C_Include_Dir_Defines::BEFORE > 0)
     arr_args.concat(arr_directories)
-    gen_put_include_directories(target_name, arr_args)
+    gen_put_target_include_directories(target_name, arr_args)
   end
   # analogous to CMake separate_arguments() command
   def separate_arguments(array_in); array_in.join(';') end
@@ -5790,7 +5801,7 @@ class V2C_CMakeV2CSyntaxGeneratorV2CFunc < V2C_CMakeV2CSyntaxGeneratorBase
   def gen_put_customization_hook_from_cmake_var(include_file_var)
     put_v2c_hook_invoke(get_dereferenced_variable_name(include_file_var))
   end
-  def gen_put_include_directories(target_name, arr_args)
+  def gen_put_target_include_directories(target_name, arr_args)
     write_command_list_quoted('v2c_target_include_directories', target_name, arr_args)
   end
   def gen_put_converter_script_location(script_location)
@@ -5821,7 +5832,7 @@ class V2C_CMakeV2CSyntaxGeneratorSelfContained < V2C_CMakeV2CSyntaxGeneratorBase
   def gen_put_customization_hook_from_cmake_var(include_file_var)
     write_include_from_cmake_var(include_file_var, true)
   end
-  def gen_put_include_directories(target_name, arr_args)
+  def gen_put_target_include_directories(target_name, arr_args)
     write_command_list_quoted('include_directories', nil, arr_args)
   end
   def gen_put_converter_script_location(script_location)
@@ -5874,6 +5885,8 @@ class V2C_CMakeV2CConditionGeneratorBase < V2C_CMakeV2CSyntaxGenerator
     # Probably the best we can do is to add a function to add to vcproj2cmake_func.cmake which calls either raw include_directories() or sets the future
     # target property, depending on a pre-determined support flag
     # for proper include dirs setting.
+    # NOT true: newer CMake now has INCLUDE_DIRECTORIES properties
+    # with genex support...
 
     if 1 == $v2c_generate_self_contained_file
 
@@ -5964,6 +5977,8 @@ end
 class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
   VS7_UNWANTED_FILE_TYPES_REGEX_OBJ = %r{\.(lex|y|ico|bmp|txt)$}
   VS7_LIB_FILE_TYPES_REGEX_OBJ = %r{\.lib$}
+  # TODO: perhaps we should add a filelist *type* parameter,
+  # to have additional information for inner logging activity.
   def initialize(textOut, project_name, project_dir, arr_sub_sources_for_parent, skip_non_sources)
     super(textOut)
     @project_name = project_name
@@ -6265,6 +6280,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def put_source_vars(arr_sub_source_list_var_names)
     next_paragraph()
     put_list_of_lists('SOURCES', arr_sub_source_list_var_names)
+    # Side note: CMAKE_<LANG>_IGNORE_EXTENSIONS is a related variable
+    # which we might eventually want to use somewhere.
   end
   def put_hook_post_sources; @localGenerator.put_customization_hook_from_cmake_var('V2C_HOOK_POST_SOURCES') end
   def put_hook_post_definitions
@@ -7104,6 +7121,9 @@ end
 # within an entire "solution" hierarchy.
 # Currently, these end up (repeated) in each local CMakeLists.txt file.
 # Should be generating into a common include() file instead.
+# We also might have some use for the related CMAKE_BUILD_TYPE_INIT
+# and DEBUG_CONFIGURATIONS variables somewhere...
+# VS_GLOBAL_SECTION_PRE_* probably is important, too.
 class V2C_CMakeGlobalGenerator < V2C_CMakeV2CSyntaxGenerator
   def put_configuration_types(configuration_types)
     configuration_types_list = separate_arguments(configuration_types)
@@ -7160,15 +7180,8 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     end
   end
 
-  # cmake_minimum_required() is required to be mentioned open-coded
-  # per-CMakeLists.txt (exact requirement seems to be:
-  # to be executed whenever it has not been done before within a scope),
-  # thus we always do need to generate this line
-  # rather than having it carried out by our module file.
-  # Having it mentioned by an included macro executed locally
-  # is not accepted either.
+  # Generates required version line to make CMake happy.
   def put_per_scope_cmake_minimum_version
-    # Required version line to make cmake happy.
     write_comment_at_level(COMMENT_LEVEL_VERBOSE,
       "For features provided (or not) by various CMake versions,\n" \
       "please see http://www.cmake.org/Wiki/CMake_Released_Versions\n" \
@@ -7176,6 +7189,9 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     )
     # Keep a whole list of various requirements and their version,
     # to know which of our dependencies carries which penalty.
+    # But keeping them in a hash would be overkill
+    # (resulting runtime overhead entirely uncalled-for) -
+    # simply have only the currently used entry uncommented.
     str_cmake_minimum_version = '2.6'
     str_cmake_minimum_version_reason = 'set_property(... COMPILE_DEFINITIONS_* ...)'
     # CMakeParseArguments is a very modern dependency,
@@ -7185,6 +7201,13 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     write_comment_at_level(COMMENT_LEVEL_MINIMUM,
       ">= #{str_cmake_minimum_version} due to crucial #{str_cmake_minimum_version_reason}"
     )
+    # cmake_minimum_required() is required to be mentioned open-coded
+    # per-CMakeLists.txt (exact requirement seems to be:
+    # to be executed whenever it has not been done before within a scope),
+    # thus we always do need to generate this line
+    # rather than having it carried out by our module file.
+    # Having it mentioned by an included macro executed locally
+    # is not accepted either.
     write_cmake_minimum_version(str_cmake_minimum_version)
     next_paragraph()
   end
@@ -7308,6 +7331,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     # a way of specifying _per-configuration_ syntax of include_directories().
     # See "[CMake] vcproj2cmake.rb script: announcing new version / hosting questions"
     #   http://www.cmake.org/pipermail/cmake/2010-June/037538.html
+    # Likely not true (Generator Expressions!!).
     #
     # Side note #2: relative arguments to include_directories() (e.g. "..")
     # are relative to CMAKE_PROJECT_SOURCE_DIR and _not_ BINARY,
