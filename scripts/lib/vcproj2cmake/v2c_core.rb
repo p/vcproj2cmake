@@ -6925,6 +6925,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     )
   end
   def put_v2c_target_midl_compile(target_name, condition, midl_info, idl_file)
+    #put_v2c_target_midl_preprocessor_definitions(...)
+    #put_v2c_target_midl_options(GENERATESTUBLESSPROXIES ... MKTYPLIBCOMPATIBLE ... VALIDATEALLPARAMETERS ...)
+    # put_v2c_target_midl_compile() will be the last line to be generated - the invoked function
+      # will then implement the MIDL custom command using all previously configured MIDL target properties settings.
+      #
     # TODO: should use condition to alternatively open-code the conditional variable
     # here in case self-contained mode is requested.
     # ... = get_buildcfg_var_name_of_condition(condition)
@@ -6942,31 +6947,39 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     args_generator.add('VALIDATE_ALL_PARAMETERS', midl_info.validate_all_parameters.to_s)
     write_invoke_object_conditional_v2c_function('v2c_target_midl_compile', target_name, condition, args_generator.array)
   end
-  def hook_up_midl_files(file_lists, config_info)
-    # VERY Q&D way to mark MIDL-related files as GENERATED,
-    # to keep CMake from erroring out when adding these source files to a target.
-    # Well, even marking these files as GENERATED does not help,
-    # since they simply won't be available for the target --> error.
-    # Instead, we do need to have an add_custom_command()
-    # which generates them (or suitable dummy files if needed).
-    arr_midl_info = config_info.tools.arr_midl_info
-
-    # Hmm, perhaps it's actually incorrect to skip IDL files
-    # when no MIDL config info provided (--> assume defaults??).
-    return if arr_midl_info.empty?
-
+  TOOL_CONTEXT_STR = Struct.new(:file_list_input, :tool_info, :tool_type)
+  def hook_up_tools(file_lists, config_info)
+    arr_tool_context = Array.new
     file_list_midl = file_lists.lookup_from_list_type(V2C_File_List_Info::TYPE_MIDL)
-    return if file_list_midl.nil?
+    # Hmm, perhaps it's actually incorrect to skip IDL files
+    # when no MIDL info provided (--> assume defaults??).
+    config_info.tools.arr_midl_info.each do |midl_info|
+      arr_tool_context.push(TOOL_CONTEXT_STR.new(file_list_midl, midl_info, 0)) # FIXME add tool types
+    end
 
-    midl_info = arr_midl_info[0]
-
-    file_list_midl.arr_files.each { | idl_file|
-      #put_v2c_target_midl_preprocessor_definitions(...)
-      #put_v2c_target_midl_options(GENERATESTUBLESSPROXIES ... MKTYPLIBCOMPATIBLE ... VALIDATEALLPARAMETERS ...)
-      # put_v2c_target_midl_compile() will be the last line to be generated - the invoked function
-      # will then implement the MIDL custom command using all previously configured MIDL target properties settings.
-      put_v2c_target_midl_compile(@target.name, config_info.condition, midl_info, idl_file.path_relative)
-    }
+    arr_tool_context.each do |tool_context|
+      # TODO: this method and anything below it could be moved
+      # into a PerToolGenerator class. But I'll defer that for now
+      # since it's not obvious yet whether this is the way to go
+      # (possibly we need to keep more decision-making per each tool,
+      # thus maybe we need to keep it within target generator).
+      do_hookup_tools(@target.name, config_info.condition, tool_context)
+    end
+  end
+  def do_hookup_tools(target_name, condition, tool_context)
+    file_list_input = tool_context.file_list_input
+    return if file_list_input.nil?
+    tool_info = tool_context.tool_info
+    tool_type = tool_context.tool_type
+    arr_input_files = file_list_input.arr_files
+    arr_input_files.each do |input_file|
+      case tool_type
+      when 0
+        put_v2c_target_midl_compile(target_name, condition, tool_info, input_file.path_relative)
+      else
+        error_unknown_case_value('tool type', tool_type)
+      end
+    end
   end
   def put_v2c_target_pdb_configure(target_name, condition, pdb_info)
     args_generator = ParameterArrayGenerator.new
@@ -7799,7 +7812,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # buildcfg condition block handling...
       # Note that some may be dependent on the target already having
       # been established!
-      hook_up_midl_files(project_info.file_lists, config_info_curr)
+      hook_up_tools(project_info.file_lists, config_info_curr)
     } # [END per-config handling]
     target_is_valid
   end
