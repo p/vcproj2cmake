@@ -46,6 +46,9 @@ if File.exist?(excluded_projects)
     f_excl.each do |line_raw|
       exclude_expr, comment = line_raw.chomp.split('#')
       #puts "exclude_expr is #{exclude_expr}"
+      # remove whitespace right before comment start,
+      # but choose to NOT remove it on left side:
+      exclude_expr.rstrip!
       next if exclude_expr.empty?
       # TODO: we probably need a per-platform implementation,
       # since exclusion is most likely per-platform after all
