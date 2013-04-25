@@ -474,22 +474,31 @@ else
   end
 end
 
-def read_mappings(filename_mappings, mappings)
-  # line format is: "tag:PLATFORM1:PLATFORM2=tag_replacement2:PLATFORM3=tag_replacement3"
-  if File.exists?(filename_mappings)
-    #Hash[*File.read(filename_mappings).scan(/^(.*)=(.*)$/).flatten]
-    File.open(filename_mappings, 'r').each do |line|
-      line_cooked = line.chomp
+def read_commented_text_file_lines(filename)
+  if File.exists?(filename)
+    #Hash[*File.read(filename).scan(/^(.*)=(.*)$/).flatten]
+    File.open(filename, 'r').each do |line_raw|
+      line_cooked = line_raw.chomp
       arr_comments_separator = line_cooked.split('#')
       line_payload = arr_comments_separator[0]
       next if line_payload.nil?
-      pattern_orig, expr_replacement = line_payload.split(':')
-      if not pattern_orig.nil?
-        mappings[pattern_orig] = expr_replacement
-      end
+      # remove whitespace right before comment start,
+      # but choose to NOT remove it on left side:
+      line_payload.rstrip!
+      yield line_payload
     end
   else
-    log_debug "NOTE: #{filename_mappings} NOT AVAILABLE"
+    log_debug "NOTE: #{filename} NOT AVAILABLE"
+  end
+end
+
+def read_mappings(filename_mappings, mappings)
+  # line format is: "tag:PLATFORM1:PLATFORM2=tag_replacement2:PLATFORM3=tag_replacement3"
+  read_commented_text_file_lines(filename_mappings) do |line_payload|
+    pattern_orig, expr_replacement = line_payload.split(':')
+    if not pattern_orig.nil?
+      mappings[pattern_orig] = expr_replacement
+    end
   end
   #log_debug mappings['kernel32']
   #log_debug mappings['mytest']

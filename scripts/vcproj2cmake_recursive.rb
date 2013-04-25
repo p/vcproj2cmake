@@ -40,23 +40,13 @@ time_cmake_root_folder = 0
 arr_excl_proj_expr = Array.new()
 time_cmake_root_folder = File.stat(v2c_config_dir_source_root).mtime.to_i
 excluded_projects = File.join(v2c_config_dir_source_root, 'project_exclude_list.txt')
-if File.exist?(excluded_projects)
-  begin
-    f_excl = File.new(excluded_projects, 'r')
-    f_excl.each do |line_raw|
-      exclude_expr, comment = line_raw.chomp.split('#')
-      #puts "exclude_expr is #{exclude_expr}"
-      # remove whitespace right before comment start,
-      # but choose to NOT remove it on left side:
-      exclude_expr.rstrip!
-      next if exclude_expr.empty?
-      # TODO: we probably need a per-platform implementation,
-      # since exclusion is most likely per-platform after all
-      arr_excl_proj_expr.push(exclude_expr)
-    end
-  ensure
-    f_excl.close
-  end
+read_commented_text_file_lines(excluded_projects) do |line_payload|
+  exclude_expr = line_payload
+  #puts "exclude_expr is #{exclude_expr}"
+  next if exclude_expr.empty?
+  # TODO: we probably need a per-platform implementation,
+  # since exclusion is most likely per-platform after all
+  arr_excl_proj_expr.push(exclude_expr)
 end
 
 class UnitWorkData
