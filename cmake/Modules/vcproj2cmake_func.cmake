@@ -873,7 +873,9 @@ else(_v2c_generator_has_dynamic_platform_switching)
       # build platform to the respective project-specific setting,
       # but at least for now we don't have a solution-global mechanism.
       # Oh well...
-      _v2c_msg_fatal_error("V2C_BUILD_PLATFORM contains invalid build platform setting (${build_platform_}), please correct! (valid candidates: ${platform_names_list_})")
+      # Worst case will mean having to exclude certain projects
+      # via project exclude list currently.
+      _v2c_msg_fatal_error("The global V2C_BUILD_PLATFORM CACHE variable contains a build platform setting choice (${build_platform_}) that's unsupported at least by this particular sub project, please correct! (platforms supported by project ${PROJECT_NAME}: ${platform_names_list_})")
     endif(platform_ok_)
   endfunction(_v2c_buildcfg_determine_platform_var _target)
 
