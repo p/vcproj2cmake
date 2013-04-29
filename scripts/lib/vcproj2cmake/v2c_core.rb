@@ -5335,13 +5335,32 @@ class V2C_ProjectValidator < V2C_ValidatorBase
     # FIXME: Disabled for TESTING only - should re-enable a fileset check once VS10 parsing is complete.
     #if @project_info.main_files.nil?; validation_error('no files!?') end
     validate_target_configs(@project_info.arr_target_config_info)
+    if false != need_config_info()
+      validate_config_infos(@project_info.arr_config_info)
+    end
+  end
+  def need_config_info
     need_config_info = true
     # An external-build Makefile config type does not need config information
     # (compiler, linker, MIDL etc.)
-    need_config_info = false if @project_info.vs_keyword == V2C_Project_Info::KEYWORD_MAKEFILE
-    if false != need_config_info
-      validate_config_infos(@project_info.arr_config_info)
+    if @project_info.vs_keyword == V2C_Project_Info::KEYWORD_MAKEFILE
+      need_config_info = false
+    else
+      # .csproj files are rather different (MSVS2010 even has a completely
+      # different GUI as compared to .vcxproj!),
+      # and they don't seem to have any ItemDefinitionGroups
+      # even distantly resembling what we are looking for
+      # (prolonged project settings testing did not show anything),
+      # thus skip this check there.
+      @project_info.arr_p_original_project_files.each do |p_proj_file|
+        # FIXME: introduce string_end_with() helper!
+        if p_proj_file.to_s.match(/\.csproj$/)
+          need_config_info = false
+          break
+        end
+      end
     end
+    need_config_info
   end
   def validate_target_configs(arr_target_config_info)
     arr_target_config_info.each { |target_config_info|
