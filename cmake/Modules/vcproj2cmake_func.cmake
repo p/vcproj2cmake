@@ -755,6 +755,25 @@ macro(v2c_project_indicate_original_guid _target _guid)
   endif(want_original_)
 endmacro(v2c_project_indicate_original_guid _target _guid)
 
+# There possibly is no builtin way to retrieve the current target in CMake.
+# While this is quite understandable, V2C may have the requirement
+# to query the current project target
+# (we - currently at least - have many questionably specific hooks referenced
+# which don't offer a hard first-class link to the current project target).
+# Thus use a directory property to keep track of the project target name
+# that's being processed.
+# We're talking about a _project_ target name only here, as opposed to
+# many other potential custom targets which we're not interested in.
+# Lifetime of this information is from establishing the target (executable,
+# library etc.) up to the next same-directory target getting established.
+macro(_v2c_project_target_current_update _target)
+  set_property(DIRECTORY PROPERTY V2C_PROJECT_TARGET_CURRENT ${_target})
+endmacro(_v2c_project_target_current_update _target)
+function(v2c_project_target_current_get _out_target)
+  get_property(project_target_current_ DIRECTORY PROPERTY V2C_PROJECT_TARGET_CURRENT)
+  set(${_out_target} ${project_target_current_} PARENT_SCOPE)
+endfunction(v2c_project_target_current_get _out_target)
+
 
 # # # # #   BUILD PLATFORM SETUP   # # # # #
 
