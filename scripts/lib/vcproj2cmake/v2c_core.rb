@@ -6918,7 +6918,15 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # While this doesn't lead to rogue rebuilds of the independent target,
     # in some environments this might happen. Thus we might want to skip adding
     # the resource files list (VS10: ResourceCompile list) to the target.
-    file_lists.arr_file_lists.each { |file_list|
+    file_lists.arr_item_lists.each { |file_list|
+      # Semi-dirty hack (TODO improve eventually):
+      # skip .csproj Reference entries (while these probably are actual
+      # physical files, they often aren't available for us, and they're being
+      # handled via CMake VS_DOTNET_REFERENCES property already.
+      # Since we do file existence checks, these would bail out otherwise...
+      virtual_only = V2C_Item_List_Info::TYPE_CS_REFERENCE == file_list.type
+      next if true == virtual_only
+
       arr_dummy = [] # TODO: temporary dummy, to satisfy existing crap (remove!)
       filelist_generator = V2C_CMakeFileListGenerator_VS10.new(@textOut, project_name, @project_dir, file_list, arr_dummy)
       source_files_variable = filelist_generator.generate
