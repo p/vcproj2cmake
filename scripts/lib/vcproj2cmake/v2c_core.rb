@@ -6863,6 +6863,13 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     @localGenerator = localGenerator
   end
 
+  # Returns name of *project*.
+  def get_project_name(); @project_info.name end
+
+  # Returns name of the project *target* that is defined within the project.
+  # May or may not be identical with the outer project's name.
+  def get_target_name(); @project_info.name end
+
   # File-related TODO:
   # should definitely support the following CMake properties, as needed:
   # PUBLIC_HEADER (cmake --help-property PUBLIC_HEADER), PRIVATE_HEADER, HEADER_FILE_ONLY, EXTERNAL_OBJECT
@@ -7091,7 +7098,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # since it's not obvious yet whether this is the way to go
       # (possibly we need to keep more decision-making per each tool,
       # thus maybe we need to keep it within target generator).
-      do_hookup_tools(@target.name, config_info.condition, tool_context)
+      do_hookup_tools(get_target_name(), config_info.condition, tool_context)
     end
   end
   def do_hookup_tools(target_name, condition, tool_context)
@@ -7117,7 +7124,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     write_invoke_object_conditional_v2c_function('v2c_target_pdb_configure', target_name, condition, args_generator.array)
   end
   def configure_pdb(condition, pdb_info)
-    put_v2c_target_pdb_configure(@target.name, condition, pdb_info)
+    put_v2c_target_pdb_configure(get_target_name(), condition, pdb_info)
   end
   def put_atl_mfc_config(target_config_info)
     # FIXME: should check whether CMAKE_MFC_FLAG is ok with specifying
@@ -7125,7 +7132,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # if so, then we could place this function call _after_ having
     # established the target, thus we could already pretend this configuration
     # item to always have proper target property scope...
-    do_configure_atl_mfc_flag(@target.name, target_config_info.condition, target_config_info.use_of_atl, target_config_info.use_of_mfc)
+    do_configure_atl_mfc_flag(get_target_name(), target_config_info.condition, target_config_info.use_of_atl, target_config_info.use_of_mfc)
   end
   #def evaluate_precompiled_header_config(target, files_str)
   #end
@@ -7148,13 +7155,14 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # added multiple times, thus need uniq here.
     arr_sub_source_list_var_names.uniq!
     put_source_vars_combined_list(arr_sub_source_list_var_names)
+    project_target_name = get_target_name()
 
     # BEFORE establishing a target, generate:
     # - link_directories()
     # - module definition file
     config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
       @localGenerator.write_link_directories(linker_info_curr.arr_lib_dirs, map_lib_dirs)
-      generate_module_definition_file_call(@target.name, config_info_curr.condition, linker_info_curr.module_definition_file)
+      generate_module_definition_file_call(project_target_name, config_info_curr.condition, linker_info_curr.module_definition_file)
     }
 
     target_is_valid = put_target_type(target, map_dependencies, config_info_curr, target_config_info_curr)
@@ -7163,11 +7171,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # which we successfully translated from a bare link directory auto-link dependency
     # (AFTER establishing a target!):
     config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
-      @localGenerator.write_build_attributes('target_link_libraries', linker_info_curr.arr_lib_dirs, map_lib_dirs_dep, @target.name, true)
+      @localGenerator.write_build_attributes('target_link_libraries', linker_info_curr.arr_lib_dirs, map_lib_dirs_dep, project_target_name, true)
     }
 
     config_info_curr.tools.arr_prepostbuildlink_info.each { |prepostbuild_info_curr|
-      put_prepostbuildlink_event(@target.name, prepostbuild_info_curr)
+      put_prepostbuildlink_event(project_target_name, prepostbuild_info_curr)
     }
 
     put_hook_post_target()
@@ -7300,7 +7308,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # (useful for input which does not provide sufficiently type-specific
     # separation of files) and add a hook to handle them specially.
 
-    target_name = @target.name
+    target_name = get_target_name()
     string_sources_list = get_dereferenced_variable_name('SOURCES')
 
     # see VCProjectEngine ConfigurationTypes enumeration
@@ -7355,7 +7363,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     return target_is_valid
   end
   def write_WinMain()
-    arr_target_prop = get_target_syntax_expression(@target.name)
+    arr_target_prop = get_target_syntax_expression(get_target_name())
     put_property_bool(arr_target_prop, 'WIN32_EXECUTABLE', true)
   end
 
@@ -7370,7 +7378,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def put_property_compile_definitions(condition, arr_compile_defn)
     arr_compile_defn_cooked = cmake_escape_compile_definitions(arr_compile_defn)
     # make sure to specify APPEND for greater flexibility (hooks etc.)
-    set_property_per_config(condition, @target.name, PROP_APPEND, 'COMPILE_DEFINITIONS', arr_compile_defn_cooked)
+    set_property_per_config(condition, get_target_name(), PROP_APPEND, 'COMPILE_DEFINITIONS', arr_compile_defn_cooked)
   end
   def generate_property_compile_definitions_per_platform(condition, arr_platdefs, arr_conditional_platform)
     write_conditional_block(arr_conditional_platform) do
@@ -7392,11 +7400,13 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     return if not $v2c_target_precompiled_header_enable
     return if precompiled_header_info.nil?
     return if precompiled_header_info.header_source_name.nil?
+
+    target_name = get_target_name()
     ## FIXME: this filesystem validation should be carried out by a non-parser/non-generator validator class...
-    #header_file_is_existing = v2c_generator_check_file_accessible(@project_dir, precompiled_header_info.header_source_name, 'header file to be precompiled', @target.name, false)
-    logger.info "#{@target.name}: generating PCH functionality (use mode #{precompiled_header_info.use_mode}, header file #{precompiled_header_info.header_source_name}, PCH output binary #{precompiled_header_info.header_binary_name})"
+    #header_file_is_existing = v2c_generator_check_file_accessible(@project_dir, precompiled_header_info.header_source_name, 'header file to be precompiled', target_name, false)
+    logger.info "#{target_name}: generating PCH functionality (use mode #{precompiled_header_info.use_mode}, header file #{precompiled_header_info.header_source_name}, PCH output binary #{precompiled_header_info.header_binary_name})"
     put_precompiled_header(
-      @target.name,
+      target_name,
       condition,
       precompiled_header_info.use_mode,
       precompiled_header_info.header_source_name,
@@ -7432,7 +7442,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         # it does NOT provide a per-config COMPILE_FLAGS property! Need to verify ASAP
         # whether compile flags do get passed properly in debug / release.
         # Strangely enough it _does_ have LINK_FLAGS_<CONFIG>, though!
-        set_property_per_config(condition, @target.name, PROP_APPEND, 'COMPILE_FLAGS', arr_flags)
+        set_property_per_config(condition, get_target_name(), PROP_APPEND, 'COMPILE_FLAGS', arr_flags)
       end
     end
   end
@@ -7443,21 +7453,21 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     gen_condition.generate(condition) do
       write_conditional_block(arr_conditional) do
         write_comment_at_level(COMMENT_LEVEL_STANDARD, comment)
-        set_property_per_config(condition, @target.name, PROP_APPEND, 'LINK_FLAGS', arr_flags)
+        set_property_per_config(condition, get_target_name(), PROP_APPEND, 'LINK_FLAGS', arr_flags)
       end
     end
   end
   def write_property_output_name(condition, output_name)
     gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
     gen_condition.generate(condition) do
-      set_property_per_config(condition, @target.name, PROP_SET, 'OUTPUT_NAME', [ output_name ])
+      set_property_per_config(condition, get_target_name(), PROP_SET, 'OUTPUT_NAME', [ output_name ])
       next_paragraph()
     end
   end
   def write_link_libraries(arr_dependencies, map_dependencies)
     arr_dependencies_augmented = arr_dependencies.clone
     arr_dependencies_augmented.push(get_dereferenced_variable_name('V2C_LIBS'))
-    @localGenerator.write_build_attributes('target_link_libraries', arr_dependencies_augmented, map_dependencies, @target.name)
+    @localGenerator.write_build_attributes('target_link_libraries', arr_dependencies_augmented, map_dependencies, get_target_name())
   end
   def write_func_v2c_target_post_setup(project_name, project_keyword)
     # Rationale: keep count of generated lines of CMakeLists.txt to a bare minimum -
@@ -7467,7 +7477,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # _internally_.
     if project_keyword.nil?; project_keyword = V2C_ATTRIBUTE_NOT_PROVIDED_MARKER end
     arr_args_func = [ project_name, project_keyword ]
-    write_invoke_config_object_v2c_function_quoted('v2c_target_post_setup', @target.name, arr_args_func)
+    write_invoke_config_object_v2c_function_quoted('v2c_target_post_setup', get_target_name(), arr_args_func)
   end
   def set_property_project_types(target_name, project_types)
     # This one does NOT follow VS_GLOBAL_* pattern i.e.
@@ -7568,7 +7578,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       log_implementation_bug('unknown charset type!?')
     end
     arr_args_func_other = [ charset_type ]
-    write_invoke_object_conditional_v2c_function('v2c_target_config_charset_set', @target.name, condition, arr_args_func_other)
+    write_invoke_object_conditional_v2c_function('v2c_target_config_charset_set', get_target_name(), condition, arr_args_func_other)
   end
 
   def generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
@@ -7609,7 +7619,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # Yup, this stuff should perhaps be shoved into
     # write_project_target_config(), too.
     if target_is_valid
-      when_target_valid_scriptlet_block(@target.name) {
+      when_target_valid_scriptlet_block(get_target_name()) {
         put_dotnet_references()
 
         arr_config_info = project_info.arr_config_info
@@ -7708,16 +7718,18 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     end # target_is_valid
 
     if target_is_valid
-      write_func_v2c_target_post_setup(project_info.name, project_info.vs_keyword)
+      target_name = get_target_name()
+
+      write_func_v2c_target_post_setup(target_name, project_info.vs_keyword)
 
       if project_info.project_types != nil
-	set_property_project_types(project_info.name, project_info.project_types)
+        set_property_project_types(target_name, project_info.project_types)
       end
       if project_info.user_properties.length > 0
-        set_properties_user_properties(project_info.name, project_info.user_properties)
+        set_properties_user_properties(target_name, project_info.user_properties)
       end
 
-      set_properties_vs_scc(@target.name, project_info.scc_info)
+      set_properties_vs_scc(target_name, project_info.scc_info)
 
       # TODO: might want to set a target's FOLDER property, too...
       # (and perhaps a .vcproj has a corresponding attribute
@@ -7735,7 +7747,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_orig_proj_files = project_info.arr_p_original_project_files.collect { |orig_proj_file|
       orig_proj_file.relative_path_from(@project_dir)
     }
-    write_func_v2c_project_post_setup(project_info.name, arr_orig_proj_files)
+    write_func_v2c_project_post_setup(get_project_name(), arr_orig_proj_files)
   end
 
   private
@@ -7745,7 +7757,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_references = array_collect_compact(list_references.arr_items) do |file|
       file_info.path_relative
     end
-    put_property_dotnet_references(@target.name, arr_references)
+    put_property_dotnet_references(get_target_name(), arr_references)
   end
   def put_property_dotnet_references(target_name, arr_references)
     set_property(target_name, PROP_SET, 'VS_DOTNET_REFERENCES', arr_references)
@@ -7768,7 +7780,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def write_project(project_info)
     # Figure out language type (C CXX etc.) and add it to project() command
     arr_languages = detect_programming_languages(project_info)
-    put_project(project_info.name, arr_languages)
+    put_project(get_project_name(), arr_languages)
   end
   def put_conversion_info(project_name, str_from_buildtool_version)
     # Add an explicit file generation timestamp,
@@ -7853,11 +7865,12 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   end
 
   def generate_project_leadin(project_info)
+    project_name = get_project_name()
     write_project(project_info)
-    put_conversion_info(project_info.name, project_info.orig_environment_shortname)
-    put_guid(project_info.name, project_info.guid)
+    put_conversion_info(project_name, project_info.orig_environment_shortname)
+    put_guid(project_name, project_info.guid)
     put_include_MasterProjectDefaults_vcproj2cmake()
-    write_funcs_v2c_project_platform_define_build_types(project_info.name, project_info.build_platform_configs)
+    write_funcs_v2c_project_platform_define_build_types(project_name, project_info.build_platform_configs)
     put_hook_project()
   end
   # _target_ generator specific method.
