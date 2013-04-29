@@ -8403,8 +8403,10 @@ end
 # and some other characteristic strings.
 #VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{#{CMAKELISTS_FILE_NAME}}
 VCPROJ_DEF_CONTENT_CMAKE_INTDIR_REGEX_OBJ = %r{\bCMAKE_INTDIR=}
-VCXPROJ_CMAKEFILES_REGEX_OBJ = %r{\bCMakeFiles\b}
-VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{(\bPreprocessorDefinitions\b.*\bCMAKE_INTDIR=|\bCMakeFiles\b)}
+# The name part of the CMAKE_FILES_DIRECTORY variable:
+CMAKE_FILES_DIRECTORY_NAME = 'CMakeFiles'
+VCXPROJ_CMAKEFILES_REGEX_OBJ = %r{\b#{CMAKE_FILES_DIRECTORY_NAME}\b}
+VCPROJ_IS_GENERATED_BY_CMAKE_REGEX_OBJ = %r{(\bPreprocessorDefinitions\b.*\bCMAKE_INTDIR=|\b#{CMAKE_FILES_DIRECTORY_NAME}\b)}
 def v2c_is_project_file_generated_by_cmake_grep(str_proj_file)
   generated_file = false
   cmakelists_text = ''
