@@ -1155,6 +1155,7 @@ class V2C_Target_Config_Build_Info < V2C_Info_Elem_Base
     @whole_program_optimization = 0 # Simply uses VS7 values for now. TODO: should use our own enum definition or so.; it seems for CMake the related setting is target/directory property INTERPROCEDURAL_OPTIMIZATION_<CONFIG> (described by Wikipedia "Interprocedural optimization")
     @use_debug_libs = false
     @atl_minimizes_crt_lib_usage_enable = false
+    @platform_toolset = nil
   end
   attr_accessor :cfg_type
   attr_accessor :use_of_mfc
@@ -1163,6 +1164,7 @@ class V2C_Target_Config_Build_Info < V2C_Info_Elem_Base
   attr_accessor :whole_program_optimization
   attr_accessor :use_debug_libs
   attr_accessor :atl_minimizes_crt_lib_usage_enable
+  attr_accessor :platform_toolset
 end
 
 class V2C_Tools_Info < V2C_Info_Elem_Base
@@ -4716,6 +4718,7 @@ end
 module V2C_VS10ConfigurationDefines
   include V2C_VSConfigurationDefines
   include V2C_VS10Defines
+  TEXT_VS10_PLATFORMTOOLSET = 'PlatformToolset'
   TEXT_VS10_USEOFATL = 'UseOfAtl'
   TEXT_VS10_USEOFMFC = 'UseOfMfc'
 end
@@ -4741,6 +4744,8 @@ private
       config_info_curr.charset = parse_charset(setting_value)
     when TEXT_CONFIGURATIONTYPE
       config_info_curr.cfg_type = parse_configuration_type(setting_value)
+    when TEXT_VS10_PLATFORMTOOLSET
+      config_info.platform_toolset = setting_key
     when TEXT_VS10_USEOFATL
       config_info_curr.use_of_atl = parse_use_of_atl_mfc(setting_value)
     when TEXT_VS10_USEOFMFC
@@ -7579,6 +7584,12 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     end
     arr_args_func_other = [ charset_type ]
     write_invoke_object_conditional_v2c_function('v2c_target_config_charset_set', get_target_name(), condition, arr_args_func_other)
+    if not target_config_info.platform_toolset.nil?
+      # TODO: there's CMAKE_XCODE_PLATFORM_TOOLSET as well -
+      # how to transparently support these two possibly (slightly?)
+      # different things?
+      write_set_var('CMAKE_VS_PLATFORM_TOOLSET', target_config_info.platform_toolset)
+    end
   end
 
   def generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
