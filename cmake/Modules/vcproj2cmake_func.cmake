@@ -1262,6 +1262,17 @@ macro(v2c_build_sub_projects_include)
   _v2c_include_optional_invoke("${v2c_fs_item_}")
 endmacro(v2c_build_sub_projects_include)
 
+# Helper to fetch <_target>_BINARY_DIR whenever target available,
+# otherwise PROJECT_BINARY_DIR.
+function(_v2c_target_binary_dir_get _target _out_binary_dir)
+  if(TARGET ${_target})
+    set(dir_ "${${_target}_BINARY_DIR}")
+  else(TARGET ${_target})
+    set(dir_ "${PROJECT_BINARY_DIR}")
+  endif(TARGET ${_target})
+  set(${_out_binary_dir} "${dir_}" PARENT_SCOPE)
+endfunction(_v2c_target_binary_dir_get _target _out_binary_dir)
+
 # CMake has a LANGUAGE source property which indicates a custom configuration
 # of the language of a file. Standard values are C CXX RC Fortran ASM.
 # HOWEVER, CMake also allows creation of a custom language defintion
@@ -1925,14 +1936,20 @@ else(_v2c_feat_cmake_missing_midl_include_dir)
   set(_v2c_midl_include_mode NONE)
 endif(_v2c_feat_cmake_missing_midl_include_dir)
 
+macro(_v2c_target_midl_include_output_directory_msg _target _dir)
+  _v2c_msg_info("MIDL: ${_target}: project binary directory ${_dir} manually added to list of include dirs, to reach generated output.")
+endmacro(_v2c_target_midl_include_output_directory_msg _target _dir)
+
 if(_v2c_midl_include_mode STREQUAL INTERMEDIATE_DIR)
-  function(_v2c_target_midl_include_output_directory _target)
+  macro(_v2c_target_midl_include_output_directory _target)
+    _v2c_target_midl_include_output_directory_msg(${_target} "${CMAKE_CURRENT_BINARY_DIR}/\$(IntDir)")
     include_directories("${CMAKE_CURRENT_BINARY_DIR}/\$(IntDir)")
-  endfunction(_v2c_target_midl_include_output_directory _target)
+  endmacro(_v2c_target_midl_include_output_directory _target)
 else(_v2c_midl_include_mode STREQUAL CURRENT_BINARY_DIR)
-  function(_v2c_target_midl_include_output_directory _target)
+  macro(_v2c_target_midl_include_output_directory _target)
+    _v2c_target_midl_include_output_directory_msg(${_target} "${CMAKE_CURRENT_BINARY_DIR}")
     include_directories("${CMAKE_CURRENT_BINARY_DIR}")
-  endfunction(_v2c_target_midl_include_output_directory _target)
+  endmacro(_v2c_target_midl_include_output_directory _target)
 else(_v2c_midl_include_mode STREQUAL NONE)
   macro(_v2c_target_midl_include_output_directory _target)
     # DUMMY
@@ -2080,12 +2097,14 @@ ${c_section_end_}
     # Hrmpf, unfortunately this *generated* item is relative to project
     # *source* dir. Eventually we might want to offer a config option to
     # relocate such things to a build tree directory.
-    # However this would require implicitly adding this directory
-    # to a project's default include path.
-    # Hah! In newer CMake versions the CMAKE_INCLUDE_CURRENT_DIR_IN_INTERFACE variable
-    # (formerly CMAKE_BUILD_INTERFACE_INCLUDES)
-    # seems to be exactly provided for this purpose (TODO enable it?).
-    _v2c_fs_item_make_relative_to_path("${v2c_target_midl_compile_HEADER_FILE_NAME}" "${PROJECT_SOURCE_DIR}" header_file_location_)
+    # Nope, CMake's generated projects do set OutputDirectory to $(IntDir),
+    # thus we do choose to generate it there as well.
+    # However this then requires implicitly adding this directory
+    # to a project's default include path (which CMake fails to do!).
+    _v2c_target_binary_dir_get(${_target} midl_binary_dir_)
+    _v2c_fs_item_make_relative_to_path("${v2c_target_midl_compile_HEADER_FILE_NAME}" "${midl_binary_dir_}" header_file_location_)
+    _v2c_target_midl_include_output_directory(${_target})
+
     _v2c_var_my_get(MIDL_HANDLING_MODE v2c_midl_mode_)
     if(${v2c_midl_mode_} STREQUAL ${v2c_midl_handling_mode_wine})
       _v2c_var_my_get(WINE_WIDL_BIN wine_widl_bin_)
