@@ -14,7 +14,8 @@ if things break, then you certainly get to keep both parts.
 On UNIX platforms (Linux, *BSD, Mac OS X, Solaris etc.) at least,
 installing required dependencies via the standard package manager mechanism
 conventions of your system/distribution is recommended.
-On Mac OS X, that would mean using e.g. one of Homebrew, nix, rudix, MacPorts.
+On Mac OS X, that would mean using e.g. one of
+fink, Homebrew, nix, rudix, MacPorts.
 
 - git (for vcproj2cmake project source download)
   [once you managed to read this README this item likely is history already,
@@ -106,6 +107,7 @@ and implement a cross-compiler setup there
 - this is said to be doable, and perhaps it can even be preferrable
   (would be nice to receive input in case anyone has particular experience
    in this area).
+  http://stackoverflow.com/questions/4769968/c-cross-compiler-from-windows-to-linux
 Jam is said to possibly be a helpful tool in such case,
 since it can be deployed as a custom build command
 in a Visual Studio project config (and in several other IDEs, too).
@@ -333,7 +335,7 @@ then a usually platform-specific conditional identifier (WIN32, APPLE, ...)
 then a '='
   to assign the replacement expression which is to be used on that platform,
 then the ensuing replacement expression.
-Then an '|' (pipe, "or")
+Then a '|' (pipe, "or")
   for an optional series of additional platform conditionals.
 
 
@@ -673,6 +675,11 @@ Perl-based converter. Unfortunately not very powerful yet as of end-2012.
 
 
 === Project development notes ===
+
+
+For random development hints, see
+doc/development_hints.txt.
+
 
 Important/useful git settings include:
 
