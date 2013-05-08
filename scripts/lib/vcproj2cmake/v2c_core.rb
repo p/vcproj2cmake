@@ -6536,6 +6536,34 @@ else
   end
 end
 
+class V2C_CMakeGeneratorExpressionsGenerator < V2C_GeneratorBase
+  def genex_current_config_type(); genex_content('CONFIGURATION') end
+  def genex_is_config_type(config); genex_key_value('CONFIG', config) end
+  def genex_is_string_equal(a, b); genex_combine('STREQUAL', [ a,  b ]) end
+  def genex_is_and(arr_expr); genex_combine('AND', arr_expr) end
+  def genex_is_or(arr_expr); genex_combine('OR', arr_expr) end
+  def genex_is_not(expr); genex_key_value('NOT', expr) end
+  def genex_target_property(target, property)
+    genex_combine('TARGET_PROPERTY', [ target, property ])
+  end
+
+  private
+  def genex_content(content); '$<' + content + '>' end
+  def genex_key(key); genex_content(key) end
+  def genex_key_value(key, value); genex_content(key + ':' + value) end
+  def genex_combine(op, arr_expr)
+    genex_key_value(op, arr_expr.join(','))
+  end
+end
+
+class V2C_ConditionToGenexConverter < V2C_GeneratorBase
+  def generate(condition, payload)
+    return payload if condition.nil?
+    build_type = condition.get_build_type()
+    V2C_CMakeGeneratorExpressionsGenerator.genex_is_config_type(build_type)
+  end
+end
+
 class V2C_CMakeV2CConditionGeneratorBase < V2C_CMakeV2CSyntaxGenerator
   def generate(arr_config_info)
     generate_assignments_of_build_type_variables(arr_config_info)
