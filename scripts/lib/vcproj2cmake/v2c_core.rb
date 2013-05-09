@@ -6834,9 +6834,9 @@ class V2C_ToolFlagsGenerator_Linker_MSVC < V2C_ToolFlagsGenerator_Base
 end
 
 class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
-  def initialize(target, project_dir, localGenerator, textOut)
+  def initialize(project_info, project_dir, localGenerator, textOut)
     super(textOut)
-    @target = target
+    @project_info = project_info
     @project_dir = project_dir
     @localGenerator = localGenerator
   end
@@ -7316,7 +7316,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # The most challenging part will be achieving
       # flexible cross-platform translation of any system-specific commands
       # that are executed by the command.
-      log_debug "#{@target.inspect}"
+      log_debug "#{@project_info.inspect}"
       raise V2C_GeneratorError, "#{target_name}: project type #{cfg_type} not supported."
     end
     return target_is_valid
@@ -7540,7 +7540,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
   def generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
 
-    project_info = @target # HACK
+    project_info = @project_info # HACK
 
     generate_project_leadin(project_info)
 
@@ -7707,7 +7707,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
   private
   def put_dotnet_references()
-    list_references = @target.file_lists.lookup_from_list_type(V2C_File_List_Info::TYPE_CS_REFERENCE)
+    list_references = @project_info.file_lists.lookup_from_list_type(V2C_File_List_Info::TYPE_CS_REFERENCE)
     return if list_references.nil?
     arr_references = array_collect_compact(list_references.arr_files) do |file|
       file_info.path_relative
