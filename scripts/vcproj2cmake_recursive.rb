@@ -163,7 +163,7 @@ def search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex, case_i
   log_debug "Initially grepped candidates within directory: #{dir_entries_match_subset.inspect}"
 
   # Shortcut: return immediately if pre-list ended up empty already:
-  return nil if dir_entries_match_subset.empty?
+  return dir_entries_match_subset if dir_entries_match_subset.empty?
 
   dir_entries_match_subset_remaining = dir_entries_match_subset.clone
 
@@ -340,6 +340,9 @@ arr_proj_file_regex = [
   "\.#{csproj_extension}$",
 ]
 
+# The (usually root-level) directory of the whole "emulated" "solution".
+solution_dir = './'
+
 arr_filtered_dirs.each do |dir|
   log_info "processing #{dir}!"
   dir_entries = Dir.entries(dir)
@@ -369,8 +372,6 @@ arr_filtered_dirs.each do |dir|
     str_proj_file
   end
 
-  next if arr_proj_files.nil?
-
 #  rebuild = 0
 #  if File.exist?(str_cmakelists_file)
 #    # is .vcproj newer (or equal: let's rebuild copies with flat timestamps!)
@@ -399,15 +400,25 @@ arr_filtered_dirs.each do |dir|
   # (in the case of it being the CMake source root it better shouldn't!!) -
   # then include the root directory project by placing a CMakeLists_native.txt there
   # and have it include the auto-generated CMakeLists.txt.
-  is_solution_dir = (dir == './')
 
-  arr_project_subdirs.push(dir) unless is_solution_dir
+  is_solution_dir = (dir == solution_dir)
+
+  is_sub_dir = (true != is_solution_dir)
+
+  if is_sub_dir
+    # No project file at all? Skip directory.
+    next if arr_proj_files.empty?
+  end
 
   if not cmakelists_may_get_created(dir, dir_entries)
     if is_solution_dir
       log_error "cannot create CMakeLists.txt in solution directory #{dir}!?"
     end
     next
+  end
+
+  if is_sub_dir
+    arr_project_subdirs.push(dir)
   end
 
   # For recursive invocation we used to have _external spawning_
@@ -622,6 +633,6 @@ if not arr_project_subdirs.empty?
   v2c_source_root_write_projects_list_file(projects_list_file, $v2c_generator_file_create_permissions, arr_project_subdirs)
 end
 
-# Finally, create a skeleton fallback file if needed.
-v2c_source_root_ensure_usable_cmakelists_skeleton_file(unitGlobal.script_location, source_root, projects_list_file_rel.to_s)
+## Finally, create a skeleton fallback file if needed.
+#v2c_source_root_ensure_usable_cmakelists_skeleton_file(unitGlobal.script_location, source_root, projects_list_file_rel.to_s)
 v2c_convert_finished()
