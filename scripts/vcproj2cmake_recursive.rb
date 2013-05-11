@@ -50,7 +50,7 @@ read_commented_text_file_lines(excluded_projects) do |line_payload|
 end
 
 class UnitWorkData
-  WORK_FLAG_IS_ROOT_DIR = 1
+  WORK_FLAG_IS_SOLUTION_DIR = 1
   def initialize(arr_proj_files, str_destination_dir, work_flags)
     @arr_proj_files = arr_proj_files
     @str_destination_dir = str_destination_dir
@@ -399,9 +399,9 @@ arr_filtered_dirs.each do |dir|
   # (in the case of it being the CMake source root it better shouldn't!!) -
   # then include the root directory project by placing a CMakeLists_native.txt there
   # and have it include the auto-generated CMakeLists.txt.
-  is_root_dir = (dir == './')
+  is_solution_dir = (dir == './')
 
-  arr_project_subdirs.push(dir) unless is_root_dir
+  arr_project_subdirs.push(dir) unless is_solution_dir
 
   if not cmakelists_may_get_created(dir, dir_entries)
     if is_solution_dir
@@ -421,7 +421,7 @@ arr_filtered_dirs.each do |dir|
   # (although threading is said to be VERY slow in Ruby -
   # but still it should provide some sizeable benefit).
   log_debug "Submitting #{arr_proj_files.inspect} to be converted in #{dir}."
-  unit_work = UnitWorkData.new(arr_proj_files, dir, is_root_dir ? UnitWorkData::WORK_FLAG_IS_ROOT_DIR : 0)
+  unit_work = UnitWorkData.new(arr_proj_files, dir, is_solution_dir ? UnitWorkData::WORK_FLAG_IS_SOLUTION_DIR : 0)
   arr_work_units.push(unit_work)
 
   #output.split("\n").each do |line|
