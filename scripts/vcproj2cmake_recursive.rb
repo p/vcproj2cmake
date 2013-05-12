@@ -58,6 +58,7 @@ class UnitWorkData
   end
   attr_accessor :arr_proj_files
   attr_accessor :str_destination_dir
+  attr_accessor :work_flags
 end
 
 arr_work_units = Array.new
@@ -461,7 +462,7 @@ class UnitGlobalData
 end
 
 def execute_work_unit(unitGlobal, myWork)
-  v2c_convert_local_projects_outer(unitGlobal.script_location, unitGlobal.source_root, myWork.arr_proj_files, myWork.str_destination_dir, nil)
+  v2c_convert_local_projects_outer(unitGlobal.script_location, unitGlobal.source_root, myWork.arr_proj_files, myWork.str_destination_dir, nil, (myWork.work_flags & UnitWorkData::WORK_FLAG_IS_SOLUTION_DIR) > 0)
 end
 
 def execute_work_units(unitGlobal, arr_work_units)
@@ -617,22 +618,7 @@ log_info 'Work for generation of projects finished - starting post-processing st
 # (the root file can obviously handle its own local projects, no
 # add_subdirectory() things needed).
 if not arr_project_subdirs.empty?
-  # FIXME: since the conversion above may end up multi-processed
-  # yet arr_project_subdirs cannot be updated on worker side
-  # (and in some cases .vcproj conversion *will* be skipped,
-  # e.g. in case of CMake-converted .vcproj:s),
-  # we should include only those entries where each directory
-  # now actually does contain a CMakeLists.txt file.
-  projects_list_file_name = 'all_sub_projects.txt'
-  generated_items_dir = File.join(v2c_path_config.get_abs_config_dir_source_root_temp_store(), 'generated_items')
-  V2C_Util_File.mkdir_p(generated_items_dir)
-  projects_list_file = File.join(generated_items_dir, projects_list_file_name)
-  p_projects_list_file = Pathname.new(projects_list_file)
-  p_source_root = Pathname.new(source_root)
-  projects_list_file_rel = p_projects_list_file.relative_path_from(p_source_root)
-  v2c_source_root_write_projects_list_file(projects_list_file, $v2c_generator_file_create_permissions, arr_project_subdirs)
+  v2c_projects_list_handle_sub_dirs(Pathname.new(source_root), arr_project_subdirs)
 end
 
-## Finally, create a skeleton fallback file if needed.
-#v2c_source_root_ensure_usable_cmakelists_skeleton_file(unitGlobal.script_location, source_root, projects_list_file_rel.to_s)
 v2c_convert_finished()
