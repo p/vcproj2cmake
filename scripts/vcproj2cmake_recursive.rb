@@ -214,6 +214,21 @@ def search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex, case_i
   return dir_entries_match_subset_remaining
 end
 
+def filter_unwanted_project_files(arr_dir_proj_files)
+  if not arr_dir_proj_files.nil?
+    arr_dir_proj_files.delete_if { |proj_file_candidate|
+      delete_element = false
+      if DETECT_MAC_OS_RESOURCE_FORK_FILES_REGEX_OBJ.match(proj_file_candidate)
+        proj_file_candidate_location = File.join(dir, proj_file_candidate)
+        log_info "Deleting element containing unrelated Mac OS resource fork file #{proj_file_candidate_location}"
+        delete_element = true
+      end
+      delete_element
+    }
+  end
+  arr_dir_proj_files
+end
+
 # FIXME: completely broken - should stat command_output_file against the file dependencies
 # in the array, to determine whether to rebuild.
 def command_file_dependencies_changed(command_output_file, arr_file_deps)
@@ -290,6 +305,25 @@ Find.find('./') do |f|
   arr_filtered_dirs.push(f)
 end
 
+
+def cmakelists_may_get_created(dir, dir_entries)
+  want_new_cmakelists_file = true
+
+  str_cmakelists_file = File.join(dir, CMAKELISTS_FILE_NAME)
+
+  # Check whether the directory already contains a CMakeLists.txt,
+  # and if so, whether it can be safely rewritten.
+  # These checks arguably perhaps shouldn't be done in the recursive handler,
+  # but directly in the main conversion handler instead. TODO?
+  if (!dir_entries.grep(/^#{CMAKELISTS_FILE_NAME}$/i).empty?)
+    log_debug dir_entries
+    log_debug "#{CMAKELISTS_FILE_NAME} exists in #{dir}, checking!"
+    want_new_cmakelists_file = v2c_want_cmakelists_rewritten(str_cmakelists_file)
+  end
+  want_new_cmakelists_file
+end
+
+
 csproj_extension = 'csproj'
 vcproj_extension = 'vcproj'
 vcxproj_extension = 'vcxproj'
@@ -314,33 +348,7 @@ arr_filtered_dirs.each do |dir|
 
   arr_dir_proj_files = search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex, case_insensitive_regex_match_option_flag)
 
-  if not arr_dir_proj_files.nil?
-    arr_dir_proj_files.delete_if { |proj_file_candidate|
-      delete_element = false
-      if DETECT_MAC_OS_RESOURCE_FORK_FILES_REGEX_OBJ.match(proj_file_candidate)
-        proj_file_candidate_location = File.join(dir, proj_file_candidate)
-        log_info "Deleting element containing unrelated Mac OS resource fork file #{proj_file_candidate_location}"
-        delete_element = true
-      end
-      delete_element
-    }
-  end
-
-  # No project file at all? Skip directory.
-  next if arr_dir_proj_files.nil?
-
-  str_cmakelists_file = File.join(dir, CMAKELISTS_FILE_NAME)
-
-  # Check whether the directory already contains a CMakeLists.txt,
-  # and if so, whether it can be safely rewritten.
-  # These checks arguably perhaps shouldn't be done in the recursive handler,
-  # but directly in the main conversion handler instead. TODO?
-  if (!dir_entries.grep(/^#{CMAKELISTS_FILE_NAME}$/i).empty?)
-    log_debug dir_entries
-    log_debug "#{CMAKELISTS_FILE_NAME} exists in #{dir}, checking!"
-    want_new_cmakelists_file = v2c_want_cmakelists_rewritten(str_cmakelists_file)
-    next if false == want_new_cmakelists_file
-  end
+  arr_dir_proj_files = filter_unwanted_project_files(arr_dir_proj_files)
 
   arr_proj_files = array_collect_compact(arr_dir_proj_files) do |projfile|
     suggest_specific_naming = false
@@ -394,6 +402,13 @@ arr_filtered_dirs.each do |dir|
   is_root_dir = (dir == './')
 
   arr_project_subdirs.push(dir) unless is_root_dir
+
+  if not cmakelists_may_get_created(dir, dir_entries)
+    if is_solution_dir
+      log_error "cannot create CMakeLists.txt in solution directory #{dir}!?"
+    end
+    next
+  end
 
   # For recursive invocation we used to have _external spawning_
   # of a new vcproj2cmake.rb session, but we _really_ don't want to do that
