@@ -237,6 +237,9 @@ if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
     # I suppose that this initial error is ok,
     # since CMake probably still needs to make up its mind as to which
     # configuration types (MinSizeRel, Debug etc.) are available.
+    # Thus I added a check via prominent variables
+    # (CMAKE_MAKE_PROGRAM, CMAKE_LINKER) to reliably detect
+    # this missing-cache initial run case.
     # Nope, turns out that this special case is more problematic than expected:
     # e.g. for ExternalProject_Add() uses,
     # signalling a FATAL_ERROR (as opposed to SEND_ERROR!) will cause CACHE vars
@@ -245,7 +248,13 @@ if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
     # decide to downgrade it to a warning only.
     # Nope - our build platform/type infrastructure does need it to be
     # correct, thus do send an error (a warning may easily get missed).
-    _v2c_msg_send_error("A single-configuration generator appears to have been chosen (currently selected: ${CMAKE_GENERATOR}) yet the corresponding important CMAKE_BUILD_TYPE variable has not been specified - needs to be set properly, or actively ignored by setting V2C_WANT_SKIP_CMAKE_BUILD_TYPE_CHECK (not recommended).")
+    set(cache_populated_ false)
+    if(CMAKE_MAKE_PROGRAM OR CMAKE_LINKER)
+      set(cache_populated_ true)
+    endif(CMAKE_MAKE_PROGRAM OR CMAKE_LINKER)
+    if(cache_populated_)
+      _v2c_msg_send_error("A single-configuration generator appears to have been chosen (currently selected: ${CMAKE_GENERATOR}) yet the corresponding important CMAKE_BUILD_TYPE variable has not been specified - needs to be set properly, or actively ignored by setting V2C_WANT_SKIP_CMAKE_BUILD_TYPE_CHECK (not recommended).")
+    endif(cache_populated_)
   endif(NOT V2C_WANT_SKIP_CMAKE_BUILD_TYPE_CHECK) # user might not want this to happen...
 endif(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 
