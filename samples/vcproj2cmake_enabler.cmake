@@ -20,27 +20,45 @@ function(v2cd_downloader_setup)
     return()
   endif(NOT COMMAND ExternalProject_Add)
 
-  set(v2c_ep_download_dir_default_setting_ "${CMAKE_SOURCE_DIR}/cmake/vcproj2cmake/temporary_content/")
-  set(V2C_EP_DOWNLOAD_DIR "${v2c_ep_download_dir_default_setting_}" CACHE PATH "Target directory for vcproj2cmake repository fetch.")
+  # We're not managing the *download* location - rather,
+  # we're interested in *install* location only (we really couldn't care less
+  # where EP places its downloads).
+  # All we want is:
+  # having things *fetched* properly,
+  # *configured* for a non-destructive install (to a tree which already does
+  # contain some configuration for V2C mechanism),
+  # *installed* (via _default_ CMake install handling)
+  # to where we'd want it to sit.
+  # Finally, we add an *extra* step to actually have the converter run
+  # if needed.
+  set(v2c_ep_install_dir_default_setting_ "${CMAKE_SOURCE_DIR}/cmake/vcproj2cmake/temporary_content/")
+  set(V2C_EP_INSTALL_DIR "${v2c_ep_install_dir_default_setting_}" CACHE PATH "Target directory for vcproj2cmake repository fetch.")
   set(v2c_ep_git_repository_default_setting_ "git://git.code.sf.net/p/vcproj2cmake/code")
   set(V2C_EP_GIT_REPOSITORY "${v2c_ep_git_repository_default_setting_}" CACHE STRING "vcproj2cmake git repository URL")
   set(V2C_EP_GIT_TAG experimental_unverified)
 
-  if(GIT_EXECUTABLE)
+  if(GIT_EXECUTABLE) # provided by EP module...
     ExternalProject_Add(v2c_downloader
-      PREFIX "${V2C_EP_DOWNLOAD_DIR}/v2c_prefix"
       GIT_REPOSITORY "${V2C_EP_GIT_REPOSITORY}"
       GIT_TAG "${V2C_EP_GIT_TAG}"
-      INSTALL_COMMAND echo hi
+      #INSTALL_COMMAND echo hi
       LOG_DOWNLOAD 1
       LOG_INSTALL 1
+    )
+
+    ExternalProject_Add_Step(
+      COMMAND ruby
+      COMMENT
+      DEPENDEES
+      DEPENDERS
+      LOG 1
     )
   else(GIT_EXECUTABLE)
     message("GIT_EXECUTABLE not available - cannot do git-based download via ExternalProject_Add().")
   endif(GIT_EXECUTABLE)
 endfunction(v2cd_downloader_setup)
 
-option(V2C_EP_WANT_DOWNLOAD "Download vcproj2cmake?" ON)
+option(V2C_EP_WANT_DOWNLOAD "Have vcproj2cmake fetched automatically, directly from within this source tree?" ON)
 if(V2C_EP_WANT_DOWNLOAD)
   v2cd_downloader_setup()
 endif(V2C_EP_WANT_DOWNLOAD)
