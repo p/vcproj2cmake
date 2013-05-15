@@ -7497,7 +7497,9 @@ def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_de
       if File.exist?(file_location)
         file_accessible = true
       else
-        log_error "File #{file_relative} (#{file_item_description}) as listed by project #{project_name} does not exist!? (perhaps filename with wrong case, or wrong path, ...)"
+        # TODO: should perhaps queue such errors in a cleverly sorted way,
+        # to be printed as a summary after a project's conversion step ended.
+        log_error "File #{file_relative} (#{file_item_description}) as listed by project #{project_name} does not exist!? (perhaps filename with wrong case, or wrong path, ..., in either file lists or perhaps source group filter lists)"
         if throw_error
 	# FIXME: should be throwing an exception, to not exit out
 	# on entire possibly recursive (global) operation
