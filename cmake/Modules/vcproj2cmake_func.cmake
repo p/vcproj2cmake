@@ -614,11 +614,11 @@ endfunction(_v2c_config_append_list_var_entry _cfg_key _cfg_value_append)
 # Now add a one-time log helper (makes use of config helpers
 # which have just been defined above).
 function(_v2c_msg_important_once _magic _msg)
-  _v2c_config_get_unchecked("${_magic}" _already_logged)
-  if(NOT _already_logged)
+  _v2c_config_get_unchecked("${_magic}" already_logged_)
+  if(NOT already_logged_)
     _v2c_msg_important("${_msg}")
     _v2c_config_set("${_magic}" "KO")
-  endif(NOT _already_logged)
+  endif(NOT already_logged_)
 endfunction(_v2c_msg_important_once _magic _msg)
 
 
