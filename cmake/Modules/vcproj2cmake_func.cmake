@@ -544,11 +544,11 @@ function(_v2c_config_get _cfg_key _cfg_value_out)
 endfunction(_v2c_config_get _cfg_key _cfg_value_out)
 
 function(_v2c_config_append_list_var_entry _cfg_key _cfg_value_append)
-  _v2c_config_get_unchecked(${cfg_key_} cfg_value_)
+  _v2c_config_get_unchecked(${_cfg_key} cfg_value_)
   _v2c_list_check_item_contained_exact("${_cfg_value_append}" "${cfg_value_}" found_)
   if(NOT found_) # only add if not yet contained in list...
     list(APPEND cfg_value_ "${_cfg_value_append}")
-    _v2c_config_set(${cfg_key_} ${cfg_value_})
+    _v2c_config_set(${_cfg_key} ${cfg_value_})
   endif(NOT found_)
 endfunction(_v2c_config_append_list_var_entry _cfg_key _cfg_value_append)
 
