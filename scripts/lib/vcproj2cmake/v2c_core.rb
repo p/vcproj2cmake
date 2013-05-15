@@ -4814,8 +4814,7 @@ end
 
 # Write into temporary file, to avoid corrupting previous
 # CMakeLists.txt due to syntax error abort, disk space or failure
-# issues. Implement as scoped block operation (ensure closing file,
-# since Fileutils.mv on an open file will barf on Windows (XP)).
+# issues. Implement as scoped block operation.
 class V2C_GenerateIntoTempFile
   include Logging
   def initialize(tempfile_prefix, destination_file)
@@ -4835,15 +4834,23 @@ class V2C_GenerateIntoTempFile
       textOut = V2C_TextStreamSyntaxGeneratorBase.new(tmpfile, @textstream_attributes)
       yield textOut
       tmpfile_path = tmpfile.path
+
+      # Definitely ensure *manually* closing file *prior* to
+      # subsequent processing, since:
+      # - Fileutils.mv on an open file will barf on Windows (XP)
+      # - unclosed (in other words: unflushed) file very easily ends up empty
+      #   (zero size)
+      tmpfile.close
+
+      # Since we're forced to fumble our source tree
+      # (a definite no-no in all other cases!) by writing our files (CMakeLists.txt etc.) there,
+      # use a write-back-when-updated approach to make sure
+      # we only write back the live CMakeLists.txt in case anything did change.
+      # This is especially important in case of multiple concurrent builds
+      # on a shared source on NFS mount.
+      mover = V2C_CMakeFilePermanentizer.new(tmpfile_path, @destination_file, @file_create_permissions)
+      mover.process
     }
-    # Since we're forced to fumble our source tree
-    # (a definite no-no in all other cases!) by writing our files (CMakeLists.txt etc.) there,
-    # use a write-back-when-updated approach to make sure
-    # we only write back the live CMakeLists.txt in case anything did change.
-    # This is especially important in case of multiple concurrent builds
-    # on a shared source on NFS mount.
-    mover = V2C_CMakeFilePermanentizer.new(tmpfile_path, @destination_file, @file_create_permissions)
-    mover.process
   end
 end
 
