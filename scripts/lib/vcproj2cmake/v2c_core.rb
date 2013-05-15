@@ -2657,24 +2657,31 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
 
   MSVC_OBJ_REGEX = %r{\.obj$}
   def parse_additional_dependencies(attr_deps, arr_dependencies)
-    have_any_objs = false
+    last_obj = nil
     split_values_list_discard_empty(attr_deps).each { |elem_lib_dep|
       logger.debug "!!!!! elem_lib_dep #{elem_lib_dep}"
       next if skip_vs10_percent_sign_var(elem_lib_dep)
       elem_lib_dep_fs = get_filesystem_location(elem_lib_dep)
       # Do nil check *after* any potential illegal path filtering!
       next if elem_lib_dep_fs.nil?
+
+      flags = 0
       # We need to differentiate between .lib:s and .obj:s -
       # while some build environments allow listing both libs and objs
       # as dependencies, e.g. CMake allows linking to libs only,
       # and objs are expected to be passed as source input instead!
-      is_obj = elem_lib_dep_fs.clone.downcase.match(MSVC_OBJ_REGEX)
-      have_any_objs ||= is_obj
-      flags = is_obj ? V2C_Dependency_Info::DEP_TYPE_OBJECT : V2C_Dependency_Info::DEP_TYPE_LIBRARY
+      mdata_obj = elem_lib_dep_fs.clone.downcase.match(MSVC_OBJ_REGEX)
+      if not mdata_obj.nil?
+        last_obj = elem_lib_dep_fs
+        flags |= V2C_Dependency_Info::DEP_TYPE_OBJECT
+      else
+        flags |= V2C_Dependency_Info::DEP_TYPE_LIBRARY
+      end
+      logger.debug "DEP_PUSH #{elem_lib_dep_fs} #{flags}"
       arr_dependencies.push(V2C_Dependency_Info.new(elem_lib_dep_fs, flags))
     }
-    if false != have_any_objs
-      parser_warn_syntax("It seems your AdditionalDependencies element contains non-library parts (object files), perhaps as a third-party obj file/header combo. While we added support for that (listing such files as a target's sources in CMake), it's perhaps better to link the object into a static library and then cleanly link to that library instead (e.g. CMake has generic internal handling of system-specific library extensions, while handling of system-specific object file extensions seems to be less generic). Also, be advised that MSVS10 seems to know an ItemGroup element type named Object, probably to be used for external object files, so this likely is a more suitable place to add object files to.")
+    if not last_obj.nil?
+      parser_warn_syntax("It seems your AdditionalDependencies element contains non-library parts (object files), perhaps as a third-party obj file/header combo (last item found: #{last_obj}). While we added support for that (listing such files as a target's sources in CMake), it's perhaps better to link the object into a static library and then cleanly link to that library instead (e.g. CMake has generic internal handling of system-specific library extensions, while handling of system-specific object file extensions seems to be less generic). Also, be advised that MSVS10 seems to know an ItemGroup element type named Object, probably to be used for external object files, so this likely is a more suitable place to add object files to.")
     end
   end
   def parse_data_execution_prevention_enable(str_data_execution_prevention_enable)
