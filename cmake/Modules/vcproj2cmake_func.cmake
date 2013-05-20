@@ -2156,6 +2156,16 @@ macro(_v2c_target_midl_do_compile_wine_widl)
   endif(v2c_target_midl_compile_TARGET_ENVIRONMENT)
   list(APPEND cmd_list_ "${idl_file_location_}")
   if(v2c_widl_outputs_)
+    # FIXME we currently have an annoying MIDL setup issue
+    # which appears at least on Ninja (multiple rules for output file,
+    # likely due to CMake generating both our add_custom_command() part
+    # and another "state the dependencies" custom command part which Ninja
+    # takes as a completely separate custom command....).
+    # Potentially helpful postings:
+    # "Re-reading dep files for auto-generated files while building"
+    #   https://groups.google.com/forum/?fromgroups=#!msg/ninja-build/Zqygj8hQbdI/5h0aAoAEiIMJ
+    # https://github.com/martine/ninja/issues/543
+    # http://cmake.3232098.n2.nabble.com/Ninja-Avoiding-unnecessary-rebuilds-with-generated-files-td7584357.html
     set(v2c_widl_descr_ "${_target} (${_build_platform} ${_build_type}): using Wine's ${V2C_WINE_WIDL_BIN} to compile IDL output result files (${v2c_widl_outputs_})")
     _v2c_msg_info("${_target}: ${v2c_widl_descr_} (command line: ${cmd_list_}, output: ${v2c_widl_outputs_}, depends: ${v2c_widl_depends_}).")
     add_custom_command(OUTPUT ${v2c_widl_outputs_}
