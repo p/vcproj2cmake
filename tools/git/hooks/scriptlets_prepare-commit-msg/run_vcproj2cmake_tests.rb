@@ -33,11 +33,38 @@ converter_bin = "#{git_repo_root_dir}/scripts/vcproj2cmake_recursive.rb"
 output = nil
 test_failed_st_reason = nil
 
-Dir.chdir(tests_dir) do |path|
-  output = `#{converter_bin} #{path} 2>&1`
+arr_ruby_bin_candidates = [ 'ruby1.8', 'ruby1.9.1', 'ruby' ]
 
-  if not $?.success?
-    test_failed_st_reason = "converter script indicated failure (exit code: #{$?.exitstatus}, output #{output})"
+arr_ruby_bin_ok = arr_ruby_bin_candidates.collect do |ruby_bin|
+  output = `which #{ruby_bin} 2>/dev/null`
+  next if not $?.success?
+  output.split("\n")
+end
+
+#arr_ruby_bin = arr_ruby_bin_ok
+
+# Optimization: it's ok to test a single ruby variant per each invocation only,
+# since a version-dependent failure effect ought to be rather rare
+# as opposed to generic failure of our commits under test.
+arr_ruby_bin = []
+if arr_ruby_bin_ok.length
+  idx = rand(arr_ruby_bin_ok.length)
+  arr_ruby_bin.push(arr_ruby_bin_ok[idx])
+end
+
+test_failed_st_reason = "converter script could not be executed (no Ruby?)"
+Dir.chdir(tests_dir) do |path|
+  arr_cmdline = [ 'RUBY_PLACEHOLDER', converter_bin, path, '2>&1' ]
+  arr_ruby_bin.each do |ruby_bin|
+    arr_cmdline[0] = ruby_bin
+    output = `#{arr_cmdline.join(' ')}`
+
+    if $?.success?
+      test_failed_st_reason = nil
+    else
+      test_failed_st_reason = "converter script indicated failure (cmdline #{arr_cmdline.join(' ')}, exit code: #{$?.exitstatus}, output #{output})"
+      break
+    end
   end
 end
 
