@@ -1985,28 +1985,16 @@ function(_v2c_midl_include_dir_mode_do_setup)
   _v2c_midl_include_dir_mode_choose(${midl_include_dir_mode_})
 endfunction(_v2c_midl_include_dir_mode_do_setup)
 
-# TODO: there are actually more MIDL compilers out there,
-# e.g. http://manpages.ubuntu.com/manpages/lucid/man1/pidl.1p.html
-# http://linuxfinances.info/info/corbaalternatives.html
-# http://osdir.com/ml/network.samba.java/2005-11/msg00005.html
-# http://fixunix.com/samba/189798-re-midlc-midl-compatible-idl-compiler.html
-# http://www.linuxmisc.com/16-linux-development/f40d368a72a80d4c.htm
-# TODO: should also service an optional user callback,
-# for completely user-custom MIDL handling.
-set(v2c_midl_handling_mode_windows "Windows")
-set(v2c_midl_handling_mode_wine "Wine")
-set(v2c_midl_handling_mode_stubs "EmulatedStubs")
-
 function(_v2c_midl_compiler_mode_get _out_mode)
-  _v2c_var_ensure_defined(v2c_midl_handling_mode_windows v2c_midl_handling_mode_wine v2c_midl_handling_mode_stubs)
+  _v2c_var_ensure_defined(v2c_midl_handling_mode_windows_dummy_ v2c_midl_handling_mode_wine_widl_ v2c_midl_handling_mode_emulated_stubs_)
   if(WIN32)
-    set(v2c_midl_handling_mode_default_setting_ ${v2c_midl_handling_mode_windows})
+    set(v2c_midl_handling_mode_default_setting_ ${v2c_midl_handling_mode_windows_dummy_})
   else(WIN32)
     find_program(V2C_WINE_WIDL_BIN widl
       DOC "Path to Wine's MIDL compiler binary (widl)."
     )
     if(V2C_WINE_WIDL_BIN)
-      set(v2c_midl_handling_mode_default_setting_ ${v2c_midl_handling_mode_wine})
+      set(v2c_midl_handling_mode_default_setting_ ${v2c_midl_handling_mode_wine_widl_})
       # Use a nice if rather manual trick
       # to figure out the actual prefix that the Wine package
       # (and thus its usually accompanying header files - potentially
@@ -2021,10 +2009,10 @@ function(_v2c_midl_compiler_mode_get _out_mode)
       )
     else(V2C_WINE_WIDL_BIN)
       _v2c_msg_warning("Could not locate an installed Wine widl IDL compiler binary (probably no wine and/or wine-devel package installed) - falling back to dummy IDL handling emulation!")
-      set(v2c_midl_handling_mode_default_setting_ ${v2c_midl_handling_mode_stubs})
+      set(v2c_midl_handling_mode_default_setting_ ${v2c_midl_handling_mode_emulated_stubs_})
     endif(V2C_WINE_WIDL_BIN)
   endif(WIN32)
-  set(v2c_midl_doc_string_ "The mode to use for handling of IDL files [this string should be one of: ${v2c_midl_handling_mode_windows} - uses builtin Windows MIDL handling / ${v2c_midl_handling_mode_wine} - uses Wine's widl IDL compiler / ${v2c_midl_handling_mode_stubs} - tries to come up with a sufficiently complete emulation stub to at least allow a successful project build [Code Coverage!]]")
+  set(v2c_midl_doc_string_ "The mode to use for handling of IDL files [this string should be one of: ${v2c_midl_handling_mode_windows_dummy_} - uses builtin Windows MIDL handling / ${v2c_midl_handling_mode_wine_widl_} - uses Wine's widl IDL compiler / ${v2c_midl_handling_mode_emulated_stubs_} - tries to come up with a sufficiently complete emulation stub to at least allow a successful project build [Code Coverage!]]")
   set(V2C_MIDL_HANDLING_MODE "${v2c_midl_handling_mode_default_setting_}" CACHE STRING "${v2c_midl_doc_string_}")
   set(${_out_mode} ${V2C_MIDL_HANDLING_MODE} PARENT_SCOPE)
 endfunction(_v2c_midl_compiler_mode_get _out_mode)
@@ -2225,25 +2213,37 @@ endmacro(_v2c_target_midl_do_compile_emulated_stubs)
 # Chooses the macro to be implemented
 # according to the MIDL compiler mode passed in.
 function(_v2c_midl_compiler_mode_choose _mode)
-  _v2c_var_ensure_defined(v2c_midl_handling_mode_windows v2c_midl_handling_mode_wine v2c_midl_handling_mode_stubs)
-  if(${_mode} STREQUAL ${v2c_midl_handling_mode_windows})
+  _v2c_var_ensure_defined(v2c_midl_handling_mode_windows_dummy_ v2c_midl_handling_mode_wine_widl_ v2c_midl_handling_mode_emulated_stubs_)
+  if(${_mode} STREQUAL ${v2c_midl_handling_mode_windows_dummy_})
     macro(_v2c_target_midl_do_compile)
       _v2c_target_midl_do_compile_windows_dummy()
     endmacro(_v2c_target_midl_do_compile)
-  elseif(${_mode} STREQUAL ${v2c_midl_handling_mode_wine})
+  elseif(${_mode} STREQUAL ${v2c_midl_handling_mode_wine_widl_})
     macro(_v2c_target_midl_do_compile)
       _v2c_target_midl_do_compile_wine_widl()
     endmacro(_v2c_target_midl_do_compile)
-  elseif(${_mode} STREQUAL ${v2c_midl_handling_mode_stubs})
+  elseif(${_mode} STREQUAL ${v2c_midl_handling_mode_emulated_stubs_})
     macro(_v2c_target_midl_do_compile)
       _v2c_target_midl_do_compile_emulated_stubs()
     endmacro(_v2c_target_midl_do_compile)
   else()
     _v2c_msg_fatal_error("Unknown MIDL handling mode ${_mode}")
-  endif(${_mode} STREQUAL ${v2c_midl_handling_mode_windows})
+  endif(${_mode} STREQUAL ${v2c_midl_handling_mode_windows_dummy_})
 endfunction(_v2c_midl_compiler_mode_choose _mode)
 
 function(_v2c_midl_compiler_mode_do_setup)
+  # TODO: there are actually more MIDL compilers out there,
+  # e.g. http://manpages.ubuntu.com/manpages/lucid/man1/pidl.1p.html
+  # http://linuxfinances.info/info/corbaalternatives.html
+  # http://osdir.com/ml/network.samba.java/2005-11/msg00005.html
+  # http://fixunix.com/samba/189798-re-midlc-midl-compatible-idl-compiler.html
+  # http://www.linuxmisc.com/16-linux-development/f40d368a72a80d4c.htm
+  # TODO: should also service an optional user callback,
+  # for completely user-custom MIDL handling.
+  set(v2c_midl_handling_mode_windows_dummy_ "Windows")
+  set(v2c_midl_handling_mode_wine_widl_ "Wine")
+  set(v2c_midl_handling_mode_emulated_stubs_ "EmulatedStubs")
+
   _v2c_midl_compiler_mode_get(v2c_midl_mode_)
   _v2c_midl_compiler_mode_choose(${v2c_midl_mode_})
 endfunction(_v2c_midl_compiler_mode_do_setup)
