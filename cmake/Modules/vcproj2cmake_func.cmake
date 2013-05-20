@@ -1985,8 +1985,6 @@ function(_v2c_midl_include_dir_mode_do_setup)
   _v2c_midl_include_dir_mode_choose(${midl_include_dir_mode_})
 endfunction(_v2c_midl_include_dir_mode_do_setup)
 
-_v2c_midl_include_dir_mode_do_setup()
-
 # TODO: there are actually more MIDL compilers out there,
 # e.g. http://manpages.ubuntu.com/manpages/lucid/man1/pidl.1p.html
 # http://linuxfinances.info/info/corbaalternatives.html
@@ -2250,7 +2248,12 @@ function(_v2c_midl_compiler_mode_do_setup)
   _v2c_midl_compiler_mode_choose(${v2c_midl_mode_})
 endfunction(_v2c_midl_compiler_mode_do_setup)
 
-_v2c_midl_compiler_mode_do_setup()
+function(_v2c_midl_do_setup)
+  _v2c_midl_include_dir_mode_do_setup()
+  _v2c_midl_compiler_mode_do_setup()
+endfunction(_v2c_midl_do_setup)
+
+_v2c_midl_do_setup()
 
 function(v2c_target_midl_compile _target _build_platform _build_type)
   ## MAIN CONDITIONALS STEP ##
