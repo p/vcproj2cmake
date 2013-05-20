@@ -336,34 +336,38 @@ macro(_v2c_var_set_if_defined _var_name _out_var_name)
   endif(DEFINED ${_var_name})
 endmacro(_v2c_var_set_if_defined _var_name _out_var_name)
 
-# FIXME: move more list helpers to this early place
-# since they're independent lowlevel infrastructure used by other parts.
-set(v2c_have_list_find ON) # list(FIND ) is >= CMake 2.4.2 or some such.
-if(v2c_have_list_find)
-function(_v2c_list_check_item_contained_exact _item _list _found_out)
-  set(found_ OFF)
-  list(FIND _list "${_item}" find_pos_)
-  if(find_pos_ GREATER -1)
-    set(found_ ON)
-  endif(find_pos_ GREATER -1)
-  set(${_found_out} ${found_} PARENT_SCOPE)
-endfunction(_v2c_list_check_item_contained_exact _item _list _found_out)
-else(v2c_have_list_find)
-function(_v2c_list_check_item_contained_exact _item _list _found_out)
-  set(found_ OFF)
-  if(_list) # not empty/unset?
-    if("${_list}" MATCHES ${_item}) # shortcut :)
-      foreach(list_item_ ${_list})
-        if(${_item} STREQUAL ${list_item_})
-          set(found_ ON)
-          break()
-        endif(${_item} STREQUAL ${list_item_})
-      endforeach(list_item_ ${_list})
-    endif("${_list}" MATCHES ${_item})
-  endif(_list)
-  set(${_found_out} ${found_} PARENT_SCOPE)
-endfunction(_v2c_list_check_item_contained_exact _item _list _found_out)
-endif(v2c_have_list_find)
+function(v2c_list_helpers_do_setup)
+  # FIXME: move more list helpers to this early place
+  # since they're independent lowlevel infrastructure used by other parts.
+  set(v2c_have_list_find_ ON) # list(FIND ) is >= CMake 2.4.2 or some such.
+  if(v2c_have_list_find_)
+    function(_v2c_list_check_item_contained_exact _item _list _found_out)
+      set(found_ OFF)
+      list(FIND _list "${_item}" find_pos_)
+      if(find_pos_ GREATER -1)
+        set(found_ ON)
+      endif(find_pos_ GREATER -1)
+      set(${_found_out} ${found_} PARENT_SCOPE)
+    endfunction(_v2c_list_check_item_contained_exact _item _list _found_out)
+  else(v2c_have_list_find_)
+    function(_v2c_list_check_item_contained_exact _item _list _found_out)
+      set(found_ OFF)
+      if(_list) # not empty/unset?
+        if("${_list}" MATCHES ${_item}) # shortcut :)
+          foreach(list_item_ ${_list})
+            if(${_item} STREQUAL ${list_item_})
+              set(found_ ON)
+              break()
+            endif(${_item} STREQUAL ${list_item_})
+          endforeach(list_item_ ${_list})
+        endif("${_list}" MATCHES ${_item})
+      endif(_list)
+      set(${_found_out} ${found_} PARENT_SCOPE)
+    endfunction(_v2c_list_check_item_contained_exact _item _list _found_out)
+  endif(v2c_have_list_find_)
+endfunction(v2c_list_helpers_do_setup)
+
+v2c_list_helpers_do_setup()
 
 
 # Escapes semi-colon payload content in strings,
@@ -1120,32 +1124,36 @@ endfunction(_v2c_config_do_setup)
 
 _v2c_config_do_setup()
 
-_v2c_build_env_has_feature(TARGET_FOLDERS v2c_want_ide_target_folders_default_setting)
-option(V2C_WANT_IDE_TARGET_FOLDERS "Sort many vcproj2cmake-specific targets below a vcproj2cmake IDE target folder. Especially useful for very large solutions." ${v2c_want_ide_target_folders_default_setting})
-# This option is less important and rarely relevant, thus hide it:
-mark_as_advanced(V2C_WANT_IDE_TARGET_FOLDERS)
+function(_v2c_ide_target_folders_do_setup)
+  _v2c_build_env_has_feature(TARGET_FOLDERS v2c_want_ide_target_folders_default_setting_)
+  option(V2C_WANT_IDE_TARGET_FOLDERS "Sort many vcproj2cmake-specific targets below a vcproj2cmake IDE target folder. Especially useful for very large solutions." ${v2c_want_ide_target_folders_default_setting_})
+  # This option is less important and rarely relevant, thus hide it:
+  mark_as_advanced(V2C_WANT_IDE_TARGET_FOLDERS)
 
-if(V2C_WANT_IDE_TARGET_FOLDERS)
-  # *We* will touch (activate) IDE target folders setting
-  # iff *we* want it.
-  set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+  if(V2C_WANT_IDE_TARGET_FOLDERS)
+    # *We* will touch (activate) IDE target folders setting
+    # iff *we* want it.
+    set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-  function(_v2c_target_file_under _target _category)
-    if(TARGET ${_target})
-      set(folder_v2c_ "vcproj2cmake")
-      if(_category)
-        set(folder_location_full_ "${folder_v2c_}/${_category}")
-      else(_category)
-        set(folder_location_full_ "${folder_v2c_}")
-      endif(_category)
-      set_property(TARGET ${_target} PROPERTY FOLDER "${folder_location_full_}")
-    endif(TARGET ${_target})
-  endfunction(_v2c_target_file_under _target _category)
-else(V2C_WANT_IDE_TARGET_FOLDERS)
-  macro(_v2c_target_file_under _target _category)
-    # DUMMY!
-  endmacro(_v2c_target_file_under _target _category)
-endif(V2C_WANT_IDE_TARGET_FOLDERS)
+    function(_v2c_target_file_under _target _category)
+      if(TARGET ${_target})
+        set(folder_v2c_ "vcproj2cmake")
+        if(_category)
+          set(folder_location_full_ "${folder_v2c_}/${_category}")
+        else(_category)
+          set(folder_location_full_ "${folder_v2c_}")
+        endif(_category)
+        set_property(TARGET ${_target} PROPERTY FOLDER "${folder_location_full_}")
+      endif(TARGET ${_target})
+    endfunction(_v2c_target_file_under _target _category)
+  else(V2C_WANT_IDE_TARGET_FOLDERS)
+    macro(_v2c_target_file_under _target _category)
+      # DUMMY!
+    endmacro(_v2c_target_file_under _target _category)
+  endif(V2C_WANT_IDE_TARGET_FOLDERS)
+endfunction(_v2c_ide_target_folders_do_setup)
+
+_v2c_ide_target_folders_do_setup()
 
 macro(_v2c_target_mark_as_internal _target)
   _v2c_target_file_under("${_target}" "INTERNAL")
