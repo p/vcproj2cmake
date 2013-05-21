@@ -1233,7 +1233,7 @@ class V2C_File_List_Info
             explanation = "Appended content of new file #{path_new} which has case sensitivity mismatch with existing entry #{key}."
             if (flags & APPEND_WARN_MISMATCH)
               # Hrmmpf, cannot make use of
-              # parser_error_syntax_semi_compatible() here...
+              # parser_warn_syntax_semi_compatible() here...
               log_error("#{explanation} While VS10 does case insensitive assignment, this case mismatch probably should best be corrected.")
             else
               log_info explanation
@@ -1759,7 +1759,7 @@ class V2C_ParserBase < V2C_LoggerBase
   # @brief Descriptively named helper, to save a ton of useless comments :) ("be optimistic :)")
   def be_optimistic; FOUND_TRUE end
 
-  def log_call; logger.error 'CALLED' end
+  def log_call; logger.debug 'CALLED' end
   def log_found(found, label); logger.debug "FOUND: #{found} #{label}" end
   def parser_error(str_description, critical)
     do_raise = false
@@ -1778,10 +1778,14 @@ class V2C_ParserBase < V2C_LoggerBase
   def parser_warn_syntax(str_description); logger.warn('syntax: ' + str_description) end
   def parser_error_logic(str_description); parser_error('logic: ' + str_description, false) end
   def parser_error_syntax(str_description); parser_error('syntax: ' + str_description, false) end
-  def parser_error_syntax_semi_compatible(str_description)
-    parser_error_syntax(str_description + ' Possibly other tools might choke when encountering this issue, thus you should correct the file content.')
+  def parser_warn_syntax_semi_compatible(str_description)
+    parser_warn_syntax(str_description + ' Possibly other tools might choke when encountering this issue, thus you should correct the file content.')
   end
-  def parser_error_todo(str_description); parser_error('todo: ' + str_description, false) end
+  def parser_error_todo(str_description)
+    # Could add a config flag to indicate whether to aggressively report
+    # such issues as an (often abort-inducing) error or using warn instead.
+    parser_error('todo: ' + str_description, false)
+  end
   def error_unknown_case_value(description, val)
     parser_error("unknown/unsupported/corrupt #{description} case value! (#{val})", true)
   end
@@ -2310,7 +2314,7 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
     return if last_char != '/'
     message = "#{path_descr} #{path} contains a trailing (back)slash. For additional directory elements, FIX: Fatal Error LNK1561: Entry Point Must Be Defined http://support.microsoft.com/kb/140597 advises against doing so (for *these* element types). Also, this is problematic for the case of \"..\\some\\quoted dir\\\" getting mistaken as \\\" quote-escaped."
     # http://connect.microsoft.com/VisualStudio/feedback/details/500197/additionalincludedirectories-in-vsprops-files-not-properly-converted
-    parser_error_syntax_semi_compatible(message)
+    parser_warn_syntax_semi_compatible(message)
     # TODO: should add a method for an inverted check for e.g.
     # OutDir and IntDir once they're supported - those *do* need it!
     # http://www.pseale.com/blog/IHateYouOutDirParameter.aspx
@@ -3831,7 +3835,7 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
       # FIXME: we don't log any useful reference to the item: not the filename,
       # and we don't have a project-specific logging helper class
       # to at least mention the project name, too.
-      parser_error_syntax_semi_compatible("Incompatible ItemGroup element! Item group name #{@group_type_name} vs. element name #{subelem_xml.name}! Visual Studio seems to correctly handle even such differently-typed elements within a group.")
+      parser_warn_syntax_semi_compatible("Incompatible ItemGroup element! Item group name #{@group_type_name} vs. element name #{subelem_xml.name}! Visual Studio seems to correctly handle even such differently-typed elements within a group.")
     end
     list_curr = select_list(subelem_xml.name)
     file_info = V2C_Info_File.new
