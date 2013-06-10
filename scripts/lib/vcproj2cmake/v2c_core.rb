@@ -5118,6 +5118,14 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def write_list_quoted(list_var_name, arr_elems)
     write_command_list_quoted('set', list_var_name, arr_elems)
   end
+  def write_list_extend_append(list_var_name, arr_elems)
+    arr_elems.unshift(get_dereferenced_variable_name(list_var_name))
+    write_list_quoted(list_var_name, arr_elems)
+  end
+  def write_list_extend_prepend(list_var_name, arr_elems)
+    arr_elems.push(get_dereferenced_variable_name(list_var_name))
+    write_list_quoted(list_var_name, arr_elems)
+  end
   def put_list_of_lists(list_var_name, arr_sub_list_var_names)
     arr_sub_list_names_deref = arr_sub_list_var_names.collect do |sub_list_name|
       get_dereferenced_variable_name(sub_list_name)
@@ -5243,6 +5251,20 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
       arr_args_set_policy = [ 'SET', str_policy, str_OLD_NEW ]
       write_command_list_single_line('cmake_policy', arr_args_set_policy)
     end
+  end
+  def put_cmake_module_path_list_append(arr_paths_new)
+    # Whatever we do here - make sure we don't stomp out
+    # any potential prior CMAKE_MODULE_PATH definition!!
+    # (for details, see "CMake coding guide"
+    #    http://www.aldebaran-robotics.com/documentation/qibuild/contrib/cmake/coding_guide.html )
+    # Note that referencing the previous CMAKE_MODULE_PATH setting
+    # may cause a --warn-uninitialized warning if it did not exist.
+    # However implementing cautious querying to prevent the warning
+    # yields quite some overhead compared to current implementation,
+    # thus we'll keep it as is for now (TODO?).
+    # NOTE: use set() instead of list(APPEND...) to _prepend_ path
+    # (otherwise not able to provide proper _overrides_)
+    write_list_extend_prepend(NAME_CMAKE_MODULE_PATH, arr_paths_new)
   end
   PROP_SET = false
   PROP_APPEND = true
@@ -7271,33 +7293,21 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     write_set_var_quoted(NAME_V2C_MASTER_PROJECT_SOURCE_DIR, str_master_proj_source_dir)
     str_master_proj_binary_dir = get_dereferenced_variable_name(NAME_CMAKE_CURRENT_BINARY_DIR) + str_conversion_root_rel_cooked
     write_set_var_quoted(NAME_V2C_MASTER_PROJECT_BINARY_DIR, str_master_proj_binary_dir)
-    # NOTE: use set() instead of list(APPEND...) to _prepend_ path
-    # (otherwise not able to provide proper _overrides_)
     write_comment_at_level(COMMENT_LEVEL_STANDARD,
       "Extend module path with both a precise relative hint to source root\n" \
       "and a flexible link via CMAKE_SOURCE_DIR expression,\n" \
       "since in certain situations both may end up used\n" \
       "(think build tree created from standalone project)."
     )
-    # Whatever we do here - make sure we don't stomp out
-    # any potential prior CMAKE_MODULE_PATH definition!!
-    # (for details, see "CMake coding guide"
-    #    http://www.aldebaran-robotics.com/documentation/qibuild/contrib/cmake/coding_guide.html )
-    # Note that referencing the previous CMAKE_MODULE_PATH setting
-    # may cause a --warn-uninitialized warning if it did not exist.
-    # However implementing cautious querying to prevent the warning
-    # yields quite some overhead compared to current implementation,
-    # thus we'll keep it as is for now (TODO?).
-    arr_args_func = [ path_join(
+    arr_paths = [ path_join(
 			get_dereferenced_variable_name(NAME_V2C_MASTER_PROJECT_SOURCE_DIR),
 			$v2c_module_path_local
 		      ),
 		      path_join(
 			get_dereferenced_variable_name(NAME_CMAKE_SOURCE_DIR),
 			$v2c_module_path_local
-		      ),
-		      get_dereferenced_variable_name(NAME_CMAKE_MODULE_PATH) ]
-    write_list_quoted(NAME_CMAKE_MODULE_PATH, arr_args_func)
+                ) ]
+    put_cmake_module_path_list_append(arr_paths)
   end
   def put_include_vcproj2cmake_func
     next_paragraph()
