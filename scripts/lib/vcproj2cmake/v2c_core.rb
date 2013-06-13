@@ -1592,6 +1592,18 @@ def cmake_path_join(a, b)
   [ a, b ].join('/')
 end
 
+def cmake_path_combine(arr_prefix, arr_suffix)
+  arr_paths = Array.new
+  arr_prefix.each do |prefix|
+    arr_suffix.each do |suffix|
+      arr_paths.push(
+        path_join(prefix, suffix)
+      )
+    end
+  end
+  arr_paths
+end
+
 # (Almost-)comment-only helper function:
 # The following variables are said to implicitly include
 # the trailing backslash ('\'), too:
@@ -7266,6 +7278,20 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
       write_cmake_policy(15, true)
     end
   end
+  def put_cmake_module_path_bootstrap(arr_module_paths_relative)
+    write_comment_at_level(COMMENT_LEVEL_STANDARD,
+      "Extend module path with both a precise relative hint to source root\n" \
+      "and a flexible link via CMAKE_SOURCE_DIR expression,\n" \
+      "since in certain situations both may end up used\n" \
+      "(think build tree created from standalone project)."
+    )
+    arr_cmake_refs = [
+      get_dereferenced_variable_name(NAME_V2C_MASTER_PROJECT_SOURCE_DIR),
+      get_dereferenced_variable_name(NAME_CMAKE_SOURCE_DIR)
+    ]
+    arr_paths = cmake_path_combine(arr_cmake_refs, arr_module_paths_relative)
+    put_cmake_module_path_list_append(arr_paths)
+  end
   def put_cmake_module_path(str_conversion_root_rel)
     # try to point to cmake/Modules of the topmost directory of the vcproj2cmake conversion tree.
     # This also contains vcproj2cmake helper modules (these should - just like the CMakeLists.txt -
@@ -7293,21 +7319,8 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     write_set_var_quoted(NAME_V2C_MASTER_PROJECT_SOURCE_DIR, str_master_proj_source_dir)
     str_master_proj_binary_dir = get_dereferenced_variable_name(NAME_CMAKE_CURRENT_BINARY_DIR) + str_conversion_root_rel_cooked
     write_set_var_quoted(NAME_V2C_MASTER_PROJECT_BINARY_DIR, str_master_proj_binary_dir)
-    write_comment_at_level(COMMENT_LEVEL_STANDARD,
-      "Extend module path with both a precise relative hint to source root\n" \
-      "and a flexible link via CMAKE_SOURCE_DIR expression,\n" \
-      "since in certain situations both may end up used\n" \
-      "(think build tree created from standalone project)."
-    )
-    arr_paths = [ path_join(
-			get_dereferenced_variable_name(NAME_V2C_MASTER_PROJECT_SOURCE_DIR),
-			$v2c_module_path_local
-		      ),
-		      path_join(
-			get_dereferenced_variable_name(NAME_CMAKE_SOURCE_DIR),
-			$v2c_module_path_local
-                ) ]
-    put_cmake_module_path_list_append(arr_paths)
+    arr_module_paths_relative = [ $v2c_module_path_local ]
+    put_cmake_module_path_bootstrap(arr_module_paths_relative)
   end
   def put_include_vcproj2cmake_func
     next_paragraph()
