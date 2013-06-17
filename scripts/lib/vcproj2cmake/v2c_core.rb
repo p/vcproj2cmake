@@ -5294,9 +5294,28 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   end
   def put_include_directories(target_name, arr_directories, flags)
     arr_args = Array.new
-    arr_args.push('SYSTEM') if (flags & V2C_Include_Dir_Defines::SYSTEM > 0)
-    arr_args.push('BEFORE') if (flags & V2C_Include_Dir_Defines::BEFORE > 0)
+    if (flags > 0)
+      # BIG FAT WARNING!!! At least in Makefile generator,
+      # order of flags (BEFORE/AFTER <-> SYSTEM) is IMPORTANT,
+      # otherwise these flags will be mistaken as directory names!!
+
+      # BEFORE/AFTER: exact same conditional as in CMake sources :)
+      if (flags & V2C_Include_Dir_Defines::BEFORE > 0)
+        arr_args.push('BEFORE')
+      elsif (flags & V2C_Include_Dir_Defines::AFTER > 0)
+        arr_args.push('AFTER')
+      end
+      arr_args.push('SYSTEM') if (flags & V2C_Include_Dir_Defines::SYSTEM > 0)
+    end
+    # Note that the BEFORE/AFTER/SYSTEM modifiers will be valid
+    # for the entire content as passed to *one* include_directories().
+
     arr_args.concat(arr_directories)
+
+    # Side note: on some systems (e.g. Mac) or older CMake (< 2.8.5),
+    # CMAKE_INCLUDE_SYSTEM_FLAG_C and CMAKE_INCLUDE_SYSTEM_FLAG_CXX
+    # do not contain a flag (usually "-isystem "),
+    # thus you might want to set it if unset and supported.
     gen_put_target_include_directories(target_name, arr_args)
   end
   # analogous to CMake separate_arguments() command
