@@ -67,15 +67,13 @@ randomize_search_arg = rand(2000).to_s
 
 google_search_url = "http://www.google.com/search?as_q=#{randomize_search_arg}&q=filetype:#{filetype}"
 
-# Scrape URLs from a Google search...
-
 puts "Querying #{google_search_url}"
 
 doc = Nokogiri::HTML(open(google_search_url))
 
-#puts "doc: #{doc.inspect}"
-
 # Do funky things with it using Nokogiri::XML::Node methods...
+
+#puts "doc: #{doc.inspect}"
 
 arr_urls = []
 
@@ -211,11 +209,11 @@ def v2c_dldr_download_random_projects(arr_urls, dir_target_root, dir_prefix, ski
     if not skip_download
       download_urls_into_prefixed_dirs(arr_urls, dir_prefix)
     end
+    # We do want the converter to fail hard on invalid input files -
+    # however for this downloader we do NOT want to encounter such cases,
+    # all input files should be legitimate.
+    move_away_broken_project_files(dir_target_root, File.join(dir_target_root, [ '..', 'broken_project_files' ]))
   end
-  # We do want the converter to fail hard on invalid input files -
-  # however for this downloader we do NOT want to encounter such cases,
-  # all input files should be legitimate.
-  move_away_broken_project_files(dir_target_root, File.join(dir_target_root, [ '..', 'broken_project_files' ]))
 end
 
 def v2c_dldr_launch_converter(dir_projfiles_root)
@@ -257,8 +255,7 @@ rescue SystemCallError
   puts "#{dir_projfiles_root} already existing!?"
 end
 
-dir_prefix = filetype
-v2c_dldr_download_random_projects(arr_urls, dir_projfiles_root, dir_prefix, skip_download)
+v2c_dldr_download_random_projects(arr_urls, filetype, skip_download)
 
 # Conversion step (we shouldn't be doing this here...)
 puts "Download finished - launching converter..."
