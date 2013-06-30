@@ -238,7 +238,12 @@ end
 skip_download = false
 #skip_download = true # TESTING
 
-dir_projfiles_root = 'dl_projects_random.tmp'
+dir_projfiles_root = nil
+if ARGV.length >= 1
+  dir_projfiles_root = ARGV.shift
+end
+dir_projfiles_root ||= 'dl_projects_random.tmp'
+
 if not skip_download
   rm_is_safe = (dir_projfiles_root.length > 5)
   if rm_is_safe
