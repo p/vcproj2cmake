@@ -111,6 +111,11 @@ doc.css('h3.r').each do |link|
   #puts "value: #{link.value}"
 end
 
+test_mode = false
+if test_mode
+  arr_urls.slice!(0, 1)
+end
+
 def get_vcproj2cmake_root_dir
   repo_root = `git rev-parse --show-toplevel`.chomp()
   if not $?.success?
