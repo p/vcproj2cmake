@@ -198,9 +198,15 @@ def move_away_broken_project_files(proj_root, safe_stash_dir)
   arr_projs = find_project_files(proj_root)
   arr_broken = detect_broken_files(arr_projs)
   return if arr_broken.empty?
+  begin
+    Dir.mkdir(safe_stash_dir)
+  rescue Errno::EEXIST
+  end
   arr_broken.each do |proj_file|
-    puts "Moving away BROKEN project file #{proj_file} to #{safe_stash_dir}"
-    File.rename(proj_file, safe_stash_dir)
+    basename = File.basename(proj_file)
+    dest = File.join(safe_stash_dir, basename)
+    puts "Moving away BROKEN project file #{proj_file} to #{dest}"
+    File.rename(proj_file, dest)
   end
 end
 
