@@ -12,14 +12,6 @@ require 'find'
 #$stdout.sync = true
 #$stderr.sync = true
 
-def url_liberate_from_google(href_raw)
-  href = href_raw
-  #puts "HREF #{href_raw}"
-  href = href_raw.sub(%r{\/url\?q=(.*?)\&.*?=.*}, '\1')
-  #puts "href #{href}"
-  href
-end
-
 # Helper to try to ensure as best as we can
 # that we always hit a "blob" URL
 # rather than some kind of undesired HTML content URL
@@ -62,8 +54,6 @@ def url_transform_to_blob_variant(url)
   url
 end
 
-# Get a Nokogiri::HTML:Document for the page we're interested in...
-
 ARR_FILETYPES = [
   'vcxproj',
   'vcproj',
@@ -72,49 +62,79 @@ ARR_FILETYPES = [
 
 i = rand(ARR_FILETYPES.length)
 filetype = ARR_FILETYPES[i]
-randomize_search_arg = rand(2000).to_s
 
-google_search_url = "http://www.google.com/search?as_q=#{randomize_search_arg}&q=filetype:#{filetype}"
-
-puts "Querying #{google_search_url}"
-
-doc = Nokogiri::HTML(open(google_search_url))
-
-# Do funky things with it using Nokogiri::XML::Node methods...
-
-#puts "doc: #{doc.inspect}"
-
-arr_urls = []
-
-####
-# Search for nodes by css
-doc.css('h3.r').each do |link|
-  #puts "LINK #{link.inspect}"
-  link.children.each do |child|
-    if child.name == 'a'
-      #puts "CHILD: #{child.inspect}"
-      # Nokigiri XML attribute gets yielded as
-      # pair of name ("href") and content (name, href, ...).
-      child.attributes.each do |name, content|
-        #puts "name #{name}, content #{content}"
-        if name == 'href'
-          href_google = content
-          str_href_google = "#{href_google}"
-          href = url_liberate_from_google(str_href_google)
-          href = url_transform_to_blob_variant(href)
-          if not href.empty?
-            arr_urls.push(href)
-          end
-        end
-      end
-      #puts "value: #{child.value}"
-    end
+class ProjectURLScraperBase
+  def initialize(filetype)
+    @filetype = filetype
   end
-  #puts "LINK: #{link.inspect}"
-  #puts "value: #{link.value}"
+
+  def get_filetype(); @filetype end
+
+  def scrape()
+  end
 end
 
-arr_proj_urls = arr_urls
+# Scrape URLs from a Google search...
+class ProjectURLScraperGoogle < ProjectURLScraperBase
+  def scrape()
+    arr_urls = []
+
+    randomize_search_arg = rand(2000).to_s
+    google_search_url = "http://www.google.com/search?as_q=#{randomize_search_arg}&q=filetype:#{get_filetype()}"
+    puts "Querying #{google_search_url}"
+
+    # Get a Nokogiri::HTML:Document for the page we're interested in...
+
+    doc = Nokogiri::HTML(open(google_search_url))
+
+    #puts "doc: #{doc.inspect}"
+
+    # Do funky things with it using Nokogiri::XML::Node methods...
+
+    ####
+    # Search for nodes by css
+    doc.css('h3.r').each do |link|
+      #puts "LINK #{link.inspect}"
+      link.children.each do |child|
+        if child.name == 'a'
+          #puts "CHILD: #{child.inspect}"
+          # Nokigiri XML attribute gets yielded as
+          # pair of name ("href") and content (name, href, ...).
+          child.attributes.each do |name, content|
+            #puts "name #{name}, content #{content}"
+            if name == 'href'
+              href_google = content
+              str_href_google = "#{href_google}"
+              href = url_liberate_from_google(str_href_google)
+              href = url_transform_to_blob_variant(href)
+              if not href.empty?
+                arr_urls.push(href)
+              end
+            end
+          end
+          #puts "value: #{child.value}"
+        end
+      end
+      #puts "LINK: #{link.inspect}"
+      #puts "value: #{link.value}"
+    end
+    arr_urls
+  end
+
+  private
+
+  def url_liberate_from_google(href_raw)
+    href = href_raw
+    #puts "HREF #{href_raw}"
+    href = href_raw.sub(%r{\/url\?q=(.*?)\&.*?=.*}, '\1')
+    #puts "href #{href}"
+    href
+  end
+end
+
+scraper = ProjectURLScraperGoogle.new(filetype)
+
+arr_proj_urls = scraper.scrape
 
 test_mode = false
 if test_mode
