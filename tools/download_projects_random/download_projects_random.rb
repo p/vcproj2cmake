@@ -244,16 +244,19 @@ if ARGV.length >= 1
 end
 dir_projfiles_root ||= 'dl_projects_random.tmp'
 
-if not skip_download
-  rm_is_safe = (dir_projfiles_root.length > 5)
-  if rm_is_safe
-    `rm -r #{dir_projfiles_root}`
+skip_mkdir = true
+if not skip_mkdir
+  if not skip_download
+    rm_is_safe = (dir_projfiles_root.length > 5)
+    if rm_is_safe
+      `rm -r #{dir_projfiles_root}`
+    end
   end
-end
-begin
-  Dir.mkdir(dir_projfiles_root)
-rescue SystemCallError
-  puts "#{dir_projfiles_root} already existing!?"
+  begin
+    Dir.mkdir(dir_projfiles_root)
+  rescue SystemCallError
+    puts "#{dir_projfiles_root} already existing!?"
+  end
 end
 Dir.chdir(dir_projfiles_root) do
   if not skip_download
