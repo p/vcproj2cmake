@@ -22,14 +22,14 @@ end
 # rather than some kind of undesired HTML content URL
 # ("augmented" file view, diff, ...).
 def url_transform_to_blob_variant(url)
-  if url.match(/^https:\/\/github\.com/)
-    url = url.sub(%r{\/blob\/}, '\/raw\/')
+  if url.match(/^https:\/\/github\.com/) or url.match(/\/gitlab\//)
+    url = url.sub(%r{\/blob\/}, '/raw/')
   end
   if url.match(/^https:\/\/bitbucket\.org/)
-    url = url.sub(%r{\/src\/}, '\/raw\/')
+    url = url.sub(%r{\/src\/}, '/raw/')
   end
   if url.match(/^http:\/\/gitorious\.org/)
-    url = url.sub(%r{\/blobs\/}, '\/blobs\/raw\/')
+    url = url.sub(%r{\/blobs\/}, '/blobs/raw/')
   end
   # http://sourceforge.net/apps/trac/mpc-hc/changeset/3213/trunk/src/apps/mplayerc/mpcresources/mpcresources.vcxproj
   # http://trac.mysvn.ru/ghazan/myranda/changeset/1990/trunk/plugins/AVS/avs_10.vcxproj
@@ -37,12 +37,22 @@ def url_transform_to_blob_variant(url)
   # http://eraser.heidi.ie/trac/browser/tags/6.0.6.1376/Eraser.Util.Unlocker/Eraser.Util.Unlocker.vcproj
   is_trac = (url.match(/^http:\/\/sourceforge\.net.*\btrac\b/) || url.match(/\btrac\b/) || url.match(/\bchangeset\b.*\b(trunk|tags)\b/))
   if is_trac
-    url = url.sub(%r{\/changeset\/}, '\/export\/')
-    url = url.sub(%r{\/browser\/}, '\/export\/HEAD\/')
+    url = url.sub(%r{\/changeset\/}, '/export/')
+    url = url.sub(%r{\/browser\/}, '/export/HEAD/')
   end
   # https://hg.splayer.org/splayer/src/e8ee4613a0ce638c3d5eb474c2b160f0ec61f135/src/apps/mplayerc/mplayerc_vs2005.vcxproj
-  if url.match(/^https:\/\/hg.*/)
-    url = url.sub(%r{\/src\/}, '\/raw\/')
+  if url.match(/^https:\/\/hg/)
+    url = url.sub(%r{\/src\/}, '/raw/')
+  end
+  if url.match(/^sourceforge.jp/)
+    url = url + '?export=raw'
+  end
+  # https://www.veracrypt.fr/code/VeraCrypt/tree/src/Mount/Mount.vcxproj
+  if url.match(/\/code\/.*\/tree\//)
+    url = url.sub(%r{\/tree\/}, '/plain/')
+  end
+  if url.match(/\/raw-annotate\//)
+    url = url.sub(%r{\/raw-annotate\/}, '/raw-file/')
   end
   # With 'diff' it's quite likely that we will not get
   # an actual raw blob download --> skip it!!
