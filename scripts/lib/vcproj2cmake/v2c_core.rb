@@ -7850,7 +7850,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeTargetGenerator
     list_references = @project_info.item_lists.lookup_from_list_type(V2C_Item_List_Info::TYPE_CS_REFERENCE)
     return if list_references.nil?
     arr_references = array_collect_compact(list_references.arr_items) do |file|
-      file_info.path_relative
+      file.path_relative
     end
     put_property_dotnet_references(get_target_name(), arr_references)
   end
