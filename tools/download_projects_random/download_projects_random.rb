@@ -133,7 +133,10 @@ def download_urls_into_prefixed_dirs(arr_urls, dir_prefix)
     # actually forking multiple processes
     # might actually be worthwhile.
     dir_projfiles_specific = dirpref + i.to_s
-    Dir.mkdir(dir_projfiles_specific)
+    begin
+      Dir.mkdir(dir_projfiles_specific)
+    rescue Errno::EEXIST
+    end
     Dir.chdir(dir_projfiles_specific) do
       download_cmd_full = download_cmd + url
       `#{download_cmd_full}`
