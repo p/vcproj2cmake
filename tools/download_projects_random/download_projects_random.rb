@@ -131,7 +131,13 @@ end
 
 def download_urls_into_prefixed_dirs(arr_urls, dir_prefix)
   dirpref = "#{dir_prefix}_"
-  download_cmd = 'wget --timeout=10 -t 2 '
+  arr_dl = []
+  download_cmd = 'wget'
+  arr_dl.push(download_cmd)
+  arr_dl.push('--timeout=10')
+  arr_dl.push('-t 2')
+  download_cmd_cert='--no-check-certificate'
+  arr_dl.push(download_cmd_cert)
   i = 1
   arr_urls.each do |url|
     # TODO: while we cannot do direct parallelization
@@ -144,7 +150,8 @@ def download_urls_into_prefixed_dirs(arr_urls, dir_prefix)
     rescue Errno::EEXIST
     end
     Dir.chdir(dir_projfiles_specific) do
-      download_cmd_full = download_cmd + url
+      download_cmd_full = arr_dl.join(' ') + ' ' + '"' + url + '"'
+      puts "Executing #{download_cmd_full}"
       `#{download_cmd_full}`
     end
     i += 1
