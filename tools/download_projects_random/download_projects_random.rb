@@ -9,6 +9,9 @@ require 'open-uri'
 
 require 'find'
 
+#$stdout.sync = true
+#$stderr.sync = true
+
 def url_liberate_from_google(href_raw)
   href = href_raw
   #puts "HREF #{href_raw}"
@@ -111,9 +114,11 @@ doc.css('h3.r').each do |link|
   #puts "value: #{link.value}"
 end
 
+arr_proj_urls = arr_urls
+
 test_mode = false
 if test_mode
-  arr_urls.slice!(0, 1)
+  arr_proj_urls.slice!(0, 1)
 end
 
 def get_vcproj2cmake_root_dir
@@ -231,6 +236,36 @@ def move_away_broken_project_files(proj_root, safe_stash_dir)
   end
 end
 
+def v2c_dldr_download_random_projects(arr_proj_urls, dir_target_root, dir_prefix, skip_download)
+  Dir.chdir(dir_target_root) do
+    if not skip_download
+      download_urls_into_prefixed_dirs(arr_proj_urls, dir_prefix)
+    end
+  end
+  # We do want the converter to fail hard on invalid input files -
+  # however for this downloader we do NOT want to encounter such cases,
+  # all input files should be legitimate.
+  move_away_broken_project_files(dir_target_root, File.join(dir_target_root, [ '..', 'broken_project_files' ]))
+end
+
+def v2c_dldr_launch_converter(dir_projfiles_root)
+  repo_root = get_vcproj2cmake_root_dir()
+  if repo_root.empty?
+    puts "ERROR: could not figure out vcproj2cmake root dir!"
+    exit 1
+  end
+  Dir.chdir(dir_projfiles_root) do
+    output = `#{repo_root}/scripts/vcproj2cmake_recursive.rb .`
+    if $?.success?
+      puts "Converter finished successfully!"
+    else
+      puts "Conversion of project files below #{dir_projfiles_root} FAILED!"
+      exit $?.exitstatus
+    end
+  end
+end
+
+
 skip_download = false
 #skip_download = true # TESTING
 
@@ -254,25 +289,11 @@ if not skip_mkdir
     puts "#{dir_projfiles_root} already existing!?"
   end
 end
-Dir.chdir(dir_projfiles_root) do
-  if not skip_download
-    download_urls_into_prefixed_dirs(arr_urls, filetype)
-  end
-  # We do want the converter to fail hard on invalid input files -
-  # however for this downloader we do NOT want to encounter such cases,
-  # all input files should be legitimate.
-  move_away_broken_project_files('./', '../broken_project_files')
-  puts "Download finished - launching converter..."
-  repo_root = get_vcproj2cmake_root_dir()
-  if repo_root.empty?
-    puts "ERROR: could not figure out vcproj2cmake root dir!"
-    exit(1)
-  end
-  output = `#{repo_root}/scripts/vcproj2cmake_recursive.rb .`
-  if $?.success?
-     puts "Converter finished successfully!"
-  else
-    puts "Conversion of project files below #{dir_projfiles_root} FAILED!"
-    exit $?.exitstatus
-  end
-end
+
+dir_prefix = filetype
+v2c_dldr_download_random_projects(arr_proj_urls, dir_projfiles_root, dir_prefix, skip_download)
+
+# Conversion step (we shouldn't be doing this here...)
+puts "Download finished - launching converter..."
+
+v2c_dldr_launch_converter(dir_projfiles_root)
