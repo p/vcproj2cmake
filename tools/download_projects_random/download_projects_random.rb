@@ -4,7 +4,7 @@
 # downloads a random selection of .vcproj/.vcxproj files from Google Search.
 # Extremely useful for stress testing of the converter.
 
-require 'nokogiri'
+require 'nokogiri' # missing? --> Debian distros: install ruby-nokogiri / libnokogiri-ruby package
 require 'open-uri'
 
 require 'find'
