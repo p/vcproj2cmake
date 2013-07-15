@@ -12,6 +12,34 @@ require 'find'
 #$stdout.sync = true
 #$stderr.sync = true
 
+def is_url_trac(url)
+  is_trac = ( \
+       url.match(/^http:\/\/sourceforge\.net.*\/trac\//) \
+    || url.match(/\/trac\//) \
+    || url.match(/\/changeset\/\d+\/(branches|trunk|tags)\//) \
+    || url.match(/\/projects\/[^\/]*\/changeset\//) \
+  )
+  is_trac
+end
+
+# Should perhaps have an actual unit test for that,
+# but for a smallish script that's quite arguably overkill ;)
+def test_is_url_trac()
+  arr_url_ok = [
+    "http://sourceforge.net/apps/trac/mpc-hc/changeset/3213/trunk/src/apps/mplayerc/mpcresources/mpcresources.vcxproj",
+    "http://trac.mysvn.ru/ghazan/myranda/changeset/1990/trunk/plugins/AVS/avs_10.vcxproj",
+    "http://iguanaworks.net/projects/IguanaIR/changeset/714/tags/software/usb_ir-0.30/win32/usb_ir.vcproj",
+    "http://eraser.heidi.ie/trac/browser/tags/6.0.6.1376/Eraser.Util.Unlocker/Eraser.Util.Unlocker.vcproj",
+    "http://dev.ibboard.co.uk/projects/warfoundry/changeset/54/IBBoard.WarFoundry.API/IBBoard.WarFoundry.API.csproj",
+  ]
+  arr_url_ok.each do |url|
+    return false if not is_url_trac(url)
+  end
+  true
+end
+
+#puts test_is_url_trac() ? "TEST OK" : "TEST FAIL"; exit 1
+
 # Helper to try to ensure as best as we can
 # that we always hit a "blob" URL
 # rather than some kind of undesired HTML content URL
@@ -26,11 +54,7 @@ def url_transform_to_blob_variant(url)
   if url.match(/^http:\/\/gitorious\.org/)
     url = url.sub(%r{\/blobs\/}, '/blobs/raw/')
   end
-  # http://sourceforge.net/apps/trac/mpc-hc/changeset/3213/trunk/src/apps/mplayerc/mpcresources/mpcresources.vcxproj
-  # http://trac.mysvn.ru/ghazan/myranda/changeset/1990/trunk/plugins/AVS/avs_10.vcxproj
-  # http://iguanaworks.net/projects/IguanaIR/changeset/714/tags/software/usb_ir-0.30/win32/usb_ir.vcproj
-  # http://eraser.heidi.ie/trac/browser/tags/6.0.6.1376/Eraser.Util.Unlocker/Eraser.Util.Unlocker.vcproj
-  is_trac = (url.match(/^http:\/\/sourceforge\.net.*\btrac\b/) || url.match(/\btrac\b/) || url.match(/\bchangeset\b.*\b(trunk|tags)\b/))
+  is_trac = is_url_trac(url)
   if is_trac
     url = url.sub(%r{\/changeset\/}, '/export/')
     url = url.sub(%r{\/browser\/}, '/export/HEAD/')
