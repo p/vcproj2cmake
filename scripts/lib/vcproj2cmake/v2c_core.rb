@@ -6465,9 +6465,15 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
   # FIXME: intermingling and stupifying condition handling like this
   # likely isn't such a smart idea (there might easily turn up conditions
   # more complicated than what we expect).
-  # Should instead generate an outer frame via condition generator
-  # and _then_ invoke the function (perhaps keeping the
-  # build_platform/build_type args).
+  # Should instead generate an outer CMake code frame via condition generator
+  # and _then_ if condition fulfilled invoke the function
+  # (perhaps keeping the build_platform/build_type args).
+  # Nope, it should probably be done differently:
+  # rather than passing a build platform / configuration combo
+  # to a V2C CMake function, we should create a suitable opaque-info *handle*
+  # to be passed to CMake side, and then the CMake side also has helpers
+  # which know how to gather info (build platform / configuration / ...)
+  # from that handle.
   def write_invoke_object_conditional_v2c_function(str_function, object_name, condition, arr_args_func_other)
     arr_args_func = [
       prepare_string_literal(condition.get_build_platform()),
@@ -6506,8 +6512,8 @@ end
 
 # class variant which is supposed to create a self-contained file
 # (i.e. one which does not rely on our V2C functions module).
-# Currently this most certainly does not work fully.
-# And I'm afraid we'll eventually get rid of "self-contained generation" mode
+# Currently this most certainly does not work fully. And I'm afraid
+# we'll eventually retract support of "self-contained generation" mode
 # since we now have way too many of our own V2C-specific helper functions.
 class V2C_CMakeV2CSyntaxGeneratorSelfContained < V2C_CMakeV2CSyntaxGeneratorBase
   private
