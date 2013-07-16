@@ -4750,7 +4750,7 @@ private
     when TEXT_CONFIGURATIONTYPE
       config_info_curr.cfg_type = parse_configuration_type(setting_value)
     when TEXT_VS10_PLATFORMTOOLSET
-      config_info_curr.platform_toolset = setting_key
+      config_info_curr.platform_toolset = setting_value
     when TEXT_VS10_USEOFATL
       config_info_curr.use_of_atl = parse_use_of_atl_mfc(setting_value)
     when TEXT_VS10_USEOFMFC
