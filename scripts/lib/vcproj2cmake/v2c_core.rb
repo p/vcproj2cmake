@@ -8657,8 +8657,8 @@ class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
       content_generator.generate
       # Keep per-project source group generation as close together
       # with local file generation as possible scope-wise
-      # (we might want to change things into keeping file handling completely
-      # outside, passing proper textOut params to a generator which
+      # (we might want to change things into keeping file-dependent handling
+      # completely outside, passing proper textOut params to a generator which
       # generates both *per-project* content *and* its source group stuff)
       if source_groups_enabled()
         # FIXME: very ugly path handling - ought to be refactored eventually
