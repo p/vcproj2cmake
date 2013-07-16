@@ -16,14 +16,14 @@ def execute_command(arr_cmdline)
   #puts "Executing command line #{str_cmdline}"
   output = `#{str_cmdline}`
   if not $?.success?
-    raise CommandExecutionError(str_cmdline, $?.exitstatus, output)
+    raise CommandExecutionError.new(str_cmdline, $?.exitstatus, output)
   end
 end
 
 script_dir_rel = File.dirname(__FILE__)
 script_dir = File.expand_path(script_dir_rel)
 
-conv_bin = script_dir + '../../scripts/vcproj2cmake.rb'
+conv_bin = File.join(script_dir, '../scripts/vcproj2cmake_recursive.rb')
 
 cmake_source_dir = script_dir
 
