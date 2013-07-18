@@ -2487,7 +2487,7 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
   end
 
   def parse_integer(setting_value)
-    # Integer(x) (rather than .to_i) may throw an ArgumentError,
+    # Integer(x) (rather than .to_i) may raise an ArgumentError,
     # which we'll cleanly handle externally
     # (parsing failed --> no value assigned --> default value kept).
     return Integer(setting_value)
@@ -8465,7 +8465,7 @@ end
 
 # Hrmm, I'm not quite sure yet where to aggregate this function...
 # (missing some proper generator base class or so...)
-def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name, throw_error)
+def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name, raise_error)
   file_accessible = false
   if $v2c_validate_vcproj_ensure_files_ok
     if file_relative.nil? or file_relative.empty?
@@ -8479,8 +8479,8 @@ def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_de
         # TODO: should perhaps queue such errors in a cleverly sorted way,
         # to be printed as a summary after a project's conversion step ended.
         log_error "File #{file_relative} (#{file_item_description}) as listed by project #{project_name} does not exist!? (perhaps filename with wrong case, or wrong path, ..., in either file lists or perhaps source group filter lists)"
-        if throw_error
-	# FIXME: should be throwing an exception, to not exit out
+        if raise_error
+	# FIXME: should be raising an exception, to not exit out
 	# on entire possibly recursive (global) operation
           # when a single project is in error...
           log_fatal "Improper original file - will abort and NOT generate a broken converted project file. Please fix content of the original project file!"
