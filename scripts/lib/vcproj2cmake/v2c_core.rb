@@ -6475,9 +6475,15 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
   # which know how to gather info (build platform / configuration / ...)
   # from that handle.
   def write_invoke_object_conditional_v2c_function(str_function, object_name, condition, arr_args_func_other)
+    build_platform = ''
+    build_type = ''
+    if not condition.nil?
+      build_platform = condition.get_build_platform()
+      build_type = condition.get_build_type()
+    end
     arr_args_func = [
-      prepare_string_literal(condition.get_build_platform()),
-      prepare_string_literal(condition.get_build_type())
+      build_platform,
+      build_type
     ]
     arr_args_func.concat(arr_args_func_other)
     write_invoke_config_object_v2c_function_quoted(str_function, object_name, arr_args_func)
