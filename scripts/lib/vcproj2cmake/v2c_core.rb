@@ -8524,63 +8524,63 @@ def v2c_is_project_file_generated_by_cmake_grep(str_proj_file)
 end
 
 def v2c_vcproj_look_for_cmake_content(str_proj_file)
-  is_cmake = false
+  is_cmake_generated = false
   File.open(str_proj_file) { |io|
     doc = REXML::Document.new io
-    doc.elements.each('VisualStudioProject') { |project_xml|
-      project_xml.elements.each('Configurations/Configuration') { |config_xml|
-        config_xml.elements.each('Tool[@Name="VCCLCompilerTool"]') { |compiler_xml|
-          attr_defines = compiler_xml.attributes['PreprocessorDefinitions']
-          if not attr_defines.nil?
-            if attr_defines.to_s.match(VCPROJ_DEF_CONTENT_CMAKE_INTDIR_REGEX_OBJ)
-              is_cmake = true
-              break
+    is_cmake_generated = true # be optimistic :)
+    # http://stackoverflow.com/questions/5286861/how-to-break-from-nested-loops-in-ruby
+    catch :found_cmake_syntax do
+      doc.elements.each('VisualStudioProject') { |project_xml|
+        project_xml.elements.each('Configurations/Configuration') { |config_xml|
+          config_xml.elements.each('Tool[@Name="VCCLCompilerTool"]') { |compiler_xml|
+            attr_defines = compiler_xml.attributes['PreprocessorDefinitions']
+            if not attr_defines.nil?
+              if attr_defines.to_s.match(VCPROJ_DEF_CONTENT_CMAKE_INTDIR_REGEX_OBJ)
+                throw :found_cmake_syntax
+              end
             end
-          end
+          }
         }
-        # http://stackoverflow.com/questions/5286861/how-to-break-from-nested-loops-in-ruby
-        break if is_cmake
       }
-    }
+      is_cmake_generated = false
+    end
   }
-  is_cmake
+  is_cmake_generated
 end
 
 def v2c_vcxproj_look_for_cmake_content(str_proj_file)
-  is_cmake = false
+  is_cmake_generated = false
   File.open(str_proj_file) { |io|
     doc = REXML::Document.new io
-    doc.elements.each('Project') { |project_xml|
-      project_xml.elements.each('ItemDefinitionGroup') { |itemdef_xml|
-        itemdef_xml.elements.each('ClCompile') { |compiler_xml|
-          attr_defines = compiler_xml.elements['PreprocessorDefinitions']
-          if not attr_defines.nil?
-            if attr_defines.to_s.match(VCPROJ_DEF_CONTENT_CMAKE_INTDIR_REGEX_OBJ)
-              is_cmake = true
-              break
+    is_cmake_generated = true # be optimistic :)
+    # http://stackoverflow.com/questions/5286861/how-to-break-from-nested-loops-in-ruby
+    catch :found_cmake_syntax do
+      doc.elements.each('Project') { |project_xml|
+        project_xml.elements.each('ItemDefinitionGroup') { |itemdef_xml|
+          itemdef_xml.elements.each('ClCompile') { |compiler_xml|
+            attr_defines = compiler_xml.elements['PreprocessorDefinitions']
+            if not attr_defines.nil?
+              if attr_defines.to_s.match(VCPROJ_DEF_CONTENT_CMAKE_INTDIR_REGEX_OBJ)
+                throw :found_cmake_syntax
+              end
             end
-          end
+          }
         }
-        # http://stackoverflow.com/questions/5286861/how-to-break-from-nested-loops-in-ruby
-        break if is_cmake
-      }
-      break if is_cmake
-      project_xml.elements.each('ItemGroup') { |itemgroup_xml|
-        itemgroup_xml.elements.each('CustomBuild') { |cbuild_xml|
-          attr_add_in = cbuild_xml.elements['AdditionalInputs']
-          if not attr_add_in.nil?
-            if attr_add_in.to_s.match(VCXPROJ_CMAKEFILES_REGEX_OBJ)
-              is_cmake = true
-              break
+        project_xml.elements.each('ItemGroup') { |itemgroup_xml|
+          itemgroup_xml.elements.each('CustomBuild') { |cbuild_xml|
+            attr_add_in = cbuild_xml.elements['AdditionalInputs']
+            if not attr_add_in.nil?
+              if attr_add_in.to_s.match(VCXPROJ_CMAKEFILES_REGEX_OBJ)
+                throw :found_cmake_syntax
+              end
             end
-          end
+          }
         }
-        # http://stackoverflow.com/questions/5286861/how-to-break-from-nested-loops-in-ruby
-        break if is_cmake
       }
-    }
+      is_cmake_generated = false
+    end
   }
-  is_cmake
+  is_cmake_generated
 end
 
 # New variant to check for a CMake-generated project file:
