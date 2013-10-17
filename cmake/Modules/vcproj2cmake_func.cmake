@@ -745,7 +745,7 @@ if("${_v2c_cmake_version_this}" VERSION_GREATER "${cmake_version_include_dirs_pr
   set(_v2c_feat_cmake_include_dirs_prop ON)
 endif("${_v2c_cmake_version_this}" VERSION_GREATER "${cmake_version_include_dirs_prop_insufficient}")
 
-option(V2C_WANT_FILELIST_TYPE_DEVIATION_SUPPORT "Enable support of project filelist compiler language type deviation support" ON)
+option(V2C_WANT_FILELIST_TYPE_DEVIATION_SUPPORT "Enable support of project filelist compiler language type deviation" ON)
 option(V2C_WANT_PDB_SUPPORT "Enable support of PDB (Program DataBase) debug information files" ON)
 option(V2C_WANT_INSTALL_SUPPORT "Activate infrastructure for configurable installation of V2C targets" ON)
 
