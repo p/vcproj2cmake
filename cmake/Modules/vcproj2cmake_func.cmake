@@ -1171,7 +1171,7 @@ endmacro(_v2c_target_mark_as_internal _target)
 function(_v2c_source_groups_enabled_get _out_enabled)
   # TODO: add a version check here, to determine whether source_group()
   # is supported by this CMake version at all...
-  # Uhoh, CMake MSVC_IDE var temporarily was broken
+  # Uhoh, CMake's MSVC_IDE var setting temporarily was broken
   # ("16fa7b7 VS: Fix MSVC_IDE definition recently broken by refactoring"),
   # possibly causing mis-detection. Not much to be done about it. :(
   if(MSVC_IDE)
