@@ -539,7 +539,7 @@ endfunction(_v2c_find_package_ruby _out_ruby_bin)
 set(_V2C_CMAKE_VERBATIM "VERBATIM")
 
 set(v2c_want_original_guid_default_setting OFF)
-option(V2C_WANT_PROJECT_ORIGINAL_GUID_ASSIGNED "Activate re-use of the original GUID of a project rather than having CMake assign a newly generated random one. This can easily turn out to be a bad idea however, since one could judge an original project and its corresponding re-generated project to NOT be identical (think out-of-tree-build differences, missing attribute translations, ...)" ${v2c_want_original_guid_default_setting})
+option(V2C_WANT_PROJECT_ORIGINAL_GUID_ASSIGNED "Activate re-use of the original GUID value of a project rather than having CMake assign a newly generated random one. This can easily turn out to be a bad idea however, since one could judge an original project and its corresponding re-generated project to NOT be identical (think out-of-tree-build differences, missing attribute translations, ...)" ${v2c_want_original_guid_default_setting})
 
 function(v2c_project_original_guid_desired_get _target _out_flag)
   # _target currently unused...
