@@ -228,7 +228,7 @@ endmacro(_v2c_msg_info _msg)
 macro(_v2c_msg_important _msg)
   # CMake docs say that the "important" message type
   # is to be indicated by omitting the message type keyword:
-  _v2c_msg_do("${_msg}")
+  _v2c_msg_do("" "${_msg}")
 endmacro(_v2c_msg_important _msg)
 macro(_v2c_msg_warning _msg)
   _v2c_msg_do(WARNING "WARNING: ${_msg}")
