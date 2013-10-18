@@ -23,7 +23,11 @@ git fetch || {
 # Perhaps it's as simple as checking exit code result
 # of git pull --ff-only.
 
-branch="$(git symbolic-ref --short HEAD)"
+# symbolic-ref --short is not supported by git 1.7.9.5,
+# thus use a hopefully more compatible sed workaround.
+# http://stackoverflow.com/a/2111099
+#branch="$(git symbolic-ref --short HEAD)"
+branch=$(git symbolic-ref HEAD | sed -e 's,.*/\(.*\),\1,')
 
 datestamp=$(date +%Y%m%d%H%M%S)
 # Do explicitly state the source argument, too
