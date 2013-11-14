@@ -2691,7 +2691,10 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
   def bail_on_trailing_slash(path, path_descr)
     last_char = path[-1,1]
     return if last_char != '/'
-    message = "#{path_descr} #{path} contains a trailing (back)slash. For additional directory elements, FIX: Fatal Error LNK1561: Entry Point Must Be Defined http://support.microsoft.com/kb/140597 advises against doing so (for *these* element types). Also, this is problematic for the case of \"..\\some\\quoted dir\\\" getting mistaken as \\\" quote-escaped."
+    # Rest assured that that URL title actually is not named "Fatal E*ror".
+    # I'm simply censoring that content
+    # in order to avoid having that special word appear in our log output.
+    message = "#{path_descr} #{path} contains a trailing (back)slash. For additional directory elements, FIX: Fatal E*ror LNK1561: Entry Point Must Be Defined http://support.microsoft.com/kb/140597 advises against doing so (for *these* element types). Also, this is problematic for the case of \"..\\some\\quoted dir\\\" getting mistaken as \\\" quote-escaped."
     # http://connect.microsoft.com/VisualStudio/feedback/details/500197/additionalincludedirectories-in-vsprops-files-not-properly-converted
     parser_warn_syntax_semi_compatible(message)
     # TODO: should add a method for an inverted check for e.g.
