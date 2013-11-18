@@ -1845,7 +1845,8 @@ VS7_PROP_VAR_MATCH_REGEX_OBJ = %r{\$\([[:alnum:]_]+\)}
 Files_str = Struct.new(:filter_info, :arr_sub_filters, :arr_file_infos)
 
 def is_known_environment_variable_convention(config_var, config_var_type_descr)
-  # Side note: need to use String.replace() to properly export the output param's new value.
+  # Side note: need to use String.replace()
+  # to have the output param's new value properly exported to the caller's scope.
   is_wellknown = false
   case config_var
   when 'BOOSTROOT'
@@ -2046,7 +2047,8 @@ EOF
       # env var, or some such).
       # TODO: In fact we should probably provide support for a property_var_mappings.txt file -
       # a variable that's relevant here would e.g. be QTDIR (an entry in that file should map
-      # it to QT_INCLUDE_DIR or some such, for ready perusal by a find_package(Qt4) done by a hook script).
+      # it to QT_INCLUDE_DIR or some such, for ready perusal by a find_package(Qt4)
+      # done by a hook script).
       # WARNING: note that _all_ existing variable syntax elements need to be sanitized into
       # CMake-compatible syntax, otherwise they'll end up verbatim in generated build files,
       # which may confuse build systems (make doesn't care, but Ninja goes kerB00M).
@@ -3965,6 +3967,8 @@ class V2C_VSProjectFilesBundleParserBase < V2C_LoggerBase
     @arr_projects_new.each { |project_new|
       # FIXME: lists main project file only - should probably also
       # add some peripheral original project files (.filters, .user, ...).
+      # And perhaps should list files related to external properties as well?
+      # (.rules, .vsprops etc.)
       project_new.arr_p_original_project_files = [ @p_parser_proj_file ]
     }
   end
@@ -4040,6 +4044,11 @@ class V2C_VS7ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
   end
   def check_unhandled_file_types
     # FIXME: we don't handle now externally specified (.rules, .vsprops) custom build parts yet!
+    # Note that such checks should only be done for file types
+    # which are included implicitly "as a sibling" of a project file,
+    # as opposed to (likely very differently named) files which are included
+    # via explicit in-project references.
+    # Not sure whether this .rules check properly follows such... rules (ahem).
     check_unhandled_file_type('rules')
     check_unhandled_file_type('vsprops')
     # Well, .user files are called .vcproj.[USERNAME].user,
@@ -6454,9 +6463,10 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
         #end
         # ok, there's no CMAKE_ATL_FLAG yet, AFAIK, but still prepare
         # for it (also to let people probe on this in hook includes)
-        # FIXME: since this flag does not exist yet yet MFC sort-of
-        # includes ATL configuration, perhaps as a workaround one should
-        # set the MFC flag if use_of_atl is true?
+        # FIXME: since this flag does not exist yet in CMake
+        # yet MFC sort-of includes ATL configuration,
+        # perhaps as a workaround one should set the MFC flag
+        # if use_of_atl is true?
         #if use_of_atl > 0
           # TODO: should also set the per-configuration-type variable variant
           write_set_var('CMAKE_ATL_FLAG', use_of_atl)
