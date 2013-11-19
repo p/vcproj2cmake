@@ -1829,7 +1829,7 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
       # OK, this is important enough - we'll better NEVER specify NONE,
       # since our language setup currently is way too weak to be pretending
       # that we know what we're doing...
-      logger.info 'project seems to have no build units. Still keeping CMake-side auto-detection active anyway.'
+      logger.info 'Project #{@project_info.name} seems to have no build units. Still keeping CMake-side auto-detection active anyway.'
       #logger.info 'project seems to have no build units --> language set to NONE'
       #@arr_languages.push('NONE')
     end
