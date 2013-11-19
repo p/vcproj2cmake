@@ -2361,7 +2361,7 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
       # since our language setup currently is way too weak to be pretending
       # that we know what we're doing...
       descr_autodetect_active = 'Still keeping CMake-side auto-detection active anyway.'
-      logger.info "project seems to have no build units. #{descr_autodetect_active}"
+      logger.info "Project #{@project_info.name} seems to have no build units. #{descr_autodetect_active}"
       #logger.info 'project seems to have no build units --> language set to NONE'
       #@arr_languages.push('NONE')
     end
