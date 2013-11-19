@@ -3391,6 +3391,7 @@ module V2C_VSConfigurationDefines
   TEXT_ATLMINIMIZESCRUNTIMELIBRARYUSAGE = 'ATLMinimizesCRunTimeLibraryUsage'
   TEXT_CHARACTERSET = 'CharacterSet'
   TEXT_CONFIGURATIONTYPE = 'ConfigurationType'
+  TEXT_VS7_INHERITEDPROPERTYSHEETS = 'InheritedPropertySheets'
   TEXT_WHOLEPROGRAMOPTIMIZATION = 'WholeProgramOptimization'
   VS_DEFAULT_SETTING_WHOLEPROGRAMOPTIMIZATION = false # VS10 default: "No"
   VS_DEFAULT_SETTING_CHARSET = V2C_TargetConfig_Defines::CHARSET_UNICODE # FIXME proper default??
@@ -3423,6 +3424,8 @@ class V2C_VS7ConfigurationBaseParser < V2C_VS7ParserBase
       get_target_config_info().charset = parse_charset(setting_value)
     when TEXT_CONFIGURATIONTYPE
       get_target_config_info().cfg_type = parse_configuration_type(setting_value)
+    when TEXT_VS7_INHERITEDPROPERTYSHEETS
+      parse_inherited_properties(setting_value, get_target_config_info())
     when TEXT_NAME
       condition = V2C_Info_Condition.new
       arr_name = setting_value.split('|')
@@ -3472,6 +3475,20 @@ class V2C_VS7ConfigurationBaseParser < V2C_VS7ParserBase
   def get_tools_info; get_config_info().tools end
   def parse_charset(str_charset); parse_integer(str_charset) end
   def parse_configuration_type(str_configuration_type); parse_integer(str_configuration_type) end
+  def parse_inherited_properties(setting_value, target_config_info)
+    arr_properties_sheets = Array.new
+    parse_inherited_properties_sheets_list(arr_properties_sheets, setting_value)
+    arr_properties_sheets.each do |properties_sheet|
+      properties_sheet_checked = get_msvs_filesystem_location(properties_sheet)
+      #if v2c_generator_check_file_accessible(@project_dir, f, 'inherited property sheet of project', @project_name, ($v2c_validate_vcproj_abort_on_error > 0))
+      #end
+    end
+  end
+  def parse_inherited_properties_sheets_list(arr_properties_sheets_out, attr_propsheets)
+    split_values_list_preserve_ws_discard_empty(attr_propsheets).each { |elem_propsheet_path|
+      arr_properties_sheets_out.push(elem_propsheet_path)
+    }
+  end
   def parse_wp_optimization(str_opt); get_boolean_value(str_opt) end
 end
 
@@ -4085,7 +4102,6 @@ class V2C_VS7ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
     # via explicit in-project references.
     # Not sure whether this .rules check properly follows such... rules (ahem).
     check_unhandled_file_type('rules')
-    check_unhandled_file_type('vsprops')
     # Well, .user files are called .vcproj.[USERNAME].user,
     # thus we'd have to do more elaborate lookup...
     ## Not sure whether we want to evaluate the settings in .user files...
