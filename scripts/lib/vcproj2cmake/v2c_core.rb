@@ -1925,9 +1925,11 @@ end
 CMAKE_CFG_INTDIR_VAR_DEREF = '${CMAKE_CFG_INTDIR}'
 CMAKE_PROJECT_BINARY_DIR_VAR_DEREF = '${PROJECT_BINARY_DIR}'
 CMAKE_PROJECT_NAME_VAR_DEREF = '${PROJECT_NAME}'
+# FIXME: this seems to be developing into a God Method rather fast
+# (starting to grow a couple parameters too many...)
 # vs7_only_flag specifies whether invoking code is VS7 classes,
 # i.e. whether to support VS7-only constructs (e.g. $(NoInherit)), too.
-def vs7_create_config_variable_translation(str_in, arr_config_var_handling, vs7_only_flag)
+def vs7_create_config_variable_translation(str_in, arr_config_var_handling, vs7_only_flag, env_replace_immediate)
   str = str_in.clone
   # http://langref.org/all-languages/pattern-matching/searching/loop-through-a-string-matching-a-regex-and-performing-an-action-for-each-match
   str_scan_copy = str_in.clone # create a deep copy of string, to avoid "`scan': string modified (RuntimeError)"
@@ -2040,11 +2042,15 @@ EOF
       config_var_emulation_code = ''
       arr_config_var_handling.push(config_var_emulation_code)
       config_var_replacement = '${v2c_VS_TargetPath}'
+    when 'VCINSTALLDIR'
+      log_warn 'FIXME: VCInstallDir value requested - likely ought to query this setting from the Windows registry, just like CMake does.'
+      config_var_emulation_code = ''
+      arr_config_var_handling.push(config_var_emulation_code)
+      config_var_replacement = '${v2c_VS_VCInstallDir}'
     else
-      # FIXME: for unknown variables, we need to provide CMake code which derives the
-      # value from the environment ($ENV{VAR}), since AFAIR these MSVS Config Variables will
-      # get defined via environment variable, via a certain ordering (project setting overrides
-      # env var, or some such).
+      # For unknown variables, grab the value from the environment ($ENV{VAR}),
+      # since these MSVS Config Variables will get defined via environment variable,
+      # via a certain priority ordering (project setting overrides env var, or some such).
       # TODO: In fact we should probably provide support for a property_var_mappings.txt file -
       # a variable that's relevant here would e.g. be QTDIR (an entry in that file should map
       # it to QT_INCLUDE_DIR or some such, for ready perusal by a find_package(Qt4)
@@ -2059,11 +2065,31 @@ EOF
         log_warn "Unknown/user-custom config variable name #{config_var} encountered in line '#{str}' --> TODO?"
         config_var_type_descr = 'unknown configuration variable'
         #str.gsub!(/\$\(#{config_var}\)/, "${v2c_VS_#{config_var}}")
-        # For now, at least better directly reroute from environment variables as well:
+        # For now, at least better directly reroute from environment variables as well
+        # (variables provided at conversion time already, that is!).
+        # This is e.g. especially important for good support of InheritedPropertySheets mechanism.
         is_env_var = true
       end
       if true == is_env_var
-        config_var_replacement = "$ENV{#{config_var}}"
+        # Act differently depending on:
+        # whether we're supposed to replace environment variable values ad-hoc
+        # (i.e., env var configuration as existing during *this* converter run!)
+        # or whether we're supposed to translate that env reference into a CMake environment reference
+        # (to be evaluated at CMake configure run time).
+        # In cases where CMake genex is supported, it might actually be feasible to support
+        # both pre-evaluated environment values
+        # *and* overrides in case of specification at CMake configure run time!
+        if true == env_replace_immediate
+          # http://ruby.about.com/od/rubyfeatures/a/envvar.htm
+          env_var_value = ENV[config_var]
+          if nil == env_var_value
+            log_warn "There was immediate replacement of environment variable references requested, yet ithe suspected-environment-type variable #{config_var} was not set (defined) during this converter run!! Possibly that variable needs to be set to a proper value."
+          else
+            config_var_replacement = env_var_value
+          end
+        else
+          config_var_replacement = "$ENV{#{config_var}}"
+        end
       end
     end
     if config_var_replacement != ''
@@ -2420,14 +2446,12 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
     return true
   end
   def get_filesystem_location(path)
-    # TODO: rather ad-hoc handling of VS7 vars, should get improved eventually.
-    path_translated = vs7_create_config_variable_translation(string_avoid_nil(path), @arr_config_var_dummy, false)
-
-    # TODO: should think of a way to do central verification
-    # of existence of the file system paths found here near this helper.
-    path_cooked = normalize_path(string_value_preprocess(path_translated))
-    logger.debug "path_translated #{path_translated}, path_cooked #{path_cooked}"
-    return path_cooked.empty? ? nil : path_cooked
+    get_filesystem_location_internal(path, false)
+  end
+  # Returns semi-cooked path of an item
+  # which needs to be accessed during conversion-time handling already
+  def get_msvs_filesystem_location(path)
+    get_filesystem_location_internal(path, true)
   end
   GUID_DIG = '[[:digit:]A-Fa-f]'
   GUID_PART = GUID_DIG + GUID_DIG + GUID_DIG + GUID_DIG
@@ -2508,6 +2532,17 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
   end
 
   private
+
+  def get_filesystem_location_internal(path, env_replace_immediate)
+    # TODO: rather ad-hoc handling of VS7 vars, should get improved eventually.
+    path_translated = vs7_create_config_variable_translation(string_avoid_nil(path), @arr_config_var_dummy, false, env_replace_immediate)
+
+    # TODO: should think of a way to do central verification
+    # of existence of the file system paths found here near this helper.
+    path_cooked = normalize_path(string_value_preprocess(path_translated))
+    logger.debug "path_translated #{path_translated}, path_cooked #{path_cooked}"
+    return path_cooked.empty? ? nil : path_cooked
+  end
 
   WHITESPACE_REGEX = %r{\s+}
   def parse_boolean_text(str_value)
@@ -3237,7 +3272,7 @@ class V2C_VSToolPrePostBuildLinkEventParser < V2C_VSToolParserBase
       # Since we only have a CMake generator for now,
       # it does not really matter yet. Oh well...
       arr_script_code = Array.new
-      str_translated = vs7_create_config_variable_translation(str_unescaped, arr_script_code, false)
+      str_translated = vs7_create_config_variable_translation(str_unescaped, arr_script_code, false, false)
 
       next if str_translated.empty?
 
@@ -8302,14 +8337,14 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     # CMake dox currently don't offer such details... (yet!)
     return if arr_includes.empty?
     arr_includes_translated = arr_includes.collect { |elem_inc_dir|
-      vs7_create_config_variable_translation(elem_inc_dir, @arr_config_var_handling, false)
+      vs7_create_config_variable_translation(elem_inc_dir, @arr_config_var_handling, false, false)
     }
     write_build_attributes('include_directories', arr_includes_translated, map_includes, nil)
   end
 
   def write_link_directories(arr_lib_dirs, map_lib_dirs)
     arr_lib_dirs_translated = arr_lib_dirs.collect { |elem_lib_dir|
-      vs7_create_config_variable_translation(elem_lib_dir, @arr_config_var_handling, false)
+      vs7_create_config_variable_translation(elem_lib_dir, @arr_config_var_handling, false, false)
     }
     arr_lib_dirs_translated.push(get_dereferenced_variable_name('V2C_LIB_DIRS'))
     write_comment_at_level(COMMENT_LEVEL_VERBOSE,
