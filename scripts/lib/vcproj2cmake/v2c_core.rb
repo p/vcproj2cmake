@@ -4708,7 +4708,7 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
 end
 
 class V2C_VS10ToolMIDLParser < V2C_VSToolMIDLParser
-  include V2C_VS10Syntax
+  include V2C_VS10Syntax # parse_boolean_property_value
 end
 
 class V2C_VS10ToolPrePostBuildLinkEventParser < V2C_VSToolPrePostBuildLinkEventParser
