@@ -8897,11 +8897,15 @@ class V2C_ToolProcessorBase < V2C_LoggerBase
     tool_info_result = transform(arr_input_items)
     tool_info_result.get_output_locations_patterns()
   end
+  # Clones the original metadata-reference-polluted data,
+  # then calls the derived helper to transform the copy.
   def transform(arr_items)
-    # Clones the original metadata-reference-polluted data,
-    # then calls the derived helper to transform the copy.
+    # Rather than sheepishly relying on all do_transform methods
+    # properly implementing returning a (our!) result,
+    # *we* will return it (i.e., minimize custom-side responsibilities).
     tool_info_result = @tool_info_template.clone
     do_transform(tool_info_result, arr_items)
+    logger.debug "tool_info_result #{tool_info_result.inspect}"
     tool_info_result
   end
   def do_transform(tool_info, arr_items)
@@ -8932,7 +8936,6 @@ class V2C_ToolProcessorMIDL < V2C_ToolProcessorBase
     tool_info.iface_id_file_name = transform_metadata(input_file, tool_info.iface_id_file_name)
     tool_info.proxy_file_name = transform_metadata(input_file, tool_info.proxy_file_name)
     tool_info.type_library_name = transform_metadata(input_file, tool_info.type_library_name)
-    #logger.warn "tool_info #{tool_info.inspect}"
   end
 end
 
@@ -8978,20 +8981,20 @@ class V2C_ProjectPostProcess < V2C_LoggerBase
     item_list_tool_input = item_list_midl
     return if item_list_tool_input.nil?
     input_items = item_list_tool_input.arr_items
-    arr_generated_items = Array.new
+    arr_output_items = Array.new
     arr_config_info.each do |config_info|
       arr_tool_info = config_info.tools.arr_midl_info
       input_items.each do |input_item_info|
         arr_input_items = [ input_item_info ]
         arr_tool_info.each do |tool_info|
           processor = V2C_ToolProcessorMIDL.new(tool_info)
-          arr_generated_items.concat(processor.process(arr_input_items))
+          arr_output_items.concat(processor.process(arr_input_items))
         end
       end
     end
     # TODO_PERFORMANCE: we're possibly doing more loop work here than needed...
     # (implement breakout on success?).
-    arr_generated_items.each do |candidate|
+    arr_output_items.each do |candidate|
       arr_lists_build.each do |item_list_build|
         info_item = item_list_build.get_item(candidate)
         if info_item.nil?
