@@ -215,6 +215,8 @@ def search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex, case_i
   return dir_entries_match_subset_remaining
 end
 
+DETECT_MAC_OS_RESOURCE_FORK_FILES_REGEX_OBJ = %r{^\._}
+
 def filter_unwanted_project_files(arr_dir_proj_files)
   if not arr_dir_proj_files.nil?
     arr_dir_proj_files.delete_if { |proj_file_candidate|
@@ -261,17 +263,40 @@ if true == $v2c_parser_proj_files_case_insensitive_match
 end
 log_info "Doing case-#{str_case_match_type}SENSITIVE matching on project file candidates!"
 
-DETECT_MAC_OS_RESOURCE_FORK_FILES_REGEX_OBJ = %r{^\._}
-# Cannot use Array.compact() for Find.find()
-# since that one is "special" (at least on < 1.9!?)
-# ("Local Jump Error" http://www.ruby-forum.com/topic/153730 )
+def crawl_hierarchy_for_directories(basedir)
+  # Cannot use Array.compact() for Find.find()
+  # since that one is "special" (at least on < 1.9!?)
+  # ("Local Jump Error" http://www.ruby-forum.com/topic/153730 )
+  arr_dirs = Array.new
+  Find.find(basedir) do |f|
+    log_debug "CANDIDATE: #{f}"
+    next if not test(?d, f) # not directory?
+    if FileTest.symlink?(f)
+      # Symlinks e.g. are poor man's way of emulating SCM sub module integration ;)
+      # default handling: skip symlinks since they might be pointing _backwards_!
+      follow_symlinks = $v2c_parser_recursive_follow_symlinks
+      if follow_symlinks == true
+        symlink = f
+        # http://www.latefortea.com/2011/12/ruby-1-8-resolve-symlink-recursively/
+        basedir_new = File.dirname(symlink) +'/'+ File.readlink(symlink)
+        arr_dirs.concat(crawl_hierarchy_for_directories(basedir_new))
+      else
+        puts "EXCLUDED SYMLINKED LOCATION #{f}"
+      end
+    else
+      arr_dirs.push(f)
+    end
+  end
+  arr_dirs
+end
+
+arr_dirs_all = crawl_hierarchy_for_directories('./')
+
+log_debug "arr_dirs_all: #{arr_dirs_all.inspect}"
+
 arr_filtered_dirs = Array.new
 
-Find.find('./') do |f|
-  next if not test(?d, f)
-  # skip symlinks since they might be pointing _backwards_!
-  next if FileTest.symlink?(f)
-
+arr_dirs_all.each do |f|
   is_excluded_recursive = false
   if not excl_regex_recursive.nil?
     #puts "MATCH: #{f} vs. #{excl_regex_recursive}"
