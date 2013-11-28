@@ -68,8 +68,6 @@ end
 
 arr_work_units = Array.new
 
-arr_project_subdirs = Array.new
-
 # FIXME: should _split_ operation between _either_ scanning entire .vcproj hierarchy into a
 # all_sub_projects.txt, _or_ converting all sub .vcproj as listed in an existing all_sub_projects.txt file.
 # (provide suitable command line switches)
@@ -282,10 +280,13 @@ arr_filtered_dirs = Array.new
 
 Find.find('./') do |dir_candidate|
   next if not test(?d, dir_candidate)
+
   # skip symlinks since they might be pointing _backwards_!
   next if FileTest.symlink?(dir_candidate)
 
   dir = dir_candidate
+
+  log_debug "CRAWLED: #{dir}"
 
   is_excluded_recursive = false
   if not excl_regex_recursive.nil?
@@ -321,6 +322,9 @@ Find.find('./') do |dir_candidate|
   arr_filtered_dirs.push(dir)
 end
 
+log_debug "arr_filtered_dirs: #{arr_filtered_dirs.inspect}"
+
+
 csproj_extension = 'csproj'
 vcproj_extension = 'vcproj'
 vcxproj_extension = 'vcxproj'
@@ -340,11 +344,13 @@ arr_proj_file_regex = [
 # The (usually root-level) directory of the whole "emulated" "solution".
 solution_dir = './'
 
+arr_project_subdirs = Array.new
+
 arr_filtered_dirs.each do |dir|
   log_info "processing #{dir}!"
   dir_entries = Dir.entries(dir)
 
-  log_debug "entries: #{dir_entries}"
+  log_debug "entries: #{dir_entries.inspect}"
 
   arr_dir_proj_files = search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex, case_insensitive_regex_match_option_flag)
 
