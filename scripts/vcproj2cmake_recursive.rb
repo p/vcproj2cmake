@@ -63,8 +63,6 @@ end
 
 arr_work_units = Array.new
 
-arr_project_subdirs = Array.new
-
 # FIXME: should _split_ operation between _either_ scanning entire .vcproj hierarchy into a
 # all_sub_projects.txt, _or_ converting all sub .vcproj as listed in an existing all_sub_projects.txt file.
 # (provide suitable command line switches)
@@ -215,6 +213,8 @@ def search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex, case_i
   return dir_entries_match_subset_remaining
 end
 
+DETECT_MAC_OS_RESOURCE_FORK_FILES_REGEX_OBJ = %r{^\._}
+
 def filter_unwanted_project_files(arr_dir_proj_files)
   if not arr_dir_proj_files.nil?
     arr_dir_proj_files.delete_if { |proj_file_candidate|
@@ -261,50 +261,55 @@ if true == $v2c_parser_proj_files_case_insensitive_match
 end
 log_info "Doing case-#{str_case_match_type}SENSITIVE matching on project file candidates!"
 
-DETECT_MAC_OS_RESOURCE_FORK_FILES_REGEX_OBJ = %r{^\._}
 # Cannot use Array.compact() for Find.find()
 # since that one is "special" (at least on < 1.9!?)
 # ("Local Jump Error" http://www.ruby-forum.com/topic/153730 )
 arr_filtered_dirs = Array.new
 
-Find.find('./') do |f|
-  next if not test(?d, f)
+Find.find('./') do |item|
+  next if not test(?d, item)
+  dir = item
+
+  log_debug "CRAWLED: #{dir}"
+
   # skip symlinks since they might be pointing _backwards_!
-  next if FileTest.symlink?(f)
+  next if FileTest.symlink?(dir)
 
   is_excluded_recursive = false
   if not excl_regex_recursive.nil?
-    #puts "MATCH: #{f} vs. #{excl_regex_recursive}"
-    if f.match(excl_regex_recursive)
+    #puts "MATCH: #{dir} vs. #{excl_regex_recursive}"
+    if dir.match(excl_regex_recursive)
       is_excluded_recursive = true
     end
   end
   # Also, skip CMake build directories! (containing CMake-generated .vcproj files!)
   # FIXME: more precise checking: check file _content_ against CMake generation!
   if true != is_excluded_recursive
-    if f =~ /\/build[^\/]*$/i
+    if dir =~ /\/build[^\/]*$/i
       is_excluded_recursive = true
     end
   end
   if true == is_excluded_recursive
-    puts "EXCLUDED RECURSIVELY #{f}!"
+    puts "EXCLUDED RECURSIVELY #{dir}!"
     Find.prune() # throws exception to skip entire recursive directories block
   end
 
   is_excluded_single = false
   if not excl_regex_single.nil?
-    #puts "MATCH: #{f} vs. #{excl_regex_single}"
-    if f.match(excl_regex_single)
+    #puts "MATCH: #{dir} vs. #{excl_regex_single}"
+    if dir.match(excl_regex_single)
       is_excluded_single = true
     end
   end
   #puts "excluded: #{is_excluded_single}"
   if true == is_excluded_single
-    puts "EXCLUDED SINGLE #{f}!"
+    puts "EXCLUDED SINGLE #{dir}!"
     next
   end
-  arr_filtered_dirs.push(f)
+  arr_filtered_dirs.push(dir)
 end
+
+log_debug "arr_filtered_dirs: #{arr_filtered_dirs.inspect}"
 
 
 def cmakelists_may_get_created(dir, dir_entries)
@@ -344,11 +349,13 @@ arr_proj_file_regex = [
 # The (usually root-level) directory of the whole "emulated" "solution".
 solution_dir = './'
 
+arr_project_subdirs = Array.new
+
 arr_filtered_dirs.each do |dir|
   log_info "processing #{dir}!"
   dir_entries = Dir.entries(dir)
 
-  log_debug "entries: #{dir_entries}"
+  log_debug "entries: #{dir_entries.inspect}"
 
   arr_dir_proj_files = search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex, case_insensitive_regex_match_option_flag)
 
