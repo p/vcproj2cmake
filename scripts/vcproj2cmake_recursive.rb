@@ -349,7 +349,7 @@ arr_proj_file_regex = [
 # The (usually root-level) directory of the whole "emulated" "solution".
 solution_dir = './'
 
-arr_project_subdirs = Array.new
+arr_project_subdir_infos = Array.new
 
 arr_filtered_dirs.each do |dir|
   log_info "processing #{dir}!"
@@ -426,7 +426,8 @@ arr_filtered_dirs.each do |dir|
   end
 
   if is_sub_dir
-    arr_project_subdirs.push(dir)
+    subdir_info = V2C_Subdir_Info.new(dir, nil)
+    arr_project_subdir_infos.push(subdir_info)
   end
 
   # For recursive invocation we used to have _external spawning_
@@ -624,8 +625,8 @@ log_info 'Work for generation of projects finished - starting post-processing st
 # But only do this if indeed we do have any projects located in sub dirs
 # (the root file can obviously handle its own local projects, no
 # add_subdirectory() things needed).
-if not arr_project_subdirs.empty?
-  v2c_projects_list_handle_sub_dirs(Pathname.new(source_root), arr_project_subdirs)
+if not arr_project_subdir_infos.empty?
+  v2c_projects_list_handle_sub_dirs(Pathname.new(source_root), arr_project_subdir_infos)
 end
 
 v2c_convert_finished()
