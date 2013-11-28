@@ -261,25 +261,99 @@ if true == $v2c_parser_proj_files_case_insensitive_match
 end
 log_info "Doing case-#{str_case_match_type}SENSITIVE matching on project file candidates!"
 
-# Cannot use Array.compact() for Find.find()
-# since that one is "special" (at least on < 1.9!?)
-# ("Local Jump Error" http://www.ruby-forum.com/topic/153730 )
+class V2C_CrawlerBase
+  def initialize(follow_symlinks)
+    @follow_symlinks = follow_symlinks
+  end
+  # Main crawler entry point.
+  # dir_base indicates location to start crawling from.
+  # block is a Ruby block to be called for every item encountered.
+  def crawl(dir_base, &block)
+    do_crawl(dir_base, nil, &block)
+  end
+  private
+  # dir_base_orig indicates the original location
+  # in case of incrementally crawling from a symlinked location.
+  def do_crawl(dir_base, dir_base_orig, &block)
+    # Cannot use Array.compact() for Find.find()
+    # since that one is "special" (at least on < 1.9!?)
+    # ("Local Jump Error" http://www.ruby-forum.com/topic/153730 )
+    Find.find(dir_base) do |item|
+      log_debug "CANDIDATE: #{item}"
+      next if want_skip(item)
+      if FileTest.symlink?(item)
+        symlink = item
+        # Symlinks e.g. are poor man's way of emulating SCM sub module integration ;)
+        # default handling: skip symlinks since they might be pointing _backwards_!
+        if @follow_symlinks == true
+          # http://www.latefortea.com/2011/12/ruby-1-8-resolve-symlink-recursively/
+          dir_base_new = File.dirname(symlink) +'/'+ File.readlink(symlink)
+          dir_base_new_orig = symlink
+          do_crawl(dir_base_new, dir_base_new_orig, &block)
+        else
+          puts "Configured to EXCLUDE DIRECTORY SYMLINK #{symlink}"
+        end
+      else
+        # Calculate/announce both the normal item
+        # and, in the case of symlinks, the dereferenced path
+        # (fully expanded destination).
+        item_announced = nil
+        item_announced_deref = nil
+        if not dir_base_orig.nil?
+          p_dir_base = Pathname.new(dir_base)
+          p_dir_base_orig = Pathname.new(dir_base_orig)
+          p_item = Pathname.new(item)
+          p_progressed = p_item.relative_path_from(p_dir_base)
+          p_announced = p_dir_base_orig + p_progressed
+          item_announced = p_announced.to_s
+          item_announced_deref = item
+        else
+          item_announced = item
+        end
+        log_debug "CALL: item_announced #{item_announced}, item_announced_deref #{item_announced_deref}"
+        prune_sub_hierarchy = block.call(item_announced, item_announced_deref)
+        if true == prune_sub_hierarchy
+          Find.prune() # throws exception to skip entire recursive directories block
+        end
+      end
+    end
+  end
+  def want_skip(fs_entry)
+    false
+  end
+end
+
+class V2C_CrawlerDirs < V2C_CrawlerBase
+  def want_skip(fs_entry)
+    test(?d, fs_entry) != true # not directory?
+  end
+end
+
 arr_filtered_dirs = Array.new
 
-Find.find('./') do |item|
-  next if not test(?d, item)
-  dir = item
+dir_crawler = V2C_CrawlerDirs.new($v2c_parser_recursive_follow_symlinks)
 
-  log_debug "CRAWLED: #{dir}"
+dir_crawler.crawl('./') do |dir, dir_deref|
 
-  # skip symlinks since they might be pointing _backwards_!
-  next if FileTest.symlink?(dir)
+  log_debug "CRAWLED: #{dir}, #{dir_deref}"
 
+  # This block grabs directories,
+  # and decides whether to ignore a single directory
+  # or an entire sub hierarchy
+  # (in which case that needs to be communicated to the outer
+  # crawler via our block return value).
+
+  # First, instantiate our status vars:
   is_excluded_recursive = false
-  if not excl_regex_recursive.nil?
-    #puts "MATCH: #{dir} vs. #{excl_regex_recursive}"
-    if dir.match(excl_regex_recursive)
-      is_excluded_recursive = true
+  is_excluded_single = false
+
+  # Then, determine is_excluded_recursive / is_excluded_single status:
+  if true != is_excluded_recursive
+    if not excl_regex_recursive.nil?
+      #puts "MATCH: #{dir} vs. #{excl_regex_recursive}"
+      if dir.match(excl_regex_recursive)
+        is_excluded_recursive = true
+      end
     end
   end
   # Also, skip CMake build directories! (containing CMake-generated .vcproj files!)
@@ -289,24 +363,36 @@ Find.find('./') do |item|
       is_excluded_recursive = true
     end
   end
-  if true == is_excluded_recursive
-    puts "EXCLUDED RECURSIVELY #{dir}!"
-    Find.prune() # throws exception to skip entire recursive directories block
-  end
 
-  is_excluded_single = false
-  if not excl_regex_single.nil?
-    #puts "MATCH: #{dir} vs. #{excl_regex_single}"
-    if dir.match(excl_regex_single)
-      is_excluded_single = true
+  if true != is_excluded_recursive
+    if not excl_regex_single.nil?
+      #puts "MATCH: #{dir} vs. #{excl_regex_single}"
+      if dir.match(excl_regex_single)
+        is_excluded_single = true
+      end
     end
   end
+
+  # Finally, have central handling to act on our status and log it:
   #puts "excluded: #{is_excluded_single}"
-  if true == is_excluded_single
-    puts "EXCLUDED SINGLE #{dir}!"
-    next
+  if true == is_excluded_recursive
+    puts "EXCLUDED RECURSIVELY #{dir}!"
+  else
+    if true == is_excluded_single
+      puts "EXCLUDED SINGLE #{dir}!"
+    else
+      subdir_info = nil
+      if not dir_deref.nil?
+        subdir_info = V2C_Subdir_Info.new(dir_deref, dir)
+      else
+        subdir_info = V2C_Subdir_Info.new(dir, nil)
+      end
+      arr_filtered_dirs.push(subdir_info)
+    end
   end
-  arr_filtered_dirs.push(dir)
+
+  # Finally, indicate our block result:
+  is_excluded_recursive
 end
 
 log_debug "arr_filtered_dirs: #{arr_filtered_dirs.inspect}"
@@ -351,7 +437,8 @@ solution_dir = './'
 
 arr_project_subdir_infos = Array.new
 
-arr_filtered_dirs.each do |dir|
+arr_filtered_dirs.each do |subdir_info|
+  dir = subdir_info.source_dir
   log_info "processing #{dir}!"
   dir_entries = Dir.entries(dir)
 
@@ -426,7 +513,6 @@ arr_filtered_dirs.each do |dir|
   end
 
   if is_sub_dir
-    subdir_info = V2C_Subdir_Info.new(dir, nil)
     arr_project_subdir_infos.push(subdir_info)
   end
 
