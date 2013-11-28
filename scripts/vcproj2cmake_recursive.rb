@@ -296,39 +296,39 @@ log_debug "arr_dirs_all: #{arr_dirs_all.inspect}"
 
 arr_filtered_dirs = Array.new
 
-arr_dirs_all.each do |dir|
+arr_dirs_all.each do |f|
   is_excluded_recursive = false
   if not excl_regex_recursive.nil?
-    #puts "MATCH: #{dir} vs. #{excl_regex_recursive}"
-    if dir.match(excl_regex_recursive)
+    #puts "MATCH: #{f} vs. #{excl_regex_recursive}"
+    if f.match(excl_regex_recursive)
       is_excluded_recursive = true
     end
   end
   # Also, skip CMake build directories! (containing CMake-generated .vcproj files!)
   # FIXME: more precise checking: check file _content_ against CMake generation!
   if true != is_excluded_recursive
-    if dir =~ /\/build[^\/]*$/i
+    if f =~ /\/build[^\/]*$/i
       is_excluded_recursive = true
     end
   end
   if true == is_excluded_recursive
-    puts "EXCLUDED RECURSIVELY #{dir}!"
+    puts "EXCLUDED RECURSIVELY #{f}!"
     Find.prune() # throws exception to skip entire recursive directories block
   end
 
   is_excluded_single = false
   if not excl_regex_single.nil?
-    #puts "MATCH: #{dir} vs. #{excl_regex_single}"
-    if dir.match(excl_regex_single)
+    #puts "MATCH: #{f} vs. #{excl_regex_single}"
+    if f.match(excl_regex_single)
       is_excluded_single = true
     end
   end
   #puts "excluded: #{is_excluded_single}"
   if true == is_excluded_single
-    puts "EXCLUDED SINGLE #{dir}!"
+    puts "EXCLUDED SINGLE #{f}!"
     next
   end
-  arr_filtered_dirs.push(dir)
+  arr_filtered_dirs.push(f)
 end
 
 
