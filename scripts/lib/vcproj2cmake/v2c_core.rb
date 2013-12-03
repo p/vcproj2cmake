@@ -2719,18 +2719,12 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
     found = be_optimistic()
     tool_info = get_tool_info()
     case setting_key
-    when TEXT_NAME
-      tool_info.name = parse_setting_name(setting_value)
     when TEXT_SUPPRESSSTARTUPBANNER
       tool_info.suppress_startup_banner_enable = get_boolean_value(setting_value)
     else
       found = super
     end
     return found
-  end
-  # Name is a VS7-only setting...
-  def parse_setting_name(setting_value)
-    raise_error_abstract_base_method
   end
   # Low-level helper for generic parsing of most (all?) VS multi-entry
   # property elements.
@@ -2993,7 +2987,6 @@ module V2C_VS7ToolSyntax
   include V2C_VSToolDefines
   TEXT_VCCLCOMPILERTOOL = 'VCCLCompilerTool'
   TEXT_VCLINKERTOOL = 'VCLinkerTool'
-  TEXT_VCMIDLTOOL = 'VCMIDLTool'
   TEXT_VCPREBUILDEVENTTOOL = 'VCPreBuildEventTool'
   TEXT_VCPRELINKEVENTTOOL = 'VCPreLinkEventTool'
   TEXT_VCPOSTBUILDEVENTTOOL = 'VCPostBuildEventTool'
@@ -3307,16 +3300,6 @@ class V2C_VSToolMIDLParser < V2C_VSToolDefineParserBase
   end
 end
 
-module V2C_VS7ToolMIDLDefines
-  include V2C_VSToolMIDLDefines
-  TEXT_IGNOREDEFAULTLIBRARYNAMES = 'IgnoreDefaultLibraryNames'
-  include V2C_VS7ToolSyntax
-end
-
-class V2C_VS7ToolMIDLParser < V2C_VSToolMIDLParser
-  include V2C_VS7Syntax # parse_boolean_property_value
-end
-
 class V2C_VSToolPrePostBuildLinkEventParser < V2C_VSToolParserBase
   # I'm actually not sure yet whether we should be using strip_whitespace()
   # at this layer - perhaps it should be used in the VS10 case only,
@@ -3391,10 +3374,6 @@ class V2C_VS7ToolForwarderParser < V2C_VS7ParserBase
       arr_info = get_tools_info().arr_linker_info
       info = V2C_Tool_Linker_Info.new(V2C_Tool_Linker_Specific_Info_MSVC7.new)
       elem_parser = V2C_VS7ToolLinkerParser.new(@elem_xml, info)
-    when TEXT_VCMIDLTOOL
-      arr_info = get_tools_info().arr_midl_info
-      info = V2C_Tool_MIDL_Info.new(V2C_Tool_MIDL_Specific_Info_MSVC7.new)
-      elem_parser = V2C_VS7ToolMIDLParser.new(@elem_xml, info)
     when TEXT_VCPREBUILDEVENTTOOL, TEXT_VCPRELINKEVENTTOOL, TEXT_VCPOSTBUILDEVENTTOOL
       arr_info = get_tools_info().arr_prepostbuildlink_info
       variant = nil
@@ -9014,16 +8993,6 @@ class V2C_ProjectPostProcess < V2C_LoggerBase
     return true
   end
   private
-  def tool_processor_factory(tool_name, tool_info)
-    processor = nil
-    case tool_name
-    when 'MIDL'
-      processor = V2C_ToolProcessorMIDL.new(tool_info)
-    else
-      error_unknown_case_value('build tool name', tool_name)
-    end
-    processor
-  end
   def mark_items_as_generated(item_lists, arr_config_info)
     # Mark some items as generated (e.g. output files as produced by MIDL etc.).
     # FIXME: update implementation to have generic iteration
@@ -9056,22 +9025,8 @@ class V2C_ProjectPostProcess < V2C_LoggerBase
       input_items.each do |input_item_info|
         arr_input_items = [ input_item_info ]
         arr_tool_info.each do |tool_info|
-          processor = tool_processor_factory(build_tool_name)
-          if not processor.nil?
-            arr_output_items.concat(processor.process(arr_input_items))
-          end
-        end
-      end
-    end
-    arr_config_info.each do |config_info|
-      arr_tool_info = config_info.tools.arr_midl_info
-      input_items.each do |input_item_info|
-        arr_input_items = [ input_item_info ]
-        arr_tool_info.each do |tool_info|
-          processor = tool_processor_factory(build_tool_name)
-          if not processor.nil?
-            arr_output_items.concat(processor.process(arr_input_items))
-          end
+          processor = V2C_ToolProcessorMIDL.new(tool_info)
+          arr_output_items.concat(processor.process(arr_input_items))
         end
       end
     end
