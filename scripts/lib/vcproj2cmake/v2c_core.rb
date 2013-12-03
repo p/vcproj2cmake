@@ -688,6 +688,7 @@ end
 
 class V2C_Tool_Base_Info
   def initialize(tool_variant_specific_info)
+    @name = nil # Hmm, do we need this member? (do we really want to know the tool name??)
     @suppress_startup_banner_enable = false # used by at least VS10 Compiler _and_ Linker, thus it's member of the common base class.
     @show_progress_enable = false
 
@@ -3020,6 +3021,8 @@ class V2C_VS7ToolCompilerParser < V2C_VSToolCompilerParser
     when 'Detect64BitPortabilityProblems'
       # TODO: add /Wp64 to flags of an MSVC compiler info...
       compiler_info.detect_64bit_porting_problems_enable = get_boolean_value(setting_value)
+    when TEXT_NAME
+      compiler_info.name = setting_value
     when TEXT_PRECOMPILEDHEADERFILE_BINARY
       provide_precompiled_header_info(compiler_info).header_binary_name = parse_precompiled_header_binary_name(setting_value)
     when TEXT_PRECOMPILEDHEADERFILE_SOURCE
@@ -3227,6 +3230,8 @@ class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
       get_linker_info().arr_ignore_specific_default_libraries = parse_ignore_specific_default_libraries(setting_value)
     when TEXT_LINKINCREMENTAL
       linker_info.link_incremental = parse_link_incremental(setting_value)
+    when TEXT_NAME
+      linker_info.name = setting_value
     else
       found = super
     end
@@ -3360,6 +3365,8 @@ class V2C_VS7ToolPrePostBuildLinkEventToolParser < V2C_VSToolPrePostBuildLinkEve
       @info_elem.arr_commandline = parse_commandline(setting_value)
     when 'Description'
       @info_elem.message = parse_message(setting_value)
+    when TEXT_NAME
+      # to be ignored
     else
       found = super
     end
