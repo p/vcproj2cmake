@@ -1705,9 +1705,23 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
     # "C vs C++ or any C varient"
     #   http://hardforum.com/archive/index.php/t-1574698.html
 
-    # VS10: in case the main project file is lacking a ProjectName element,
-    # the project will adopt the _exact name part_ of the filename,
-    # thus enforce this ctor taking a project name to use as a default if no ProjectName element is available:
+    # Project name (MSVS10: ProjectName element).
+    # VS10: in case the .vcxproj file is lacking a ProjectName element,
+    # the project will adopt the _exact name-only part_
+    # of the .vcxproj filename (the RootNamespace element
+    # appears to NOT get considered for naming the project).
+    # And come to think of it, it's just natural handling:
+    # object has a nil default-init, and if parsing could not successfully
+    # assign a proper value, the _outer file-based layer_
+    # is responsible for doing simple
+    #     .nil? --> assign project file name-only part
+    # handling.
+    #
+    # On MSVS10 this info then is shown in both
+    # Solution Explorer (as project name)
+    # and during msbuild processing (as target name).
+    # MSVS10's project name fallback handling might perhaps turn out
+    # to be different from what MSVS8 does, though.
     @name = nil
 
     # the original environment (build environment / IDE)
@@ -4032,6 +4046,7 @@ class V2C_VSProjectFilesBundleParserBase < V2C_LoggerBase
   def mark_projects_default_project_name(project_name_default)
     @arr_projects_new.each { |project_new|
       project_new.name ||= project_name_default
+      logger.debug "PROJECT NAME now #{project_new.name} (default #{project_name_default})"
     }
   end
 end
@@ -4891,16 +4906,10 @@ class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10BaseElemParser
   end
   def parse_verify
     found = super
-    if get_project().name.nil?
-      # This can be seen e.g. with sbnc.vcxproj
-      # (contains RootNamespace and NOT ProjectName),
-      # despite sbnc.vcproj containing Name and NOT RootNamespace. WEIRD.
-      # Couldn't find any hint how this case should be handled,
-      # which setting to adopt then. OK, some internet descriptions
-      # seem to confirm that it's pretty normal, so downgrade to debug log...
-      logger.debug('missing project name? Adopting root namespace...')
-      get_project().name = get_project().root_namespace
-    end
+    # Used to fall back to using RootNamespace as ProjectName value here
+    # in case of ProjectName element non-provided,
+    # but this most certainly is incorrect (see full description near the
+    # project info's ProjectName-related member).
     found
   end
 end
