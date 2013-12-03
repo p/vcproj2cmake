@@ -13,8 +13,9 @@ end
 
 def execute_command(arr_cmdline)
   str_cmdline = arr_cmdline.join(' ')
-  #puts "Executing command line #{str_cmdline}"
+  puts "Executing command line #{str_cmdline}"
   output = `#{str_cmdline}`
+  puts "success #{$?.success?}"
   if not $?.success?
     raise CommandExecutionError.new(str_cmdline, $?.exitstatus, output)
   end
@@ -23,25 +24,36 @@ end
 script_dir_rel = File.dirname(__FILE__)
 script_dir = File.expand_path(script_dir_rel)
 
+### converter run step ###
+
 conv_bin = File.join(script_dir, '../scripts/vcproj2cmake_recursive.rb')
 
 cmake_source_dir = script_dir
 
-output_convert = `#{conv_bin} #{cmake_source_dir} 2>&1`
-
-if not $?.success?
-  test_failed_st_reason = "script indicated failure (exit code: #{$?.exitstatus})"
-end
+execute_command([ conv_bin,cmake_source_dir, '2>&1' ])
 
 cmake_build_dir = "#{cmake_source_dir}/../st.build"
-begin
-  Dir.mkdir(cmake_build_dir)
-rescue Errno::EEXIST
-  # ignore it
+
+def test_step_cmake_configure_run(cmake_source_dir, cmake_binary_dir, cmake_args)
+  begin
+    Dir.mkdir(cmake_binary_dir)
+  rescue Errno::EEXIST
+    # ignore it
+  end
+  puts "Created build root #{cmake_binary_dir}"
+  exec_args = [ 'cmake' ]
+  exec_args.concat(cmake_args)
+  exec_args.push(cmake_source_dir)
+  Dir.chdir(cmake_binary_dir) do |path|
+    execute_command(exec_args)
+  end
 end
 
+### CMake configure run step ###
+
+test_step_cmake_configure_run(cmake_source_dir, cmake_build_dir, [ '-DCMAKE_BUILD_TYPE=Debug' ])
+
 Dir.chdir(cmake_build_dir) do |path|
-  execute_command([ 'cmake', '-DCMAKE_BUILD_TYPE=Debug', cmake_source_dir ])
   # FIXME: tap into CMAKE_MAKE_PROGRAM. Could move the mechanism used by our
   # installer script into a common module.
   execute_command([ 'make' ])
