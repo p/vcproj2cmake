@@ -4425,32 +4425,32 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
       parser_warn_syntax_semi_compatible("Incompatible ItemGroup element! Item group name #{@group_type_name} vs. element name #{subelem_xml.name}! Visual Studio seems to correctly handle even such differently-typed elements within a group.")
     end
     list_curr = select_list(subelem_xml.name)
-    file_info = V2C_Info_File.new
-    file_parser = V2C_VS10ItemGroupFileElemParser.new(subelem_xml, file_info)
-    found = file_parser.parse
+    item_info = V2C_Info_File.new
+    item_parser = V2C_VS10ItemGroupFileElemParser.new(subelem_xml, item_info)
+    found = item_parser.parse
     if FOUND_TRUE == found
-      list_curr.append_item(file_info, V2C_Item_List_Info::APPEND_CASE_INSENSITIVE|V2C_Item_List_Info::APPEND_WARN_MISMATCH)
+      list_curr.append_item(item_info, V2C_Item_List_Info::APPEND_CASE_INSENSITIVE|V2C_Item_List_Info::APPEND_WARN_MISMATCH)
     else
       found = super
     end
     return found
   end
   private
-  def get_file_lists; @info_elem end
+  def get_item_lists; @info_elem end
   def select_list(name)
     if @cached_list_ptr.nil? || @cached_list_ptr.name != name
-      item_lists = get_file_lists()
+      item_lists = get_item_lists()
       @cached_list_ptr = item_lists.lookup_from_list_name(name)
       if @cached_list_ptr.nil?
-        @cached_list_ptr = V2C_Item_List_Info.new(name, get_file_list_type(name))
+        @cached_list_ptr = V2C_Item_List_Info.new(name, get_item_list_type(name))
         item_lists.append(@cached_list_ptr)
       end
     end
     @cached_list_ptr
   end
-  def get_file_list_type(file_list_name)
+  def get_item_list_type(item_list_name)
     type = V2C_Item_List_Types::TYPE_NONE
-    case file_list_name
+    case item_list_name
     when TEXT_CLCOMPILE
       type = V2C_Item_List_Types::TYPE_CL_COMPILES
     when TEXT_CLINCLUDE
@@ -4491,13 +4491,13 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
     when TEXT_WEBREFERENCEURL
       type = V2C_Item_List_Types::TYPE_CS_WEBREFERENCEURL
     else
-      logger.unhandled_functionality("file list name #{file_list_name}")
+      logger.unhandled_functionality("item list name #{item_list_name}")
       type = V2C_Item_List_Types::TYPE_NONE
     end
     return type
   end
   #def parse_verify
-  #  log_fatal "file list: #{get_file_list().inspect}"
+  #  log_fatal "item list: #{get_item_list().inspect}"
   #end
 end
 
