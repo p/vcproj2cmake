@@ -358,7 +358,7 @@ module Logging_Redirector
   end
 
   def logger_member
-    self # HACK - we're currently the base class of certain classes, but ultimately the logger target should be a ctor param (i.e., member) of all classes). This trick allows us to do a gradual migration :)
+    self # HACK - we're currently the base class of certain classes, but ultimately the logger target should be a ctor param (i.e., member) of all classes. This trick allows us to do a gradual migration :)
   end
 
   def todo(str)
@@ -4372,6 +4372,8 @@ class V2C_VS10ItemGroupFileElemParser < V2C_VS10ParserBase
     found = be_optimistic()
     setting_key = subelem_xml.name
     setting_value = subelem_xml.text
+    # We're parsing the ItemGroup's Item element's sub elements here.
+    # MSVS speak: they are called ItemMetadata.
     case setting_key
     when 'Filter'
       get_file_elem().filter = vs_normalized_filter_name(setting_value)
