@@ -927,6 +927,12 @@ def condition_get_build_type(
 end
 
 # @brief Mostly used to manage the condition element...
+# TODO: since a sub element hierarchy will establish
+# a hierarchical chain of potentially progressively restricting
+# condition clauses, we will need a helper which is able to traverse
+# the condition chain and yield a resulting combined condition
+# for any sub element that's being queried.
+
 class V2C_Info_Elem_Base < Logger
   include Logging_Redirector
 
@@ -1608,7 +1614,10 @@ class V2C_Build_Platform_Configs
   end
 end
 
-class V2C_Info_Item
+class V2C_Info_Item < V2C_Info_Elem_Base
+  def initialize
+    super
+  end
 end
 
 class V2C_Info_File < V2C_Info_Item
@@ -1719,7 +1728,7 @@ ITEM_LIST_DESCRIPTIONS = [
   File_List_Descr.new('none', 'Does not participate in build'), # VS10: None
 ]
 
-class V2C_Item_List_Info
+class V2C_Item_List_Info < V2C_Info_Elem_Base
   include V2C_Item_List_Types
   def initialize(
     name,
@@ -1814,8 +1823,9 @@ class V2C_Item_List_Info
   end
 end
 
-class V2C_Item_Lists_Container
+class V2C_Item_Lists_Container < V2C_Info_Elem_Base
   def initialize
+    super
     # FIXME: the array/hash combo should perhaps be merged
     # with identical functionality in V2C_Filters_Container (new class?).
     @arr_item_lists = Array.new # V2C_Item_List_Info:s, array (serves to maintain ordering)
@@ -4514,7 +4524,7 @@ class V2C_VS10ItemGroupFiltersParser < V2C_VS10BaseElemParser
   end
 end
 
-class V2C_VS10ItemGroupFileElemParser < V2C_VS10ParserBase
+class V2C_VS10ItemGroupFileElemParser < V2C_VS10BaseElemParser
   private
 
   def get_file_elem; @info_elem end # V2C_Info_File
@@ -4549,7 +4559,7 @@ class V2C_VS10ItemGroupFileElemParser < V2C_VS10ParserBase
   end
 end
 
-class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
+class V2C_VS10ItemGroupFilesParser < V2C_VS10BaseElemParser
   def initialize(
     elem_xml,
     group_type_name,
