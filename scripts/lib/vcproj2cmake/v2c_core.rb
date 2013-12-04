@@ -5192,11 +5192,12 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10BaseElemParser
       # to at least mention the project name, too.
       parser_warn_syntax_semi_compatible("Incompatible ItemGroup element! Item group name #{@group_type_name} vs. element name #{subelem_xml.name}! Visual Studio seems to correctly handle even such differently-typed elements within a group.")
     end
-    list_curr = select_list(subelem_xml.name)
     info_file = V2C_Info_File.new
     file_parser = V2C_VS10ItemGroupFileElemParser.new(subelem_xml, info_file)
     found = file_parser.parse
     if FOUND_TRUE == found
+      list_curr = select_list(
+        subelem_xml.name)
       list_curr.append_item(
         info_file,
         V2C_Item_List_Info::APPEND_CASE_INSENSITIVE|V2C_Item_List_Info::APPEND_WARN_MISMATCH)
