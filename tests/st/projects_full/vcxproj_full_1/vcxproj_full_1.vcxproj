@@ -189,6 +189,14 @@
     <ResourceCompile Include=".\..\files\version.rc" />
   </ItemGroup>
   <ItemGroup>
+    <CustomBuildStep Include="vcxproj_full_1.exe.manifest">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </CustomBuildStep>
+  </ItemGroup>
+  <ItemGroup>
     <Unknown_weird_category Include=".\..\files\misctestfile" />
   </ItemGroup>
   <ItemGroup>

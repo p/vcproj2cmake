@@ -4183,6 +4183,7 @@ module V2C_VS10Defines
   TEXT__EMBEDMANAGEDRESOURCEFILE = '_EmbedManagedResourceFile'
   TEXT_MANIFEST = 'Manifest'
   TEXT_CUSTOMBUILD = 'CustomBuild'
+  TEXT_CUSTOMBUILDSTEP = 'CustomBuildStep'
   TEXT_NONE = 'None'
   TEXT_REFERENCE = 'Reference'
   TEXT_BOOTSTRAPPERPACKAGE = 'BootstrapperPackage'
@@ -4486,6 +4487,9 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10BaseElemParser
       type = V2C_Item_List_Types::TYPE_MANIFEST
     when TEXT_CUSTOMBUILD
       type = V2C_Item_List_Types::TYPE_CUSTOM_BUILD
+    when TEXT_CUSTOMBUILDSTEP
+      logger.unhandled_functionality("item list name #{item_list_name} has raw intermediate handling only: currently hard-coding an assumption that this means that ExcludedFromBuild marking of this item is desired.")
+      type = V2C_Item_List_Types::TYPE_NONE
     when TEXT_NONE
       type = V2C_Item_List_Types::TYPE_NONE
     when TEXT_REFERENCE
