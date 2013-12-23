@@ -4160,6 +4160,7 @@ module V2C_VS10Defines
   TEXT_CONDITION = 'Condition'
   TEXT_DEFAULT = 'Default'
   TEXT_DISABLED = 'Disabled'
+  TEXT_EXCLUDE = 'Exclude'
   TEXT_FALSE_LOWER = 'false' # Perhaps move to a common VS module
   TEXT_INCLUDE = 'Include'
   TEXT_LABEL = 'Label'
@@ -4396,6 +4397,8 @@ class V2C_VS10ItemGroupFileElemParser < V2C_VS10BaseElemParser
       # and multiple elements ("file1.c; file2.c") are valid - for MSBuild
       # (not sure whether that applies to .vcxproj, too)
       get_file_elem().path_relative = get_filesystem_location(setting_value)
+    when TEXT_EXCLUDE
+      get_file_elem().
     else
       found = super
     end
