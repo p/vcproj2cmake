@@ -715,9 +715,11 @@ def read_mappings(filename_mappings, mappings)
     #Hash[*File.read(filename_mappings).scan(/^(.*)=(.*)$/).flatten]
     File.open(filename_mappings, 'r').each do |line|
       next if COMMENT_LINE_REGEX_OBJ.match(line)
-      b, c = line.chomp.split(':')
-      if not b.nil?
-        mappings[b] = c
+      line_cooked = line.chomp
+      line_payload = line_cooked
+      pattern_orig, expr_replacement = line_payload.split(':')
+      if not pattern_orig.nil?
+        mappings[pattern_orig] = expr_replacement
       end
     end
   else
