@@ -40,10 +40,12 @@
 # - have some low-level functions which are compiler-dependent
 #   and offer results to mid-level APIs
 # - have some high-level APIs which are public (user-facing), long-lived APIs
+# - always do a check via cmake --warn-uninitialized when doing changes,
+#   to catch stale variable reference issues
 
 
 # Provide PCH_WANT_DEBUG for quick debug enable by user - to be provided externally or edited here.
-#set(PCH_WANT_DEBUG true)
+#set(PCH_WANT_DEBUG ON)
 if(PCH_WANT_DEBUG)
   macro(_pch_msg_debug _msg)
     message("V2C_PCHSupport module: ${_msg}")
@@ -70,6 +72,37 @@ function(_pch_ensure_valid_variables)
   endforeach(var_name_ ${ARGV})
 endfunction(_pch_ensure_valid_variables)
 
+# Comment-only-helper for workaround
+# for CMake empty-var-PARENT_SCOPE-results-in-non-DEFINED bug (#13786).
+# Simply set var to empty prior to calling a problematic PARENT_SCOPE function.
+# This central helper would actually allow us
+# to disable this potentially bug-shadowing workaround
+# in case of detecting newish CMake version which will perhaps have it fixed.
+macro(_pch_var_empty_parent_scope_bug_workaround _var_name)
+  set(${_var_name} "")
+endmacro(_pch_var_empty_parent_scope_bug_workaround _var_name)
+
+# Small helper to query some variables which might not be defined.
+# Used to avoid --warn-uninitialized warnings.
+macro(_pch_set_if_defined _var_name _out_var_name)
+  set(${_out_var_name} "")
+  if(DEFINED ${_var_name})
+    set(${${_out_var_name}} "${${_var_name}}")
+  endif(DEFINED ${_var_name})
+endmacro(_pch_set_if_defined _var_name _out_var_name)
+
+# Logging *any* backslash-containing result of file(TO_NATIVE_PATH)
+# on Windows will cause a "nice" (NOT) "Syntax error in CMake code at"
+# developer warning.
+# Thus if needed escape all backslashes in a TO_NATIVE_PATH result.
+function(_pch_to_native_path_sanitized _in_path _out_path_native)
+  file(TO_NATIVE_PATH "${_in_path}" out_path_native_)
+  if(WIN32)
+    string(REPLACE "\\" "\\\\" out_path_native_ "${out_path_native_}")
+  endif(WIN32)
+  set(${_out_path_native} "${out_path_native_}" PARENT_SCOPE)
+endfunction(_pch_to_native_path_sanitized _in_path _out_path_native)
+
 # Helper to explicitly quote a variable's content if needed.
 # Should probably only be used in cases where trying
 # to achieve better automatic handling is hopeless.
@@ -89,7 +122,8 @@ if(NOT PCH_SKIP_CHECK_VALID_PROJECT)
   endif(NOT PROJECT_NAME)
 endif(NOT PCH_SKIP_CHECK_VALID_PROJECT)
 
-_pch_msg_debug("CMAKE_COMPILER_IS_GNUCXX ${CMAKE_COMPILER_IS_GNUCXX}")
+_pch_set_if_defined(CMAKE_COMPILER_IS_GNUCXX my_CMAKE_COMPILER_IS_GNUCXX)
+_pch_msg_debug("CMAKE_COMPILER_IS_GNUCXX: ${my_CMAKE_COMPILER_IS_GNUCXX}")
 
 IF(CMAKE_COMPILER_IS_GNUCXX)
 
@@ -158,7 +192,11 @@ endmacro(_pch_append_string_items_to_list _list_var_name _string)
 MACRO(_PCH_GATHER_EXISTING_COMPILE_FLAGS_FROM_SCOPE _out_compile_flags_list)
 
   set(pch_all_compile_flags_list_ "")
-  STRING(TOUPPER "CMAKE_CXX_FLAGS_${CMAKE_BUILD_TYPE}" _flags_var_name)
+  if(CMAKE_CONFIGURATION_TYPES)
+    set(_flags_var_name "CMAKE_CXX_FLAGS")
+  else(CMAKE_CONFIGURATION_TYPES)
+    STRING(TOUPPER "CMAKE_CXX_FLAGS_${CMAKE_BUILD_TYPE}" _flags_var_name)
+  endif(CMAKE_CONFIGURATION_TYPES)
   _pch_append_string_items_to_list(pch_all_compile_flags_list_ ${_flags_var_name})
 
   IF(CMAKE_COMPILER_IS_GNUCXX)
@@ -220,6 +258,8 @@ ENDMACRO(_PCH_GATHER_EXISTING_COMPILE_DEFINITIONS_FROM_SCOPE _out_compile_defs_l
 
 MACRO(_PCH_WRITE_PCHDEP_CXX _targetName _include_file _out_dephelp)
 
+  # Do NOT specify CMAKE_CFG_INTDIR here! (configure-time file activity
+  # obviously will not handle that)
   SET(pch_dephelp_fqpn_ "${CMAKE_CURRENT_BINARY_DIR}/${_targetName}_pch_dephelp.cxx")
   FILE(WRITE "${pch_dephelp_fqpn_}.in"
 "#include \"${_include_file}\"
@@ -239,23 +279,36 @@ int testfunction()
 ENDMACRO(_PCH_WRITE_PCHDEP_CXX )
 
 # Returns the compile flags required to *Create* a PCH, and only those.
-MACRO(_PCH_GET_COMPILE_FLAGS_PCH_CREATE _out_cflags _header _pch _pch_creator_cxx)
-	set(cflags_pch_create_ "")
+function(_PCH_GET_COMPILE_FLAGS_PCH_CREATE _out_cflags _header _pch _pch_creator_cxx)
+	set(pch_cflags_create_ "")
+
+	_pch_msg_debug("_header: ${_header}, _pch: ${_pch}")
+
+        # Let's assume that native paths are useful for both MSVC and now gcc, too.
+	# And do this *right before* the transition to a native tool (compiler),
+	# since CMake has issues with unescaped Windows-side backslashes
+	# in the resulting strings (ARGH).
+	# If MSVC and gcc do grok slash-type paths, then one might consider
+	# skipping TO_NATIVE_PATH stuff completely (it's very problematic).
+	_pch_to_native_path_sanitized("${_header}" native_header_)
+	_pch_to_native_path_sanitized("${_pch}" native_pch_)
 
 	IF(CMAKE_COMPILER_IS_GNUCXX)
 	  # gcc does not build the PCH via a .cpp builder file,
 	  # thus this argument is not used... right!?
-	  SET(cflags_pch_create_ -x c++-header -o ${_pch} ${_header})
+	  SET(pch_cflags_create_ -x c++-header -o ${native_pch_} ${native_header_})
 	ELSE(CMAKE_COMPILER_IS_GNUCXX)
-		SET(cflags_pch_create_ /c /Fp\"${_pch}\" /Yc\"${_header}\" ${_pch_creator_cxx}
+		SET(pch_cflags_create_ /c /Fp\"${native_pch_}\" /Yc\"${native_header_}\" ${_pch_creator_cxx}
 		)
-		#/out:${_pch}
+		#/out:${native_pch_}
 
 	ENDIF(CMAKE_COMPILER_IS_GNUCXX)
 
-	SET(${_out_cflags} ${cflags_pch_create_})
+	#message(FATAL_ERROR "pch_cflags_create_ ${pch_cflags_create_}")
 
-ENDMACRO(_PCH_GET_COMPILE_FLAGS_PCH_CREATE _out_cflags _header _pch _pch_creator_cxx)
+	SET(${_out_cflags} "${pch_cflags_create_}" PARENT_SCOPE)
+
+endfunction(_PCH_GET_COMPILE_FLAGS_PCH_CREATE _out_cflags _header _pch _pch_creator_cxx)
 
 # Fetches a user-specified PCH_ADDITIONAL_COMPILER_FLAGS.
 # If preprocessed files are accessible on all remote machines,
@@ -271,9 +324,9 @@ function(_pch_compiler_flags_additional_get _out_flags)
 endfunction(_pch_compiler_flags_additional_get _out_flags)
 
 # Returns the compile flags required to *Use* a PCH, and only those.
-MACRO(_PCH_GET_COMPILE_FLAGS_PCH_USE _out_cflags _header_name _pch_path_arg _dowarn )
+function(_PCH_GET_COMPILE_FLAGS_PCH_USE _out_cflags _header_name _pch_path_arg _dowarn )
 
-  set(cflags_pch_use_ "")
+  set(pch_cflags_use_ "")
 
   IF(CMAKE_COMPILER_IS_GNUCXX)
     # gcc does not seem to need/use _pch_path arg.
@@ -295,7 +348,7 @@ MACRO(_PCH_GET_COMPILE_FLAGS_PCH_USE _out_cflags _header_name _pch_path_arg _dow
     _pch_quote_manually_if_needed(pch_header_location_)
     set(additional_flags_ "") # pre-init required (CMake bug #13786)
     _pch_compiler_flags_additional_get(additional_flags_)
-    set(cflags_pch_use_ "${additional_flags_} -include ${pch_header_location_} ${pch_gcc_pch_warn_flag_} " )
+    set(pch_cflags_use_ "${additional_flags_} -include ${pch_header_location_} ${pch_gcc_pch_warn_flag_} ")
 
     # Currently there seems to be an annoyance on gcc side where headers
     # without include guards lead to duplicate inclusion, whereas on MSVC
@@ -308,21 +361,19 @@ MACRO(_PCH_GET_COMPILE_FLAGS_PCH_USE _out_cflags _header_name _pch_path_arg _dow
   ELSE(CMAKE_COMPILER_IS_GNUCXX)
 
     if(_pch_path_arg)
-      set(cflags_pch_use_ "${cflags_pch_use_} /Fp${_pch_path_arg}")
+      set(pch_cflags_use_ "${pch_cflags_use_} /Fp\"${_pch_path_arg}\"")
     endif(_pch_path_arg)
-    set(cflags_pch_use_ "${cflags_pch_use_} /Yu${_header_name}" )
+    set(pch_cflags_use_ "${pch_cflags_use_} /Yu\"${_header_name}\"")
 
   ENDIF(CMAKE_COMPILER_IS_GNUCXX)
 
-  set(${_out_cflags} ${cflags_pch_use_})
+  _pch_msg_debug("_pch_pat_arg: ${_pch_path_arg}, _pch_path_pch_cflags_use_: ${pch_cflags_use_}")
 
-ENDMACRO(_PCH_GET_COMPILE_FLAGS_PCH_USE )
+  set(${_out_cflags} "${pch_cflags_use_}" PARENT_SCOPE)
 
-MACRO(_PCH_GET_COMPILE_COMMAND_PCH_CREATE _out_command _input _output _pch_creator_cxx)
+endfunction(_PCH_GET_COMPILE_FLAGS_PCH_USE )
 
-        # Let's assume that native paths are useful for both MSVC and now gcc, too.
-	FILE(TO_NATIVE_PATH ${_input} _native_input)
-	FILE(TO_NATIVE_PATH ${_output} _native_output)
+function(_PCH_GET_COMPILE_COMMAND_PCH_CREATE _out_command_list _header _pch _pch_creator_cxx)
 
         set(pch_compiler_cxx_arg1_ "") # Provide empty default
         set(pch_creator_cxx_ "${_pch_creator_cxx}")
@@ -338,11 +389,13 @@ MACRO(_PCH_GET_COMPILE_COMMAND_PCH_CREATE _out_command _input _output _pch_creat
 	  # thus provide an ad-hoc instance of it if needed.
 	  if(NOT pch_creator_cxx_)
 	    SET(pch_creator_cxx_ pch_creator_dummy.cpp)
-	    _pch_write_pch_creator_cxx(${CMAKE_CURRENT_BINARY_DIR}/${pch_creator_cxx_} "2")
+	    _pch_write_pch_creator_cxx(${CMAKE_CURRENT_BINARY_DIR}/${pch_creator_cxx_} "${_header}" "2")
 	  endif(NOT pch_creator_cxx_)
 	ENDIF(CMAKE_COMPILER_IS_GNUCXX)
 
-	_PCH_GET_COMPILE_FLAGS_PCH_CREATE(_compile_FLAGS_PCH "${_native_input}" "${_native_output}" "${pch_creator_cxx_}")
+	_PCH_GET_COMPILE_FLAGS_PCH_CREATE(_compile_FLAGS_PCH "${_header}" "${_pch}" "${pch_creator_cxx_}")
+
+	_pch_msg_debug("compile pch create flags: ${_compile_FLAGS_PCH}")
 
 	# FIXME: why the ******[CENSORED] do we feel the need
 	# to fumble together a manual compiler invocation here,
@@ -350,16 +403,26 @@ MACRO(_PCH_GET_COMPILE_COMMAND_PCH_CREATE _out_command _input _output _pch_creat
 	# for creating the PCH!?
 	# I could accept this being externally required to be done this way,
 	# but then at the very least a detailed comment is sorely missing here...
-	SET(${_out_command} ${CMAKE_CXX_COMPILER} ${pch_compiler_cxx_arg1_} ${_compile_FLAGS} ${_compiler_decorated_DEFS} ${_compile_FLAGS_PCH})
-ENDMACRO(_PCH_GET_COMPILE_COMMAND_PCH_CREATE )
+	SET(${_out_command_list}
+          ${CMAKE_CXX_COMPILER} ${pch_compiler_cxx_arg1_}
+          ${_compile_FLAGS} ${_compiler_decorated_DEFS}
+          ${_compile_FLAGS_PCH}
+        PARENT_SCOPE)
+	#_pch_msg_debug("compile pch create: ${${_out_command_list}}")
+endfunction(_PCH_GET_COMPILE_COMMAND_PCH_CREATE )
 
-
-macro(_pch_get_default_output_location_name _targetName _input _out_output)
+function(_pch_get_default_output_location_name _targetName _input _out_output)
   GET_FILENAME_COMPONENT(_name ${_input} NAME)
   GET_FILENAME_COMPONENT(_path ${_input} PATH)
-  SET(${_out_output} "${CMAKE_CURRENT_BINARY_DIR}/${_name}.gch/${_targetName}_${CMAKE_BUILD_TYPE}.h++")
-  _pch_msg_debug("created default PCH output name: ${${_out_output}}")
-endmacro(_pch_get_default_output_location_name _targetName _input _out_output)
+  if(DEFINED CMAKE_BUILD_TYPE)
+    set(pch_output_filename_decoration_ "_${CMAKE_BUILD_TYPE}")
+  else(DEFINED CMAKE_BUILD_TYPE)
+    set(pch_output_filename_decoration_ "")
+  endif(DEFINED CMAKE_BUILD_TYPE)
+  set(out_output_ "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/${_name}.gch/${_targetName}${pch_output_filename_decoration_}.h++")
+  _pch_msg_debug("created default PCH output name: ${out_output_}")
+  SET(${_out_output} "${out_output_}" PARENT_SCOPE)
+endfunction(_pch_get_default_output_location_name _targetName _input _out_output)
 
 # Existing legacy public API (unfortunate naming).
 MACRO(GET_PRECOMPILED_HEADER_OUTPUT _targetName _input _output)
@@ -375,22 +438,23 @@ macro(_pch_normalize_notfound_var_content _var_name)
   endif("${${_var_name}}" MATCHES NOTFOUND)
 endmacro(_pch_normalize_notfound_var_content _var_name)
 
-macro(_pch_target_compile_flags_get _targetName _out_cflags_string)
+function(_pch_target_compile_flags_get _targetName _out_cflags_string)
   GET_TARGET_PROPERTY(cflags_ ${_targetName} COMPILE_FLAGS)
   _pch_normalize_notfound_var_content(cflags_)
-  set(${_out_cflags_string} "${cflags_}")
-endmacro(_pch_target_compile_flags_get _targetName _out_cflags_string)
+  set(${_out_cflags_string} "${cflags_}" PARENT_SCOPE)
+endfunction(_pch_target_compile_flags_get _targetName _out_cflags_string)
 
 # Small helper to ensure that adding COMPILE_FLAGS will NOT lose the old ones.
-macro(_pch_target_compile_flags_add _targetName _cflags_string)
+function(_pch_target_compile_flags_add _targetName _cflags_string)
+  _pch_var_empty_parent_scope_bug_workaround(cflags_old_)
   _pch_target_compile_flags_get(${_targetName} cflags_old_)
   _pch_msg_debug("Add flags ${_cflags_string} to ${_targetName} (pre-existing: ${cflags_old_})" )
   SET(cflags_new_ "${cflags_old_} ${_cflags_string}")
   SET_TARGET_PROPERTIES(${_targetName} PROPERTIES COMPILE_FLAGS "${cflags_new_}")
-endmacro(_pch_target_compile_flags_add _targetName _cflags_string)
+endfunction(_pch_target_compile_flags_add _targetName _cflags_string)
 
 
-MACRO(ADD_PRECOMPILED_HEADER_TO_TARGET _targetName _input _pch_output_to_use )
+function(ADD_PRECOMPILED_HEADER_TO_TARGET _targetName _input _pch_output_to_use )
 
   # to do: test whether compiler flags match between target  _targetName
   # and _pch_output_to_use
@@ -406,7 +470,7 @@ MACRO(ADD_PRECOMPILED_HEADER_TO_TARGET _targetName _input _pch_output_to_use )
   endif(${ARGN})
 
 
-  FILE(TO_NATIVE_PATH "${_pch_output_to_use}" _pch_output_to_use_native)
+  _pch_to_native_path_sanitized("${_pch_output_to_use}" _pch_output_to_use_native)
 
   _PCH_GET_COMPILE_FLAGS_PCH_USE(_target_cflags_use "${_name}" "${_pch_output_to_use_native}" ${dowarn_})
   _pch_target_compile_flags_add(${_targetName} ${_target_cflags_use})
@@ -417,29 +481,32 @@ MACRO(ADD_PRECOMPILED_HEADER_TO_TARGET _targetName _input _pch_output_to_use )
 
   ADD_DEPENDENCIES(${_targetName} pch_Generate_${_targetName} )
 
-ENDMACRO(ADD_PRECOMPILED_HEADER_TO_TARGET)
+endfunction(ADD_PRECOMPILED_HEADER_TO_TARGET)
 
-MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
-
-  SET(_PCH_current_target ${_targetName})
-
+macro(_pch_build_config_verify)
   # This check is VERY debatable.
   # This function here is used for multi-config setups as well
   # yet CMAKE_BUILD_TYPE should NOT be set there.
+  # [ok, fixed check to properly query CMAKE_CONFIGURATION_TYPES]
   # Also, what I think is the case is that our PCH stuff
   # queries CMAKE_BUILD_TYPE for file naming purposes and stuff,
   # and does not tolerate it not being set.
   # Obviously the problem is in our own handling,
-  # since we should be having our own CACHE variable
+  # since the utmost we should do is having our own CACHE variable
   # to mimick a CMAKE_BUILD_TYPE whenever it's not set(table).
   # Again, setting a specific (and automatically wrong) CMAKE_BUILD_TYPE
   # on multi-config (CMAKE_CONFIGURATION_TYPES available) is not a good thing to do.
-  IF(NOT CMAKE_BUILD_TYPE)
+  IF(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
     _pch_msg_fatal_error(
-      "This is the ADD_PRECOMPILED_HEADER macro. "
-      "You must set CMAKE_BUILD_TYPE!"
-      )
-  ENDIF(NOT CMAKE_BUILD_TYPE)
+      "This is the ADD_PRECOMPILED_HEADER macro. You must set CMAKE_BUILD_TYPE!"
+    )
+  ENDIF(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+endmacro(_pch_build_config_verify)
+
+function(_pch_add_precompiled_header _targetName _header)
+  SET(_PCH_current_target ${_targetName})
+
+  _pch_build_config_verify()
 
   # BUG FIX: a non-option invocation will cause ARGN def to be skipped!!
   set(dowarn_ 0)
@@ -450,22 +517,38 @@ MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
     ENDIF("${ARGN}" STREQUAL "0")
   endif(${ARGN})
 
-  GET_FILENAME_COMPONENT(_name "${_input}" NAME)
-  GET_FILENAME_COMPONENT(_path "${_input}" PATH)
-  _pch_get_default_output_location_name( ${_targetName} "${_input}" output_)
+  GET_FILENAME_COMPONENT(_name "${_header}" NAME)
+  GET_FILENAME_COMPONENT(_path "${_header}" PATH)
+  _pch_get_default_output_location_name( ${_targetName} "${_header}" output_)
 
   GET_FILENAME_COMPONENT(_outdir "${output_}" PATH)
 
-  _PCH_WRITE_PCHDEP_CXX(${_targetName} "${_input}" _pch_dephelp_cxx)
+  _PCH_WRITE_PCHDEP_CXX(${_targetName} "${_header}" _pch_dephelp_cxx)
   GET_TARGET_PROPERTY(_targetType ${_PCH_current_target} TYPE)
   IF(${_targetType} STREQUAL SHARED_LIBRARY)
     set(lib_type_arg_ "SHARED")
   ELSE(${_targetType} STREQUAL SHARED_LIBRARY)
     set(lib_type_arg_ "STATIC")
   ENDIF(${_targetType} STREQUAL SHARED_LIBRARY)
-  ADD_LIBRARY(${_targetName}_pch_dephelp ${lib_type_arg_} ${_pch_dephelp_cxx})
 
   FILE(MAKE_DIRECTORY "${_outdir}")
+
+  set(pch_dephelp_target_name_ ${_targetName}_pch_dephelp)
+  # For certain uses within multi-configuration build environments,
+  # our function will get called multiple times (per-configuration).
+  # However, a target can be setup *once* only (and we need *one* target
+  # only anyway since per-configuration switching of outdirs
+  # can be properly managed, via CMAKE_CFG_INTDIR mechanism etc.).
+  # Thus guard against such cases.
+  set(pch_need_dephelp_target_ ON)
+  if(CMAKE_CONFIGURATION_TYPES)
+    if(TARGET ${pch_dephelp_target_name_})
+      set(pch_need_dephelp_target_ OFF)
+    endif(TARGET ${pch_dephelp_target_name_})
+  endif(CMAKE_CONFIGURATION_TYPES)
+  if(pch_need_dephelp_target_)
+    ADD_LIBRARY(${pch_dephelp_target_name_} ${lib_type_arg_} "${_pch_dephelp_cxx}")
+  endif(pch_need_dephelp_target_)
 
 
   _PCH_GATHER_EXISTING_COMPILE_FLAGS_FROM_SCOPE(_compile_FLAGS)
@@ -485,26 +568,36 @@ MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
   set(header_file_copy_in_binary_dir_ "${CMAKE_CURRENT_BINARY_DIR}/${_name}")
   SET_SOURCE_FILES_PROPERTIES("${header_file_copy_in_binary_dir_}" PROPERTIES GENERATED 1)
   ADD_CUSTOM_COMMAND(
-   OUTPUT "${header_file_copy_in_binary_dir_}"
-   COMMAND "${CMAKE_COMMAND}" -E copy ${_input} ${header_file_copy_in_binary_dir_} # ensure same directory! Required by gcc
-   DEPENDS "${_input}"
+   OUTPUT	"${header_file_copy_in_binary_dir_}"
+   COMMAND "${CMAKE_COMMAND}" -E copy ${_header} ${header_file_copy_in_binary_dir_} # ensure same directory! Required by gcc
+   DEPENDS "${_header}"
   )
 
-  _PCH_GET_COMPILE_COMMAND_PCH_CREATE(_compile_command_pch_create  "${header_file_copy_in_binary_dir_}" "${output_}" "")
+  _PCH_GET_COMPILE_COMMAND_PCH_CREATE(compile_command_pch_create_ "${header_file_copy_in_binary_dir_}" "${output_}" "")
 
   _pch_msg_debug("_compile_FLAGS: ${_compile_FLAGS}\n_compiler_decorated_DEFS: ${_compiler_decorated_DEFS}")
-  _pch_msg_debug("_input ${_input}\noutput_ ${output_}" )
-  _pch_msg_debug("COMMAND ${_compile_command_pch_create}")
+  _pch_msg_debug("_header ${_header}\noutput_ ${output_}" )
+  _pch_msg_debug("COMMAND ${compile_command_pch_create_}")
 
-  ADD_CUSTOM_COMMAND(
-    OUTPUT "${output_}"
-    COMMAND ${_compile_command_pch_create}
-    DEPENDS "${_input}"   "${header_file_copy_in_binary_dir_}" ${_targetName}_pch_dephelp
-    VERBATIM
-   )
+  if(pch_need_dephelp_target_)
+    ADD_CUSTOM_COMMAND(
+      OUTPUT "${output_}"
+      COMMAND ${compile_command_pch_create_}
+      DEPENDS "${_header}" "${header_file_copy_in_binary_dir_}" ${pch_dephelp_target_name_}
+      VERBATIM
+    )
 
 
-  ADD_PRECOMPILED_HEADER_TO_TARGET(${_targetName} ${_input} ${output_} ${dowarn_})
+    ADD_PRECOMPILED_HEADER_TO_TARGET(${_targetName} "${_header}" "${output_}" ${dowarn_})
+  else(pch_need_dephelp_target_)
+    message("add_precompiled_header() already had the helper targets setup - skipping addition of duplicate targets - potentially ignoring a differing configuration!")
+  endif(pch_need_dephelp_target_)
+endfunction(_pch_add_precompiled_header _targetName _header)
+
+
+# Existing legacy public API (unfortunate naming, and macro).
+MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
+  _pch_add_precompiled_header("${_targetName}" "${_input}")
 ENDMACRO(ADD_PRECOMPILED_HEADER)
 
 # Added a unified helper for writing the various differing PCH creator files...
@@ -513,32 +606,31 @@ ENDMACRO(ADD_PRECOMPILED_HEADER)
 # most likely it should be merged to be one and the same
 # (especially the PCH header #include is always done with quotes on MSVC,
 # not default-include-path-type brackets).
-macro(_pch_write_pch_creator_cxx _pch_creator_cxx _variant)
+function(_pch_write_pch_creator_cxx _pch_creator_cxx _header _variant)
   if("${_variant}" EQUAL "1")
     # I suspected that this LNK4221 workaround might trigger
     # an "unused variable" warning (should do the usual "(void) var;" trick),
     # but that's not the case (due to compile-unit-external variable?).
-    SET(dummy_file_content_ "#include \"${_input}\"\n"
-      "// This is required to suppress LNK4221.  Very annoying.\n"
+    SET(dummy_file_content_ "#include \"${_header}\"\n"
+      "// This is required to suppress MSVC LNK4221. Very annoying.\n"
       "void *g_${_targetName}Dummy = 0\;\n")
   else("${_variant}" EQUAL "1")
     SET(dummy_file_content_ "#include <${_header}>")
   endif("${_variant}" EQUAL "1")
 
-  if(EXISTS ${_pch_creator_cxx})
-	# Check if contents is the same, if not rewrite
-	# todo
-  else(EXISTS ${_pch_creator_cxx})
-	FILE(WRITE ${_pch_creator_cxx} ${dummy_file_content_})
-  endif(EXISTS ${_pch_creator_cxx})
-endmacro(_pch_write_pch_creator_cxx _pch_creator_cxx _variant)
+  set(pch_creator_production_ "${_pch_creator_cxx}")
+  set(pch_creator_template_ "${pch_creator_production_}.in")
+  FILE(WRITE "${pch_creator_template_}" ${dummy_file_content_})
+  configure_file("${pch_creator_template_}" "${pch_creator_production_}" COPYONLY)
+  _pch_msg_debug("Providing PCH binary creator stub (variant ${_variant}) at ${pch_creator_production_}.")
+endfunction(_pch_write_pch_creator_cxx _pch_creator_cxx _header _variant)
 
 MACRO(_PCH_GET_NATIVE_PRECOMPILED_HEADER _targetName _input _out_pch_creator_cxx)
 
 	if(CMAKE_GENERATOR MATCHES Visual*)
 		# Use of cxx extension for generated files (as Qt does)
 		SET(this_pch_creator_cxx_ ${CMAKE_CURRENT_BINARY_DIR}/${_targetName}_pch.cxx)
-		_pch_write_pch_creator_cxx(${this_pch_creator_cxx_} "1")
+		_pch_write_pch_creator_cxx(${this_pch_creator_cxx_} "${_input}" "1")
 		set(${_out_pch_creator} ${this_pch_creator_cxx_})
 	endif(CMAKE_GENERATOR MATCHES Visual*)
 
