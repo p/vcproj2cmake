@@ -784,8 +784,12 @@ end
 
 def push_platform_defn(platform_defs, platform, defn_value)
   #log_debug "adding #{defn_value} on platform #{platform}"
-  platform_defs[platform] ||= Array.new
-  platform_defs[platform].push(defn_value)
+  arr_defs = platform_defs[platform]
+  if arr_defs.nil?
+    arr_defs = Array.new
+    platform_defs[platform] = arr_defs
+  end
+  arr_defs.push(defn_value)
 end
 
 # IMPORTANT NOTE: the generator/target/parser class hierarchy and _naming_
