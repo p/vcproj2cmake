@@ -7609,8 +7609,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # Yup, this stuff should perhaps be shoved into
     # write_project_target_config(), too.
     if target_is_valid
-      arr_config_info = project_info.arr_config_info
       when_target_valid_scriptlet_block(@target.name) {
+        put_dotnet_references(
+          )
+
+        arr_config_info = project_info.arr_config_info
         arr_config_info.each { |config_info_curr|
           condition = config_info_curr.condition
           tools = config_info_curr.tools
@@ -7750,6 +7753,27 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   end
 
   private
+  def put_dotnet_references(
+    )
+    list_references = @target.file_lists.lookup_from_list_type(
+      V2C_File_List_Info::TYPE_CS_REFERENCE)
+    return if list_references.nil?
+    arr_references = array_collect_compact(list_references.arr_files) do |info_file|
+      info_file.path_relative
+    end
+    put_property_dotnet_references(
+      @target.name,
+      arr_references)
+  end
+  def put_property_dotnet_references(
+    target_name,
+    arr_references)
+    set_property(
+      target_name,
+      PROP_SET,
+      'VS_DOTNET_REFERENCES',
+      arr_references)
+  end
   def put_project(project_name, arr_progr_languages = nil)
     arr_args_project_name_and_attrs = [ project_name ]
     if obj_nil_or_empty(arr_progr_languages)
