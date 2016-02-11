@@ -1545,6 +1545,7 @@ class V2C_Tool_MIDL_Info < V2C_Tool_Define_Base_Info
     @iface_id_file_name = nil
     @mktyplib_compatible = false
     @proxy_file_name = nil
+    @generate_stubless_proxies_flag = false
     @target_environment = 'Win32'
     @type_library_name = nil
     @validate_all_parameters = false
@@ -1557,6 +1558,7 @@ class V2C_Tool_MIDL_Info < V2C_Tool_Define_Base_Info
   attr_accessor :iface_id_file_name
   attr_accessor :mktyplib_compatible
   attr_accessor :proxy_file_name
+  attr_accessor :generate_stubless_proxies_flag
   attr_accessor :target_environment
   attr_accessor :type_library_name
   attr_accessor :validate_all_parameters
@@ -3759,6 +3761,7 @@ end
 module V2C_VSToolMIDLDefines
   include V2C_VSToolDefineDefines
   TEXT_DLLDATAFILENAME = 'DllDataFileName'
+  TEXT_GENERATESTUBLESSPROXIES = 'GenerateStublessProxies'
   TEXT_HEADERFILENAME = 'HeaderFileName'
   TEXT_INTERFACEIDENTIFIERFILENAME = 'InterfaceIdentifierFileName'
   TEXT_MKTYPLIBCOMPATIBLE = 'MkTypLibCompatible'
@@ -3778,6 +3781,8 @@ class V2C_VSToolMIDLParser < V2C_VSToolDefineParserBase
     case setting_key
     when TEXT_DLLDATAFILENAME
       get_midl_info().dll_data_file_name = get_filesystem_location(setting_value)
+    when TEXT_GENERATESTUBLESSPROXIES
+      get_midl_info().generate_stubless_proxies_flag = get_boolean_value(setting_value)
     when TEXT_HEADERFILENAME
       get_midl_info().header_file_name = get_filesystem_location(setting_value)
     when TEXT_INTERFACEIDENTIFIERFILENAME
