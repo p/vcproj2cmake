@@ -24,6 +24,18 @@ module V2C_Ruby_Compat
   module_function :string_start_with
 end
 
+# https://blog.arkency.com/2017/07/nil-empty-blank-ruby-rails-difference/
+def obj_nil_or_empty(
+  obj)
+  obj.nil? or obj.empty?
+end
+
+def string_nil_or_empty(
+  str)
+  obj_nil_or_empty(
+    str)
+end
+
 
 
 
@@ -709,7 +721,7 @@ class V2C_Info_Condition
         build_type = $1
         platform = $2
       }
-      if build_type.nil? or build_type.empty?
+      if string_nil_or_empty(build_type)
         # TODO!!
         log_fatal "could not parse build type from condition #{str_condition_cooked}"
       end
@@ -1748,8 +1760,8 @@ def cmake_path_join(a, b)
   # Flatten stuff (input potentially Pathname-typed)
   a_str = a.to_s
   b_str = b.to_s
-  a_valid = !(a_str.nil? || a_str.empty?)
-  b_valid = !(b_str.nil? || b_str.empty?)
+  a_valid = !(string_nil_or_empty(a_str))
+  b_valid = !(string_nil_or_empty(b_str))
   need_sep = (a_valid && b_valid)
   # CMake path string expressions always use '/' as separator, right?
   return need_sep ? a_str + '/' + b_str : a_str + b_str
@@ -4987,7 +4999,7 @@ class V2C_ProjectValidator
     need_config_info = false if @project_info.vs_keyword == V2C_Project_Info::KEYWORD_MAKEFILE
     if false != need_config_info
       arr_config_info = @project_info.arr_config_info
-      if arr_config_info.nil? or arr_config_info.empty?
+      if obj_nil_or_empty(arr_config_info)
         validation_error('no config information for a project type which probably requires it!?')
       end
     end
@@ -5273,7 +5285,7 @@ end
 class V2C_GeneratorBase < V2C_LoggerBase
   def generator_error(str_description); logger.error(str_description) end
   def ensure_string_nonempty(str_test)
-    if str_test.nil? or str_test.empty?
+    if string_nil_or_empty(str_test)
       raise V2C_GeneratorError, 'detected invalid string'
     end
   end
@@ -5625,11 +5637,11 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   end
   def gen_if(arr_params)
     empty_conditional = false
-    if arr_params.nil? or arr_params.empty?
+    if obj_nil_or_empty(arr_params)
       empty_conditional = true
     else
       first_parm = arr_params[0]
-      if first_parm.nil? or first_parm.empty?
+      if string_nil_or_empty(first_parm)
         empty_conditional = true
       end
     end
@@ -6923,7 +6935,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # (however this is an entry of the .cpp file: not sure whether we can
     # and should derive the header from that - but we could grep the
     # .cpp file for the similarly named include......).
-    return if pch_source_name.nil? or pch_source_name.empty?
+    return if string_nil_or_empty(pch_source_name)
     arr_args_precomp_header = [ pch_use_mode.to_s, pch_source_name, pch_binary_name ]
     write_invoke_object_conditional_v2c_function('v2c_target_add_precompiled_header',
       target_name, condition, arr_args_precomp_header)
@@ -7282,7 +7294,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   private
   def put_project(project_name, arr_progr_languages = nil)
     arr_args_project_name_and_attrs = [ project_name ]
-    if arr_progr_languages.nil? or arr_progr_languages.empty?
+    if obj_nil_or_empty(arr_progr_languages)
       ## No programming language given? Indicate special marker "NONE"
       ## to skip any compiler checks.
       # Nope, no language means "unknown", thus don't specify anything -
@@ -7307,7 +7319,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # due to copying/modification).
     str_time = ''
     timestamp_format = $v2c_generator_timestamp_format
-    if not timestamp_format.nil? and not timestamp_format.empty?
+    if not string_nil_or_empty(timestamp_format)
       timestamp_format_docs = timestamp_format.tr('%', '')
       time = Time.new
       str_time = time.utc.strftime(timestamp_format)
@@ -7923,7 +7935,7 @@ end
 def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name, throw_error)
   file_accessible = false
   if $v2c_validate_vcproj_ensure_files_ok
-    if file_relative.nil? or file_relative.empty?
+    if string_nil_or_empty(file_relative)
       log_warn "#{project_name}: empty file argument! (#{file_item_description})"
     else
       # TODO: perhaps we need to add a permissions check, too?
@@ -8139,7 +8151,7 @@ class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
   end
   def source_groups_enabled; true == @flag_source_groups_enabled end
   def generate_per_project_source_groups(dest_dir, target_name, arr_filtered_file_lists)
-    return if arr_filtered_file_lists.nil? or arr_filtered_file_lists.empty?
+    return if obj_nil_or_empty(arr_filtered_file_lists)
     sg_file_name = "source_groups_#{target_name}.cmake"
     output_file_location = File.join(dest_dir, sg_file_name)
     temp_generator_sg = V2C_GenerateIntoTempFile.new('vcproj2cmake', output_file_location)

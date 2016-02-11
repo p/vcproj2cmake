@@ -576,7 +576,7 @@ def submit_work(unitGlobal, arr_work_units)
     log_debug "arr_work_units.length #{arr_work_units.length}"
     arr_worker_work_units = arr_work_units.slice!(0, num_work_units_per_worker)
     log_debug "per-worker length: #{arr_worker_work_units.length}, num_work_units_per_worker #{num_work_units_per_worker}"
-    break if arr_worker_work_units.nil? or arr_worker_work_units.empty?
+    break if obj_nil_or_empty(arr_worker_work_units)
     workPackage.push(arr_worker_work_units)
   end
 
