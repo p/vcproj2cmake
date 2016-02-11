@@ -1145,7 +1145,7 @@ endmacro(_v2c_target_mark_as_internal _target)
 # source_group() information. E.g. for bare Makefiles providing GUI
 # file filters information obviously would be of no use,
 # and would simply cause sizeable overhead.
-function(_v2c_source_groups_do_setup)
+function(_v2c_source_groups_enabled_get _out_enabled)
   # TODO: add a version check here, to determine whether source_group()
   # is supported by this CMake version at all...
   # Uhoh, CMake's MSVC_IDE var setting
@@ -1170,7 +1170,47 @@ function(_v2c_source_groups_do_setup)
     _v2c_msg_warning("Could not assign/detect a default source groups support setting for this build environment (CMAKE_GENERATOR ${CMAKE_GENERATOR}, CMAKE_EXTRA_GENERATOR ${CMAKE_EXTRA_GENERATOR}): unknown build environment, thus please enhance the detection algorithm! Resorting to ${v2c_source_groups_enabled_default_setting_}.")
   endif(DEFINED v2c_source_groups_enabled_introspection_)
   option(V2C_SOURCE_GROUPS_ENABLED "Whether to enable source groups (IDE file filter list trees) in this build environment. Default setting is automatically determined based on environment capabilities." ${v2c_source_groups_enabled_default_setting_})
-  _v2c_msg_info("Support for project source file groups (file filters): ${V2C_SOURCE_GROUPS_ENABLED}.")
+  set(${_out_enabled} ${V2C_SOURCE_GROUPS_ENABLED} PARENT_SCOPE)
+endfunction(_v2c_source_groups_enabled_get _out_enabled)
+
+function(_v2c_source_groups_do_setup)
+  _v2c_source_groups_enabled_get(source_groups_enabled_)
+  _v2c_msg_info("Support for project source file groups (file filters): ${source_groups_enabled_}.")
+
+  if(source_groups_enabled_)
+    # Indicates whether source groups for a project target ought to be
+    # provided.
+    # Naming clearly lumped into *_target_*() scope-wise
+    # since source groups are provided by a project file i.e. a project *target*.
+    function(_v2c_target_source_groups_is_enabled _target _out_is_enabled)
+      #_v2c_var_my_get(SOURCE_GROUPS_ENABLED is_enabled_)
+      set(is_enabled_ true)
+      # Could add a per-target evaluation of source group setting here,
+      # but a per-project-target decision is not too useful anyway...
+      set(${_out_is_enabled} ${is_enabled_} PARENT_SCOPE)
+    endfunction(_v2c_target_source_groups_is_enabled _target _out_is_enabled)
+
+    # Includes the generated per-target file which defines source_group() data.
+    function(_v2c_target_source_groups_definitions_include _target)
+      _v2c_target_source_groups_is_enabled(${_target} sg_enabled_)
+      if(NOT sg_enabled_)
+        return()
+      endif(NOT sg_enabled_)
+
+      _v2c_fs_generated_items_dir_relpath_get(generated_items_dir_)
+      # Although at this point we have the knowledge that we do want source groups,
+      # we'll still do an *optional* include()
+      # since some users might have decided to delete unwanted source group files.
+      _v2c_include_optional_invoke("${generated_items_dir_}/source_groups/${_target}.cmake")
+    endfunction(_v2c_target_source_groups_definitions_include _target)
+  else(source_groups_enabled_)
+    macro(_v2c_target_source_groups_is_enabled _target _out_is_enabled)
+      # DUMMY
+    endmacro(_v2c_target_source_groups_is_enabled _target _out_is_enabled)
+    macro(_v2c_target_source_groups_definitions_include _target)
+      # DUMMY
+    endmacro(_v2c_target_source_groups_definitions_include _target)
+  endif(source_groups_enabled_)
 endfunction(_v2c_source_groups_do_setup)
 
 _v2c_source_groups_do_setup()
@@ -1291,31 +1331,6 @@ function(_v2c_target_filelist_route _target _fl_type_magic _out_add_to_target)
   endif(language_)
   set(${_out_add_to_target} ${add_to_target_} PARENT_SCOPE)
 endfunction(_v2c_target_filelist_route _target _fl_type_magic _out_add_to_target)
-
-# Indicates whether source groups for a project target ought to be
-# provided.
-# Naming clearly lumped into *_target_*() scope-wise
-# since source groups are provided by a project file i.e. a project *target*.
-function(_v2c_target_source_groups_is_enabled _target _out_is_enabled)
-  _v2c_var_my_get(SOURCE_GROUPS_ENABLED is_enabled_)
-  # Could add a per-target evaluation of source group setting here,
-  # but a per-project-target decision is not too useful anyway...
-  set(${_out_is_enabled} ${is_enabled_} PARENT_SCOPE)
-endfunction(_v2c_target_source_groups_is_enabled _target _out_is_enabled)
-
-# Includes the generated per-target file which defines source_group() data.
-function(_v2c_target_source_groups_definitions_include _target)
-  _v2c_target_source_groups_is_enabled(${_target} sg_enabled_)
-  if(NOT sg_enabled_)
-    return()
-  endif(NOT sg_enabled_)
-
-  _v2c_fs_generated_items_dir_relpath_get(generated_items_dir_)
-  # Although at this point we have the knowledge that we do want source groups,
-  # we'll still do an *optional* include()
-  # since some users might have decided to delete unwanted source group files.
-  _v2c_include_optional_invoke("${generated_items_dir_}/source_groups/${_target}.cmake")
-endfunction(_v2c_target_source_groups_definitions_include _target)
 
 # Defines the actual CMake source_group() part.
 # Note that it will get passed variable *names* rather than *content*,
