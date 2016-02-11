@@ -319,9 +319,9 @@ function(_pch_compiler_flags_additional_get _out_flags)
   set(out_flags_ "")
   # Since PCH_ADDITIONAL_COMPILER_FLAGS is an *optional* variable,
   # we need explicit validation (avoid causing --warn-uninitialized noise).
-  if(PCH_ADDITIONAL_COMPILER_FLAGS)
+  if(DEFINED PCH_ADDITIONAL_COMPILER_FLAGS)
     set(out_flags_ "${PCH_ADDITIONAL_COMPILER_FLAGS}")
-  endif(PCH_ADDITIONAL_COMPILER_FLAGS)
+  endif(DEFINED PCH_ADDITIONAL_COMPILER_FLAGS)
   set(${_out_flags} "${out_flags_}" PARENT_SCOPE)
 endfunction(_pch_compiler_flags_additional_get _out_flags)
 
