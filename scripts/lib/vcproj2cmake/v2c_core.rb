@@ -9127,7 +9127,16 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
       log_debug "#{@project_info.inspect}"
       raise V2C_GeneratorError, "#{target_name}: project type #{cfg_type} not supported."
     end
+    do_project_target_current_update = target_is_valid
+    if do_project_target_current_update
+      project_target_current_update
+    end
     return target_is_valid
+  end
+  def project_target_current_update
+    write_command_single_line(
+      '_v2c_project_target_current_update',
+      get_target_name())
   end
   def write_WinMain()
     arr_target_prop = get_target_syntax_expression(
