@@ -4257,7 +4257,9 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
 
       type = V2C_File_List_Types::TYPE_XSD
     else
-      logger.unhandled_functionality("file list name #{file_list_name}")
+      logger.unhandled_functionality(
+        'file list name ' +
+        file_list_name)
       type = V2C_File_List_Types::TYPE_NONE
     end
     return type
@@ -7356,7 +7358,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       when_target_valid_scriptlet_block(@target.name) {
         arr_config_info.each { |config_info_curr|
           condition = config_info_curr.condition
-
           tools = config_info_curr.tools
 
           # NOTE: the commands below can stay in the general section (outside of
@@ -8379,9 +8380,12 @@ class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
     raise V2C_FileGeneratorError.new("Failed to generate source groups file for project #{target_name} to #{output_file_location}.")
   end
   def generate_source_groups(dest_dir)
-    @arr_projects.each { |project_info|
-      generate_per_project_source_groups(dest_dir, project_info.name, project_info.arr_filtered_file_lists)
-    }
+    @arr_projects.each do |project_info|
+      generate_per_project_source_groups(
+        dest_dir,
+        project_info.name,
+        project_info.arr_filtered_file_lists)
+    end
   end
 end
 
