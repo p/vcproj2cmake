@@ -2000,56 +2000,84 @@ endmacro(_v2c_target_linker_def_file
   _def_file
 )
 
-# CMake unfortunately currently fails
-# to add the MIDL output files directory
-# (hardcoded as $(IntDir) by VS generator)
-# to the compiler-side include directories.
-# This is a CMake bug which needs to be fixed (FIXME).
-# CMake's Tests/VSMidl/ even manually adds these directories
-# rather than realizing
-# that this must be implicitly done by generator side. Doh.
-# (the code here is derived from what this test does)
-# TODO: add CMake version check once CMake starts to have support.
-set(_v2c_feat_cmake_missing_midl_include_dir ON)
-if(_v2c_feat_cmake_missing_midl_include_dir)
-  if(MSVC)
-    if(MSVC_VERSION GREATER 1200)
-      set(_v2c_midl_include_mode INTERMEDIATE_DIR)
-    else(MSVC_VERSION GREATER 1200)
-      # midl generated headers end up directly in CMAKE_CURRENT_BINARY_DIR
-      # with VS6 builds.
-      set(_v2c_midl_include_mode CURRENT_BINARY_DIR)
-    endif(MSVC_VERSION GREATER 1200)
-  else(MSVC)
-    # For now assume that all non-MSVC place them in current binary dir:
-    set(_v2c_midl_include_mode CURRENT_BINARY_DIR)
-  endif(MSVC)
-else(_v2c_feat_cmake_missing_midl_include_dir)
-  set(_v2c_midl_include_mode NONE)
-endif(_v2c_feat_cmake_missing_midl_include_dir)
+function(_v2c_midl_include_dir_mode_get _out_mode)
+  function(_v2c_midl_include_dir_mode_determine _out_mode)
+    # CMake unfortunately currently fails
+    # to add the MIDL output files directory
+    # (hardcoded as $(IntDir) by VS generator)
+    # to the compiler-side include directories.
+    # This is a CMake bug which needs to be fixed (FIXME).
+    # CMake's Tests/VSMidl/ even manually adds these directories
+    # rather than realizing
+    # that this must be implicitly done by generator side. Doh.
+    # (the code here is derived from what this test does)
+    # TODO: add CMake version check once CMake starts to have support.
+    set(_v2c_feat_cmake_missing_midl_include_dir ON)
+    if(_v2c_feat_cmake_missing_midl_include_dir)
+      _v2c_var_ensure_defined(midl_include_dir_mode_intermediate_dir_ midl_include_dir_mode_current_binary_dir_ midl_include_dir_mode_none_)
+      if(MSVC)
+        if(MSVC_VERSION GREATER 1200)
+          set(v2c_midl_include_mode_default_setting_ ${midl_include_dir_mode_intermediate_dir_})
+        else(MSVC_VERSION GREATER 1200)
+          # midl generated headers end up directly in CMAKE_CURRENT_BINARY_DIR
+          # with VS6 builds.
+          set(v2c_midl_include_mode_default_setting_ ${midl_include_dir_mode_current_binary_dir_})
+        endif(MSVC_VERSION GREATER 1200)
+      else(MSVC)
+        # For now assume that all non-MSVC place them in current binary dir:
+        set(v2c_midl_include_mode_default_setting_ ${midl_include_dir_mode_current_binary_dir_})
+      endif(MSVC)
+    else(_v2c_feat_cmake_missing_midl_include_dir)
+      set(v2c_midl_include_mode_default_setting_ ${midl_include_dir_mode_none_})
+    endif(_v2c_feat_cmake_missing_midl_include_dir)
+    set(${_out_mode} ${v2c_midl_include_mode_default_setting_} PARENT_SCOPE)
+  endfunction(_v2c_midl_include_dir_mode_determine _out_mode)
+
+  if(NOT V2C_MIDL_INCLUDE_DIR_MODE)
+    _v2c_midl_include_dir_mode_determine(v2c_midl_include_dir_mode_default_setting_)
+    set(v2c_midl_include_dir_doc_string_ "The include directory handling to be used for MIDL (depending on where MIDL output files are to be placed) [this string should be one of: ${midl_include_dir_mode_intermediate_dir_} - include the project's intermediate (per-config) binary dir / ${midl_include_dir_mode_current_binary_dir_} - include the project's binary dir / ${midl_include_dir_mode_none_} - include nothing]")
+    set(V2C_MIDL_INCLUDE_DIR_MODE ${v2c_midl_include_dir_mode_default_setting_} CACHE STRING "${v2c_midl_include_dir_doc_string_}")
+    mark_as_advanced(V2C_MIDL_INCLUDE_DIR_MODE)
+  endif(NOT V2C_MIDL_INCLUDE_DIR_MODE)
+  set(${_out_mode} ${V2C_MIDL_INCLUDE_DIR_MODE} PARENT_SCOPE)
+endfunction(_v2c_midl_include_dir_mode_get _out_mode)
 
 macro(_v2c_target_tool_midl_include_output_directory_msg _target _dir)
   _v2c_msg_info("MIDL: ${_target}: project binary directory ${_dir} manually added to list of include dirs, to reach generated output.")
 endmacro(_v2c_target_tool_midl_include_output_directory_msg _target _dir)
 
-if(_v2c_midl_include_mode STREQUAL INTERMEDIATE_DIR)
-  macro(_v2c_target_tool_midl_include_output_directory _target)
-    _v2c_target_tool_midl_include_output_directory_msg(${_target} "${CMAKE_CURRENT_BINARY_DIR}/\$(IntDir)")
-    include_directories("${CMAKE_CURRENT_BINARY_DIR}/\$(IntDir)")
-  endmacro(_v2c_target_tool_midl_include_output_directory _target)
-else(_v2c_midl_include_mode STREQUAL CURRENT_BINARY_DIR)
-  macro(_v2c_target_tool_midl_include_output_directory _target)
-    _v2c_target_tool_midl_include_output_directory_msg(${_target} "${CMAKE_CURRENT_BINARY_DIR}")
-    include_directories("${CMAKE_CURRENT_BINARY_DIR}")
-  endmacro(_v2c_target_tool_midl_include_output_directory _target)
-else(_v2c_midl_include_mode STREQUAL NONE)
-  macro(_v2c_target_tool_midl_include_output_directory _target)
-    # DUMMY
-  endmacro(_v2c_target_tool_midl_include_output_directory _target)
-else()
-  _v2c_msg_fatal_error("Unknown MIDL include dir mode ${_v2c_midl_include_mode}")
-endif(_v2c_midl_include_mode STREQUAL INTERMEDIATE_DIR)
+# Chooses the macro to be implemented
+# according to the MIDL include dir mode passed in.
+function(_v2c_midl_include_dir_mode_choose _mode)
+  _v2c_var_ensure_defined(midl_include_dir_mode_intermediate_dir_ midl_include_dir_mode_current_binary_dir_ midl_include_dir_mode_none_)
+  if(${_mode} STREQUAL ${midl_include_dir_mode_intermediate_dir_})
+    macro(_v2c_target_tool_midl_include_output_directory _target)
+      _v2c_target_tool_midl_include_output_directory_msg(${_target} "${CMAKE_CURRENT_BINARY_DIR}/\$(IntDir)")
+      include_directories("${CMAKE_CURRENT_BINARY_DIR}/\$(IntDir)")
+    endmacro(_v2c_target_tool_midl_include_output_directory _target)
+  else(${_mode} STREQUAL ${midl_include_dir_mode_current_binary_dir_})
+    macro(_v2c_target_tool_midl_include_output_directory _target)
+      _v2c_target_tool_midl_include_output_directory_msg(${_target} "${CMAKE_CURRENT_BINARY_DIR}")
+      include_directories("${CMAKE_CURRENT_BINARY_DIR}")
+    endmacro(_v2c_target_tool_midl_include_output_directory _target)
+  else(${_mode} STREQUAL ${midl_include_dir_mode_none_})
+    macro(_v2c_target_tool_midl_include_output_directory _target)
+      # DUMMY
+    endmacro(_v2c_target_tool_midl_include_output_directory _target)
+  else()
+    _v2c_msg_fatal_error("Unknown MIDL include dir mode ${_mode}")
+  endif(${_mode} STREQUAL ${midl_include_dir_mode_intermediate_dir_})
+endfunction(_v2c_midl_include_dir_mode_choose _mode)
 
+function(_v2c_midl_include_dir_mode_do_setup)
+  set(midl_include_dir_mode_intermediate_dir_ INTERMEDIATE_DIR)
+  set(midl_include_dir_mode_current_binary_dir_ CURRENT_BINARY_DIR)
+  set(midl_include_dir_mode_none_ NONE)
+  _v2c_midl_include_dir_mode_get(midl_include_dir_mode_)
+  _v2c_midl_include_dir_mode_choose(${midl_include_dir_mode_})
+endfunction(_v2c_midl_include_dir_mode_do_setup)
+
+_v2c_midl_include_dir_mode_do_setup()
 
 # TODO: there are actually more MIDL compilers out there,
 # e.g. http://manpages.ubuntu.com/manpages/lucid/man1/pidl.1p.html
