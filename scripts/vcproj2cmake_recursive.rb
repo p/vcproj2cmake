@@ -259,8 +259,12 @@ end
 log_info "Doing case-#{str_case_match_type}SENSITIVE matching on project file candidates!"
 
 DETECT_MAC_OS_RESOURCE_FORK_FILES_REGEX_OBJ = %r{^\._}
-Find.find('./') do
-  |f|
+# Cannot use Array.compact() for Find.find()
+# since that one is "special" (at least on < 1.9!?)
+# ("Local Jump Error" http://www.ruby-forum.com/topic/153730 )
+arr_filtered_dirs = Array.new
+
+Find.find('./') do |f|
   next if not test(?d, f)
   # skip symlinks since they might be pointing _backwards_!
   next if FileTest.symlink?(f)
@@ -296,27 +300,30 @@ Find.find('./') do
     puts "EXCLUDED SINGLE #{f}!"
     next
   end
+  arr_filtered_dirs.push(f)
+end
 
-  log_info "processing #{f}!"
-  dir_entries = Dir.entries(f)
+csproj_extension = 'csproj'
+vcproj_extension = 'vcproj'
+vcxproj_extension = 'vcxproj'
+
+# In each directory, find the .vc[x]proj files to use.
+# In case of .vcproj type files, prefer xxx_vc8.vcproj,
+# but in cases of directories where this is not available, use a non-_vc8 file.
+# WARNING: ensure comma separation between array elements!
+arr_proj_file_regex = [
+  "_vc10\.#{vcxproj_extension}$",
+  "\.#{vcxproj_extension}$",
+  "_vc8\.#{vcproj_extension}$",
+  "\.#{vcproj_extension}$",
+  "\.#{csproj_extension}$",
+]
+
+arr_filtered_dirs.each do |dir|
+  log_info "processing #{dir}!"
+  dir_entries = Dir.entries(dir)
 
   log_debug "entries: #{dir_entries}"
-
-  csproj_extension = 'csproj'
-  vcproj_extension = 'vcproj'
-  vcxproj_extension = 'vcxproj'
-
-  # In each directory, find the .vc[x]proj files to use.
-  # In case of .vcproj type files, prefer xxx_vc8.vcproj,
-  # but in cases of directories where this is not available, use a non-_vc8 file.
-  # WARNING: ensure comma separation between array elements!
-  arr_proj_file_regex = [
-    "_vc10\.#{vcxproj_extension}$",
-    "\.#{vcxproj_extension}$",
-    "_vc8\.#{vcproj_extension}$",
-    "\.#{vcproj_extension}$",
-    "\.#{csproj_extension}$",
-  ]
 
   arr_dir_proj_files = search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex, case_insensitive_regex_match_option_flag)
 
@@ -324,7 +331,7 @@ Find.find('./') do
     arr_dir_proj_files.delete_if { |proj_file_candidate|
       delete_element = false
       if DETECT_MAC_OS_RESOURCE_FORK_FILES_REGEX_OBJ.match(proj_file_candidate)
-        proj_file_candidate_location = File.join(f, proj_file_candidate)
+        proj_file_candidate_location = File.join(dir, proj_file_candidate)
         log_info "Deleting element containing unrelated Mac OS resource fork file #{proj_file_candidate_location}"
         delete_element = true
       end
@@ -335,7 +342,7 @@ Find.find('./') do
   # No project file at all? Skip directory.
   next if arr_dir_proj_files.nil?
 
-  str_cmakelists_file = File.join(f, CMAKELISTS_FILE_NAME)
+  str_cmakelists_file = File.join(dir, CMAKELISTS_FILE_NAME)
 
   # Check whether the directory already contains a CMakeLists.txt,
   # and if so, whether it can be safely rewritten.
@@ -343,7 +350,7 @@ Find.find('./') do
   # but directly in the main conversion handler instead. TODO?
   if (!dir_entries.grep(/^#{CMAKELISTS_FILE_NAME}$/i).empty?)
     log_debug dir_entries
-    log_debug "#{CMAKELISTS_FILE_NAME} exists in #{f}, checking!"
+    log_debug "#{CMAKELISTS_FILE_NAME} exists in #{dir}, checking!"
     want_new_cmakelists_file = v2c_want_cmakelists_rewritten(str_cmakelists_file)
     next if false == want_new_cmakelists_file
   end
@@ -354,11 +361,11 @@ Find.find('./') do
       if projfile =~ /.#{vcproj_extension}$/i
         if projfile =~ /_vc8.#{vcproj_extension}$/i
         else
-          log_info "Darn, no _vc8.vcproj in #{f}! Should have offered one..."
+          log_info "Darn, no _vc8.vcproj in #{dir}! Should have offered one..."
         end
       end
     end
-    str_proj_file = File.join(f, projfile)
+    str_proj_file = File.join(dir, projfile)
     log_debug "Checking CMake-side generation possibility of #{str_proj_file}"
     if true == v2c_is_project_file_generated_by_cmake(str_proj_file)
       log_info "Skipping CMake-generated MSVS file #{str_proj_file}"
@@ -369,25 +376,25 @@ Find.find('./') do
 
   next if arr_proj_files.nil?
 
-  rebuild = 0
-  if File.exist?(str_cmakelists_file)
-    # is .vcproj newer (or equal: let's rebuild copies with flat timestamps!)
-    # than CMakeLists.txt?
-    # NOTE: if we need to add even more dependencies here, then it
-    # might be a good idea to do this stuff properly and use a CMake-based re-build
-    # infrastructure instead...
-    # FIXME: doesn't really seem to work... yet?
-
-    # verify age of .vcproj file... (NOT activated: experimental feature!)
-    # arr_file_deps = [ str_proj_file ]
-    # rebuild = command_file_dependencies_changed(str_cmakelists_file, arr_file_deps)
-  else
-    # no CMakeLists.txt at all, definitely process this project
-    rebuild = 2
-  end
-  if rebuild > 0
-    log_debug "REBUILD #{f}!! #{rebuild}"
-  end
+#  rebuild = 0
+#  if File.exist?(str_cmakelists_file)
+#    # is .vcproj newer (or equal: let's rebuild copies with flat timestamps!)
+#    # than CMakeLists.txt?
+#    # NOTE: if we need to add even more dependencies here, then it
+#    # might be a good idea to do this stuff properly and use a CMake-based re-build
+#    # infrastructure instead...
+#    # FIXME: doesn't really seem to work... yet?
+#
+#    # verify age of .vcproj file... (NOT activated: experimental feature!)
+#    # arr_file_deps = [ str_proj_file ]
+#    # rebuild = command_file_dependencies_changed(str_cmakelists_file, arr_file_deps)
+#  else
+#    # no CMakeLists.txt at all, definitely process this project
+#    rebuild = 2
+#  end
+#  if rebuild > 0
+#    log_debug "REBUILD #{dir}!! #{rebuild}"
+#  end
 
   # The root directory is special: in case of the V2C part
   # being included within a larger CMake tree,
@@ -397,9 +404,9 @@ Find.find('./') do
   # (in the case of it being the CMake source root it better shouldn't!!) -
   # then include the root directory project by placing a CMakeLists_native.txt there
   # and have it include the auto-generated CMakeLists.txt.
-  is_root_dir = (f == './')
+  is_root_dir = (dir == './')
 
-  arr_project_subdirs.push(f) unless is_root_dir
+  arr_project_subdirs.push(dir) unless is_root_dir
 
   # For recursive invocation we used to have _external spawning_
   # of a new vcproj2cmake.rb session, but we _really_ don't want to do that
@@ -411,8 +418,8 @@ Find.find('./') do
   # in some parallel execution mode!
   # (although threading is said to be VERY slow in Ruby -
   # but still it should provide some sizeable benefit).
-  log_debug "Submitting #{arr_proj_files.inspect} to be converted in #{f}."
-  unit_work = UnitWorkData.new(arr_proj_files, f, is_root_dir ? UnitWorkData::WORK_FLAG_IS_ROOT_DIR : 0)
+  log_debug "Submitting #{arr_proj_files.inspect} to be converted in #{dir}."
+  unit_work = UnitWorkData.new(arr_proj_files, dir, is_root_dir ? UnitWorkData::WORK_FLAG_IS_ROOT_DIR : 0)
   arr_work_units.push(unit_work)
 
   #output.split("\n").each do |line|
