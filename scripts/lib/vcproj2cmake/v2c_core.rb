@@ -7972,6 +7972,14 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     # the resource files list (VS10: ResourceCompile list) to the target.
     virtual_only = arr_dummy = source_files_variable = arr_generated = arr_file_elems = add_to_target = LoopVarPreconstruct()
     item_lists.arr_item_lists.each { |item_list|
+      # Semi-dirty hack (TODO improve eventually):
+      # skip .csproj Reference entries (while these probably are actual
+      # physical files, they often aren't available for us, and they're being
+      # handled via CMake VS_DOTNET_REFERENCES property already.
+      # Since we do file existence checks, these would bail out otherwise...
+      virtual_only = V2C_Item_List_Info::TYPE_CS_REFERENCE == item_list.type
+      next if true == virtual_only
+
       arr_dummy = [] # TODO: temporary dummy, to satisfy existing crap (remove!)
       filelist_generator = V2C_CMakeFileListGenerator_VS10.new(
         @textOut,
