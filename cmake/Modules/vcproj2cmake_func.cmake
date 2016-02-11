@@ -93,9 +93,6 @@ set(V2C_FUNC_DEFINED ON)
 # # # # #   MOST IMPORTANT HELPER FUNCTIONS   # # # # #
 # (those used by all other parts)
 
-set(V2C_CMAKE_CONFIGURE_PROMPT "[V2C] " CACHE STRING "The prompt prefix to show for any vcproj2cmake messages occurring during CMake configure time." FORCE)
-mark_as_advanced(V2C_CMAKE_CONFIGURE_PROMPT)
-
 # Zero out a variable (or several).
 macro(_v2c_var_set_empty)
   foreach(var_name_ ${ARGV})
@@ -120,6 +117,8 @@ macro(_v2c_var_set_default _var_name _default)
   set(${_var_name} "${_default}")
 endmacro(_v2c_var_set_default _var_name _default)
 
+# Helper mainly used to implement optionally accepting a possibly existing
+# outer user-side custom setting in preference to our default setting.
 macro(_v2c_var_set_default_if_not_set _var_name _v2c_default_setting)
   if(NOT DEFINED ${_var_name})
     _v2c_var_set_default(${_var_name} "${_v2c_default_setting}")
@@ -217,23 +216,31 @@ macro(v2c_parse_arguments _prefix _options _one_value_args _multi_value_args)
   _v2c_parse_arguments_local("${_prefix}" "${_one_value_args}" "${_options}" ${ARGN})
 endmacro(v2c_parse_arguments _prefix _options _one_value_args _multi_value_args)
 
+_v2c_var_set_default_if_not_set(V2C_CMAKE_CONFIGURE_PROMPT_PREDEFINED "[V2C] ")
+set(V2C_CMAKE_CONFIGURE_PROMPT "${V2C_CMAKE_CONFIGURE_PROMPT_PREDEFINED}" CACHE INTERNAL "The prompt prefix to show for any vcproj2cmake messages occurring during CMake configure time.")
+
+macro(_v2c_msg_do _msg_type _msg)
+  message(${_msg_type} "${V2C_CMAKE_CONFIGURE_PROMPT}${_msg}")
+endmacro(_v2c_msg_do _msg_type _msg)
 macro(_v2c_msg_info _msg)
-  message(STATUS "${V2C_CMAKE_CONFIGURE_PROMPT}${_msg}")
+  _v2c_msg_do(STATUS "${_msg}")
 endmacro(_v2c_msg_info _msg)
 macro(_v2c_msg_important _msg)
-  message("${V2C_CMAKE_CONFIGURE_PROMPT}${_msg}")
+  # CMake docs say that the "important" message type
+  # is to be indicated by omitting the message type keyword:
+  _v2c_msg_do("" "${_msg}")
 endmacro(_v2c_msg_important _msg)
 macro(_v2c_msg_warning _msg)
-  message("${V2C_CMAKE_CONFIGURE_PROMPT}WARNING: ${_msg}")
+  _v2c_msg_do(WARNING "WARNING: ${_msg}")
 endmacro(_v2c_msg_warning _msg)
 macro(_v2c_msg_fixme _msg)
-  message("${V2C_CMAKE_CONFIGURE_PROMPT}FIXME: ${_msg}")
+  _v2c_msg_do(WARNING "FIXME: ${_msg}")
 endmacro(_v2c_msg_fixme _msg)
 macro(_v2c_msg_send_error _msg)
-  message(SEND_ERROR "${V2C_CMAKE_CONFIGURE_PROMPT}${_msg}")
+  _v2c_msg_do(SEND_ERROR "${_msg}")
 endmacro(_v2c_msg_send_error _msg)
 macro(_v2c_msg_fatal_error _msg)
-  message(FATAL_ERROR "${V2C_CMAKE_CONFIGURE_PROMPT}${_msg}")
+  _v2c_msg_do(FATAL_ERROR "${_msg}")
 endmacro(_v2c_msg_fatal_error _msg)
 macro(_v2c_msg_fatal_error_please_report _msg)
   _v2c_msg_fatal_error("${_msg} - please report!")
