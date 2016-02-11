@@ -1500,11 +1500,14 @@ class V2C_File_List_Info
   # and add another flag to openly warn about such less-precise matches.
   APPEND_CASE_INSENSITIVE = 1
   APPEND_WARN_MISMATCH = 2
-  def append_file(file_info, flags)
+  def append_file(
+    file_info,
+    flags)
     path_new = file_info.path_relative
     # Always try a fast precise match lookup first,
     # irrespective of additional case insensitivity desires.
-    existing_file = @hash_files[path_new]
+    existing_file = @hash_files[
+      path_new]
     if existing_file.nil?
       if (flags & APPEND_CASE_INSENSITIVE)
         @hash_files.each_pair { |key, value|
@@ -1523,16 +1526,21 @@ class V2C_File_List_Info
       end
     end
     if existing_file.nil?
-      @arr_files.push(file_info)
-      @hash_files[path_new] = file_info
+      @arr_files.push(
+        file_info)
+      @hash_files[
+        path_new] = file_info
     else
-      existing_file.extend(file_info)
+      existing_file.extend(
+        file_info)
     end
   end
-  def get_file(file_name)
+  def get_file(
+    file_name)
     @arr_files.each { |info_file|
       #puts "#{file_name} vs. #{info_file.path_relative}"
-      if file_name.eql?(info_file.path_relative)
+      if file_name.eql?(
+        info_file.path_relative)
         return info_file
       end
     }
@@ -1568,16 +1576,20 @@ class V2C_File_Lists_Container
     @hash_file_lists = Hash.new # dito, but hashed! (serves to maintain fast lookup)
   end
   attr_reader :arr_file_lists
-  def lookup_from_list_name(file_list_name)
-    return @hash_file_lists[file_list_name]
+  def lookup_from_list_name(
+    file_list_name)
+    return @hash_file_lists[
+      file_list_name]
   end
-  def lookup_from_list_type(file_list_type)
+  def lookup_from_list_type(
+    file_list_type)
     @arr_file_lists.each { |list|
       return list if file_list_type == list.type
     }
     return nil
   end
-  def lookup_from_file_name(file_name)
+  def lookup_from_file_name(
+    file_name)
     info_file = nil
     arr_file_lists.each { |file_list|
       #puts "file_list: #{file_list.name}"
@@ -1586,21 +1598,27 @@ class V2C_File_Lists_Container
     }
     return info_file
   end
-  def append(file_list)
+  def append(
+    file_list)
     name = file_list.name
-    file_list_existing = lookup_from_list_name(name)
+    file_list_existing = lookup_from_list_name(
+      name)
     file_list_append = file_list_existing
     if file_list_append.nil?
-      register(file_list)
+      register(
+        file_list)
       file_list_append = file_list
     end
   end
 
   private
   # registers a file list (does NOT do collision checks!)
-  def register(file_list)
-    @arr_file_lists.push(file_list)
-    @hash_file_lists[file_list.name] = file_list
+  def register(
+    file_list)
+    @arr_file_lists.push(
+      file_list)
+    @hash_file_lists[
+      file_list.name] = file_list
   end
 end
 
@@ -4246,7 +4264,9 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
     file_parser = V2C_VS10ItemGroupFileElemParser.new(subelem_xml, file_info)
     found = file_parser.parse
     if FOUND_TRUE == found
-      list_curr.append_file(file_info, V2C_File_List_Info::APPEND_CASE_INSENSITIVE|V2C_File_List_Info::APPEND_WARN_MISMATCH)
+      list_curr.append_file(
+        file_info,
+        V2C_File_List_Info::APPEND_CASE_INSENSITIVE|V2C_File_List_Info::APPEND_WARN_MISMATCH)
     else
       found = super
     end
@@ -4257,10 +4277,15 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
   def select_list(name)
     if @cached_list_ptr.nil? || @cached_list_ptr.name != name
       file_lists = get_file_lists()
-      @cached_list_ptr = file_lists.lookup_from_list_name(name)
+      @cached_list_ptr = file_lists.lookup_from_list_name(
+        name)
       if @cached_list_ptr.nil?
-        @cached_list_ptr = V2C_File_List_Info.new(name, get_file_list_type(name))
-        file_lists.append(@cached_list_ptr)
+        @cached_list_ptr = V2C_File_List_Info.new(
+          name,
+          get_file_list_type(
+            name))
+        file_lists.append(
+          @cached_list_ptr)
       end
     end
     @cached_list_ptr
@@ -4311,7 +4336,10 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10BaseElemParser
         elem_parser = V2C_VS10ItemGroupFiltersParser.new(@elem_xml, get_project().filters)
         elem_parser.parse
       when 'ClCompile', 'ClInclude', 'Midl', 'None', 'ResourceCompile', 'Xsd'
-        elem_parser = V2C_VS10ItemGroupFilesParser.new(@elem_xml, elem_name, get_project().file_lists)
+        elem_parser = V2C_VS10ItemGroupFilesParser.new(
+          @elem_xml,
+          elem_name,
+          get_project().file_lists)
         elem_parser.parse
       else
         # We should NOT call base method, right? This is an _override_ of the
@@ -6578,7 +6606,8 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
     @arr_sub_sources_for_parent = arr_sub_sources_for_parent
     @skip_non_sources = skip_non_sources
   end
-  def filter_files(arr_file_infos)
+  def filter_files(
+    arr_file_infos)
     arr_local_sources = nil
     if not arr_file_infos.nil?
       arr_local_sources = array_collect_compact(arr_file_infos) do |file|
@@ -6625,7 +6654,10 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
     end
     return arr_local_sources
   end
-  def write_sources_list(source_list_name, arr_sources, var_prefix = NAME_V2C_SOURCE_LIST_PREFIX)
+  def write_sources_list(
+    source_list_name,
+    arr_sources,
+    var_prefix = NAME_V2C_SOURCE_LIST_PREFIX)
     source_files_list_var_name = var_prefix + source_list_name
     write_list_quoted(
       source_files_list_var_name,
@@ -6680,7 +6712,8 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeFileListGeneratorBase
     end
     arr_file_infos = files_str[:arr_file_infos]
 
-    arr_local_sources = filter_files(arr_file_infos)
+    arr_local_sources = filter_files(
+      arr_file_infos)
 
     # TODO: CMake is said to have a weird bug in case of parent_source_group being "Source Files":
     # "Re: [CMake] SOURCE_GROUP does not function in Visual Studio 8"
@@ -6710,7 +6743,9 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeFileListGeneratorBase
 
     # process our hierarchy's own files
     if not arr_local_sources.nil?
-      source_files_list_var_name = write_sources_list(source_group_var_suffix, arr_local_sources)
+      source_files_list_var_name = write_sources_list(
+        source_group_var_suffix,
+        arr_local_sources)
       # create source_group() of our local files
       if not parent_source_group.nil?
         # use list of filters if available: have it generated as source_group(REGULAR_EXPRESSION "regex" ...).
@@ -6755,14 +6790,22 @@ class V2C_CMakeFileListGenerator_VS10 < V2C_CMakeFileListGeneratorBase
     @file_list = file_list
     @parent_source_group = parent_source_group
   end
-  def generate; put_file_list(@file_list) end
+  def generate
+    put_file_list(
+      @file_list)
+  end
 
   private
 
-  def put_file_list(file_list)
-    arr_local_sources = filter_files(file_list.arr_files)
-    source_files_variable = write_sources_list(file_list.name, arr_local_sources)
-    register_new_source_list_variable(source_files_variable)
+  def put_file_list(
+    file_list)
+    arr_local_sources = filter_files(
+      file_list.arr_files)
+    source_files_variable = write_sources_list(
+      file_list.name,
+      arr_local_sources)
+    register_new_source_list_variable(
+      source_files_variable)
   end
 end
 
@@ -6980,7 +7023,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # when no MIDL config info provided (--> assume defaults??).
     return if arr_midl_info.empty?
 
-    file_list_midl = file_lists.lookup_from_list_type(V2C_File_List_Info::TYPE_MIDL)
+    file_list_midl = file_lists.lookup_from_list_type(
+      V2C_File_List_Info::TYPE_MIDL)
     return if file_list_midl.nil?
 
     midl_info = arr_midl_info[0]
@@ -8670,26 +8714,34 @@ class V2C_ProjectPostProcess < V2C_LoggerBase
     @project_info = project_info
   end
   def process
-    mark_files_as_generated(@project_info)
+    mark_files_as_generated(
+      @project_info)
     process_filtered_file_lists(@project_info)
     detect_build_units(@project_info)
     return true
   end
   private
-  def mark_files_as_generated(project_info)
+  def mark_files_as_generated(
+    project_info)
     # Mark some files as generated
     # (MIDL etc.).
     arr_generated_files = Array.new
     project_info.arr_config_info.each { |config_info|
       arr_midl_info = config_info.tools.arr_midl_info
       arr_midl_info.each { |midl_info|
-        arr_generated_files.push(midl_info.header_file_name, midl_info.iface_id_file_name, midl_info.proxy_file_name, midl_info.type_library_name)
+        arr_generated_files.push(
+          midl_info.header_file_name,
+          midl_info.iface_id_file_name,
+          midl_info.proxy_file_name,
+          midl_info.type_library_name)
       }
     }
     arr_generated_files.compact.each { |candidate|
-      info_file = project_info.file_lists.lookup_from_file_name(candidate)
+      info_file = project_info.file_lists.lookup_from_file_name(
+        candidate)
       if not info_file.nil?
-        info_file.enable_attribute(V2C_Info_File::ATTR_GENERATED)
+        info_file.enable_attribute(
+          V2C_Info_File::ATTR_GENERATED)
       end
       #puts "candidate #{candidate} info_file #{info_file.inspect}"
     }
