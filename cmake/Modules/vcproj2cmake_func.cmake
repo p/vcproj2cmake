@@ -30,6 +30,8 @@
 #   should always be kept in sync)
 # - all variable accesses should be wrapped by accessor functions
 #   (access to non-existent CMake functions/variables will be signalled/ignored!)
+# - also, frequently used helpers should try to save as many LOC as possible,
+#   even when slightly sacrificing readability
 # - content should not cause any --warn-uninitialized output
 
 # Policy descriptions:
@@ -592,8 +594,7 @@ function(_v2c_config_set _cfg_key)
 endfunction(_v2c_config_set _cfg_key)
 
 function(_v2c_config_get_unchecked _cfg_key _cfg_value_out)
-  set(cfg_key_full_ _v2c_${_cfg_key})
-  get_property(cfg_value_ GLOBAL PROPERTY ${cfg_key_full_})
+  get_property(cfg_value_ GLOBAL PROPERTY _v2c_${_cfg_key})
   #message("_v2c_config_get ${_cfg_key}: ${cfg_value_}")
   set(${_cfg_value_out} "${cfg_value_}" PARENT_SCOPE)
 endfunction(_v2c_config_get_unchecked _cfg_key _cfg_value_out)
@@ -604,8 +605,7 @@ function(_v2c_config_get _cfg_key _cfg_value_out)
   if(NOT cfg_value_is_set_)
     _v2c_msg_fatal_error("_v2c_config_get: config var ${_cfg_key} not set!?")
   endif(NOT cfg_value_is_set_)
-  _v2c_var_empty_parent_scope_bug_workaround(cfg_value_)
-  _v2c_config_get_unchecked(${_cfg_key} cfg_value_)
+  get_property(cfg_value_ GLOBAL PROPERTY ${cfg_key_full_})
   set(${_cfg_value_out} "${cfg_value_}" PARENT_SCOPE)
 endfunction(_v2c_config_get _cfg_key _cfg_value_out)
 
@@ -799,10 +799,9 @@ function(_v2c_buildcfg_get_magic_conditional_name _target _build_platform _build
   else(_build_platform AND _build_type)
     _v2c_msg_warning("v2c_buildcfg_check_if_platform_buildtype_active: empty platform [${_build_platform}] or build type [${_build_type}]!?")
   endif(_build_platform AND _build_type)
-  # Nice performance trick: since we need to flatten both _build_platform and _build_type,
-  # preassemble to combined string, _then_ flatten:
-  set(build_platform_type_raw_ "platform_${_build_platform}_build_type_${_build_type}")
-  _v2c_flatten_name("${build_platform_type_raw_}" build_platform_type_flattened_)
+  # Nice performance trick: since we need to flatten both _build_platform
+  # and _build_type, flatten an entire *combined* string:
+  _v2c_flatten_name("platform_${_build_platform}_build_type_${_build_type}" build_platform_type_flattened_)
   set(${_var_name_out} "v2c_want_buildcfg_${build_platform_type_flattened_}" PARENT_SCOPE)
 endfunction(_v2c_buildcfg_get_magic_conditional_name _target _build_platform _build_type _var_name_out)
 
