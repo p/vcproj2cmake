@@ -708,15 +708,15 @@ else
   end
 end
 
-COMMENT_LINE_REGEX_OBJ = %r{^\s*#}
 def read_mappings(filename_mappings, mappings)
   # line format is: "tag:PLATFORM1:PLATFORM2=tag_replacement2:PLATFORM3=tag_replacement3"
   if File.exist?(filename_mappings)
     #Hash[*File.read(filename_mappings).scan(/^(.*)=(.*)$/).flatten]
     File.open(filename_mappings, 'r').each do |line|
-      next if COMMENT_LINE_REGEX_OBJ.match(line)
       line_cooked = line.chomp
-      line_payload = line_cooked
+      arr_comments_separator = line_cooked.split('#')
+      line_payload = arr_comments_separator[0]
+      next if line_payload.nil?
       pattern_orig, expr_replacement = line_payload.split(':')
       if not pattern_orig.nil?
         mappings[pattern_orig] = expr_replacement
