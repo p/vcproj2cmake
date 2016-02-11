@@ -2546,23 +2546,6 @@ class V2C_XmlParserBase < V2C_ParserBase
 end
 
 class V2C_VSXmlParserBase < V2C_XmlParserBase
-  # FIXME: very rough handling - what to do with those VS10 %(XXX) variables?
-  # (terminus technicus appears to be: "item metadata macro")
-  # Well, one idea would be to append entries (include directories, dependencies etc.)
-  # to individual list vars that are being scoped within a
-  # CMake parent directory chain. But these lists should be implementation details
-  # hidden behind v2c_xxx(_target _build_type _entries) funcs, of course.
-  # Known %(YYY) variable names are:
-  # - Filename (e.g. written by CMake VS10 generator)
-  # See also old VS7 $(Inherit) / $(NoInherit)
-  # "<PropertyGroup Label="UserMacros" />" might be related, too.
-  # For details, see
-  #   http://stackoverflow.com/questions/8626333/what-is-additionaldependencies-macro
-  #   http://stackoverflow.com/questions/3058111/how-do-i-set-environment-variables-in-visual-studio-2010
-  #   http://connect.microsoft.com/VisualStudio/feedback/details/606484/property-sheets-upgraded
-  #   http://blogs.msdn.com/b/vcblog/archive/2010/02/16/project-settings-changes-with-vs2010.aspx
-  VS10_ITEM_METADATA_MACRO_MATCH_REGEX_OBJ = %r{%\([^\s]*\)}
-
   # Hmm, \n at least appears in VS10 (DisableSpecificWarnings element), but in VS7 as well?
   # WS_VALUE is for entries containing (and preserving!) whitespace (no split on whitespace!).
   VS_VALUE_SEPARATOR_REGEX_OBJ    = %r{[;,\s]} # (\s char set includes \n)
@@ -2579,7 +2562,24 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
   def get_boolean_value(str_value)
     parse_boolean_property_value(str_value)
   end
-  def skip_vs10_percent_sign_var(str_var)
+  # FIXME: very rough handling - what to do with those VS10 %(foo)
+  # percent sign variables?
+  # (terminus technicus appears to be: "item metadata macro")
+  # Well, one idea would be to append entries (include directories, dependencies etc.)
+  # to individual list vars that are being scoped within a
+  # CMake parent directory chain. But these lists should be implementation details
+  # hidden behind v2c_xxx(_target _build_type _entries) funcs, of course.
+  # Known %(YYY) variable names are:
+  # - Filename (e.g. written by CMake VS10 generator)
+  # See also old VS7 $(Inherit) / $(NoInherit)
+  # "<PropertyGroup Label="UserMacros" />" might be related, too.
+  # For details, see
+  #   http://stackoverflow.com/questions/8626333/what-is-additionaldependencies-macro
+  #   http://stackoverflow.com/questions/3058111/how-do-i-set-environment-variables-in-visual-studio-2010
+  #   http://connect.microsoft.com/VisualStudio/feedback/details/606484/property-sheets-upgraded
+  #   http://blogs.msdn.com/b/vcblog/archive/2010/02/16/project-settings-changes-with-vs2010.aspx
+  VS10_ITEM_METADATA_MACRO_MATCH_REGEX_OBJ = %r{%\([^\s]*\)}
+  def skip_vs10_item_metadata_macro_var(str_var)
     # shortcut :)
     return false if not str_var.include?('%')
 
@@ -2827,9 +2827,9 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
     value = string_avoid_nil(str_property_value)
     if not value.empty?
       arr_elems = array_collect_compact(value.split(regex)) do |elem|
-        # skip_vs10_percent_sign_var() most likely is a temporary HACK,
+        # skip_vs10_item_metadata_macro_var() most likely is a temporary HACK,
         # but for now we decide to not support these specifics.
-        next if skip_vs10_percent_sign_var(elem)
+        next if skip_vs10_item_metadata_macro_var(elem)
         elem
       end
     end
@@ -2850,7 +2850,7 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
   end
   def parse_list_fs_items(attr_fs_items)
     array_collect_compact(split_values_list_preserve_ws_discard_empty(attr_fs_items)) do |elem|
-      next if skip_vs10_percent_sign_var(elem)
+      next if skip_vs10_item_metadata_macro_var(elem)
       elem_fs = get_filesystem_location(elem)
       next if elem_fs.nil?
       #logger.info "fs item is '#{elem_fs}'"
@@ -2907,7 +2907,7 @@ class V2C_VSToolDefineParserBase < V2C_VSToolParserBase
   def parse_preprocessor_definitions(hash_defines, attr_defines)
     split_values_list_discard_empty(attr_defines).each { |elem_define|
       str_define_key, str_define_value = elem_define.strip.split('=')
-      next if skip_vs10_percent_sign_var(str_define_key)
+      next if skip_vs10_item_metadata_macro_var(str_define_key)
       # Since a Hash will indicate nil for any non-existing key,
       # we do need to fill in _empty_ value for our _existing_ key.
       str_define_value ||= ''
@@ -3027,7 +3027,7 @@ class V2C_VSToolCompilerParser < V2C_VSToolDefineParserBase
 
   def parse_additional_include_directories(arr_include_dirs_out, attr_incdir)
     split_values_list_preserve_ws_discard_empty(attr_incdir).each { |elem_inc_dir|
-      next if skip_vs10_percent_sign_var(elem_inc_dir)
+      next if skip_vs10_item_metadata_macro_var(elem_inc_dir)
       elem_inc_dir_fs = get_additional_directory_element_checked(elem_inc_dir)
       next if elem_inc_dir_fs.nil?
       #logger.info "include is '#{elem_inc_dir}'"
@@ -3223,7 +3223,7 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
     last_obj = nil
     split_values_list_discard_empty(attr_deps).each { |elem_lib_dep|
       logger.debug "!!!!! elem_lib_dep #{elem_lib_dep}"
-      next if skip_vs10_percent_sign_var(elem_lib_dep)
+      next if skip_vs10_item_metadata_macro_var(elem_lib_dep)
       elem_lib_dep_fs = get_filesystem_location(elem_lib_dep)
       # Do nil check *after* any potential illegal path filtering!
       next if elem_lib_dep_fs.nil?
