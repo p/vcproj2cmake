@@ -219,6 +219,12 @@ endmacro(v2c_parse_arguments _prefix _options _one_value_args _multi_value_args)
 _v2c_var_set_default_if_not_set(V2C_CMAKE_CONFIGURE_PROMPT_PREDEFINED "[V2C] ")
 set(V2C_CMAKE_CONFIGURE_PROMPT "${V2C_CMAKE_CONFIGURE_PROMPT_PREDEFINED}" CACHE INTERNAL "The prompt prefix to show for any vcproj2cmake messages occurring during CMake configure time.")
 
+function(_v2c_msg_string_from_list _msg_string_out)
+  set(_msg_list "${ARGN}")
+  string(REPLACE ";" " " msg_string_out_ "${_msg_list}")
+  set(${_msg_string_out} ${msg_string_out_} PARENT_SCOPE)
+endfunction(_v2c_msg_string_from_list _msg_string_out)
+
 macro(_v2c_msg_do _msg_type _msg)
   message(${_msg_type} "${V2C_CMAKE_CONFIGURE_PROMPT}${_msg}")
 endmacro(_v2c_msg_do _msg_type _msg)
@@ -2179,8 +2185,26 @@ function(_v2c_midl_include_dir_mode_do_setup)
   _v2c_midl_include_dir_mode_choose(${midl_include_dir_mode_})
 endfunction(_v2c_midl_include_dir_mode_do_setup)
 
+function(_v2c_midl_issue_report_as_error_get _out_flag)
+  set(v2c_midl_issue_report_as_error_default_setting_
+    ON)
+  option(V2C_MIDL_ISSUE_REPORT_AS_ERROR
+    "Report MIDL configuration as error"
+    ${v2c_midl_issue_report_as_error_default_setting_})
+  mark_as_advanced(V2C_MIDL_ISSUE_REPORT_AS_ERROR)
+  set(${_out_flag} ${V2C_MIDL_ISSUE_REPORT_AS_ERROR} PARENT_SCOPE)
+endfunction(_v2c_midl_issue_report_as_error_get _out_flag)
+
 function(_v2c_midl_compiler_mode_get _out_mode)
   _v2c_var_ensure_defined(v2c_midl_handling_mode_windows_dummy_ v2c_midl_handling_mode_wine_widl_ v2c_midl_handling_mode_emulated_stubs_ v2c_midl_handling_mode_user_callback_)
+  _v2c_msg_string_from_list(
+    v2c_midl_recommend_config_switch_
+    "Since this MIDL compiler provider configuration is not fully usable,"
+    "it should be corrected."
+    "If this is not possible,"
+    "we recommend having MIDL configuration"
+    "switched into using a better provider"
+  )
   if(WIN32)
     set(v2c_midl_handling_mode_default_setting_ ${v2c_midl_handling_mode_windows_dummy_})
   else(WIN32)
@@ -2189,6 +2213,31 @@ function(_v2c_midl_compiler_mode_get _out_mode)
     )
     if(V2C_WINE_WIDL_BIN)
       set(v2c_midl_handling_mode_default_setting_ ${v2c_midl_handling_mode_wine_widl_})
+      set(v2c_midl_wine_idl_file_candidate_
+        "oaidl.idl")
+      _v2c_msg_string_from_list(
+        # Parts censored below ("er*or")
+        # in order to prevent build systems
+        # from indicating a false positive.
+        v2c_midl_wine_usage_descr_
+        "Wine widl MIDL compiler usage hints:"
+        "Note that setup of Wine widl environment"
+        "may be more or less problematic,"
+        "depending on Wine version"
+        "and on MIDL requirements of your app:"
+        "- the environment may be unable to provide"
+        "system files such as ${v2c_wine_windows_include_dir_candidate_}"
+        "which are potentially #include:d by interface definition files"
+        "(sample er*or message:"
+        "    MyProject.idl:7: er*or: Unable to open include file oaidl.idl"
+        ")."
+        "- even if that is ok,"
+        "the environment may be unable to provide files such as stdole2.tlb"
+        "(sample er*or message:"
+        "    er*or: Could not open importlib stdole2.tlb."
+        ")."
+      )
+      _v2c_msg_info("${v2c_midl_wine_usage_descr_}")
       # Use a nice if rather manual trick
       # to figure out the actual prefix that the Wine package
       # (and thus its usually accompanying header files - potentially
@@ -2197,10 +2246,43 @@ function(_v2c_midl_compiler_mode_get _out_mode)
       # ocidl.idl files that user-side .idl files may include.
       set(wine_widl_standard_sub_prefix_location_ "bin/widl")
       string(REGEX REPLACE "^(.*)/${wine_widl_standard_sub_prefix_location_}$" "\\1" wine_prefix_ "${V2C_WINE_WIDL_BIN}")
-      find_path(V2C_WINE_WINDOWS_INCLUDE_DIR "oaidl.idl"
+      set(v2c_wine_windows_include_dir_doc_cfg_item_intro_
+        "Path to the Windows include header file directory of a Wine installation")
+      set(v2c_wine_windows_include_dir_doc_
+        "${v2c_wine_windows_include_dir_doc_cfg_item_intro_}")
+      set(v2c_wine_windows_include_dir_candidates_
+        "${v2c_midl_wine_idl_file_candidate_}")
+      find_path(V2C_WINE_WINDOWS_INCLUDE_DIR
+        NAMES "${v2c_wine_windows_include_dir_candidates_}"
         HINTS "${wine_prefix_}/include/wine/windows"
-        DOC "Path to the Windows include header file directory of a Wine installation"
+        DOC "${v2c_wine_windows_include_dir_doc_}"
       )
+      if(V2C_WINE_WINDOWS_INCLUDE_DIR MATCHES NOTFOUND)
+        set(wine_windows_include_dir_not_found_ true)
+      endif(V2C_WINE_WINDOWS_INCLUDE_DIR MATCHES NOTFOUND)
+      if(wine_windows_include_dir_not_found_)
+        set(wine_windows_include_dir_not_found_error_intro_
+          "${v2c_wine_windows_include_dir_doc_cfg_item_intro_} was not found")
+        _v2c_msg_string_from_list(
+          wine_windows_include_dir_not_found_error_details_
+          "This means that Wine's MIDL compiler setup is incomplete"
+          "(quite likely due to a missing installation of the wine -dev package!)"
+          "which may easily become a problem"
+          "(details see usage hints message)"
+          " ${v2c_midl_recommend_config_switch_}."
+        )
+        set(wine_windows_include_dir_not_found_error_
+          "${wine_windows_include_dir_not_found_error_intro_}. ${wine_windows_include_dir_not_found_error_details_}")
+        _v2c_midl_issue_report_as_error_get(
+          v2c_midl_issue_report_as_error_)
+        if(v2c_midl_issue_report_as_error_)
+          _v2c_msg_fatal_error(
+            "${wine_windows_include_dir_not_found_error_}")
+        else(v2c_midl_issue_report_as_error_)
+          _v2c_msg_warning(
+            "${wine_windows_include_dir_not_found_error_}")
+        endif(v2c_midl_issue_report_as_error_)
+      endif(wine_windows_include_dir_not_found_)
     else(V2C_WINE_WIDL_BIN)
       _v2c_msg_warning("Could not locate an installed Wine widl IDL compiler binary (probably no wine and/or wine-devel package installed) - falling back to dummy IDL handling emulation!")
       set(v2c_midl_handling_mode_default_setting_ ${v2c_midl_handling_mode_emulated_stubs_})
@@ -2418,6 +2500,7 @@ macro(_v2c_target_tool_midl_do_compile_wine_widl)
     # we definitely want to avoid fumbling the source tree
     # (TODO make this user-configurable!).
     _v2c_fs_item_make_relative_to_path("${v2c_target_tool_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME}" "${PROJECT_BINARY_DIR}" iid_file_location_)
+    #message("MIDL IID!!!!!  ${v2c_target_tool_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME}, ${PROJECT_BINARY_DIR}, iid_file_location_ ${iid_file_location_}")
     list(APPEND cmd_list_ "-u" "-U${iid_file_location_}")
     list(APPEND v2c_widl_outputs_ "${iid_file_location_}")
   endif(v2c_target_tool_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME)
