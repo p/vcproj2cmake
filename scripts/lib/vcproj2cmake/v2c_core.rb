@@ -1221,6 +1221,13 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
     end
     need_winmain
   end
+
+  def get_deps_objs()
+    array_collect_compact(arr_dependencies) do |dep|
+      next if not dep.is_object_type()
+      dep.dependency
+    end
+  end
 end
 
 # For TypeLibrary file naming info, visit
@@ -7002,10 +7009,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       condition = config_info_curr.condition
       tools = config_info_curr.tools
       tools.arr_linker_info.each do |linker_info_curr|
-        arr_obj = array_collect_compact(linker_info_curr.arr_dependencies) do |dep|
-          next if not dep.is_object_type()
-          dep.dependency
-        end
+        arr_obj = linker_info_curr.get_deps_objs()
         if not arr_obj.empty?
           # Since that .obj handling remains totally platform-specific
           # for now, add a conditional to have it applied on original
