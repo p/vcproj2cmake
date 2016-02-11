@@ -6875,7 +6875,12 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       put_property_compile_definitions(config_name, arr_platdefs)
     end
   end
-  def put_precompiled_header(target_name, condition, pch_use_mode, pch_source_name, pch_binary_name)
+  def put_precompiled_header(
+    target_name,
+    condition,
+    pch_use_mode,
+    pch_source_name,
+    pch_binary_name)
     # FIXME: empty filename may happen in case of precompiled file
     # indicated via VS7 FileConfiguration UsePrecompiledHeader
     # (however this is an entry of the .cpp file: not sure whether we can
@@ -7600,15 +7605,17 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     # However implementing cautious querying to prevent the warning
     # yields quite some overhead compared to current implementation,
     # thus we'll keep it as is for now (TODO?).
-    arr_args_func = [ path_join(
-        get_dereferenced_variable_name(NAME_V2C_MASTER_PROJECT_SOURCE_DIR),
-        $v2c_module_path_local
-      ),
+    arr_args_func = [
       path_join(
-        get_dereferenced_variable_name(NAME_CMAKE_SOURCE_DIR),
-        $v2c_module_path_local
-      ),
-      get_dereferenced_variable_name(NAME_CMAKE_MODULE_PATH) ]
+        get_dereferenced_variable_name(
+          NAME_V2C_MASTER_PROJECT_SOURCE_DIR),
+        $v2c_module_path_local),
+      path_join(
+        get_dereferenced_variable_name(
+          NAME_CMAKE_SOURCE_DIR),
+        $v2c_module_path_local),
+      get_dereferenced_variable_name(
+        NAME_CMAKE_MODULE_PATH) ]
     write_list_quoted(NAME_CMAKE_MODULE_PATH, arr_args_func)
   end
   def put_include_vcproj2cmake_func
