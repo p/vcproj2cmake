@@ -96,8 +96,17 @@
       <AdditionalDependencies></AdditionalDependencies>
     </Link>
     <Midl>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MkTypLibCompatible>false</MkTypLibCompatible>
+      <TargetEnvironment>Win32</TargetEnvironment>
+      <GenerateStublessProxies>true</GenerateStublessProxies>
       <TypeLibraryName>.\Debug/vcxproj_full_1.tlb</TypeLibraryName>
       <HeaderFileName />
+      <DllDataFileName>
+      </DllDataFileName>
+      <InterfaceIdentifierFileName>I$(TargetName)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>I$(TargetName)_p.c</ProxyFileName>
+      <ValidateAllParameters>false</ValidateAllParameters>
     </Midl>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -163,6 +172,9 @@
   </ItemGroup>
   <ItemGroup>
     <Unknown_weird_category Include=".\..\files\misctestfile" />
+  </ItemGroup>
+  <ItemGroup>
+    <Midl Include=".\vcxproj_full_1.idl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
