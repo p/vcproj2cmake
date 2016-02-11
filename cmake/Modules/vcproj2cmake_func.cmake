@@ -268,6 +268,32 @@ if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
   endif(NOT V2C_WANT_SKIP_CMAKE_BUILD_TYPE_CHECK) # user might not want this to happen...
 endif(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 
+# Allow optional disabling of the below settings
+# via setting a "don't want that idealistic governance crap" variable,
+# for configuration from outer scope,
+# in case these settings below turn out to be too strict in some cases.
+
+# Better *actively* disallow in-source build trees...
+# (some environments - e.g. Eclipse generator has a builtin check -
+# even completely refuse to work properly with such practice anyway)
+# ...unless the source tree is not ready for these policies (hmm...).
+# These variables may optionally be CACHE, in case persistence is needed.
+if(V2C_NEED_SKIP_CMAKE_DISABLE_IN_SOURCE_BUILD)
+  _v2c_msg_warning("Detected outer-scope request to skip disabling of in-source builds!")
+else(V2C_NEED_SKIP_CMAKE_DISABLE_IN_SOURCE_BUILD)
+  set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
+endif(V2C_NEED_SKIP_CMAKE_DISABLE_IN_SOURCE_BUILD)
+# ...and especially disallow dirty CMake configure run changes
+# of source tree content, too (parallel [even NFS-shared?] builds might croak).
+# Another nice idea (at least in build server environments)
+# might be to have the partition containing the source tree mounted read-only.
+if(V2C_NEED_SKIP_CMAKE_DISABLE_SOURCE_CHANGES)
+  _v2c_msg_warning("Detected outer-scope request to skip disabling of source tree changes!")
+else(V2C_NEED_SKIP_CMAKE_DISABLE_SOURCE_CHANGES)
+  set(CMAKE_DISABLE_SOURCE_CHANGES ON)
+endif(V2C_NEED_SKIP_CMAKE_DISABLE_SOURCE_CHANGES)
+
+
 # Small helper to query some variables which might not be defined.
 # Used to avoid --warn-uninitialized warnings.
 macro(_v2c_var_set_if_defined _var_name _out_var_name)
