@@ -411,6 +411,7 @@ Find.find(v2c_plugin_dir) { |f_plugin|
 }
 
 # TODO: to be automatically filled in from parser plugins
+# TODO: parser plugin stuff is very incomplete ATM
 
 plugin_parser_vs10_vcxproj = V2C_Core_Plugin_Info_Parser.new
 
@@ -607,6 +608,10 @@ class Logger
   end
 
   def scope_id
+    # initialize() / super() issue debugging:
+    #puts "SELF #{self.class.name}"
+    #puts @scope_id
+    #puts "SELF END"
     @scope_id
   end
 end
@@ -8094,6 +8099,14 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
         f = info_file.path_relative
 
         # We fully expect ALL non-generated files to already be available!
+        # FIXME: it seems that
+        # output items of tools are getting marked as "generated"
+        # in an *on-demand* manner by MSVS
+        # (items in a project *do* show state "generated", yet
+        # did **NOT** have any "generated" attribute in project config file!).
+        # To achieve similarly correct state, we would also need to
+        # consult our tool processors in order to
+        # have their output marked as "generated" each.
         if false == info_file.is_generated
           v2c_generator_check_file_accessible(
             @project_dir,
@@ -8925,6 +8938,11 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
       end
     end
   end
+
+  # Refs:
+  # - "Properties on Source Files"
+  #     https://cmake.org/cmake/help/latest/manual/cmake-properties.7.html#id6
+
   def file_list_mark_as_generated(
     arr_file_elems,
     is_generated)

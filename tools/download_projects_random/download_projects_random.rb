@@ -109,6 +109,14 @@ class ProjectURLScraperGoogle < ProjectURLScraperBase
     arr_urls = []
 
     randomize_search_arg = rand(2000).to_s
+    # Important note:
+    # querying this Google URL may yield this error message result:
+    # /usr/lib/ruby/2.3.0/open-uri.rb:359:in `open_http': 503 Service Unavailable (OpenURI::HTTPError)
+    # , which might happen due to:
+    # - automatic service disabling/denial due to
+    #   overly frequent requests
+    #   (one then might decide to
+    #   visit the URL via browser and manually confirm the request activity)
     google_search_url = "http://www.google.com/search?as_q=#{randomize_search_arg}&q=filetype:#{get_filetype()}"
     puts "Querying #{google_search_url}"
 
