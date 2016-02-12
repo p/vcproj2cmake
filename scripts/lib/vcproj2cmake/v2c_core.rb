@@ -1756,7 +1756,7 @@ def vs7_create_config_variable_translation(str_in, arr_config_var_handling)
 EOF
       arr_config_var_handling.push(config_var_emulation_code)
       config_var_replacement = '${v2c_VS_PlatformName}'
-      # InputName is said to be same as ProjectName in case input is the project.
+    # InputName is said to be same as ProjectName in case input is the project.
     when 'INPUTNAME', 'PROJECTNAME'
       config_var_replacement = CMAKE_PROJECT_NAME_VAR_DEREF
       # See ProjectPath reasoning below.
@@ -2256,7 +2256,7 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
           bool_out = false
           success = true
         else
-	  # Unknown syntax (caller should probably log an error).
+          # Unknown syntax (caller should probably log an error).
           success = false
         end
       end
@@ -3342,7 +3342,7 @@ class V2C_VS7FilterParser < V2C_VS7ParserBase
       when 'File'
         logger.debug('FOUND File')
         elem_parser = V2C_VS7FileParser.new(subelem_xml, arr_file_infos)
-	elem_parser.parse
+        elem_parser.parse
       when 'Filter'
         logger.debug('FOUND Filter')
         subfiles_str = Files_str.new
@@ -3410,10 +3410,10 @@ class V2C_VS7FilterParser < V2C_VS7ParserBase
       case setting_value_upper
       when GUID_VS_SOURCEFILES
       when GUID_QMAKE_SOURCEFILES
-	  #filter_info.is_compiles = true
+          #filter_info.is_compiles = true
       when GUID_VS_HEADERFILES
       when GUID_QMAKE_HEADERFILES
-	  #filter_info.is_includes = true
+          #filter_info.is_includes = true
       when GUID_VS_RESOURCEFILES
       when GUID_QMAKE_RESOURCEFILES
         #filter_info.is_resources = true
@@ -3526,11 +3526,11 @@ class V2C_VS7PlatformsParser < V2C_VS7ParserBase
       elem_parser = V2C_VS7PlatformParser.new(subelem_xml, platform_name)
       if elem_parser.parse
         # Hrmm... while Ruby does pass string parameters by reference,
-	# once, in this case we do it _twice_ (into class member)
-	# and this seems to mess it up since the internal assignment
-	# doesn't make it back out here. There's no explanation about that
-	# that I could find easily...
-	# Thus resort to elem_parser.info_elem. Ugh.
+        # once, in this case we do it _twice_ (into class member)
+        # and this seems to mess it up since the internal assignment
+        # doesn't make it back out here. There's no explanation about that
+        # that I could find easily...
+        # Thus resort to elem_parser.info_elem. Ugh.
         get_build_platform_configs().register_platform(elem_parser.info_elem)
       end
     else
@@ -6238,10 +6238,10 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
       arr_local_sources = arr_file_infos.collect { |file|
         f = file.path_relative
 
-	# We fully expect ALL non-generated files to already be available!
-	if false == file.is_generated
-	  v2c_generator_check_file_accessible(@project_dir, f, 'file item in project', @project_name, ($v2c_validate_vcproj_abort_on_error > 0))
-	end
+        # We fully expect ALL non-generated files to already be available!
+        if false == file.is_generated
+          v2c_generator_check_file_accessible(@project_dir, f, 'file item in project', @project_name, ($v2c_validate_vcproj_abort_on_error > 0))
+        end
 
         ## Ignore all generated files, for now.
         #if true == file.is_generated
@@ -6817,7 +6817,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     return if pch_source_name.nil? or pch_source_name.empty?
     arr_args_precomp_header = [ pch_use_mode.to_s, pch_source_name, pch_binary_name ]
     write_invoke_object_conditional_v2c_function('v2c_target_add_precompiled_header',
-    target_name, condition, arr_args_precomp_header)
+      target_name, condition, arr_args_precomp_header)
   end
   def write_precompiled_header(condition, precompiled_header_info)
     return if not $v2c_target_precompiled_header_enable
@@ -7140,7 +7140,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       write_func_v2c_target_post_setup(project_info.name, project_info.vs_keyword)
 
       if project_info.project_types != nil
-	set_property_project_types(project_info.name, project_info.project_types)
+        set_property_project_types(project_info.name, project_info.project_types)
       end
       if project_info.user_properties.length > 0
         set_properties_user_properties(project_info.name, project_info.user_properties)
@@ -7236,7 +7236,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # per-project()!
       hook_project_location = File.join($v2c_config_dir_local, 'hook_project.txt')
       @textOut.write_block( \
-	"# MasterProjectDefaults_vcproj2cmake is supposed to define generic settings\n" \
+        "# MasterProjectDefaults_vcproj2cmake is supposed to define generic settings\n" \
         "# (such as V2C_HOOK_PROJECT, defined as e.g.\n" \
         "# #{hook_project_location},\n" \
         "# and other hook include variables below).\n" \
@@ -7543,14 +7543,14 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     # yields quite some overhead compared to current implementation,
     # thus we'll keep it as is for now (TODO?).
     arr_args_func = [ path_join(
-			get_dereferenced_variable_name(NAME_V2C_MASTER_PROJECT_SOURCE_DIR),
-			$v2c_module_path_local
-		      ),
-		      path_join(
-			get_dereferenced_variable_name(NAME_CMAKE_SOURCE_DIR),
-			$v2c_module_path_local
-		      ),
-		      get_dereferenced_variable_name(NAME_CMAKE_MODULE_PATH) ]
+        get_dereferenced_variable_name(NAME_V2C_MASTER_PROJECT_SOURCE_DIR),
+        $v2c_module_path_local
+      ),
+      path_join(
+        get_dereferenced_variable_name(NAME_CMAKE_SOURCE_DIR),
+        $v2c_module_path_local
+      ),
+      get_dereferenced_variable_name(NAME_CMAKE_MODULE_PATH) ]
     write_list_quoted(NAME_CMAKE_MODULE_PATH, arr_args_func)
   end
   def put_include_vcproj2cmake_func
@@ -7715,7 +7715,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     # if(PLATFORM) message(STATUS "not supported") return() ...
     # (note that we appended CMAKE_MODULE_PATH _prior_ to this include()!)
     put_customization_hook(
-	path_join(get_dereferenced_variable_name(NAME_V2C_CONFIG_DIR_LOCAL), 'hook_pre.txt')
+      path_join(get_dereferenced_variable_name(NAME_V2C_CONFIG_DIR_LOCAL), 'hook_pre.txt')
     )
   end
 end
@@ -7810,8 +7810,8 @@ def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_de
         # to be printed as a summary after a project's conversion step ended.
         log_error "File #{file_relative} (#{file_item_description}) as listed by project #{project_name} does not exist!? (perhaps filename with wrong case, or wrong path, ..., in either file lists or perhaps source group filter lists)"
         if throw_error
-	# FIXME: should be throwing an exception, to not exit out
-	# on entire possibly recursive (global) operation
+          # FIXME: should be throwing an exception, to not exit out
+          # on entire possibly recursive (global) operation
           # when a single project is in error...
           log_fatal "Improper original file - will abort and NOT generate a broken converted project file. Please fix content of the original project file!"
         end

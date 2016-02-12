@@ -114,7 +114,7 @@ else
         #puts "Looking for #{vcproj_filename}"
         if FileTest.exist?(vcproj_filename_test)
           vcproj_filename = vcproj_filename_test
-	  break
+          break
         end
      end
    }
