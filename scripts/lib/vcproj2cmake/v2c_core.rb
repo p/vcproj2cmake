@@ -1590,8 +1590,14 @@ end
 # FIXME: we shouldn't need such a helper in global namespace...
 # (keep in CMake generator base)
 def cmake_path_join(a, b)
+  # Flatten stuff (input potentially Pathname-typed)
+  a_str = a.to_s
+  b_str = b.to_s
+  a_valid = !(a_str.nil? || a_str.empty?)
+  b_valid = !(b_str.nil? || b_str.empty?)
+  need_sep = (a_valid && b_valid)
   # CMake path string expressions always use '/' as separator, right?
-  [ a, b ].join('/')
+  return need_sep ? a_str + '/' + b_str : a_str + b_str
 end
 
 # (Almost-)comment-only helper function:
