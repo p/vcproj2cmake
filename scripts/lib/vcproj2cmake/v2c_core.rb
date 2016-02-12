@@ -6810,7 +6810,6 @@ class V2C_CMakeFileListGenerator_VS10 < V2C_CMakeFileListGeneratorBase
     project_name,
     project_dir,
     file_list,
-    parent_source_group,
     arr_sub_sources_for_parent)
     super(
       textOut,
@@ -6819,7 +6818,6 @@ class V2C_CMakeFileListGenerator_VS10 < V2C_CMakeFileListGeneratorBase
       arr_sub_sources_for_parent,
       false)
     @file_list = file_list
-    @parent_source_group = parent_source_group
   end
   def generate
     put_file_list(
@@ -6911,7 +6909,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       put_file_list_vs10(
         project_info.name,
         project_info.file_lists,
-        nil,
         arr_sub_source_list_var_names)
     end
 
@@ -6943,7 +6940,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def put_file_list_vs10(
     project_name,
     file_lists,
-    parent_source_group,
     arr_sub_sources_for_parent)
     if file_lists.nil?
       puts "ERROR: WHAT THE HELL, NO FILES!?"
@@ -6968,7 +6964,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         project_name,
         @project_dir,
         file_list,
-        parent_source_group,
         arr_sub_sources_for_parent)
       filelist_generator.generate
       arr_generated = file_list.get_generated_files
