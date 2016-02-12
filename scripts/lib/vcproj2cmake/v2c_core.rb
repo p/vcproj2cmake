@@ -5860,7 +5860,8 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
   def write_vcproj2cmake_func_comment()
     write_comment_at_level(COMMENT_LEVEL_STANDARD, "See function implementation/docs in #{VCPROJ2CMAKE_FUNC_CMAKE_LOCATION}")
   end
-  def put_converter_script_location(script_location_relative_to_master)
+  def put_converter_script_location(
+    script_location_relative_to_master)
     return if $v2c_generator_one_time_conversion_only
 
     if script_location_relative_to_master.nil?
@@ -5876,8 +5877,12 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     # and _not_ CMAKE_CURRENT_SOURCE_DIR,
     # (this provision should even enable people to manually relocate
     # an entire sub project within the source tree).
-    v2c_converter_script_location = path_join(get_dereferenced_variable_name(NAME_V2C_MASTER_PROJECT_SOURCE_DIR), script_location_relative_to_master)
-    gen_put_converter_script_location(v2c_converter_script_location)
+    v2c_converter_script_location = path_join(
+      get_dereferenced_variable_name(
+        NAME_V2C_MASTER_PROJECT_SOURCE_DIR),
+      script_location_relative_to_master)
+    gen_put_converter_script_location(
+      v2c_converter_script_location)
   end
   def put_include_dir_precompiled_header(target_name, cmake_path_to_header)
     # AFAIK .vcproj implicitly adds the project root to standard include path
@@ -6314,7 +6319,9 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
   end
   def write_sources_list(source_list_name, arr_sources, var_prefix = NAME_V2C_SOURCE_LIST_PREFIX)
     source_files_list_var_name = var_prefix + source_list_name
-    write_list_quoted(source_files_list_var_name, arr_sources)
+    write_list_quoted(
+      source_files_list_var_name,
+      arr_sources)
     return source_files_list_var_name
   end
   # Side note: we will NOT prefix source variables within a newly
@@ -7537,7 +7544,8 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
       # while different project files/dirs may have been converted
       # with differing scripts, such a use case can be considered
       # sufficiently pathological, thus we will not support it.
-      put_converter_script_location(@script_location_relative_to_master)
+      put_converter_script_location(
+        @script_location_relative_to_master)
       write_set_var_bool(str_per_scope_definition_guard, true)
     end
   end
@@ -7667,10 +7675,15 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     @master_project_dir = p_solution_dir.to_s
     @arr_local_project_targets = arr_local_project_targets
     @script_location_relative_to_master = script_location_relative_to_master
-    local_dir_fqpn = File.expand_path(local_dir)
-    p_local_dir_fqpn = Pathname.new(local_dir_fqpn)
-    p_root = Pathname.new(File.expand_path(@master_project_dir))
-    @p_relative_path_to_root = p_root.relative_path_from(p_local_dir_fqpn)
+    local_dir_fqpn = File.expand_path(
+      local_dir)
+    p_local_dir_fqpn = Pathname.new(
+      local_dir_fqpn)
+    p_root = Pathname.new(
+      File.expand_path(
+        @master_project_dir))
+    @p_relative_path_to_root = p_root.relative_path_from(
+      p_local_dir_fqpn)
     # FIXME: handle arr_config_var_handling appropriately
     # (place the translated CMake commands somewhere suitable)
     @arr_config_var_handling = Array.new
@@ -7752,12 +7765,24 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
   end
   def generate_body
     # FIXME: all these function arguments are temporary crap! - they're supposed to be per-ProjectTarget mostly.
-    generate_projects(@local_dir, @generator_base, @map_lib_dirs, @map_lib_dirs_dep, @map_dependencies, @map_defines)
+    generate_projects(
+      @local_dir,
+      @generator_base,
+      @map_lib_dirs,
+      @map_lib_dirs_dep,
+      @map_dependencies,
+      @map_defines)
   end
   def generate_footer
     write_func_v2c_directory_post_setup
   end
-  def generate_projects(local_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
+  def generate_projects(
+    local_dir,
+    generator_base,
+    map_lib_dirs,
+    map_lib_dirs_dep,
+    map_dependencies,
+    map_defines)
     @arr_local_project_targets.each { |project_info|
       project_generator = V2C_CMakeProjectTargetGenerator.new(
         project_info,
@@ -7779,8 +7804,10 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
 
   def put_file_header(str_conversion_root_rel)
     @textOut.put_file_header_temporary_marker()
-    bootstrap_generator =
-      V2C_CMakeGlobalBootstrapCodeGenerator.new(@textOut, str_conversion_root_rel, @script_location_relative_to_master)
+    bootstrap_generator = V2C_CMakeGlobalBootstrapCodeGenerator.new(
+      @textOut,
+      str_conversion_root_rel,
+      @script_location_relative_to_master)
     bootstrap_generator.generate
     put_include_vcproj2cmake_defs()
     put_hook_pre()
@@ -8060,7 +8087,8 @@ class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
     @p_generator_proj_file = p_generator_proj_file
     @p_local_dir = @p_generator_proj_file.dirname
     @arr_projects = arr_projects
-    @script_location_relative_to_master = p_v2c_script.relative_path_from(p_master_project)
+    @script_location_relative_to_master = p_v2c_script.relative_path_from(
+      p_master_project)
     @flag_source_groups_enabled = flag_source_groups_enabled
     #logger.debug "p_v2c_script #{p_v2c_script} | p_master_project #{p_master_project} | @script_location_relative_to_master #{@script_location_relative_to_master}"
   end
@@ -8073,7 +8101,15 @@ class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
   def generate_local_projects(output_file_location)
     temp_generator_local = V2C_GenerateIntoTempFile.new('vcproj2cmake', output_file_location)
     temp_generator_local.generate { |textOutLocal|
-      content_generator = V2C_CMakeLocalFileContentGenerator.new(textOutLocal, @p_local_dir, @p_master_project, @arr_projects, @script_location_relative_to_master)
+      do_generate_local = true
+      if false != do_generate_local
+        content_generator = V2C_CMakeLocalFileContentGenerator.new(
+          textOutLocal,
+          @p_local_dir,
+          @p_master_project,
+          @arr_projects,
+          @script_location_relative_to_master)
+      end
       content_generator.generate
       # Keep per-project source group generation as close together
       # with local file generation as possible scope-wise
@@ -8082,7 +8118,8 @@ class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
       # generates both local file content *and* source group stuff)
       if source_groups_enabled()
         path_config = v2c_get_path_config(@p_master_project.to_s)
-        temp_store_dir = path_config.get_abs_temp_store_dir(@p_local_dir.to_s)
+        temp_store_dir = path_config.get_abs_temp_store_dir(
+          @p_local_dir.to_s)
         generate_source_groups(temp_store_dir)
       end
     }
@@ -8185,8 +8222,12 @@ end
 def v2c_source_root_write_cmakelists_skeleton_file(p_master_project, p_script, path_cmakelists_txt, projects_list_file)
   generate_skeleton = V2C_GenerateIntoTempFile.new('vcproj2cmake_root_skeleton', path_cmakelists_txt)
   generate_skeleton.generate { |textOut|
-    script_location_relative_to_master = p_script.relative_path_from(p_master_project)
-    content_generator = V2C_CMakeRootFileContentGenerator.new(textOut, projects_list_file, script_location_relative_to_master)
+    script_location_relative_to_master = p_script.relative_path_from(
+      p_master_project)
+    content_generator = V2C_CMakeRootFileContentGenerator.new(
+      textOut,
+      projects_list_file,
+      script_location_relative_to_master)
     content_generator.generate
   }
 rescue Exception
@@ -8388,7 +8429,12 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
     # should be distinctly provided for each generator, too.
     generator = nil
     if true
-      generator = V2C_CMakeLocalFileGenerator.new(p_script, p_master_project, p_generator_proj_file, arr_projects, $v2c_generator_source_groups_enable)
+      generator = V2C_CMakeLocalFileGenerator.new(
+        p_script,
+        p_master_project,
+        p_generator_proj_file,
+        arr_projects,
+        $v2c_generator_source_groups_enable)
     end
 
     if not generator.nil?
