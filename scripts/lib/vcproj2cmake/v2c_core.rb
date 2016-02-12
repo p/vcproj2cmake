@@ -5282,6 +5282,14 @@ class V2C_SyntaxGeneratorBase < V2C_GeneratorBase
   COMMENT_LEVEL_STANDARD = 2 # standard setting
   COMMENT_LEVEL_VERBOSE = 3 # verbose mode - even more comments
   COMMENT_LEVEL_ALL = 4 # highly verbose, many comments
+  # NOTE: consistency:
+  # implementations in all derived classes
+  # should have textOut as their first param:
+  # Reason being that it is the single output sink parameter,
+  # whereas the remaining parameters of derived classes
+  # are a *potentially variable* (to-be-extended - causing inconvenient parameter *shifting*)
+  # number of parameters
+  # required for influencing/configuring text generation.
   def initialize(
     textOut)
     super(
@@ -6489,10 +6497,10 @@ end
 
 class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def initialize(
+    textOut,
     target,
     project_dir,
-    localGenerator,
-    textOut)
+    localGenerator)
     super(
       textOut)
     @target = target
@@ -7785,10 +7793,10 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     map_defines)
     @arr_local_project_targets.each { |project_info|
       project_generator = V2C_CMakeProjectTargetGenerator.new(
+        @textOut,
         project_info,
         p_local_dir,
-        self,
-        @textOut)
+        self)
 
       begin
         project_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
