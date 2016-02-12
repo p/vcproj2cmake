@@ -6321,7 +6321,7 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
 end
 
 # FIXME: temporarily appended a _VS7 suffix since we're currently changing file list generation during our VS10 generator work.
-class V2C_CMakeFileListsGenerator_VS7 < V2C_CMakeFileListGeneratorBase
+class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeFileListGeneratorBase
   def initialize(
     textOut,
     project_name,
@@ -6527,7 +6527,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       puts "ERROR: WHAT THE HELL, NO FILES!?"
       return
     end
-    filelist_generator = V2C_CMakeFileListsGenerator_VS7.new(
+    filelist_generator = V2C_CMakeFileListGenerator_VS7.new(
       @textOut,
       project_name,
       @project_dir,
