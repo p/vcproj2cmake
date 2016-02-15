@@ -6265,7 +6265,12 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
 
         # We fully expect ALL non-generated files to already be available!
         if false == file.is_generated
-          v2c_generator_check_file_accessible(@project_dir, f, 'file item in project', @project_name, ($v2c_validate_vcproj_abort_on_error > 0))
+          v2c_generator_check_file_accessible(
+            @project_dir,
+            f,
+            'file item in project',
+            @project_name,
+            ($v2c_validate_vcproj_abort_on_error > 0))
         end
 
         ## Ignore all generated files, for now.
@@ -6485,10 +6490,26 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   # should definitely support the following CMake properties, as needed:
   # PUBLIC_HEADER (cmake --help-property PUBLIC_HEADER), PRIVATE_HEADER, HEADER_FILE_ONLY
   # and possibly the PUBLIC_HEADER option of the INSTALL(TARGETS) command.
-  def put_file_list(project_info, arr_sub_source_list_var_names)
-    put_file_list_source_group_recursive(project_info.name, project_info.main_files, nil, arr_sub_source_list_var_names)
+  def put_file_list(
+    project_info,
+    arr_sub_source_list_var_names)
+    do_put_source_group = true
+    if false != do_put_source_group
+      put_file_list_source_group_recursive(
+        project_info.name,
+        project_info.main_files,
+        nil,
+        arr_sub_source_list_var_names)
+    end
 
-    put_file_list_vs10(project_info.name, project_info.file_lists, nil, arr_sub_source_list_var_names)
+    do_put_file_list = true
+    if false != do_put_file_list
+      put_file_list_vs10(
+        project_info.name,
+        project_info.file_lists,
+        nil,
+        arr_sub_source_list_var_names)
+    end
 
     if not arr_sub_source_list_var_names.empty?
       # add a ${V2C_SOURCES} variable to the list, to be able to append
@@ -6506,10 +6527,20 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       puts "ERROR: WHAT THE HELL, NO FILES!?"
       return
     end
-    filelist_generator = V2C_CMakeFileListsGenerator_VS7.new(@textOut, project_name, @project_dir, files_str, parent_source_group, arr_sub_sources_for_parent)
+    filelist_generator = V2C_CMakeFileListsGenerator_VS7.new(
+      @textOut,
+      project_name,
+      @project_dir,
+      files_str,
+      parent_source_group,
+      arr_sub_sources_for_parent)
     filelist_generator.generate
   end
-  def put_file_list_vs10(project_name, file_lists, parent_source_group, arr_sub_sources_for_parent)
+  def put_file_list_vs10(
+    project_name,
+    file_lists,
+    parent_source_group,
+    arr_sub_sources_for_parent)
     if file_lists.nil?
       puts "ERROR: WHAT THE HELL, NO FILES!?"
       return
@@ -6528,7 +6559,13 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # in some environments this might happen. Thus we might want to skip adding
     # the resource files list (VS10: ResourceCompile list) to the target.
     file_lists.arr_file_lists.each { |file_list|
-      filelist_generator = V2C_CMakeFileListGenerator_VS10.new(@textOut, project_name, @project_dir, file_list, parent_source_group, arr_sub_sources_for_parent)
+      filelist_generator = V2C_CMakeFileListGenerator_VS10.new(
+        @textOut,
+        project_name,
+        @project_dir,
+        file_list,
+        parent_source_group,
+        arr_sub_sources_for_parent)
       filelist_generator.generate
       arr_generated = file_list.get_generated_files
       #puts "file_list.name #{file_list.name} arr_generated #{arr_generated.inspect}"
@@ -7037,7 +7074,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # the names of the individual source list variables:
     arr_sub_source_list_var_names = Array.new
 
-    put_file_list(project_info, arr_sub_source_list_var_names)
+    put_file_list(
+      project_info,
+      arr_sub_source_list_var_names)
 
     put_obj_files_as_sources(project_info, arr_sub_source_list_var_names)
 
