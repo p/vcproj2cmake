@@ -3612,8 +3612,7 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
         subelem_xml,
         get_project().arr_config_info,
         get_project().arr_target_config_info,
-        get_project().build_platform_configs
-      )
+        get_project().build_platform_configs)
     when 'Files' # "Files" simply appears to be a special "Filter" element without any filter conditions.
       # FIXME: we most likely shouldn't pass a rather global "project target" object here! (pass a file info object)
       get_project().main_files = Files_str.new
@@ -5087,8 +5086,7 @@ class V2C_GenerateIntoTempFile
     textstream_attributes = V2C_TextStream_Attributes.new(
       $v2c_generator_indent_initial_num_spaces,
       $v2c_generator_indent_step,
-      $v2c_generator_comments_level
-    )
+      $v2c_generator_comments_level)
     @textstream_attributes = textstream_attributes
     @file_create_permissions = $v2c_generator_file_create_permissions
   end
@@ -5907,8 +5905,7 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
       "Add the #{header_location} as a full include dir.\n" \
       "In case of precompiled headers that's definitely required for some compilers\n" \
       "(gcc), since MSVC implicitly provides inclusion of the PCH header\n" \
-      "whereas they don't."
-    )
+      "whereas they don't.")
     # We could have created a vcproj2cmake_func helper which
     # figures out: which compiler, which setting needed (reference to
     # file or adding include path), then does it.
@@ -6076,8 +6073,7 @@ class V2C_CMakeV2CSyntaxGeneratorV2CFunc < V2C_CMakeV2CSyntaxGeneratorBase
   def put_v2c_target_source_groups_definitions_include(target_name)
     write_comment_at_level(COMMENT_LEVEL_STANDARD,
       "Optionally include()s a generated file which contains source_group() defs\n" \
-      "for this project target."
-    )
+      "for this project target.")
     write_command_single_line('_v2c_target_source_groups_definitions_include', target_name)
   end
   def gen_message_info(msg)
@@ -6103,8 +6099,7 @@ class V2C_CMakeV2CSyntaxGeneratorSelfContained < V2C_CMakeV2CSyntaxGeneratorBase
   end
   def gen_put_converter_script_location(script_location)
     write_comment_at_level(COMMENT_LEVEL_MINIMUM,
-      "User override mechanism (don't prevent specifying a custom location of this script)"
-    )
+      "User override mechanism (don't prevent specifying a custom location of this script)")
     write_set_var_if_unset('V2C_SCRIPT_LOCATION', element_manual_quoting(script_location))
   end
 end
@@ -6623,8 +6618,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       'V2C_HOOK_POST_DEFINITIONS',
       COMMENT_LEVEL_MINIMUM,
       "Hook include after all definitions have been made\n" \
-      "(but _before_ target is created using the source list!)"
-    )
+      "(but _before_ target is created using the source list!)")
   end
   def put_v2c_target_midl_compile(target_name, condition, midl_info, idl_file)
     # TODO: should use condition to alternatively open-code the conditional variable
@@ -6856,8 +6850,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     @localGenerator.put_customization_hook_commented_from_cmake_var(
       'V2C_HOOK_POST_TARGET',
       COMMENT_LEVEL_MINIMUM,
-      "E.g. to be used for tweaking target properties etc."
-    )
+      "E.g. to be used for tweaking target properties etc.")
   end
   def put_property_compile_definitions(config_name, arr_compile_defn)
     arr_compile_defn_cooked = cmake_escape_compile_definitions(arr_compile_defn)
@@ -6893,8 +6886,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       condition,
       precompiled_header_info.use_mode,
       precompiled_header_info.header_source_name,
-      precompiled_header_info.header_binary_name
-    )
+      precompiled_header_info.header_binary_name)
   end
   def write_property_compile_definitions(condition, arr_defs_assignments, map_defs)
     return if arr_defs_assignments.empty?
@@ -7264,8 +7256,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     end
     write_comment_at_level(COMMENT_LEVEL_VERBOSE,
       "For this project's file, indicates originating build environment / IDE,\n" \
-      "and indicates conversion moment in time (UTC, format #{timestamp_format_docs})"
-    )
+      "and indicates conversion moment in time (UTC, format #{timestamp_format_docs})")
     write_invoke_v2c_function_quoted('v2c_project_conversion_info_set', [ project_name, str_time, str_from_buildtool_version ])
   end
   def put_guid(project_name, project_guid)
@@ -7304,8 +7295,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         "# and other hook include variables below).\n" \
         "# NOTE: it usually should also reset variables\n" \
         "# V2C_LIBS, V2C_SOURCES etc. as used below since they should contain\n" \
-        "# project-specific contents only, not accumulate!" \
-      )
+        "# project-specific contents only, not accumulate!")
     end
     # (side note: see "ldd -u -r" on Linux for superfluous link parts potentially caused by this!)
     write_include('MasterProjectDefaults_vcproj2cmake', true)
@@ -7328,8 +7318,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       COMMENT_LEVEL_STANDARD,
       "Hook e.g. for invoking Find scripts as expected by\n" \
       "the _LIBRARIES / _INCLUDE_DIRS mappings created\n" \
-      "by your include/dependency map files."
-    )
+      "by your include/dependency map files.")
   end
 
   def generate_project_leadin(project_info)
@@ -7490,8 +7479,7 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
       "to be able to support the use case of creating a build environment\n" \
       "from single local project directories, too.\n" \
       "But there's a nice trick: if a guard variable is already defined,\n" \
-      "then some other (parent?) scope already did all that setup work for us." \
-    )
+      "then some other (parent?) scope already did all that setup work for us.")
     # Decide to have both conditional var and block
     # generated inline from within the same function,
     # since they're deeply related (block should always be used
@@ -7526,8 +7514,7 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     write_comment_at_level(COMMENT_LEVEL_VERBOSE,
       "For features provided (or not) by various CMake versions,\n" \
       "please see http://www.cmake.org/Wiki/CMake_Released_Versions\n" \
-      "(and page CMake_Version_Compatibility_Matrix)."
-    )
+      "(and page CMake_Version_Compatibility_Matrix).")
     # Keep a whole list of various requirements and their version,
     # to know which of our dependencies carries which penalty.
     str_cmake_minimum_version = '2.6'
@@ -7537,8 +7524,7 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     #str_cmake_minimum_version = '2.8.3'
     #str_cmake_minimum_version_reason = 'CMakeParseArguments module'
     write_comment_at_level(COMMENT_LEVEL_MINIMUM,
-      ">= #{str_cmake_minimum_version} due to crucial #{str_cmake_minimum_version_reason}"
-    )
+      ">= #{str_cmake_minimum_version} due to crucial #{str_cmake_minimum_version_reason}")
     write_cmake_minimum_version(str_cmake_minimum_version)
     next_paragraph()
   end
@@ -7575,8 +7561,7 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     next_paragraph()
     write_comment_at_level(COMMENT_LEVEL_STANDARD,
       "Denotes the source root directory where the V2C conversion run was carried out.\n" \
-      "This directory also contains certain global vcproj2cmake support subdirs."
-    )
+      "This directory also contains certain global vcproj2cmake support subdirs.")
 
     # Handle the case of generating for V2C root (== empty relative path).
     str_conversion_root_rel_cooked = ''
@@ -7593,8 +7578,7 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
       "Extend module path with both a precise relative hint to source root\n" \
       "and a flexible link via CMAKE_SOURCE_DIR expression,\n" \
       "since in certain situations both may end up used\n" \
-      "(think build tree created from standalone project)."
-    )
+      "(think build tree created from standalone project).")
     # Whatever we do here - make sure we don't stomp out
     # any potential prior CMAKE_MODULE_PATH definition!!
     # (for details, see "CMake coding guide"
@@ -7618,8 +7602,7 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
   def put_include_vcproj2cmake_func
     next_paragraph()
     write_comment_at_level(COMMENT_LEVEL_STANDARD,
-      "Include the main file for pre-defined vcproj2cmake helper functions"
-    )
+      "Include the main file for pre-defined vcproj2cmake helper functions")
     write_include('vcproj2cmake_func')
   end
   # "export" our internal $v2c_config_dir_local variable (to be able to reference it in CMake scripts as well)
@@ -7687,8 +7670,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_lib_dirs_translated.push(get_dereferenced_variable_name('V2C_LIB_DIRS'))
     write_comment_at_level(COMMENT_LEVEL_VERBOSE,
       "It is said to be much preferable to be able to use target_link_libraries()\n" \
-      "rather than the very unspecific link_directories()."
-    )
+      "rather than the very unspecific link_directories().")
     write_build_attributes('link_directories', arr_lib_dirs_translated, map_lib_dirs, nil)
   end
   def write_directory_property_compile_flags(attr_opts)
@@ -7767,8 +7749,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     next_paragraph()
     write_comment_at_level(COMMENT_LEVEL_STANDARD,
       "Include the globally provided module for re-init of local (per-scope)\n" \
-      "configuration settings definitions (to be customized by user as needed)"
-    )
+      "configuration settings definitions (to be customized by user as needed)")
     write_include('vcproj2cmake_defs')
   end
   def put_hook_pre
@@ -7777,8 +7758,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     # if(PLATFORM) message(STATUS "not supported") return() ...
     # (note that we appended CMAKE_MODULE_PATH _prior_ to this include()!)
     put_customization_hook(
-      path_join(get_dereferenced_variable_name(NAME_V2C_CONFIG_DIR_LOCAL), 'hook_pre.txt')
-    )
+      path_join(get_dereferenced_variable_name(NAME_V2C_CONFIG_DIR_LOCAL), 'hook_pre.txt'))
   end
 end
 
@@ -7847,8 +7827,7 @@ class V2C_CMakeSourceGroupFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
           ]
         end
         write_command_list(
-          '_v2c_target_source_group_define', target_name, arr_func_parms
-        )
+          '_v2c_target_source_group_define', target_name, arr_func_parms)
       end
     }
     next_paragraph()
@@ -8150,8 +8129,7 @@ class V2C_CMakeRootFileContentGenerator < V2C_CMakeLocalFileContentGenerator
   def put_projects_list_file_include
     write_comment_at_level(COMMENT_LEVEL_MINIMUM,
       "Includes the generated file that adds all sub directories\n" \
-      "which contain projects converted by V2C."
-    )
+      "which contain projects converted by V2C.")
     # TODO: once vcproj2cmake_func.cmake is available at this point in
     # time, should invoke a V2C helper macro instead which does that.
     write_include(@projects_list_file)
