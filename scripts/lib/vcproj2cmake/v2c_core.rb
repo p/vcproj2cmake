@@ -1842,7 +1842,10 @@ end
 VS7_PROP_VAR_SCAN_REGEX_OBJ = %r{\$\(([[:alnum:]_]+)\)}
 VS7_PROP_VAR_MATCH_REGEX_OBJ = %r{\$\([[:alnum:]_]+\)}
 
-Files_str = Struct.new(:filter_info, :arr_sub_filters, :arr_file_infos)
+Files_str = Struct.new(
+  :filter_info,
+  :arr_sub_filters,
+  :arr_file_infos)
 
 def is_known_environment_variable_convention(config_var, config_var_type_descr)
   # Side note: need to use String.replace()
