@@ -51,6 +51,15 @@ $v2c_validate_vcproj_abort_on_error = 1
 $v2c_parser_proj_files_case_insensitive_match = false
 
 
+# Whether the recursive project crawler (vcproj2cmake_recursive.rb)
+# is allowed to follow symlinks.
+# Following symlinks may develop into a problem (infinite recursion)
+# in case of symlinks which point backwards (above the current base directory).
+# But for a poor man's way of emulating SCM sub module integration,
+# symlink support is very important.
+$v2c_parser_recursive_follow_symlinks = false
+
+
 # Configures amount of useful comments left in generated CMakeLists.txt
 # files
 # 0 == completely disabled (not recommended)

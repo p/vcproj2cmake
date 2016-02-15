@@ -275,8 +275,8 @@ log_info "Doing case-#{str_case_match_type}SENSITIVE matching on project file ca
 
 class V2C_CrawlerBase
   def initialize(
-    )
-    @follow_symlinks = false
+    follow_symlinks)
+    @follow_symlinks = follow_symlinks
   end
   # Main crawler entry point.
   # dir_base indicates location to start crawling from.
@@ -286,11 +286,15 @@ class V2C_CrawlerBase
     &block)
     do_crawl(
       dir_base,
+      nil,
       &block)
   end
   private
+  # dir_base_orig indicates the original location
+  # in case of incrementally crawling from a symlinked location.
   def do_crawl(
     dir_base,
+    dir_base_orig,
     &block)
     # Cannot use Array.compact() for Find.find()
     # since that one is "special" (at least on < 1.9!?)
@@ -302,15 +306,32 @@ class V2C_CrawlerBase
       if FileTest.symlink?(
         item)
         symlink = item
+        # Symlinks e.g. are poor man's way of emulating SCM sub module integration ;)
         # default handling: skip symlinks since they might be pointing _backwards_!
         if @follow_symlinks == true
+          # http://www.latefortea.com/2011/12/ruby-1-8-resolve-symlink-recursively/
+          sym_dirname = File.dirname(
+            symlink)
+          sym_value = File.readlink(
+            symlink)
+          dir_base_new = File.join(
+            sym_dirname,
+            sym_value)
+          dir_base_new_orig = symlink
+          do_crawl(
+            dir_base_new,
+            dir_base_new_orig,
+            &block)
         else
           log_debug "Configured to EXCLUDE DIRECTORY SYMLINK #{symlink}"
         end
       else
         # Calculate/announce:
         # - the normal item
+        # - in the case of symlinks, the dereferenced path
+        #   (fully expanded destination)
         item_announced = nil
+        item_announced_deref = nil
         if not dir_base_orig.nil?
           p_dir_base = Pathname.new(
             dir_base)
@@ -322,12 +343,14 @@ class V2C_CrawlerBase
             p_dir_base)
           p_announced = p_dir_base_orig + p_progressed
           item_announced = p_announced.to_s
+          item_announced_deref = item
         else
           item_announced = item
         end
-        log_debug "CALL: item_announced #{item_announced}"
+        log_debug "CALL: item_announced #{item_announced}, item_announced_deref #{item_announced_deref}"
         prune_sub_hierarchy = block.call(
-          item_announced)
+          item_announced,
+          item_announced_deref)
         if true == prune_sub_hierarchy
           Find.prune() # throws exception to skip entire recursive directories block
         end
@@ -350,11 +373,11 @@ end
 arr_filtered_dirs = Array.new
 
 dir_crawler = V2C_CrawlerDirs.new(
-  )
+  $v2c_parser_recursive_follow_symlinks)
 
-dir_crawler.crawl('./') do |dir|
+dir_crawler.crawl('./') do |dir, dir_deref|
 
-  log_debug "CRAWLED: #{dir}"
+  log_debug "CRAWLED: #{dir}, #{dir_deref}"
 
   # This block grabs directories,
   # and decides whether to ignore a single directory
@@ -402,9 +425,16 @@ dir_crawler.crawl('./') do |dir|
     if true == is_excluded_single
       log_debug "EXCLUDED SINGLE #{dir}!"
     else
-      subdir_info = V2C_Subdir_Info.new(
-        dir,
-        nil)
+      subdir_info = nil
+      if not dir_deref.nil?
+        subdir_info = V2C_Subdir_Info.new(
+          dir_deref,
+          dir)
+      else
+        subdir_info = V2C_Subdir_Info.new(
+          dir,
+          nil)
+      end
       arr_filtered_dirs.push(
         subdir_info)
     end
