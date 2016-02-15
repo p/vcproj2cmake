@@ -4642,15 +4642,15 @@ class V2C_VS10ProjectParser < V2C_VSProjectParserBase
     found = be_optimistic()
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
-    when 'ItemGroup'
-      elem_parser = V2C_VS10ItemGroupForwarderParser.new(subelem_xml, get_project())
-      elem_parser.parse
     when 'ItemDefinitionGroup'
       config_info_curr = V2C_Project_Config_Info.new
       elem_parser = V2C_VS10ItemDefinitionGroupParser.new(subelem_xml, config_info_curr)
       if FOUND_FALSE != elem_parser.parse
         get_project().arr_config_info.push(config_info_curr)
       end
+    when 'ItemGroup'
+      elem_parser = V2C_VS10ItemGroupForwarderParser.new(subelem_xml, get_project())
+      elem_parser.parse
     when 'ProjectExtensions'
       elem_parser = V2C_VS10ProjectExtensionsParser.new(subelem_xml, get_project())
       elem_parser.parse
