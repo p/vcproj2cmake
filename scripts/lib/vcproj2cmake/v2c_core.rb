@@ -6718,8 +6718,14 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
   end
   def write_sources_list(
     source_list_name,
+    source_list_description,
     arr_sources,
     var_prefix = NAME_V2C_SOURCE_LIST_PREFIX)
+    if not source_list_description.nil?
+      write_comment_at_level(
+        COMMENT_LEVEL_STANDARD,
+        "File list: " + source_list_description)
+    end
     source_files_list_var_name = var_prefix + source_list_name
     write_list_quoted(
       source_files_list_var_name,
@@ -6807,6 +6813,7 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeFileListGeneratorBase
     if not arr_local_sources.nil?
       source_files_list_var_name = write_sources_list(
         source_group_var_suffix,
+        nil,
         arr_local_sources)
       # create source_group() of our local files
       if not parent_source_group.nil?
@@ -6863,6 +6870,7 @@ class V2C_CMakeFileListGenerator_VS10 < V2C_CMakeFileListGeneratorBase
       file_list.arr_files)
     source_files_variable = write_sources_list(
       file_list.name,
+      file_list.get_list_type_description(),
       arr_local_sources)
     source_files_variable
   end
