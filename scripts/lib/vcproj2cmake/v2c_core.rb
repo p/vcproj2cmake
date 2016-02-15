@@ -5503,6 +5503,10 @@ class V2C_GeneratorBase < V2C_LoggerBase
   def error_unknown_case_value(description, val)
     raise V2C_GeneratorError, "unknown/unsupported/corrupt #{description} case value! (#{val})"
   end
+  def generator_error_unknown_case(
+    value)
+    logger.error("Missing case (unsupported/corrupt?) for #{value}")
+  end
 end
 
 class V2C_SyntaxGeneratorBase < V2C_GeneratorBase
