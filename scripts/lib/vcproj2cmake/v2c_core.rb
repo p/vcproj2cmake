@@ -6676,22 +6676,35 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       put_v2c_target_midl_compile(@target.name, config_info.condition, midl_info, idl_file.path_relative)
     }
   end
-  def put_v2c_target_pdb_configure(target_name, condition, pdb_info)
+  def put_v2c_target_pdb_configure(
+    target_name,
+    condition,
+    pdb_info)
     args_generator = ParameterArrayGenerator.new
     args_generator.add('PDB_OUTPUT_DIRECTORY', pdb_info.output_dir)
     args_generator.add('PDB_NAME', pdb_info.filename)
     write_invoke_object_conditional_v2c_function('v2c_target_pdb_configure', target_name, condition, args_generator.array)
   end
-  def configure_pdb(condition, pdb_info)
-    put_v2c_target_pdb_configure(@target.name, condition, pdb_info)
+  def configure_pdb(
+    condition,
+    pdb_info)
+    put_v2c_target_pdb_configure(
+      @target.name,
+      condition,
+      pdb_info)
   end
-  def put_atl_mfc_config(target_config_info)
+  def put_atl_mfc_config(
+    target_config_info)
     # FIXME: should check whether CMAKE_MFC_FLAG is ok with specifying
     # it anywhere within CMakeLists.txt at our local directory scope -
     # if so, then we could place this function call _after_ having
     # established the target, thus we could already pretend this configuration
     # item to always have proper target property scope...
-    do_configure_atl_mfc_flag(@target.name, target_config_info.condition, target_config_info.use_of_atl, target_config_info.use_of_mfc)
+    do_configure_atl_mfc_flag(
+      @target.name,
+      target_config_info.condition,
+      target_config_info.use_of_atl,
+      target_config_info.use_of_mfc)
   end
   #def evaluate_precompiled_header_config(target, files_str)
   #end
@@ -6721,7 +6734,12 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # which we successfully translated from a bare link directory auto-link dependency
     # (AFTER establishing a target!):
     config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
-      @localGenerator.write_build_attributes('target_link_libraries', linker_info_curr.arr_lib_dirs, map_lib_dirs_dep, @target.name, true)
+      @localGenerator.write_build_attributes(
+        'target_link_libraries',
+        linker_info_curr.arr_lib_dirs,
+        map_lib_dirs_dep,
+        @target.name,
+        true)
     }
 
     put_hook_post_target()
@@ -6853,7 +6871,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     return target_is_valid
   end
   def write_WinMain()
-    arr_target_prop = get_target_syntax_expression(@target.name)
+    arr_target_prop = get_target_syntax_expression(
+      @target.name)
     put_property_bool(arr_target_prop, 'WIN32_EXECUTABLE', true)
   end
 
@@ -6959,7 +6978,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def write_link_libraries(arr_dependencies, map_dependencies)
     arr_dependencies_augmented = arr_dependencies.clone
     arr_dependencies_augmented.push(get_dereferenced_variable_name('V2C_LIBS'))
-    @localGenerator.write_build_attributes('target_link_libraries', arr_dependencies_augmented, map_dependencies, @target.name)
+    @localGenerator.write_build_attributes(
+      'target_link_libraries',
+      arr_dependencies_augmented,
+      map_dependencies,
+      @target.name)
   end
   def write_func_v2c_target_post_setup(project_name, project_keyword)
     # Rationale: keep count of generated lines of CMakeLists.txt to a bare minimum -
@@ -7736,7 +7759,11 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
   end
   def generate_projects(local_dir, generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
     @arr_local_project_targets.each { |project_info|
-      project_generator = V2C_CMakeProjectTargetGenerator.new(project_info, local_dir, self, @textOut)
+      project_generator = V2C_CMakeProjectTargetGenerator.new(
+        project_info,
+        local_dir,
+        self,
+        @textOut)
 
       begin
         project_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
