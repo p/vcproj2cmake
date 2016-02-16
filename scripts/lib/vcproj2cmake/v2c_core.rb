@@ -1920,7 +1920,9 @@ end
 CMAKE_CFG_INTDIR_VAR_DEREF = '${CMAKE_CFG_INTDIR}'
 CMAKE_PROJECT_BINARY_DIR_VAR_DEREF = '${PROJECT_BINARY_DIR}'
 CMAKE_PROJECT_NAME_VAR_DEREF = '${PROJECT_NAME}'
-def vs7_create_config_variable_translation(str_in, arr_config_var_handling)
+def vs7_create_config_variable_translation(
+  str_in,
+  arr_config_var_handling)
   str = str_in.clone
   # http://langref.org/all-languages/pattern-matching/searching/loop-through-a-string-matching-a-regex-and-performing-an-action-for-each-match
   str_scan_copy = str_in.clone # create a deep copy of string, to avoid "`scan': string modified (RuntimeError)"
@@ -1963,7 +1965,8 @@ def vs7_create_config_variable_translation(str_in, arr_config_var_handling)
     endif(CMAKE_CL_64)
   endif(NOT v2c_VS_PlatformName)
 EOF
-      arr_config_var_handling.push(config_var_emulation_code)
+      arr_config_var_handling.push(
+        config_var_emulation_code)
       config_var_replacement = '${v2c_VS_PlatformName}'
     # InputName is said to be same as ProjectName
     # in case input is the project.
@@ -2339,9 +2342,13 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
     logger.fixme("skipping unhandled VS10 variable (#{str_var})")
     return true
   end
-  def get_filesystem_location(path)
+  def get_filesystem_location(
+    path)
     # TODO: rather ad-hoc handling of VS7 vars, should get improved eventually.
-    path_translated = vs7_create_config_variable_translation(string_avoid_nil(path), @arr_config_var_dummy)
+    path_translated = vs7_create_config_variable_translation(
+      string_avoid_nil(
+        path),
+      @arr_config_var_dummy)
 
     # TODO: should think of a way to do central verification
     # of existence of the file system paths found here near this helper.
@@ -8071,14 +8078,18 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     # CMake dox currently don't offer such details... (yet!)
     return if arr_includes.empty?
     arr_includes_translated = arr_includes.collect { |elem_inc_dir|
-      vs7_create_config_variable_translation(elem_inc_dir, @arr_config_var_handling)
+      vs7_create_config_variable_translation(
+        elem_inc_dir,
+        @arr_config_var_handling)
     }
     write_build_attributes('include_directories', arr_includes_translated, map_includes, nil)
   end
 
   def write_link_directories(arr_lib_dirs, map_lib_dirs)
     arr_lib_dirs_translated = arr_lib_dirs.collect { |elem_lib_dir|
-      vs7_create_config_variable_translation(elem_lib_dir, @arr_config_var_handling)
+      vs7_create_config_variable_translation(
+        elem_lib_dir,
+        @arr_config_var_handling)
     }
     arr_lib_dirs_translated.push(get_dereferenced_variable_name('V2C_LIB_DIRS'))
     write_comment_at_level(COMMENT_LEVEL_VERBOSE,
