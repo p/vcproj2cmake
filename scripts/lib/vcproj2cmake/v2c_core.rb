@@ -7135,7 +7135,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       log_implementation_bug('unknown charset type!?')
     end
     arr_args_func_other = [ charset_type ]
-    write_invoke_object_conditional_v2c_function('v2c_target_config_charset_set', @target.name, condition, arr_args_func_other)
+    write_invoke_object_conditional_v2c_function(
+      'v2c_target_config_charset_set',
+      @target.name,
+      condition,
+      arr_args_func_other)
   end
 
   def generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
@@ -7300,7 +7304,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_orig_proj_files = project_info.arr_p_original_project_files.collect { |orig_proj_file|
       orig_proj_file.relative_path_from(@project_dir)
     }
-    write_func_v2c_project_post_setup(project_info.name, arr_orig_proj_files)
+    write_func_v2c_project_post_setup(
+      project_info.name,
+      arr_orig_proj_files)
   end
 
   private
@@ -7322,7 +7328,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def write_project(project_info)
     # Figure out language type (C CXX etc.) and add it to project() command
     arr_languages = detect_programming_languages(project_info)
-    put_project(project_info.name, arr_languages)
+    put_project(
+      project_info.name,
+      arr_languages)
   end
   def put_conversion_info(project_name, str_from_buildtool_version)
     # Add an explicit file generation timestamp,
@@ -7341,7 +7349,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       "and indicates conversion moment in time (UTC, format #{timestamp_format_docs})")
     write_invoke_v2c_function_quoted('v2c_project_conversion_info_set', [ project_name, str_time, str_from_buildtool_version ])
   end
-  def put_guid(project_name, project_guid)
+  def put_guid(
+    project_name,
+    project_guid)
     return if project_guid.nil?
     write_comment_at_level(COMMENT_LEVEL_VERBOSE,
       "Indicates the GUID that the project of the original environment carried.\n" \
@@ -7405,10 +7415,16 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
   def generate_project_leadin(project_info)
     write_project(project_info)
-    put_conversion_info(project_info.name, project_info.orig_environment_shortname)
-    put_guid(project_info.name, project_info.guid)
+    put_conversion_info(
+      project_info.name,
+      project_info.orig_environment_shortname)
+    put_guid(
+      project_info.name,
+      project_info.guid)
     put_include_MasterProjectDefaults_vcproj2cmake()
-    write_funcs_v2c_project_platform_define_build_types(project_info.name, project_info.build_platform_configs)
+    write_funcs_v2c_project_platform_define_build_types(
+      project_info.name,
+      project_info.build_platform_configs)
     put_hook_project()
   end
   # _target_ generator specific method.
