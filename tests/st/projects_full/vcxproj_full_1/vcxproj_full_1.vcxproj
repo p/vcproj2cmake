@@ -161,6 +161,9 @@
   <ItemGroup>
     <ResourceCompile Include=".\..\files\version.rc" />
   </ItemGroup>
+  <ItemGroup>
+    <Unknown_weird_category Include=".\..\files\misctestfile" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
