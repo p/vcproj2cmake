@@ -7022,13 +7022,20 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     deref << '${' << str_var << '}'
   end
   def add_subdirectory(
-    str_subdir_source)
+    str_subdir_source,
+    str_subdir_binary = nil)
     # quote strings containing spaces!!
     str_subdir_source_quoted = element_handle_quoting(
       str_subdir_source)
     arr_args = [
       str_subdir_source_quoted,
     ]
+    if not str_subdir_binary.nil?
+      str_subdir_binary_quoted = element_handle_quoting(
+        str_subdir_binary)
+      arr_args.push(
+        str_subdir_binary_quoted)
+    end
     write_command_list_single_line(
       'add_subdirectory',
       arr_args)
@@ -10898,10 +10905,15 @@ def v2c_want_cmakelists_rewritten(str_cmakelists_file)
   return want_cmakelists_rewritten
 end
 
+# Matches parameter passed into CMake add_subdirectory()
+V2C_Subdir_Info = Struct.new(
+  :source_dir,
+  :binary_dir)
+
 def v2c_source_root_write_projects_list_file(
   output_file_fqpn,
   output_file_permissions,
-  arr_project_subdirs)
+  arr_project_subdir_infos)
   # write into temporary file,
   # to avoid corrupting previous file
   # due to syntax error abort, disk space or failure issues
@@ -10911,9 +10923,10 @@ def v2c_source_root_write_projects_list_file(
   generate_projects_list.generate { |textOut|
     projects_list_generator = V2C_CMakeSyntaxGenerator.new(
       textOut)
-    arr_project_subdirs.each { |subdir|
+    arr_project_subdir_infos.each { |subdir_info|
       projects_list_generator.add_subdirectory(
-        subdir)
+        subdir_info.source_dir,
+        subdir_info.binary_dir)
     }
   }
 rescue Exception
@@ -10922,9 +10935,9 @@ end
 
 def v2c_projects_list_handle_sub_dirs(
   p_source_root,
-  arr_project_subdirs)
+  arr_project_subdir_infos)
   # FIXME: since the conversion above may end up multi-processed
-  # yet arr_project_subdirs cannot be updated on worker side
+  # yet arr_project_subdir_infos cannot be updated on worker side
   # (and in some cases .vcproj conversion *will* be skipped,
   # e.g. in case of CMake-converted .vcproj:s),
   # we should include only those entries where each directory
@@ -10946,7 +10959,7 @@ def v2c_projects_list_handle_sub_dirs(
   v2c_source_root_write_projects_list_file(
     projects_list_file,
     $v2c_generator_file_create_permissions,
-    arr_project_subdirs)
+    arr_project_subdir_infos)
 end
 
 
