@@ -4625,6 +4625,7 @@ end
 class V2C_VS10ProjectParser < V2C_VSProjectParserBase
 
   private
+  include V2C_VS10Syntax
 
   def parse_attribute(setting_key, setting_value)
     found = be_optimistic()
