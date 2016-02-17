@@ -9747,7 +9747,11 @@ end
 # "does this really need a conversion update?"
 # checks
 # (well, at least at parsing time!).
-def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_files, p_generator_proj_file)
+def v2c_convert_project_inner(
+  p_script,
+  p_master_project,
+  arr_p_parser_proj_files,
+  p_generator_proj_file)
 
   arr_projects = Array.new
 
@@ -9830,7 +9834,12 @@ end
 
 # Treat non-normalized ("raw") input arguments as needed,
 # then pass on to inner function.
-def v2c_convert_local_projects_outer(project_converter_script_filename, master_project_dir, arr_parser_proj_files, generator_proj_dir, generator_proj_filename)
+def v2c_convert_local_projects_outer(
+  project_converter_script_filename,
+  master_project_dir,
+  arr_parser_proj_files,
+  generator_proj_dir,
+  generator_proj_filename)
   arr_p_parser_proj_files = arr_parser_proj_files.collect { |parser_proj_file|
     Pathname.new(parser_proj_file)
   }
@@ -9845,7 +9854,11 @@ def v2c_convert_local_projects_outer(project_converter_script_filename, master_p
   script_location = File.expand_path(project_converter_script_filename)
   p_script = Pathname.new(script_location)
 
-  v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_files, p_generator_proj_file_location)
+  v2c_convert_project_inner(
+    p_script,
+    p_master_project,
+    arr_p_parser_proj_files,
+    p_generator_proj_file_location)
 end
 
 # Writes the final message.

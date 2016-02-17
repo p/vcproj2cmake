@@ -459,7 +459,12 @@ class UnitGlobalData
 end
 
 def execute_work_unit(unitGlobal, myWork)
-  v2c_convert_local_projects_outer(unitGlobal.script_location, unitGlobal.source_root, myWork.arr_proj_files, myWork.str_destination_dir, nil)
+  v2c_convert_local_projects_outer(
+    unitGlobal.script_location,
+    unitGlobal.source_root,
+    myWork.arr_proj_files,
+    myWork.str_destination_dir,
+    nil)
 end
 
 def execute_work_units(unitGlobal, arr_work_units)
