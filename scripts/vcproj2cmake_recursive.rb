@@ -406,7 +406,11 @@ arr_filtered_dirs.each do |dir|
   # and have it include the auto-generated CMakeLists.txt.
   is_root_dir = (dir == './')
 
-  arr_project_subdirs.push(dir) unless is_root_dir
+  is_sub_dir = (true != is_root_dir)
+
+  if is_sub_dir
+    arr_project_subdirs.push(dir)
+  end
 
   # These checks arguably perhaps shouldn't be done in the recursive handler,
   # but directly in the main conversion handler instead. TODO?
