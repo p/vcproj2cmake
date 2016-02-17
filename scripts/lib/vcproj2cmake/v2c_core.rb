@@ -4014,6 +4014,13 @@ module V2C_VS10Defines_Tool_Types
   TEXT_XSD = 'Xsd'
 end
 
+module V2C_VS10Defines_File_List_Types
+  include V2C_VS10Defines_Tool_Types
+
+  TEXT_CLINCLUDE = 'ClInclude'
+  TEXT_NONE = 'None'
+end
+
 module V2C_VS10Defines
   TEXT_CONDITION = 'Condition'
   TEXT_DEFAULT = 'Default'
@@ -4023,7 +4030,7 @@ module V2C_VS10Defines
   TEXT_LABEL = 'Label'
   TEXT_PROJECT = 'Project'
 
-  include V2C_VS10Defines_Tool_Types
+  include V2C_VS10Defines_File_List_Types
 end
 
 module V2C_VS10Syntax
@@ -4307,17 +4314,17 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
   def get_file_list_type(file_list_name)
     type = V2C_File_List_Types::TYPE_NONE
     case file_list_name
-    when 'None'
+    when TEXT_NONE
       type = V2C_File_List_Types::TYPE_NONE
-    when 'ClCompile'
+    when TEXT_CLCOMPILE
       type = V2C_File_List_Types::TYPE_COMPILES
-    when 'ClInclude'
+    when TEXT_CLINCLUDE
       type = V2C_File_List_Types::TYPE_INCLUDES
-    when 'ResourceCompile'
+    when TEXT_RESOURCECOMPILE
       type = V2C_File_List_Types::TYPE_RESOURCES
-    when 'Midl'
+    when TEXT_MIDL
       type = V2C_File_List_Types::TYPE_MIDL
-    when 'Xsd'
+    when TEXT_XSD
       # Xsd appears to be a pretty much UNDOCUMENTED file type on MSVS2010.
       # Removing/adding an Xsd ItemGroup element will cause
       # a VS10 project tab "XML Data Generator Tool" to (dis)appear,
@@ -4349,7 +4356,7 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10BaseElemParser
       when 'Filter'
         elem_parser = V2C_VS10ItemGroupFiltersParser.new(@elem_xml, get_project().filters)
         elem_parser.parse
-      when 'ClCompile', 'ClInclude', 'Midl', 'None', 'ResourceCompile', 'Xsd'
+      when TEXT_CLCOMPILE, TEXT_CLINCLUDE, TEXT_MIDL, TEXT_NONE, TEXT_RESOURCECOMPILE, TEXT_XSD
         elem_parser = V2C_VS10ItemGroupFilesParser.new(
           @elem_xml,
           elem_name,
