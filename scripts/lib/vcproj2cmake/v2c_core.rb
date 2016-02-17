@@ -2656,28 +2656,10 @@ class V2C_VSProjectParserBase < V2C_VSXmlParserBase
     super(
       elem_xml,
       info_elem_out)
-    set_vs_specific_default_values(get_project())
   end
   private
 
   def get_project; @info_elem end
-
-  # This helper is supposed to supply
-  # "default/fallback" values
-  # as seen in MSVS project GUI dialogs
-  # where no specific values have been set.
-  # Such "defaults" handling
-  # is to be completely specific
-  # to this MSVS environment (parsing)
-  # and thus NOT to instead be added
-  # in *common* (all-environments) data model areas.
-  # TODO: perhaps this "default values" initializer
-  # should be spread throughout all parser sub classes.
-  # But since they're instantiated on-demand
-  # that's currently not possible in several cases.
-  def set_vs_specific_default_values(project_info)
-     # nothing to do yet.
-  end
 end
 
 class V2C_VS7ProjectParserBase < V2C_VSProjectParserBase
