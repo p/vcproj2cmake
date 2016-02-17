@@ -3836,7 +3836,6 @@ class V2C_VS10BaseElemParser < V2C_VS10ParserBase
     @have_condition = false
   end
   private
-  include V2C_VS10Defines
 
   def get_base_elem; @info_elem end
   def parse_attribute(setting_key, setting_value)
