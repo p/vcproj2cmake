@@ -7022,13 +7022,16 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     deref << '${' << str_var << '}'
   end
   def add_subdirectory(
-    str_subdir)
+    str_subdir_source)
     # quote strings containing spaces!!
-    str_subdir_quoted = element_handle_quoting(
-      str_subdir)
-    write_command_single_line(
+    str_subdir_source_quoted = element_handle_quoting(
+      str_subdir_source)
+    arr_args = [
+      str_subdir_source_quoted,
+    ]
+    write_command_list_single_line(
       'add_subdirectory',
-      str_subdir_quoted)
+      arr_args)
   end
 
   def get_var_conditional_command(
