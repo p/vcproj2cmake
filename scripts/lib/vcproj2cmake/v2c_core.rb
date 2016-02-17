@@ -3844,6 +3844,7 @@ module V2C_VS10Defines
   TEXT_FALSE_LOWER = 'false' # Perhaps move to a common VS module
   TEXT_INCLUDE = 'Include'
   TEXT_LABEL = 'Label'
+  TEXT_PROJECT = 'Project'
 end
 
 module V2C_VS10Syntax
@@ -4752,11 +4753,12 @@ class V2C_VS10ProjectFileXmlParser < V2C_VSProjectFileXmlParserBase
     @flag_populate_existing = flag_populate_existing
     @project_idx = 0
   end
+  include V2C_VS10Syntax
   def parse_element(subelem_xml)
     found = be_optimistic()
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
-    when 'Project'
+    when TEXT_PROJECT
       arr_projects_out = get_arr_projects_out()
       # FIXME handle fetch() exception - somewhere!
       project_info = populate_existing_projects() ? arr_projects_out.fetch(@project_idx) : V2C_Project_Info.new
@@ -4861,7 +4863,7 @@ class V2C_VS10ProjectFiltersXmlParser < V2C_VS10ParserBase
     found = be_optimistic()
     elem_parser = nil # IMPORTANT: reset it!
     case subelem_xml.name
-    when 'Project'
+    when TEXT_PROJECT
       # FIXME handle fetch() exception - somewhere!
       project_info = get_arr_projects().fetch(@idx_target)
       @idx_target += 1
