@@ -508,7 +508,7 @@ end
 COMMENT_LINE_REGEX_OBJ = %r{^\s*#}
 def read_mappings(filename_mappings, mappings)
   # line format is: "tag:PLATFORM1:PLATFORM2=tag_replacement2:PLATFORM3=tag_replacement3"
-  if File.exists?(filename_mappings)
+  if File.exist?(filename_mappings)
     #Hash[*File.read(filename_mappings).scan(/^(.*)=(.*)$/).flatten]
     File.open(filename_mappings, 'r').each do |line|
       next if COMMENT_LINE_REGEX_OBJ.match(line)
@@ -3689,7 +3689,7 @@ class V2C_VSProjectFilesBundleParserBase < V2C_LoggerBase
   # in this somewhat too specific class...
   def check_unhandled_file_type(str_ext)
     str_file = @proj_filename + '.' + str_ext
-    if File.exists?(str_file)
+    if File.file?(str_file)
       logger.unhandled_functionality("parser does not handle type of file #{str_file} yet!")
     end
   end
@@ -5013,7 +5013,7 @@ class Util_TempFilePermanentizer
     V2C_Util_File.mv(@input_file_location, @output_file_fqpn)
     return MOVE_RES_OK
   end
-  def have_old_output_file(); File.exists?(@output_file_fqpn) end
+  def have_old_output_file(); File.exist?(@output_file_fqpn) end
   def permanentize_if_ok_and_different
     configuration_changed = true
     if have_old_output_file()
