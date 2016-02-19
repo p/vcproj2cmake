@@ -8023,4 +8023,5 @@ end
 def v2c_convert_finished()
   log_info %{\
 Finished. You should make sure to have all important V2C settings includes such as vcproj2cmake_defs.cmake somewhere in your CMAKE_MODULE_PATH (probably copy them to <SOURCE_ROOT>/#{$v2c_module_path_root})}
+  log_debug "When doing development, please remember to maintain existing unit tests (details see tests/README.txt)."
 end
