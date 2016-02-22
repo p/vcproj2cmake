@@ -4146,7 +4146,7 @@ class V2C_VS10ItemGroupForwarderParser < V2C_VS10ParserBase
   def parse
     found = be_optimistic()
     itemgroup_label = @elem_xml.attributes[TEXT_LABEL]
-    logger.debug("Label #{itemgroup_label}!")
+    logger.debug("#{TEXT_LABEL} #{itemgroup_label}!")
     item_group_parser = nil
     case itemgroup_label
     when 'ProjectConfigurations'
@@ -4595,7 +4595,7 @@ class V2C_VS10PropertyGroupForwarderParser < V2C_VS10BaseElemParser
   def parse
     found = be_optimistic()
     propgroup_label = @elem_xml.attributes[TEXT_LABEL]
-    logger.debug("Label #{propgroup_label}!")
+    logger.debug("#{TEXT_LABEL} #{propgroup_label}!")
     case propgroup_label
     # Future comment for anonymous PropertyGroup:
     # the TargetName element could be helpful to determine the required
