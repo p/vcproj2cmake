@@ -7981,11 +7981,20 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
     gen_condition.generate(condition) do
       write_conditional_block(arr_conditional) do
-        arr_target_expr = get_target_syntax_expression(@target.name)
+        arr_target_expr = get_target_syntax_expression(
+          @target.name)
         build_type = condition.get_build_type()
-        property_name = get_name_of_per_config_type_property('LINK_FLAGS', build_type)
-        write_comment_at_level(COMMENT_LEVEL_STANDARD, comment)
-        put_property(arr_target_expr, PROP_APPEND, property_name, arr_flags)
+        property_name = get_name_of_per_config_type_property(
+          'LINK_FLAGS',
+          build_type)
+        write_comment_at_level(
+          COMMENT_LEVEL_STANDARD,
+          comment)
+        put_property(
+          arr_target_expr,
+          PROP_APPEND,
+          property_name,
+          arr_flags)
       end
     end
   end
@@ -8184,7 +8193,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # Yup, this stuff should perhaps be shoved into
     # write_project_target_config(), too.
     if target_is_valid
-      when_target_valid_scriptlet_block(@target.name) {
+      when_target_valid_scriptlet_block(
+        @target.name) {
         put_dotnet_references(
           )
 
@@ -8375,7 +8385,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       project_info.name,
       arr_languages)
   end
-  def put_conversion_info(project_name, str_from_buildtool_version)
+  def put_conversion_info(
+    project_name,
+    str_from_buildtool_version)
     # Add an explicit file generation timestamp,
     # to enable easy identification (grepping) of files of a certain age
     # (a filesystem-based creation/modification timestamp might be unreliable
