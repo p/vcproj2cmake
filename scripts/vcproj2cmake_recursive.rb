@@ -485,8 +485,9 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
     # See also http://stackoverflow.com/a/1076445
     log_info 'Recursively converting projects, multi-process.'
     workPackage.each { |arr_work_units_per_worker|
-      pid = fork {
-        log_info("Process ID #{Process.pid()} started.")
+      childpid = fork {
+        mypid = Process.pid()
+        log_info("Process ID #{mypid} started.")
         # Nope, does not seem to be true - anyway,
         # we'll keep this code since I'm not entirely sure...
         #begin
@@ -497,7 +498,7 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
         #  log_error "EXCEPTION!! #{e.inspect} #{e.backtrace}"
         #end
       }
-      log_info("Worker PID #{pid} forked.")
+      log_info("Worker PID #{childpid} forked.")
     }
     log_info 'Waiting for all worker processes to finish...'
     results = Process.waitall
@@ -524,7 +525,8 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
 
     workPackage.each { |arr_work_units_per_worker|
       threads << Thread.new(arr_work_units_per_worker) { |arr_work_units|
-        log_info("Thread #{Thread.current.object_id} started.")
+        mytid = Thread.current.object_id
+        log_info("Thread #{mytid} started.")
         execute_work_units(unitGlobal, arr_work_units)
       }
     }
