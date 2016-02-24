@@ -461,7 +461,9 @@ class UnitGlobalData
   attr_accessor :source_root
 end
 
-def execute_work_unit(unitGlobal, myWork)
+def execute_work_unit(
+  unitGlobal,
+  myWork)
   is_solution_dir = (myWork.work_flags & UnitWorkData::WORK_FLAG_IS_SOLUTION_DIR) != 0;
   v2c_convert_local_projects_outer(
     unitGlobal.script_location,
@@ -472,10 +474,14 @@ def execute_work_unit(unitGlobal, myWork)
     is_solution_dir)
 end
 
-def execute_work_units(unitGlobal, arr_work_units)
+def execute_work_units(
+    unitGlobal,
+    arr_work_units)
   log_info 'Worker starting.'
   arr_work_units.each { |work_unit|
-    execute_work_unit(unitGlobal, work_unit)
+    execute_work_unit(
+      unitGlobal,
+      work_unit)
   }
   log_info 'Worker finished.'
 end
@@ -491,7 +497,9 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
         # Nope, does not seem to be true - anyway,
         # we'll keep this code since I'm not entirely sure...
         #begin
-          execute_work_units(unitGlobal, arr_work_units_per_worker)
+          execute_work_units(
+            unitGlobal,
+            arr_work_units_per_worker)
         #rescue Exception => e
         #  # Need to add an open-coded exception logging line
         #  # since foreign-process exceptions will be swallowed silently!
@@ -527,7 +535,9 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
       threads << Thread.new(arr_work_units_per_worker) { |arr_work_units|
         mytid = Thread.current.object_id
         log_info("Thread #{mytid} started.")
-        execute_work_units(unitGlobal, arr_work_units)
+        execute_work_units(
+          unitGlobal,
+          arr_work_units)
       }
     }
 
@@ -555,7 +565,9 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
   else # single-process
     log_info 'Recursively converting projects, single-process.'
     workPackage.each { |arr_work_units_per_worker|
-      execute_work_units(unitGlobal, arr_work_units_per_worker)
+      execute_work_units(
+        unitGlobal,
+        arr_work_units_per_worker)
     }
   end
 end
