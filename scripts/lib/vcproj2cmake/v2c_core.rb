@@ -483,9 +483,9 @@ end
 #   IOW achieves end-to-end validation)
 class Logger
   def initialize(
-    class_name,
+    scope_id, # describes originating scope of this log activity; useful values e.g.: class name (self.class.name), ...
     log_descriptor)
-    @class_name = class_name
+    @scope_id = scope_id
     # FIXME: log_descriptor not obeyed yet!
   end
 
@@ -558,9 +558,13 @@ class Logger
   private
   def formatter(
     str)
-    @class_name +
+    scope_id +
     ': ' +
     str
+  end
+
+  def scope_id
+    @scope_id
   end
 end
 
