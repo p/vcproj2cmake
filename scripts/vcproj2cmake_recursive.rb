@@ -347,19 +347,20 @@ arr_filtered_dirs.each do |dir|
   # No project file at all? Skip directory.
   next if arr_dir_proj_files.nil?
 
-  str_cmakelists_file = File.join(
+  str_cmakelists_file_name = CMAKELISTS_FILE_NAME
+  str_cmakelists_file_path = File.join(
     dir,
-    CMAKELISTS_FILE_NAME)
+    str_cmakelists_file_name)
 
   # Check whether the directory already contains a CMakeLists.txt,
   # and if so, whether it can be safely rewritten.
   # These checks arguably perhaps shouldn't be done in the recursive handler,
   # but directly in the main conversion handler instead. TODO?
-  if (!dir_entries.grep(/^#{CMAKELISTS_FILE_NAME}$/i).empty?)
+  if (!dir_entries.grep(/^#{str_cmakelists_file_name}$/i).empty?)
     log_debug dir_entries
-    log_debug "#{CMAKELISTS_FILE_NAME} exists in #{dir}, checking!"
+    log_debug "#{str_cmakelists_file_name} exists in #{dir}, checking!"
     want_new_cmakelists_file = v2c_want_cmakelists_rewritten(
-      str_cmakelists_file)
+      str_cmakelists_file_path)
     next if false == want_new_cmakelists_file
   end
 
