@@ -499,12 +499,12 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
 
     threads = []
 
-    for arr_work_units_per_worker in workPackage
+    workPackage.each { |arr_work_units_per_worker|
       threads << Thread.new(arr_work_units_per_worker) { |arr_work_units|
         log_info "Thread #{Thread.current.object_id} started."
         execute_work_units(unitGlobal, arr_work_units)
       }
-    end
+    }
 
     log_info 'Waiting for all worker threads to finish...'
     # This amount ought to be enough even for the most daring of environments...
@@ -523,9 +523,9 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
     log_info 'Waiting for all worker threads: done.'
   else # single-process
     log_info 'Recursively converting projects, single-process.'
-    for arr_work_units_per_worker in workPackage
+    workPackage.each { |arr_work_units_per_worker|
       execute_work_units(unitGlobal, arr_work_units_per_worker)
-    end
+    }
   end
 end
 
