@@ -7409,15 +7409,29 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       COMMENT_LEVEL_MINIMUM,
       "E.g. to be used for tweaking target properties etc.")
   end
-  def put_property_compile_definitions(config_name, arr_compile_defn)
-    arr_compile_defn_cooked = cmake_escape_compile_definitions(arr_compile_defn)
-    property_name = get_name_of_per_config_type_property('COMPILE_DEFINITIONS', config_name)
+  def put_property_compile_definitions(
+    config_name,
+    arr_compile_defn)
+    arr_compile_defn_cooked = cmake_escape_compile_definitions(
+      arr_compile_defn)
+    property_name = get_name_of_per_config_type_property(
+      'COMPILE_DEFINITIONS',
+      config_name)
     # make sure to specify APPEND for greater flexibility (hooks etc.)
-    set_property(@target.name, PROP_APPEND, property_name, arr_compile_defn_cooked)
+    set_property(
+      @target.name,
+      PROP_APPEND,
+      property_name,
+      arr_compile_defn_cooked)
   end
-  def generate_property_compile_definitions_per_platform(config_name, arr_platdefs, arr_conditional_platform)
+  def generate_property_compile_definitions_per_platform(
+    config_name,
+    arr_platdefs,
+    arr_conditional_platform)
     write_conditional_block(arr_conditional_platform) do
-      put_property_compile_definitions(config_name, arr_platdefs)
+      put_property_compile_definitions(
+        config_name,
+        arr_platdefs)
     end
   end
   def put_precompiled_header(
@@ -7468,7 +7482,10 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         #logger.info "key #{key}, arr_platdefs: #{arr_platdefs}"
         next_paragraph()
         arr_conditional_platform = key.eql?(V2C_ALL_PLATFORMS_MARKER) ? nil : split_string_to_array(key)
-        generate_property_compile_definitions_per_platform(build_type, arr_platdefs, arr_conditional_platform)
+        generate_property_compile_definitions_per_platform(
+          build_type,
+          arr_platdefs,
+          arr_conditional_platform)
       }
     end
   end
