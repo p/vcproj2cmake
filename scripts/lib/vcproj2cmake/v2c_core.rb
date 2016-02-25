@@ -6823,10 +6823,20 @@ class V2C_CMakeV2CConditionGeneratorBase < V2C_CMakeV2CSyntaxGenerator
         # correspondingly modernized
         # write_set_var_bool_conditional() helper.
         if config_multi_authoritative == build_type
-          arr_cmake_build_type_condition = [ 'CMAKE_CONFIGURATION_TYPES', 'OR', 'CMAKE_BUILD_TYPE', 'STREQUAL', build_type_cooked ]
+          arr_cmake_build_type_condition = [
+            'CMAKE_CONFIGURATION_TYPES',
+            'OR',
+            'CMAKE_BUILD_TYPE',
+            'STREQUAL',
+            build_type_cooked
+          ]
         else
           # YES, this condition is supposed to NOT trigger in case of a multi-configuration generator
-          arr_cmake_build_type_condition = [ 'CMAKE_BUILD_TYPE', 'STREQUAL', build_type_cooked ]
+          arr_cmake_build_type_condition = [
+            'CMAKE_BUILD_TYPE',
+            'STREQUAL',
+            build_type_cooked
+          ]
         end
         write_set_var_bool_conditional(get_buildcfg_var_name_of_condition(condition), arr_cmake_build_type_condition)
       }
