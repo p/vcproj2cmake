@@ -8412,11 +8412,15 @@ class V2C_CMakeRootFileContentGenerator < V2C_CMakeLocalFileContentGenerator
     textOut,
     projects_list_file,
     p_script_location_relative_to_master)
+    p_local_dir = Pathname.new('.')
+    p_solution_dir = Pathname.new('.')
+    arr_local_project_targets = [
+    ]
     super(
       textOut,
-      Pathname.new('.'),
-      Pathname.new('.'),
-      [ ],
+      p_local_dir,
+      p_solution_dir,
+      arr_local_project_targets,
       p_script_location_relative_to_master)
     @projects_list_file = projects_list_file
   end
