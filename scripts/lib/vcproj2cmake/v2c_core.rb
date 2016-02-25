@@ -5946,7 +5946,13 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     write_command_single_line('add_subdirectory', str_subdir_quoted)
   end
 
-  def get_var_conditional_command(command_name); [ 'COMMAND', command_name ] end
+  def get_var_conditional_command(
+    command_name)
+    [
+      'COMMAND',
+      command_name,
+    ]
+  end
 
   def get_conditional_inverted(arr_conditional); arr_conditional.unshift('NOT') end
   def write_conditional_else(arr_conditional_params)
