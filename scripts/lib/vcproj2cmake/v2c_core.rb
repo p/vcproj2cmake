@@ -9936,6 +9936,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     textOut,
     p_solution_dir,
     p_script_location_relative_to_master,
+    p_proj_base_dir,
     p_local_dir,
     arr_local_projects)
     super(
@@ -10203,12 +10204,14 @@ class V2C_CMakeRootFileContentGenerator < V2C_CMakeLocalFileContentGenerator
     textOut,
     p_solution_dir,
     p_script_location_relative_to_master,
+    p_proj_base_dir,
     p_local_dir,
     arr_local_projects)
     super(
       textOut,
       p_solution_dir,
       p_script_location_relative_to_master,
+      p_proj_base_dir,
       p_local_dir,
       arr_local_projects)
   end
@@ -10447,6 +10450,7 @@ class V2C_CMakeLocalFileGenerator < V2C_CMakeFileGenerator
   def initialize(
     p_v2c_script,
     p_master_project,
+    p_proj_base_dir,
     p_generator_proj_file,
     is_solution_dir,
     flag_source_groups_enabled,
@@ -10457,16 +10461,18 @@ class V2C_CMakeLocalFileGenerator < V2C_CMakeFileGenerator
 
     @p_script_location_relative_to_master = p_v2c_script.relative_path_from(
       p_master_project)
+    @p_proj_base_dir = p_proj_base_dir
     @p_generator_proj_file = p_generator_proj_file
     @is_solution_dir = is_solution_dir
     @flag_source_groups_enabled = flag_source_groups_enabled
     @p_local_dir = @p_generator_proj_file.dirname
     @arr_projects = arr_projects
+    logger.debug "p_generator_proj_file #{@p_generator_proj_file} arr_projects #{@arr_projects}"
     #logger.debug "p_v2c_script #{p_v2c_script} | p_master_project #{p_master_project} | @p_script_location_relative_to_master #{@p_script_location_relative_to_master}"
   end
   def generate
     output_file_location = @p_generator_proj_file.to_s
-    logger.info "Generating project(s) in #{logger.escape_item(@p_local_dir)} into #{logger.escape_item(output_file_location)}"
+    logger.info "Generating project(s) in #{logger.escape_item(@p_proj_base_dir)} into #{logger.escape_item(output_file_location)}"
     generate_local_projects(output_file_location)
   end
   private
@@ -10478,6 +10484,7 @@ class V2C_CMakeLocalFileGenerator < V2C_CMakeFileGenerator
           textOutLocal,
           @p_master_project,
           @p_script_location_relative_to_master,
+          @p_proj_base_dir,
           @p_local_dir,
           @arr_projects)
       else
@@ -10485,6 +10492,7 @@ class V2C_CMakeLocalFileGenerator < V2C_CMakeFileGenerator
           textOutLocal,
           @p_master_project,
           @p_script_location_relative_to_master,
+          @p_proj_base_dir,
           @p_local_dir,
           @arr_projects)
       end
@@ -10500,7 +10508,7 @@ class V2C_CMakeLocalFileGenerator < V2C_CMakeFileGenerator
         # FIXME: very ugly path handling - ought to be refactored eventually
         path_config = get_path_config(@p_master_project.to_s)
         temp_store_dir_local = path_config.get_abs_temp_store_dir(
-          @p_local_dir.to_s)
+          @p_proj_base_dir.to_s)
         generated_files_dir = File.join(temp_store_dir_local, 'generated_items')
         source_groups_dir = File.join(generated_files_dir, 'source_groups')
         generate_source_groups(source_groups_dir)
@@ -10851,6 +10859,20 @@ def v2c_convert_local_projects_inner(
     end
   }
 
+  # E.g. in the case of solution root,
+  # we may NOT have any projects at all,
+  # in which case we obviously both
+  # cannot figure out any base dir
+  # and do not need it anyway...
+  p_proj_base_dir = nil
+  if not arr_p_parser_proj_files.empty?
+    p_proj = Pathname.new(
+      arr_p_parser_proj_files[0])
+    p_proj_base_dir = p_proj.dirname
+  else
+    p_proj_base_dir = p_master_project
+  end
+
   # Post-process all projects.
   project_processed = LoopVarPreconstruct()
   post_processor = LoopVarPreconstruct()
@@ -10896,6 +10918,7 @@ def v2c_convert_local_projects_inner(
       generator = V2C_CMakeLocalFileGenerator.new(
         p_script,
         p_master_project,
+        p_proj_base_dir,
         p_generator_proj_file,
         is_solution_dir,
         $v2c_generator_source_groups_enable,
