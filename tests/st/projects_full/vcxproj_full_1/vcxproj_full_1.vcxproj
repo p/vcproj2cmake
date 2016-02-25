@@ -21,7 +21,7 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{6f59102a-1aa1-47ca-86ca-022432b90074}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>vcxproj_full_1</RootNamespace>
+    <RootNamespace>vcxproj_full_1_test</RootNamespace>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Label="Configuration">
