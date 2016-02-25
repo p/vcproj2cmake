@@ -32,7 +32,10 @@ branch=$(git symbolic-ref HEAD | sed -e 's,.*/\(.*\),\1,')
 datestamp=$(date +%Y%m%d%H%M%S)
 # Do explicitly state the source argument, too
 # (probably increases safety against "issues"):
-git branch -m "${branch}" "old.${branch}.${datestamp}"
+old_name="old/${branch}.${datestamp}"
+git branch -m "${branch}" "${old_name}"
+git tag "${old_name}" "${branch}"
+git branch -D "${old_name}"
 # Perhaps rather than stashing away these things one should
 # do an automated commit to that old branch...
 git diff --quiet || {
