@@ -2436,15 +2436,16 @@ function(v2c_target_tool_midl_compile _target _build_platform _build_type)
   # is relative to project *source* dir.
   # Eventually we might want to offer a config option
   # to have such things relocated to a build tree directory.
-  # However this would require
+  # Nope, CMake's generated projects
+  # do set OutputDirectory to $(IntDir),
+  # thus we do choose to generate it there as well.
+  # However this then requires
   # implicitly adding this directory
-  # to a project's default include path.
-  # Hah! In newer CMake versions
-  # the CMAKE_INCLUDE_CURRENT_DIR_IN_INTERFACE variable
-  # (formerly CMAKE_BUILD_INTERFACE_INCLUDES)
-  # seems to be exactly provided for this purpose
-  # (TODO enable it?).
-  _v2c_fs_item_make_relative_to_path("${v2c_target_tool_midl_compile_HEADER_FILE_NAME}" "${PROJECT_SOURCE_DIR}" header_file_location_)
+  # to a project's default include path
+  # (which CMake fails to do!).
+  _v2c_target_binary_dir_get(${_target} midl_binary_dir_)
+  _v2c_fs_item_make_relative_to_path("${v2c_target_tool_midl_compile_HEADER_FILE_NAME}" "${midl_binary_dir_}" header_file_location_)
+  _v2c_target_tool_midl_include_output_directory(${_target})
 
   ## SWITCHEROO FOR PER-MODE HANDLING ##
   _v2c_target_tool_midl_do_compile()
