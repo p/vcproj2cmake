@@ -2284,7 +2284,7 @@ macro(_v2c_target_tool_midl_do_compile_wine_widl)
   list(APPEND cmd_list_ "${idl_file_location_}")
   if(v2c_widl_outputs_)
     set(v2c_widl_descr_ "${_target} (${_build_platform} ${_build_type}): using Wine's ${V2C_WINE_WIDL_BIN} to compile IDL output result files (${v2c_widl_outputs_})")
-    _v2c_msg_info("${_target}: ${v2c_widl_descr_} (command line: ${cmd_list_}, output: ${v2c_widl_outputs_}, depends: ${v2c_widl_depends_}).")
+    _v2c_msg_info("${v2c_widl_descr_} (command line: ${cmd_list_}, output: ${v2c_widl_outputs_}, depends: ${v2c_widl_depends_}).")
     add_custom_command(OUTPUT ${v2c_widl_outputs_}
       COMMAND ${cmd_list_}
       DEPENDS ${v2c_widl_depends_}
