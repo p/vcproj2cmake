@@ -2112,7 +2112,7 @@ endfunction(_v2c_midl_compiler_mode_get _out_mode)
 ### MIDL IMPLEMENTATION PARTS ###
 
 # Note that these functions make use of some implicitly passed variables.
-function(_v2c_target_tool_midl_create_dummy_header_file _target _header_file_location)
+function(_v2c_target_tool_midl_header_file_create_dummy _target _header_file_location)
   _v2c_var_ensure_defined(
     _header_file_location
     rpc_includes_
@@ -2145,8 +2145,8 @@ ${c_section_end_}
 
 \#endif /* ${midl_header_include_guard_} */")
   _v2c_create_build_decoupled_adhoc_file("${header_template_}" "${_header_file_location}" "${header_content_}")
-endfunction(_v2c_target_tool_midl_create_dummy_header_file _target _header_file_location)
-function(_v2c_target_tool_midl_create_dummy_iid_file _target _iid_file)
+endfunction(_v2c_target_tool_midl_header_file_create_dummy _target _header_file_location)
+function(_v2c_target_tool_midl_iid_file_create_dummy _target _iid_file)
   _v2c_var_ensure_defined(
     _iid_file
     rpc_includes_
@@ -2203,7 +2203,7 @@ ${c_section_end_}
   # by creating a template here and then invoking a cmake -P custom
   # command creating the required OUTPUT.
   _v2c_create_build_decoupled_adhoc_file("${iidfile_template_}" "${_iid_file}" "${iidfile_content_}")
-endfunction(_v2c_target_tool_midl_create_dummy_iid_file _target _iid_file)
+endfunction(_v2c_target_tool_midl_iid_file_create_dummy _target _iid_file)
 
 ### MIDL PER-MODE SWITCHEROO ###
 
@@ -2317,10 +2317,10 @@ extern \"C\" {
 \#endif
 ")
   if(header_file_location_)
-    _v2c_target_tool_midl_create_dummy_header_file(${_target} "${header_file_location_}")
+    _v2c_target_tool_midl_header_file_create_dummy(${_target} "${header_file_location_}")
   endif(header_file_location_)
   if(v2c_target_tool_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME)
-    _v2c_target_tool_midl_create_dummy_iid_file(${_target} "${v2c_target_tool_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME}")
+    _v2c_target_tool_midl_iid_file_create_dummy(${_target} "${v2c_target_tool_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME}")
   endif(v2c_target_tool_midl_compile_INTERFACE_IDENTIFIER_FILE_NAME)
 endmacro(_v2c_target_tool_midl_do_compile_emulated_stubs)
 
