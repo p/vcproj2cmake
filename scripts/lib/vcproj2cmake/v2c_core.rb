@@ -6516,9 +6516,12 @@ class V2C_TextStreamSyntaxGeneratorBase
       write_line(line)
     }
   end
-  def write_line(part)
-    @out.print ' ' * get_indent()
-    write_data(part)
+  def write_line(
+    payload)
+    indent = ' ' * get_indent()
+    out_data = indent + payload
+    write_data(
+      out_data)
   end
 
   def write_empty_line; @out.puts end
