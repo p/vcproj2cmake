@@ -243,10 +243,10 @@ endmacro(_v2c_msg_fatal_error_please_report _msg)
 # to avoid continuous rebuilds
 # due to
 # continually rewriting a file with actually unchanged content.
-function(_v2c_create_build_decoupled_adhoc_file _template_name _file_location _content)
-  file(WRITE "${_template_name}" "${_content}")
-  configure_file("${_template_name}" "${_file_location}" COPYONLY)
-endfunction(_v2c_create_build_decoupled_adhoc_file _template_name _file_location _content)
+macro(_v2c_create_build_decoupled_adhoc_file _file_template _file_production _content)
+  file(WRITE "${_file_template}" "${_content}")
+  configure_file("${_file_template}" "${_file_production}" COPYONLY)
+endmacro(_v2c_create_build_decoupled_adhoc_file _file_template _file_production _content)
 
 # Validate CMAKE_BUILD_TYPE setting:
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
@@ -590,11 +590,9 @@ endfunction(_v2c_list_create_prefix_suffix_expanded_version _list _prefix _suffi
 # Uses ARGN mechanism to transparently support list variables, too
 # (also, you should pass quoted strings
 # when needing to preserve any space-containing content).
-function(_v2c_config_set _cfg_key)
-  set(cfg_values_list_ ${ARGN})
-  set(cfg_key_full_ _v2c_${_cfg_key})
-  set_property(GLOBAL PROPERTY ${cfg_key_full_} "${cfg_values_list_}")
-endfunction(_v2c_config_set _cfg_key)
+macro(_v2c_config_set _cfg_key)
+  set_property(GLOBAL PROPERTY _v2c_${_cfg_key} "${ARGN}")
+endmacro(_v2c_config_set _cfg_key)
 
 function(_v2c_config_get_unchecked _cfg_key _cfg_value_out)
   get_property(cfg_value_ GLOBAL PROPERTY _v2c_${_cfg_key})
@@ -778,10 +776,9 @@ endmacro(v2c_project_indicate_original_guid _target _guid)
 
 # # # # #   BUILD PLATFORM SETUP   # # # # #
 
-function(_v2c_project_platform_append _target _build_platform)
-  set(cfg_key_ ${_target}_platforms)
-  _v2c_config_append_list_var_entry(${cfg_key_} "${_build_platform}")
-endfunction(_v2c_project_platform_append _target _build_platform)
+macro(_v2c_project_platform_append _target _build_platform)
+  _v2c_config_append_list_var_entry(${_target}_platforms "${_build_platform}")
+endmacro(_v2c_project_platform_append _target _build_platform)
 
 function(_v2c_project_platform_get_list _target _platform_list_out)
   set(cfg_key_ ${_target}_platforms)
@@ -883,9 +880,9 @@ endfunction(v2c_buildcfg_check_if_platform_buildtype_active _target _build_platf
 # provide dummy.
 set(_v2c_generator_has_dynamic_platform_switching OFF)
 if(_v2c_generator_has_dynamic_platform_switching)
-  function(v2c_platform_build_setting_configure _target)
+  macro(v2c_platform_build_setting_configure _target)
     # DUMMY (not needed on certain generators)
-  endfunction(v2c_platform_build_setting_configure _target)
+  endmacro(v2c_platform_build_setting_configure _target)
 else(_v2c_generator_has_dynamic_platform_switching)
   function(_v2c_platform_determine_default _platform_names_list _platform_default_out _platform_reason_out)
     #message("CMAKE_SIZEOF_VOID_P ${CMAKE_SIZEOF_VOID_P}")
@@ -1135,14 +1132,14 @@ if(V2C_WANT_IDE_TARGET_FOLDERS)
     endif(TARGET ${_target})
   endfunction(_v2c_target_file_under _target _category)
 else(V2C_WANT_IDE_TARGET_FOLDERS)
-  function(_v2c_target_file_under _target _category)
+  macro(_v2c_target_file_under _target _category)
     # DUMMY!
-  endfunction(_v2c_target_file_under _target _category)
+  endmacro(_v2c_target_file_under _target _category)
 endif(V2C_WANT_IDE_TARGET_FOLDERS)
 
-function(_v2c_target_mark_as_internal _target)
+macro(_v2c_target_mark_as_internal _target)
   _v2c_target_file_under("${_target}" "INTERNAL")
-endfunction(_v2c_target_mark_as_internal _target)
+endmacro(_v2c_target_mark_as_internal _target)
 
 # Determines whether a particular generator can make use of
 # source_group() information. E.g. for bare Makefiles providing GUI
@@ -1256,9 +1253,9 @@ function(_v2c_target_filelist_type_language_deviation_get _target _fl_type_magic
   set(${_out_language} "${language_}" PARENT_SCOPE)
 endfunction(_v2c_target_filelist_type_language_deviation_get _target _fl_type_magic _out_language)
 else(v2c_want_filelist_type_deviation_support)
-function(_v2c_target_filelist_type_language_deviation_get _target _fl_type_magic _out_language)
+macro(_v2c_target_filelist_type_language_deviation_get _target _fl_type_magic _out_language)
   # DUMMY
-endfunction(_v2c_target_filelist_type_language_deviation_get _target _fl_type_magic _out_language)
+endmacro(_v2c_target_filelist_type_language_deviation_get _target _fl_type_magic _out_language)
 endif(v2c_want_filelist_type_deviation_support)
 
 # For various file lists defined by an original project,
@@ -1829,10 +1826,10 @@ if(v2c_want_pch_support)
     endif(do_use_)
   endfunction(v2c_target_add_precompiled_header _target _build_platform _build_type _use _header_file _pch_file)
 else(v2c_want_pch_support)
-  function(v2c_target_add_precompiled_header _target _build_platform _build_type _use _header_file _pch_file)
+  macro(v2c_target_add_precompiled_header _target _build_platform _build_type _use _header_file _pch_file)
     # DUMMY
     _v2c_msg_important("${_target}: not configuring PCH support for header file ${_header_file} (disabled/missing support/...).")
-  endfunction(v2c_target_add_precompiled_header _target _build_platform _build_type _use _header_file _pch_file)
+  endmacro(v2c_target_add_precompiled_header _target _build_platform _build_type _use _header_file _pch_file)
 endif(v2c_want_pch_support)
 
 # Creates the upper-case name required for per-configuration
@@ -1913,9 +1910,9 @@ else(_v2c_midl_include_mode STREQUAL CURRENT_BINARY_DIR)
     include_directories("${CMAKE_CURRENT_BINARY_DIR}")
   endfunction(_v2c_target_midl_include_output_directory _target)
 else(_v2c_midl_include_mode STREQUAL NONE)
-  function(_v2c_target_midl_include_output_directory _target)
+  macro(_v2c_target_midl_include_output_directory _target)
     # DUMMY
-  endfunction(_v2c_target_midl_include_output_directory _target)
+  endmacro(_v2c_target_midl_include_output_directory _target)
 else()
   _v2c_msg_fatal_error("Unknown MIDL include dir mode ${_v2c_midl_include_mode}")
 endif(_v2c_midl_include_mode STREQUAL INTERMEDIATE_DIR)
@@ -2208,9 +2205,9 @@ function(v2c_target_pdb_configure _target _build_platform _build_type)
   endif(is_active_)
 endfunction(v2c_target_pdb_configure _target _build_platform _build_type)
 else(_v2c_want_pdb_support)
-function(v2c_target_pdb_configure _target _build_platform _build_type)
+macro(v2c_target_pdb_configure _target _build_platform _build_type)
   # DUMMY
-endfunction(v2c_target_pdb_configure _target _build_platform _build_type)
+endmacro(v2c_target_pdb_configure _target _build_platform _build_type)
 endif(_v2c_want_pdb_support)
 
 
@@ -2252,9 +2249,9 @@ if(v2c_flag_scc_integration_)
     endif(_vs_scc_projectname)
   endfunction(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_localpath _vs_scc_provider _vs_scc_auxpath)
 else(v2c_flag_scc_integration_)
-  function(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_localpath _vs_scc_provider _vs_scc_auxpath)
+  macro(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_localpath _vs_scc_provider _vs_scc_auxpath)
     # DUMMY
-  endfunction(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_localpath _vs_scc_provider _vs_scc_auxpath)
+  endmacro(v2c_target_set_properties_vs_scc _target _vs_scc_projectname _vs_scc_localpath _vs_scc_provider _vs_scc_auxpath)
 endif(v2c_flag_scc_integration_)
 
 
@@ -2389,9 +2386,9 @@ endfunction(v2c_target_install _target)
     set(_v2c_install_of_targets_not_enabled OFF)
   endif(V2C_INSTALL_ENABLE)
 else(_v2c_want_install_support)
-function(v2c_target_install _target)
+macro(v2c_target_install _target)
   # DUMMY
-endfunction(v2c_target_install _target)
+endmacro(v2c_target_install _target)
 endif(_v2c_want_install_support)
 
 # Log an install warning in case either install infrastructure
@@ -2455,9 +2452,9 @@ function(_v2c_directory_projects_list_get _projects_list_out)
   set(${_projects_list_out} "${directory_projects_list_}" PARENT_SCOPE)
 endfunction(_v2c_directory_projects_list_get _projects_list_out)
 
-function(_v2c_directory_projects_list_set _projects_list)
+macro(_v2c_directory_projects_list_set _projects_list)
   set_property(DIRECTORY PROPERTY V2C_PROJECTS_LIST "${_projects_list}")
-endfunction(_v2c_directory_projects_list_set _projects_list)
+endmacro(_v2c_directory_projects_list_set _projects_list)
 
 function(_v2c_directory_register_project _target)
   _v2c_directory_projects_list_get(projects_list_)
