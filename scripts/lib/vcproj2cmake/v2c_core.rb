@@ -4664,7 +4664,9 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10BaseElemParser
       elem_parser = nil # IMPORTANT: reset it!
       case elem_name
       when 'Filter'
-        elem_parser = V2C_VS10ItemGroupFiltersParser.new(@elem_xml, get_project().filters)
+        elem_parser = V2C_VS10ItemGroupFiltersParser.new(
+          @elem_xml,
+          get_project().filters)
       else # Treat *all* other (not specially handled) entries as files!
         elem_parser = V2C_VS10ItemGroupFilesParser.new(
           @elem_xml,
