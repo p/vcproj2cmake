@@ -2057,15 +2057,26 @@ class V2C_XmlParserBase < V2C_ParserBase
           found)
       end
     rescue ArgumentError => e
-      # Ruby's ArgumentError, unfortunately, may happen for BOTH syntax errors in arguments
-      # to certain Ruby functions (integer parsing)
-      # AND for function argument count errors in Ruby methods.
-      # I.e. for both implementation-time AND run-time issues.
+      # Ruby's ArgumentError, unfortunately,
+      # may happen for BOTH
+      # syntax errors in arguments to certain Ruby functions (integer parsing)
+      # AND
+      # for function argument count errors in Ruby methods.
+      # I.e. for issues in BOTH
+      # implementation-time
+      # AND
+      # run-time.
       # And then of course telling things apart properly is impossible.
       # This looks like a collossal design issue. "Ruby, bad doggie, no bone!"
-      # Oh well, seems it's possible to check .message for the specific error string.
-      if V2C_Ruby_Compat::string_start_with(e.message, 'invalid value for Integer')
-        parser_error("encountered ArgumentError #{e.message} - probably integer parsing of #{setting_key} --> #{setting_value} failed", true)
+      # Oh well, seems it's possible
+      # to check .message
+      # for the specific error string.
+      if V2C_Ruby_Compat::string_start_with(
+        e.message,
+        'invalid value for Integer')
+        parser_error(
+          "encountered ArgumentError #{e.message} - probably integer parsing of #{setting_key} --> #{setting_value} failed",
+          true)
       else
         raise
       end
@@ -5005,7 +5016,8 @@ class Util_TempFilePermanentizer
     # activate our version
     # We'll choose to chmod() the input rather than the output file,
     # since operations on the output file should better be atomic
-    # (a single move, and NOT a subsequent permissions adjustment),
+    # (a single move,
+    # and NOT a subsequent permissions adjustment),
     # to obey potential build tool requirements.
     # [for chmod() comments, see our $v2c_generator_file_create_permissions settings variable]
     V2C_Util_File.chmod(@target_file_permissions, @input_file_location)
