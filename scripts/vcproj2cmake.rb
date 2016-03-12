@@ -61,7 +61,9 @@ else
        vcproj_filename = vcproj_filename_test
        break
      else
-        # The first argument on the command-line did not have any the project file extension which the current parser supports.
+        # The first argument on the command-line did not have
+        # any the project file extension which
+        # the current parser supports.
         # If the local directory contains file "ARGV[0].<project_extension>" then use it, else error.
         # (Note:  Only '+' works here for concatenation, not '<<'.)
         vcproj_filename_test += parser_extension
