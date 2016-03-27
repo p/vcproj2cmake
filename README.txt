@@ -17,7 +17,8 @@ conventions of your system/distribution is recommended.
 On Mac OS X, that would mean using e.g. one of
 fink, Homebrew, nix, rudix, MacPorts.
 
-- git (for vcproj2cmake project source download)
+- git ( Upstream: http://www.git-scm.com )
+  For download of vcproj2cmake project source
   [once you managed to read this README this item likely is history already,
   unless you viewed this file in the SF web repository browser]
   For Windows (less recommended -  CMake support issues
@@ -320,12 +321,11 @@ adapt_my_project_target_dir(foobar "${foobar_SOURCE_DIR}/doc/html")
 
 
 
-=== mappings files (definitions, dependencies, library directories,
-include directories) ===
+=== mappings files (definitions, dependencies, library/include directories) ===
 
 Certain compiler defines in your projects may be Win32-only,
 and certain other defines might need a different replacement
-on a certain other platform.
+on certain other platforms.
 
 Dito with library dependencies,
 and especially with include and library directories.
@@ -379,7 +379,7 @@ See also
   http://www.boost.org/doc/libs/1_48_0/more/getting_started/windows.html#auto-linking
   http://stackoverflow.com/questions/1875388/help-on-linking-in-gcc
   http://stackoverflow.com/questions/1685206/pragma-commentlib-xxx-lib-equivalent-under-linux
-  "#pragma comment GCC equivelent"
+  "#pragma comment GCC equivelent" (sic!)
     http://www.cplusplus.com/forum/general/52941/
   http://cboard.cprogramming.com/c-programming/124805-%5Bgcc%5D-specifying-include-libraries-source-files.html
   "Passing names of libraries to linker."
@@ -438,7 +438,7 @@ and it's important to then launch it a second time to have CMake start
 a new configure run with the CMakeLists.txt and then re-build
 all newly modified targets.
 There's no appreciable way to immediately re-build the updated configuration -
-see CMake list
+see CMake mailing list
 "User-accessible hook on internal cmake_check_build_system target?".
 
 To cleanly re-convert _all_ CMakeLists.txt in an isolated way (one step)
