@@ -47,9 +47,11 @@ Details for manual usage (very rough summary), with Linux/Makefile generator:
   a .vcxproj/.vcproj file
 - install vcproj2cmake environment to this source tree
 - [OPTIONAL] choose suitable vcproj2cmake converter configuration:
-  create a [PATH_TO_INSTALLED_VCPROJ2CMAKE]/scripts/vcproj2cmake_settings.user.rb,
+  create a
+  [PATH_TO_INSTALLED_VCPROJ2CMAKE]/scripts/vcproj2cmake_settings.user.rb,
   or directly modify the vcproj2cmake_settings.rb there
-  (not recommended - the non-user file will be overwritten on each repository update,
+  (not recommended -
+  the non-user file will be overwritten on each repository update,
   thus restoring all settings to default)
 - in the project source tree, run
   ruby [PATH_TO_VCPROJ2CMAKE]/scripts/vcproj2cmake.rb YOURPROJECT.vcproj
@@ -63,7 +65,9 @@ Details for manual usage (very rough summary), with Linux/Makefile generator:
   start your out-of-tree CMake builds:
   - mkdir ../[PROJECT_NAME].build_toolkit1_v1.2.3_unicode_debug
   - cd ../[PROJECT_NAME].build_toolkit1_v1.2.3_unicode_debug
-  - ccmake -DCMAKE_BUILD_TYPE=Debug ../[PROJECT_NAME] (alternatively: cmake ../[PROJECT_NAME])
+  - ccmake -DCMAKE_BUILD_TYPE=Debug ../[PROJECT_NAME]
+    (alternatively:
+    cmake ../[PROJECT_NAME])
      -- NOTE that CMAKE_BUILD_TYPE is a _required_ setting on many generators
         (things will break if unspecified)
   - time make -j3 -k
@@ -246,15 +250,16 @@ v2c_hook_invoke(${V2C_HOOK_PROJECT})
 These are meant to provide interception points ("hooks")
 to enhance online-converted CMakeLists.txt with specific static content
 (e.g. to call required CMake Find scripts via "find_package(Foobar REQUIRED)",
-or to override some undesireable .vc[x]proj choices, to provide some user-facing
-CMake setup cache variables, etc.).
+or to override some undesireable .vc[x]proj choices,
+to provide some user-facing CMake setup cache variables,
+etc.).
 One could just as easily have used a hard-coded
 cmake/vcproj2cmake/hook_project.txt in this call,
 but then it would be somewhat less flexible (some environments might want to
 temporarily disable use of these included scripts, by changing the variable
 to a different/inexistent script).
-Note that these required variables like V2C_HOOK_PROJECT are pre-defined by our
-vcproj2cmake_defs.cmake module.
+Note that these required variables like V2C_HOOK_PROJECT
+are pre-defined by our vcproj2cmake_defs.cmake module.
 
 
 Example hook scripts to be used by every sub project in your project hierarchy
@@ -287,13 +292,16 @@ By centrally defining such common functions in this module
 they can then be invoked (referenced) by each hook point
 (or a subsequent one!) as needed,
 each time supplying project-_specific_ function variables as needed.
-And since that CMake module is used only in a generic way (to define
-those generic functions) and thus does _not_ dirtily fumble any project-specific
-state, it is sufficient to have this _static_ content of this module
-get parsed _once_ only despite actually having it include(myModule):d many times.
+And since that CMake module is used only in a generic way
+(to define those generic functions)
+and thus does _not_ dirtily fumble any project-specific state,
+it is sufficient
+to have this _static_ content of this module get parsed _once_ only
+despite actually having it include(myModule):d many times.
 This can be achieved by implementing an include protection guard such as
 
-if(my_module_parsed) # Avoid repeated parsing of this generic (non-state-modifying) function module
+# Avoid repeated parsing of this generic (non-state-modifying) function module:
+if(my_module_parsed)
   return()
 endif(my_module_parsed)
 set(my_module_parsed true)
@@ -312,15 +320,19 @@ adapt_my_project_target_dir(foobar "${foobar_SOURCE_DIR}/doc/html")
 
 
 
-=== mappings files (definitions, dependencies, library directories, include directories) ===
+=== mappings files (definitions, dependencies, library directories,
+include directories) ===
 
 Certain compiler defines in your projects may be Win32-only,
-and certain other defines might need a different replacement on a certain other platform.
+and certain other defines might need a different replacement
+on a certain other platform.
 
-Dito with library dependencies, and especially with include and library directories.
+Dito with library dependencies,
+and especially with include and library directories.
 
 This is what vcproj2cmake's mappings file mechanism is meant to solve
-(see our initial-content sample files at cmake/vcproj2cmake/include_mappings.txt etc.).
+(see our initial-content sample files
+at cmake/vcproj2cmake/include_mappings.txt etc.).
 
 
 Basic syntax of mappings files is:
@@ -349,7 +361,8 @@ in addition to their (optional) local mappings files.
 lib_dirs_dep_mappings.txt is a bit special in that it will translate
 library _directory_ (link directory) statements
 into appropriate ${YYYY_LIBRARIES} library _dependency_ variables
-(or an open-coded list of libraries if the Find module does not provide a *_LIBRARIES variable),
+(or an open-coded list of libraries
+if the Find module does not provide a *_LIBRARIES variable),
 iff(!) a matching entry can be found.
 This mechanism can easily be required on Non-Windows platforms since
 on Windows MSVC supports "auto-linking" (i.e., auto-discovery)
@@ -357,7 +370,8 @@ of required library dependencies via
 
 #pragma comment(lib, ...)
 
-lines in header files (thus it's only a library directory which needs to be specified),
+lines in header files (thus it's only a library directory
+which needs to be specified),
 whereas on Non-Windows each library needs to be explicitly listed.
 See also
   http://en.wikipedia.org/wiki/Auto-linking
@@ -365,9 +379,11 @@ See also
   http://www.boost.org/doc/libs/1_48_0/more/getting_started/windows.html#auto-linking
   http://stackoverflow.com/questions/1875388/help-on-linking-in-gcc
   http://stackoverflow.com/questions/1685206/pragma-commentlib-xxx-lib-equivalent-under-linux
-  "#pragma comment GCC equivelent" http://www.cplusplus.com/forum/general/52941/
+  "#pragma comment GCC equivelent"
+    http://www.cplusplus.com/forum/general/52941/
   http://cboard.cprogramming.com/c-programming/124805-%5Bgcc%5D-specifying-include-libraries-source-files.html
-  "Passing names of libraries to linker." http://gcc.gnu.org/ml/gcc-help/2005-06/msg00205.html
+  "Passing names of libraries to linker."
+    http://gcc.gnu.org/ml/gcc-help/2005-06/msg00205.html
 
 This sufficiently automatic and easy conversion mechanism unfortunately
 has certain drawbacks:
@@ -422,7 +438,8 @@ and it's important to then launch it a second time to have CMake start
 a new configure run with the CMakeLists.txt and then re-build
 all newly modified targets.
 There's no appreciable way to immediately re-build the updated configuration -
-see CMake list "User-accessible hook on internal cmake_check_build_system target?".
+see CMake list
+"User-accessible hook on internal cmake_check_build_system target?".
 
 To cleanly re-convert _all_ CMakeLists.txt in an isolated way (one step)
 after a source upgrade via SCM, you may invoke target update_cmakelists_ALL,
@@ -456,12 +473,16 @@ and/or correcting improperly cased #include statements in source code.
 == CMake configure run issues ==
 
 - use CMake's message(FATAL_ERROR "DBG: xxx") command
-- add_custom_command(... COMMENT="DBG: we are doing ${THIS} and failing ${THAT}")
+- add_custom_command(
+    ...
+    COMMENT="DBG: we are doing ${THIS} and failing ${THAT}"
+  )
 - in CMAKE_BINARY_DIR: cmake --debug-output --trace . &>/tmp/cmake.log
   [then analyze that log file]
 
 
-If you get an obscure (without a suitable location pinpointed) CMake configure error,
+If you get an obscure (without a suitable location pinpointed)
+CMake configure error,
 then either analyze a log file of cmake --trace,
 or comment ('#') many/several entries in
 cmake/vcproj2cmake/generated_temporary_content/all_sub_projects.txt
@@ -626,7 +647,8 @@ CMake's builtin command: include_external_msproject().
 This one is MSVC-only, quite obviously.
 
 
-sln2mak (.sln to Makefile converter), http://www.codeproject.com/KB/cross-platform/sln2mak.aspx
+sln2mak (.sln to Makefile converter),
+  http://www.codeproject.com/KB/cross-platform/sln2mak.aspx
 
 I just have to state that we have a very unfair advantage here:
 while this script implementation possibly might be better
@@ -709,8 +731,9 @@ in order to have a certain amount of testing guaranteed.
 
 
 A repeated conversion run over the entire source tree should NEVER lead to
-another forced initial CMake configure run when launching a build (well, unless the hour
-timestamp in the generated CMakeLists.txt happened to change),
+another forced initial CMake configure run when launching a build
+(well, unless the hour timestamp in the generated CMakeLists.txt
+happened to change),
 since all generated files are expected to be written back to the prior file
 *only* in case there actually was any change in generated content.
 
@@ -764,7 +787,9 @@ POSIX-only interface, thus a corresponding user-side project
 is able to consist of POSIX-only parts, too),
 try to setup a POSIX-only setting (this is not openly documented,
 but I believe it's possible; see e.g. .vcxproj SubSystem element or some such).
-Indeed, SubSystem values are listed as Console, Windows, Native, EFI Application, EFI ROM, EFI Runtime, WindowsCE, POSIX
+Indeed, SubSystem values are listed as
+    Console, Windows, Native, EFI Application, EFI ROM, EFI Runtime,
+    WindowsCE, POSIX
 (MSVC /SUBSYSTEM: does have a POSIX flag; however KB308259 says that POSIX
 subsystem has been deprecated in XP).
 You really don't want to have the unbelievably bloated windows.h header
@@ -790,7 +815,8 @@ shortcomings, among these:
 - non-cross-platform tool
   --> inescapable (hard) dependency on non-performant Windows servers
      --> filename case sensitivity issue (certain TFS 2008 API functions
-	return *other* case insensitive results for *different* case sensitive input)
+        return *other* case insensitive results
+        for *different* case sensitive input)
 - no three-way-merges via common base version, i.e. base-less merge
   http://jamesmckay.net/2011/01/baseless-merges-in-team-foundation-server-why/
   (uncertain whether this is still true nowadays)
@@ -814,8 +840,11 @@ shortcomings, among these:
   - a work item tracking exception occurring in server layers
     that was caused by one client will cause (TFS2008):
     a) the server to not handle the NullPtrException in a benign way
-       (no client input whatsoever should ever cause a server to croak, ideally ["INPUT VALIDATION"])
-    b) several *other*, *unrelated* VS clients which happen to have ongoing TFS transmissions to be affected by this single-client server session failure (WTH?)
+       (no client input whatsoever should ever cause a server to croak,
+       ideally ["INPUT VALIDATION"])
+    b) several *other*, *unrelated* VS clients
+       which happen to have ongoing TFS transmissions to be affected
+       by this single-client server session failure (WTH?)
     c) those other clients to *not* handle this failure in a benign way
        (final failure due to simply locking up as an entirely inadequate
         "handling" of this problem that originated on the side of the server)
@@ -839,8 +868,9 @@ For a very revealing discussion with many experienced SCM/ALM people,
 you may look at
 http://jamesmckay.net/2011/02/team-foundation-server-is-the-lotus-notes-of-version-control-tools/
 
-In short, it is strongly advisable to also check out other (possibly much more
-transparently developed) ALM solutions such as Trac, Jira, Polarion
+In short, it is strongly advisable to also check out other
+(possibly much more transparently developed)
+ALM solutions such as Trac, Jira, Polarion
 before committing to a specific product
 (these environments make up a large part of your team's development inner loop,
 thus a wrong choice will cost dearly in wasted time and inefficiency).
@@ -861,9 +891,11 @@ http://code.google.com/p/gitextensions/
 Whenever something needs better explanation (or is just worded awkwardly),
 just tell me and I'll try to improve it (I'm constantly rewording
 many parts of this README).
-Dito if you think that some mechanism is poorly implemented (we're still at pre-Beta stage!).
+Dito if you think that some mechanism is poorly implemented
+(we're still at pre-Beta stage!).
 
-Despite being at a semi-finished stage, the converter is now more than usable enough
+Despite being at a semi-finished stage,
+the converter is now more than usable enough
 to successfully build and install/package a very large project
 consisting of many dozen sub projects.
 
