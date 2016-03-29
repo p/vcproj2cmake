@@ -817,15 +817,6 @@ shortcomings, among these:
      --> filename case sensitivity issue (certain TFS 2008 API functions
         return *other* case insensitive results
         for *different* case sensitive input)
-- no three-way-merges via common base version, i.e. base-less merge
-  http://jamesmckay.net/2011/01/baseless-merges-in-team-foundation-server-why/
-  (uncertain whether this is still true nowadays)
-- no disconnected SCM operation (server connection required;
-  server is managing client state on server side
-  [and BTW their solution of working "disconnected" is annoyingly cumbersome
-  at both disconnecting *and* reconnecting ops])
-- installation is a veritable PITA (e.g. due to multi-server setup for
-  perfect spreading of Microsoft infrastructure lockin)
 - interfacing towards much more strongly cross-platform SCMs such as SVN or git
   is h*ll:
   - SvnBridge project rates itself as "stable" - everything but
@@ -836,6 +827,18 @@ shortcomings, among these:
   - the "new" second git-tfs project (Java-based) that was just released
     probably hasn't seen much use yet (TODO: determine actual status)
   - also, OpenTF hasn't seen a commit since 2008
+- does not support sub modules (as supported by git, SVN, CVS etc.)
+  Rather, one is expected to do wild branching between various Team Projects.
+  For strongly upstream-based mix-and-match bundling-type project organisation
+  (AFAICT The Way It Should Be), this sounds like h*ll.
+  Sub modules are an important way to divide-and-conquer, as mentioned by
+  http://git.661346.n2.nabble.com/Git-performance-results-on-a-large-repository-td7250867.html
+- no disconnected SCM operation (server connection required;
+  server is managing client state on server side
+  [and BTW their solution of working "disconnected" is annoyingly cumbersome
+  at both disconnecting *and* reconnecting ops])
+- installation is a veritable PITA (e.g. due to multi-server setup for
+  perfect spreading of Microsoft infrastructure lockin)
 - astonishing stability issues
   - a work item tracking exception occurring in server layers
     that was caused by one client will cause (TFS2008):
@@ -857,12 +860,9 @@ shortcomings, among these:
     despite both original blobs emphatically NOT containing any embedded NUL
     [quite likely the root cause is a string handling off-by-1 in
     TFS's merge code!]
-- does not support sub modules (as supported by git, SVN, CVS etc.)
-  Rather, one is expected to do wild branching between various Team Projects.
-  For strongly upstream-based mix-and-match bundling-type project organisation
-  (AFAICT The Way It Should Be), this sounds like h*ll.
-  Sub modules are an important way to divide-and-conquer, as mentioned by
-  http://git.661346.n2.nabble.com/Git-performance-results-on-a-large-repository-td7250867.html
+- no three-way-merges via common base version, i.e. base-less merge
+  http://jamesmckay.net/2011/01/baseless-merges-in-team-foundation-server-why/
+  (uncertain whether this is still true nowadays)
 
 For a very revealing discussion with many experienced SCM/ALM people,
 you may look at
