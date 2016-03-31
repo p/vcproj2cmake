@@ -6758,10 +6758,14 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     write_command_list_quoted(str_function, nil, arr_args_func)
   end
   def get_dereferenced_variable_name(str_var); "${#{str_var}}" end
-  def add_subdirectory(str_subdir)
+  def add_subdirectory(
+    str_subdir)
     # quote strings containing spaces!!
-    str_subdir_quoted = element_handle_quoting(str_subdir)
-    write_command_single_line('add_subdirectory', str_subdir_quoted)
+    str_subdir_quoted = element_handle_quoting(
+      str_subdir)
+    write_command_single_line(
+      'add_subdirectory',
+      str_subdir_quoted)
   end
 
   def get_var_conditional_command(
@@ -10497,15 +10501,22 @@ def v2c_want_cmakelists_rewritten(str_cmakelists_file)
   return want_cmakelists_rewritten
 end
 
-def v2c_source_root_write_projects_list_file(output_file_fqpn, output_file_permissions, arr_project_subdirs)
+def v2c_source_root_write_projects_list_file(
+  output_file_fqpn,
+  output_file_permissions,
+  arr_project_subdirs)
   # write into temporary file,
   # to avoid corrupting previous file
   # due to syntax error abort, disk space or failure issues
-  generate_projects_list = V2C_GenerateIntoTempFile.new('vcproj2cmake_recursive', output_file_fqpn)
+  generate_projects_list = V2C_GenerateIntoTempFile.new(
+    'vcproj2cmake_recursive',
+    output_file_fqpn)
   generate_projects_list.generate { |textOut|
-    projects_list_generator = V2C_CMakeSyntaxGenerator.new(textOut)
+    projects_list_generator = V2C_CMakeSyntaxGenerator.new(
+      textOut)
     arr_project_subdirs.each { |subdir|
-      projects_list_generator.add_subdirectory(subdir)
+      projects_list_generator.add_subdirectory(
+        subdir)
     }
   }
 rescue Exception

@@ -399,7 +399,8 @@ arr_filtered_dirs.each do |dir|
   is_sub_dir = (true != is_root_dir)
 
   if is_sub_dir
-    arr_project_subdirs.push(dir)
+    arr_project_subdirs.push(
+      dir)
   end
 
   # These checks arguably perhaps shouldn't be done in the recursive handler,
