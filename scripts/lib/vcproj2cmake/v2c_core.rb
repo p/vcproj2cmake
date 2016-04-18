@@ -2254,6 +2254,13 @@ class V2C_File_Filters_Group_Info
 end
 
 
+module V2C_VS10KeywordValues
+  KEYWORD_WIN32 = 'Win32Proj'
+  KEYWORD_ATL = 'ATLProj'
+  KEYWORD_MFC = 'MFCProj'
+  KEYWORD_MAKEFILE = 'MakeFileProj'
+end
+
 # Well, in fact in Visual Studio, "target" and "project"
 # seem to be pretty much synonymous...
 # FIXME: we should still do better separation between these two...
@@ -2269,10 +2276,7 @@ end
 class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consistently get a condition element - but the VS10-side project info actually most likely does not have/use it!
   ORIG_ENV_SHORTNAME_MSVS7 = 'MSVS7'
   ORIG_ENV_SHORTNAME_MSVS10 = 'MSVS10'
-  KEYWORD_WIN32 = 'Win32Proj'
-  KEYWORD_ATL = 'ATLProj'
-  KEYWORD_MFC = 'MFCProj'
-  KEYWORD_MAKEFILE = 'MakeFileProj'
+  include V2C_VS10KeywordValues
   def initialize
     super(
       )
