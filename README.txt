@@ -814,9 +814,10 @@ While TFS is an awful lot better than VSS, it still has some painful
 shortcomings, among these:
 - non-cross-platform tool
   --> inescapable (hard) dependency on non-performant Windows servers
-     --> filename case sensitivity issue (certain TFS 2008 API functions
-        return *other* case insensitive results
-        for *different* case sensitive input)
+     --> filename case sensitivity issue:
+        - certain TFS 2008 API functions
+          return *other* case insensitive results
+          for *different* case sensitive input
 - interfacing towards much more strongly cross-platform SCMs such as SVN or git
   is h*ll:
   - SvnBridge project rates itself as "stable" - everything but
@@ -828,7 +829,9 @@ shortcomings, among these:
     probably hasn't seen much use yet (TODO: determine actual status)
   - also, OpenTF hasn't seen a commit since 2008
 - does not support sub modules (as supported by git, SVN, CVS etc.)
-  Rather, one is expected to do wild branching between various Team Projects.
+  Rather, one is expected to do
+  wild
+  branching between various Team Projects.
   For strongly upstream-based mix-and-match bundling-type project organisation
   (AFAICT The Way It Should Be), this sounds like h*ll.
   Sub modules are an important way to divide-and-conquer, as mentioned by
@@ -868,7 +871,8 @@ For a very revealing discussion with many experienced SCM/ALM people,
 you may look at
 http://jamesmckay.net/2011/02/team-foundation-server-is-the-lotus-notes-of-version-control-tools/
 
-In short, it is strongly advisable to also check out other
+In short, it is strongly advisable to also check out
+other
 (possibly much more transparently developed)
 ALM solutions such as Trac, Jira, Polarion
 before committing to a specific product
