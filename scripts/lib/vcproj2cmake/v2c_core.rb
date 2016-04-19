@@ -1987,7 +1987,9 @@ class V2C_XmlParserBase < V2C_ParserBase
       skipped_element_warn(subelem_xml.name)
       success = true
     else
-      error_unknown_case_value(found)
+      error_unknown_case_value(
+        'call_parse_element',
+        found)
     end
     return success
   end
@@ -2007,7 +2009,9 @@ class V2C_XmlParserBase < V2C_ParserBase
         skipped_element_warn(setting_key)
         success = true
       else
-        error_unknown_case_value(found)
+        error_unknown_case_value(
+          'call_parse_setting',
+          found)
       end
     rescue ArgumentError => e
       # Ruby's ArgumentError, unfortunately, may happen for BOTH syntax errors in arguments
