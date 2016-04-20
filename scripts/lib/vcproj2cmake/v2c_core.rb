@@ -1408,17 +1408,51 @@ class V2C_Target_Config_Build_Info < V2C_Info_Elem_Base
   attr_accessor :atl_minimizes_crt_lib_usage_enable
 end
 
+# Lists the set of build tool types
+# that will *commonly* be required / supported by
+# multiple different build environment types
+# (i.e., NOT only MSVS2010
+# which is a parser-side environment
+# that the code might currently happen to be using predominantly)
+# http://stackoverflow.com/questions/75759/enums-in-ruby
+# V2C_POLICY_RUBY_ENUM_INDICES_VARIABLE
+# Note: V2C_Tool_Types and V2C_Item_List_Types are somewhat related,
+# but still different.
+module V2C_Tool_Types
+  TYPE_NONE = 0
+  TYPE_CL_COMPILES = 1
+  TYPE_LINK = 2
+  TYPE_MIDL = 3
+  TYPE_XSD = 4
+  TYPE_CUSTOM_BUILD = 5
+end
+
 class V2C_Tools_Info < V2C_Info_Elem_Base
   def initialize
     super(
       )
-    @arr_compiler_info = Array.new
-    @arr_linker_info = Array.new
-    @arr_midl_info = Array.new
+    # WARNING: hash access is unexpectedly universal:
+    # when accessing via a Module's constant,
+    # the key will be *numeric*,
+    # whereas when using one element of a [MODULE_NAME].constants,
+    # it will be constant-based!!
+    # (need to use [MODULE_NAME].const_get()
+    # to use the constant's value)
+    @tools = Hash.new
   end
-  attr_accessor :arr_compiler_info
-  attr_accessor :arr_linker_info
-  attr_accessor :arr_midl_info
+
+  def get(
+    type)
+    arr_tool_info = @tools.fetch(
+      type) { |type_unused|
+      arr_tool_info = Array.new
+      @tools[
+        type] = arr_tool_info
+    }
+    logger.debug(
+      "get #{type} #{arr_tool_info.inspect}")
+    arr_tool_info
+  end
 end
 
 # Common base class of both file config and project config.
@@ -1591,6 +1625,9 @@ end
 # hash instead (with then possibly ending up adopting exactly the VS
 # strings as item names :-P),
 # and expose a type-based interface at the outside then.
+#
+# Note: V2C_Tool_Types and V2C_Item_List_Types are somewhat related,
+# but still different.
 module V2C_Item_List_Types
   # WARNING: keep indices symmetric with its use in methods below!
   TYPE_CL_COMPILES = 0
@@ -3343,11 +3380,11 @@ class V2C_VS7ToolForwarderParser < V2C_VS7ParserBase
     elem_parser = nil # IMPORTANT: reset it!
     case toolname
     when TEXT_VCCLCOMPILERTOOL
-      arr_info = get_tools_info().arr_compiler_info
+      tool_type = V2C_Tool_Types::TYPE_CL_COMPILES
       info = V2C_Tool_Compiler_Info.new(V2C_Tool_Compiler_Specific_Info_MSVC7.new)
       elem_parser = V2C_VS7ToolCompilerParser.new(@elem_xml, info)
     when TEXT_VCLINKERTOOL
-      arr_info = get_tools_info().arr_linker_info
+      tool_type = V2C_Tool_Types::TYPE_LINK
       info = V2C_Tool_Linker_Info.new(V2C_Tool_Linker_Specific_Info_MSVC7.new)
       elem_parser = V2C_VS7ToolLinkerParser.new(@elem_xml, info)
     else
@@ -3355,6 +3392,8 @@ class V2C_VS7ToolForwarderParser < V2C_VS7ParserBase
     end
     if not elem_parser.nil?
       elem_parser.parse
+      arr_info = get_tools_info().get(
+        tool_type)
       arr_info.push(info)
     end
     return found
@@ -4820,21 +4859,21 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
     found = be_optimistic()
     setting_key = subelem_xml.name
     item_def_group_parser = nil # IMPORTANT: reset it!
-    arr_info = nil
     info = nil
+    tool_type = V2C_Tool_Types::TYPE_NONE
     logger.debug(setting_key)
     case setting_key
     when TEXT_CLCOMPILE
-      arr_info = get_tools_info().arr_compiler_info
+      tool_type = V2C_Tool_Types::TYPE_CL_COMPILES
       info = V2C_Tool_Compiler_Info.new(V2C_Tool_Compiler_Specific_Info_MSVC10.new)
       item_def_group_parser = V2C_VS10ToolCompilerParser.new(subelem_xml, info)
     #when TEXT_RESOURCECOMPILE
     when TEXT_LINK
-      arr_info = get_tools_info().arr_linker_info
+      tool_type = V2C_Tool_Types::TYPE_LINK
       info = V2C_Tool_Linker_Info.new(V2C_Tool_Linker_Specific_Info_MSVC10.new)
       item_def_group_parser = V2C_VS10ToolLinkerParser.new(subelem_xml, info)
     when TEXT_MIDL
-      arr_info = get_tools_info().arr_midl_info
+      tool_type = V2C_Tool_Types::TYPE_MIDL
       info = V2C_Tool_MIDL_Info.new(V2C_Tool_MIDL_Specific_Info_MSVC10.new)
       item_def_group_parser = V2C_VS10ToolMIDLParser.new(subelem_xml, info)
     else
@@ -4843,7 +4882,9 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
     if not item_def_group_parser.nil?
       if FOUND_FALSE != item_def_group_parser.parse
         logger.debug(
-          "info #{info.inspect}")
+          "tool_type #{tool_type} info #{info.inspect}")
+        arr_info = get_tools_info().get(
+          tool_type)
         arr_info.push(info)
       end
     end
@@ -4854,15 +4895,29 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
   end
   def is_unmodified(
     tools_info)
+    arr_const_tool_type = V2C_Tool_Types.constants
     logger.debug(
       "tools_info #{tools_info.inspect}")
 
     is_unmodified = true
-    if tools_info.arr_compiler_info.empty? and tools_info.arr_linker_info.empty? and tools_info.arr_midl_info.empty?
-    else
-      is_unmodified = false
-    end
+    arr_const_tool_type.each { |const_tool_type|
+      tool_type = V2C_Tool_Types.const_get(
+        const_tool_type)
+      if false != have_info(
+        tools_info,
+        tool_type)
+        is_unmodified = false
+        break
+      end
+    }
     is_unmodified
+  end
+  def have_info(
+    tools_info,
+    tool_type)
+    arr_tool_infos = tools_info.get(
+      tool_type)
+    return !(arr_tool_infos.empty?)
   end
 end
 
@@ -7241,7 +7296,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_config_info.each do |config_info_curr|
       condition = config_info_curr.condition
       tools = config_info_curr.tools
-      arr_linker_info = tools.arr_linker_info
+      arr_linker_info = tools.get(
+        V2C_Tool_Types::TYPE_LINK)
       arr_linker_info.each do |linker_info_curr|
         arr_obj = linker_info_curr.get_deps_objs()
         if not arr_obj.empty?
@@ -7349,7 +7405,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # since they simply won't be available for the target --> error.
     # Instead, we do need to have an add_custom_command()
     # which generates them (or suitable dummy files if needed).
-    arr_midl_info = config_info.tools.arr_midl_info
+    arr_midl_info = config_info.tools.get(
+      V2C_Tool_Types::TYPE_MIDL)
 
     # Hmm, perhaps it's actually incorrect to skip IDL files
     # when no MIDL info provided (--> assume defaults??).
@@ -7424,7 +7481,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # BEFORE establishing a target, generate:
     # - link_directories()
     tools = config_info_curr.tools
-    arr_linker_info = tools.arr_linker_info
+    arr_linker_info = tools.get(
+      V2C_Tool_Types::TYPE_LINK)
     arr_linker_info.each { |linker_info_curr|
       @localGenerator.write_link_directories(linker_info_curr.arr_lib_dirs, map_lib_dirs)
     }
@@ -7458,7 +7516,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # configure its requirements.
     tools = target_info_curr.tools
     if target_is_valid
-      arr_linker_info = tools.arr_linker_info
+      arr_linker_info = tools.get(
+        V2C_Tool_Types::TYPE_LINK)
       arr_linker_info.each { |linker_info_curr|
         put_target_attributes(
           target_config_info_curr,
@@ -7925,7 +7984,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
           # I don't know WhyTH we're *iterating* over a compiler_info here,
           # but let's just do it like that for now since
           # it's required by our current data model:
-          arr_compiler_info = tools.arr_compiler_info
+          arr_compiler_info = tools.get(
+            V2C_Tool_Types::TYPE_CL_COMPILES)
           arr_compiler_info.each { |compiler_info_curr|
             print_marker_line('per-compiler_info')
             project_info.get_arr_target_config_info_matching(condition).each { |target_config_info_curr|
@@ -7979,7 +8039,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
           # separately
           # (since the property write does specify APPEND
           # this is no problem).
-          arr_linker_info = tools.arr_linker_info
+          arr_linker_info = tools.get(
+            V2C_Tool_Types::TYPE_LINK)
           arr_linker_info.each { |linker_info_curr|
             print_marker_line('per-linker_info')
             linker_info_curr.arr_tool_variant_specific_info.each { |linker_specific|
@@ -8223,7 +8284,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       condition = config_info_curr.condition
       gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
       gen_condition.generate(condition) do
-        arr_compiler_info = tools.arr_compiler_info
+        arr_compiler_info = tools.get(
+          V2C_Tool_Types::TYPE_CL_COMPILES)
         arr_compiler_info.each { |compiler_info_curr|
           arr_includes = compiler_info_curr.get_include_dirs(false, false)
           @localGenerator.write_include_directories(arr_includes, generator_base.map_includes)
@@ -9205,7 +9267,8 @@ class V2C_ProjectPostProcess < V2C_LoggerBase
     arr_generated_items = Array.new
     arr_config_info = project_info.arr_config_info
     arr_config_info.each { |config_info|
-      arr_midl_info = config_info.tools.arr_midl_info
+      arr_midl_info = config_info.tools.get(
+        V2C_Tool_Types::TYPE_MIDL)
       arr_midl_info.each { |midl_info|
         arr_generated_items.push(
           midl_info.header_file_name,
