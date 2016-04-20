@@ -4002,6 +4002,14 @@ class V2C_VS7ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
   end
 end
 
+module V2C_VS10Defines_Tool_Types
+  TEXT_CLCOMPILE = 'ClCompile'
+  TEXT_LINK = 'Link'
+  TEXT_MIDL = 'Midl'
+  TEXT_RESOURCECOMPILE = 'ResourceCompile'
+  TEXT_XSD = 'Xsd'
+end
+
 module V2C_VS10Defines
   TEXT_CONDITION = 'Condition'
   TEXT_DEFAULT = 'Default'
@@ -4010,6 +4018,8 @@ module V2C_VS10Defines
   TEXT_INCLUDE = 'Include'
   TEXT_LABEL = 'Label'
   TEXT_PROJECT = 'Project'
+
+  include V2C_VS10Defines_Tool_Types
 end
 
 module V2C_VS10Syntax
@@ -4594,16 +4604,16 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
     info = nil
     logger.debug(setting_key)
     case setting_key
-    when 'ClCompile'
+    when TEXT_CLCOMPILE
       arr_info = get_tools_info().arr_compiler_info
       info = V2C_Tool_Compiler_Info.new(V2C_Tool_Compiler_Specific_Info_MSVC10.new)
       item_def_group_parser = V2C_VS10ToolCompilerParser.new(subelem_xml, info)
-    #when 'ResourceCompile'
-    when 'Link'
+    #when TEXT_RESOURCECOMPILE
+    when TEXT_LINK
       arr_info = get_tools_info().arr_linker_info
       info = V2C_Tool_Linker_Info.new(V2C_Tool_Linker_Specific_Info_MSVC10.new)
       item_def_group_parser = V2C_VS10ToolLinkerParser.new(subelem_xml, info)
-    when 'Midl'
+    when TEXT_MIDL
       arr_info = get_tools_info().arr_midl_info
       info = V2C_Tool_MIDL_Info.new(V2C_Tool_MIDL_Specific_Info_MSVC10.new)
       item_def_group_parser = V2C_VS10ToolMIDLParser.new(subelem_xml, info)
@@ -8425,7 +8435,7 @@ def v2c_vcxproj_look_for_cmake_content(str_proj_file)
     doc = REXML::Document.new io
     doc.elements.each('Project') { |project_xml|
       project_xml.elements.each('ItemDefinitionGroup') { |itemdef_xml|
-        itemdef_xml.elements.each('ClCompile') { |compiler_xml|
+        itemdef_xml.elements.each(V2C_VS10Defines_Tool_Types::TEXT_CLCOMPILE) { |compiler_xml|
           attr_defines = compiler_xml.elements['PreprocessorDefinitions']
           if not attr_defines.nil?
             if attr_defines.to_s.match(VCPROJ_DEF_CONTENT_CMAKE_INTDIR_REGEX_OBJ)
