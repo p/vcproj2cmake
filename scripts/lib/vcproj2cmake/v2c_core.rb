@@ -4778,10 +4778,19 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
     return found
   end
   def parse_verify
-    found = FOUND_TRUE
-    tools_info = get_tools_info()
-    found = FOUND_FALSE if tools_info.arr_compiler_info.empty? and tools_info.arr_linker_info.empty? and tools_info.arr_midl_info.empty?
-    found
+    is_unmodified(get_tools_info()) ? FOUND_FALSE : FOUND_TRUE
+  end
+  def is_unmodified(
+    tools_info)
+    logger.debug(
+      "tools_info #{tools_info.inspect}")
+
+    is_unmodified = true
+    if tools_info.arr_compiler_info.empty? and tools_info.arr_linker_info.empty? and tools_info.arr_midl_info.empty?
+    else
+      is_unmodified = false
+    end
+    is_unmodified
   end
 end
 
