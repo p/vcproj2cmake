@@ -6765,6 +6765,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # added multiple times, thus need uniq here.
     arr_sub_source_list_var_names.uniq!
     put_source_vars(arr_sub_source_list_var_names)
+    project_target_name = @target.name
 
     # write link_directories() (BEFORE establishing a target!)
     config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
@@ -6781,7 +6782,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         'target_link_libraries',
         linker_info_curr.arr_lib_dirs,
         map_lib_dirs_dep,
-        @target.name,
+        project_target_name,
         true)
     }
 
@@ -6956,11 +6957,13 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     return if not $v2c_target_precompiled_header_enable
     return if precompiled_header_info.nil?
     return if precompiled_header_info.header_source_name.nil?
+
+    target_name = @target.name
     ## FIXME: this filesystem validation should be carried out by a non-parser/non-generator validator class...
-    #header_file_is_existing = v2c_generator_check_file_accessible(@project_dir, precompiled_header_info.header_source_name, 'header file to be precompiled', @target.name, false)
-    logger.info "#{@target.name}: generating PCH functionality (use mode #{precompiled_header_info.use_mode}, header file #{precompiled_header_info.header_source_name}, PCH output binary #{precompiled_header_info.header_binary_name})"
+    #header_file_is_existing = v2c_generator_check_file_accessible(@project_dir, precompiled_header_info.header_source_name, 'header file to be precompiled', target_name, false)
+    logger.info "#{target_name}: generating PCH functionality (use mode #{precompiled_header_info.use_mode}, header file #{precompiled_header_info.header_source_name}, PCH output binary #{precompiled_header_info.header_binary_name})"
     put_precompiled_header(
-      @target.name,
+      target_name,
       condition,
       precompiled_header_info.use_mode,
       precompiled_header_info.header_source_name,
@@ -7414,16 +7417,17 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   end
 
   def generate_project_leadin(project_info)
+    project_name = project_info.name
     write_project(project_info)
     put_conversion_info(
-      project_info.name,
+      project_name,
       project_info.orig_environment_shortname)
     put_guid(
-      project_info.name,
+      project_name,
       project_info.guid)
     put_include_MasterProjectDefaults_vcproj2cmake()
     write_funcs_v2c_project_platform_define_build_types(
-      project_info.name,
+      project_name,
       project_info.build_platform_configs)
     put_hook_project()
   end
