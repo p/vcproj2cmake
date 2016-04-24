@@ -7350,8 +7350,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         end
         write_link_libraries(arr_dependency_names, map_dependencies)
       }
+      logger.debug "TARGET_LINK_LIBRARIES: #{target_info_curr.tools.arr_linker_info.inspect}"
     end # target_is_valid
-    logger.debug "TARGET_LINK_LIBRARIES: target_is_valid #{target_is_valid}, #{target_info_curr.tools.arr_linker_info.inspect}"
+    logger.debug "TARGET_LINK_LIBRARIES: target_is_valid #{target_is_valid}"
     return target_is_valid
   end
   def write_target_executable(target_name, string_sources_list)
