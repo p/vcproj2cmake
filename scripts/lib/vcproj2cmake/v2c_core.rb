@@ -8238,6 +8238,20 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
   #end
   #
 
+  def generate_module_definition_file_call(
+    target_name,
+    condition,
+    module_definition_file)
+    arr_args_func = [
+      module_definition_file,
+    ]
+    write_invoke_object_conditional_v2c_function(
+      '_v2c_target_linker_def_file',
+      target_name,
+      condition,
+      arr_args_func)
+  end
+
   # FIXME: not sure whether map_lib_dirs etc. should be passed in
   # in such a raw way -
   # probably mapping should already have been done at that stage...
@@ -8255,11 +8269,16 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
 
     # BEFORE establishing a target, generate:
     # - link_directories()
+    # - module definition file
     tools = config_info_curr.tools
     arr_linker_info = tools.get(
       V2C_Tool_Types::TYPE_LINK)
     arr_linker_info.each { |linker_info_curr|
       @localGenerator.write_link_directories(linker_info_curr.arr_lib_dirs, map_lib_dirs)
+      generate_module_definition_file_call(
+        project_target_name,
+        config_info_curr.condition,
+        linker_info_curr.module_definition_file)
     }
 
     target_is_valid = put_target_type(target, map_dependencies, config_info_curr, target_config_info_curr)
