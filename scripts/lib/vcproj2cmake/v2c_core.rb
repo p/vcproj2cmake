@@ -7121,7 +7121,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
             # is fully configured (it needs to be able to correctly gather
             # all settings of the target it is supposed to be used for).
             write_precompiled_header(condition, compiler_info_curr.precompiled_header_info)
-          } # config_info_curr.tools.arr_compiler_info.each
+          } # tools.arr_compiler_info.each
 
           # TODO: perhaps that stuff ought to be grouped in a cleaner way:
           # for each platform-specific linker, figure out the combined set of
