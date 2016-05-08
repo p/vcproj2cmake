@@ -4876,8 +4876,6 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
       tool_type = V2C_Tool_Types::TYPE_MIDL
       info = V2C_Tool_MIDL_Info.new(V2C_Tool_MIDL_Specific_Info_MSVC10.new)
       item_def_group_parser = V2C_VS10ToolMIDLParser.new(subelem_xml, info)
-    else
-      found = super
     end
     if not item_def_group_parser.nil?
       if FOUND_FALSE != item_def_group_parser.parse
@@ -4887,6 +4885,8 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
           tool_type)
         arr_info.push(info)
       end
+    else
+      found = super
     end
     return found
   end
