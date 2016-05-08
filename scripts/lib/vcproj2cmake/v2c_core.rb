@@ -1436,6 +1436,79 @@ class V2C_Tool_MIDL_Specific_Info_MSVC10 < V2C_Tool_MIDL_Specific_Info
   end
 end
 
+module V2C_Tool_PrePostBuildLink_Variant_Defines
+  VARIANT_PREBUILD = 1
+  VARIANT_PRELINK = 2
+  VARIANT_POSTBUILD = 3
+end
+
+class V2C_Tool_PrePostBuildLink_Info < V2C_Tool_Base_Info
+  include V2C_Tool_PrePostBuildLink_Variant_Defines
+  def initialize(
+    variant,
+    tool_variant_specific_info = nil)
+    super(
+      tool_variant_specific_info)
+    @variant = variant
+    @message = nil # Text printed upon target execution
+    @arr_commandline = nil # Command lines to be executed
+  end
+  attr_accessor :variant
+  attr_accessor :message
+  attr_accessor :arr_commandline
+end
+
+class V2C_Tool_PrePostBuildLink_Info_PreBuildEvent < V2C_Tool_PrePostBuildLink_Info
+  def initialize(
+    tool_variant_specific_info = nil)
+    super(
+      VARIANT_PREBUILD,
+      tool_variant_specific_info)
+  end
+end
+
+class V2C_Tool_PrePostBuildLink_Info_PreLinkEvent < V2C_Tool_PrePostBuildLink_Info
+  def initialize(
+    tool_variant_specific_info = nil)
+    super(
+      VARIANT_PRELINK,
+      tool_variant_specific_info)
+  end
+end
+
+class V2C_Tool_PrePostBuildLink_Info_PostBuildEvent < V2C_Tool_PrePostBuildLink_Info
+  def initialize(
+    tool_variant_specific_info = nil)
+    super(
+      VARIANT_POSTBUILD,
+      tool_variant_specific_info)
+  end
+end
+
+class V2C_Tool_PrePostBuildLink_Specific_Info < V2C_Tool_Specific_Info_Base
+  def initialize(
+    tool_id)
+    super(
+      tool_id)
+  end
+end
+
+class V2C_Tool_PrePostBuildLink_Specific_Info_MSVC7 < V2C_Tool_PrePostBuildLink_Specific_Info
+  def initialize(
+    )
+    super(
+      'MSVC7')
+  end
+end
+
+class V2C_Tool_PrePostBuildLink_Specific_Info_MSVC10 < V2C_Tool_PrePostBuildLink_Specific_Info
+  def initialize(
+    )
+    super(
+      'MSVC10')
+  end
+end
+
 # CONVENTION_VS_PROJECT_RELATIVE_PATH:
 # In the case of this filesystem item value,
 # our convention is following Visual Studio's convention:
@@ -1536,6 +1609,9 @@ module V2C_Tool_Types
   TYPE_MIDL = 3
   TYPE_XSD = 4
   TYPE_CUSTOM_BUILD = 5
+  TYPE_PREBUILDEVENT = 6
+  TYPE_PRELINKEVENT = 7
+  TYPE_POSTBUILDEVENT = 8
 end
 
 class V2C_Tools_Info < V2C_Info_Elem_Base
@@ -2275,9 +2351,12 @@ end
 CMAKE_CFG_INTDIR_VAR_DEREF = '${CMAKE_CFG_INTDIR}'
 CMAKE_PROJECT_BINARY_DIR_VAR_DEREF = '${PROJECT_BINARY_DIR}'
 CMAKE_PROJECT_NAME_VAR_DEREF = '${PROJECT_NAME}'
+# vs7_only_flag specifies whether invoking code is VS7 classes,
+# i.e. whether to support VS7-only constructs (e.g. $(NoInherit)), too.
 def vs7_create_config_variable_translation(
   str_in,
-  arr_config_var_handling)
+  arr_config_var_handling,
+  vs7_only_flag)
   str = str_in.clone
   # http://langref.org/all-languages/pattern-matching/searching/loop-through-a-string-matching-a-regex-and-performing-an-action-for-each-match
   str_scan_copy = str_in.clone # create a deep copy of string, to avoid "`scan': string modified (RuntimeError)"
@@ -2324,6 +2403,18 @@ EOF
       arr_config_var_handling.push(
         config_var_emulation_code)
       config_var_replacement = '${v2c_VS_PlatformName}'
+    when 'INHERIT', 'NOINHERIT'
+      # $(Inherit)/$(NoInherit) are mechanisms for e.g. include/library/define
+      # settings.
+      # Inherit (the default setting, BTW) means
+      # that settings of per-file entries
+      # will be enhanced by project-side settings,
+      # *at the position where Inherit is placed*.
+      # NoInherit overrides any Inherit.
+      # (No)Inherit, being user macros rather than env settings,
+      # really shouldn't be replaced by environment variable references,
+      # thus at least skip it for now and log a TODO.
+      log_todo "$(Inherit) / $(NoInherit) not supported yet."
     # InputName is said to be same as ProjectName
     # in case input is the project.
     when 'INPUTNAME', 'PROJECTNAME'
@@ -2472,6 +2563,9 @@ class V2C_XmlParserBase < V2C_ParserBase
     found
   end
   def unknown_attribute(key, value); unknown_something_key_value('attribute', key, value) end
+  def unknown_attribute_value(key, value)
+    unknown_something_key_value('attribute value', key, value)
+  end
   def unknown_element_key(name); unknown_something('element', name) end
   def unknown_element_attribute_value(
     elem,
@@ -2665,6 +2759,26 @@ class V2C_XmlParserBase < V2C_ParserBase
   def unknown_something_key_value(something_name, key, value)
     logger.todo "#{self.class.name}: unknown/incorrect XML #{something_name} (#{key}: #{value})!"
   end
+  def string_unescape_from_xml(
+    raw)
+    # See also http://stackoverflow.com/questions/14899734/unescape-numeric-xml-entities-with-lua
+    # XXX this is a very incomplete / improperly hard-coded list,
+    # should try to possibly find
+    # an existing toolkit API
+    # for this purpose.
+    cooked = raw.clone
+    cooked.gsub!('&#x0A;', "\n")
+    cooked.gsub!('&#x0D;', "\r")
+    # Translate the 5 predefined XML entities:
+    # Attention ordering: '&' should get translated last!!
+    # (otherwise false matches possible!)
+    cooked.gsub!('&quot;', '"')
+    cooked.gsub!('&apos;', '\'')
+    cooked.gsub!('&lt;', '<')
+    cooked.gsub!('&gt;', '>')
+    cooked.gsub!('&amp;', '&')
+    cooked
+  end
 end
 
 class V2C_VSXmlParserBase < V2C_XmlParserBase
@@ -2719,7 +2833,8 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
     path_translated = vs7_create_config_variable_translation(
       string_avoid_nil(
         path),
-      @arr_config_var_dummy)
+      @arr_config_var_dummy,
+      false)
 
     # TODO: should think of a way to do central verification
     # of existence of the file system paths found here near this helper.
@@ -3217,6 +3332,9 @@ module V2C_VS7ToolSyntax
   include V2C_VSToolDefines
   TEXT_VCCLCOMPILERTOOL = 'VCCLCompilerTool'
   TEXT_VCLINKERTOOL = 'VCLinkerTool'
+  TEXT_VCPREBUILDEVENTTOOL = 'VCPreBuildEventTool'
+  TEXT_VCPRELINKEVENTTOOL = 'VCPreLinkEventTool'
+  TEXT_VCPOSTBUILDEVENTTOOL = 'VCPostBuildEventTool'
 end
 
 module V2C_VS7ToolCompilerSyntax
@@ -3528,6 +3646,75 @@ class V2C_VSToolMIDLParser < V2C_VSToolDefineParserBase
   end
 end
 
+class V2C_VSToolPrePostBuildLinkEventParser < V2C_VSToolParserBase
+  # I'm actually not sure yet whether we should be using strip_whitespace()
+  # at this layer - perhaps it should be used in the VS10 case only,
+  # and perhaps this even means even doing strip_whitespace()
+  # prior to handing content over to parse_element() implementation!
+  def parse_commandline(
+    str_in)
+    return nil if str_in.nil?
+
+    arr_commandline_raw = str_in.split("\n")
+    array_collect_compact(arr_commandline_raw) do |commandline_raw|
+      str_unescaped = string_unescape_from_xml(
+        string_value_preprocess(
+          commandline_raw))
+
+      # This is problematic - generic build information data
+      # as gathered from original project files
+      # shouldn't contain any CMake-specific content yet.
+      # Since we only have a CMake generator for now,
+      # it does not really matter yet. Oh well...
+      arr_script_code = Array.new
+      str_translated = vs7_create_config_variable_translation(
+        str_unescaped,
+        arr_script_code,
+        false)
+
+      next if str_translated.empty?
+
+      # Note that VS has a "\some\path\" syntax, i.e. it has a last backslash
+      # escape prior to closing quote, which is a very special case.
+      # We possibly ought to remove this quote-escaping "feature" here
+      # (since we're going towards other platforms),
+      # and it then ought to be re-added for VS generation
+      # (but CMake perhaps already does do that properly anyway...).
+
+      str_translated
+    end
+  end
+  def parse_message(
+    str_in)
+    str = string_value_preprocess(
+      str_in)
+    str = nil if str.empty?
+    str
+  end
+end
+
+class V2C_VS7ToolPrePostBuildLinkEventToolParser < V2C_VSToolPrePostBuildLinkEventParser
+  include V2C_VS7Syntax
+  def parse_attribute(
+    setting_key,
+    setting_value)
+    found = be_optimistic()
+    case setting_key
+    when 'CommandLine'
+      @info_elem.arr_commandline = parse_commandline(
+        setting_value)
+    when 'Description'
+      @info_elem.message = parse_message(
+        setting_value)
+    when TEXT_NAME
+      # to be ignored
+    else
+      found = super
+    end
+    return found
+  end
+end
+
 # Simple forwarder class. Creates specific parsers and invokes them.
 class V2C_VS7ToolForwarderParser < V2C_VS7ParserBase
   def parse
@@ -3545,7 +3732,29 @@ class V2C_VS7ToolForwarderParser < V2C_VS7ParserBase
       tool_type = V2C_Tool_Types::TYPE_LINK
       info = V2C_Tool_Linker_Info.new(V2C_Tool_Linker_Specific_Info_MSVC7.new)
       elem_parser = V2C_VS7ToolLinkerParser.new(@elem_xml, info)
+    when TEXT_VCPREBUILDEVENTTOOL, TEXT_VCPRELINKEVENTTOOL, TEXT_VCPOSTBUILDEVENTTOOL
+      specific_info = V2C_Tool_PrePostBuildLink_Specific_Info_MSVC7.new
+      case toolname
+      when TEXT_VCPREBUILDEVENTTOOL
+        tool_type = V2C_Tool_Types::TYPE_PREBUILDEVENT
+        info = V2C_Tool_PrePostBuildLink_Info_PreBuildEvent.new(
+          specific_info)
+      when TEXT_VCPRELINKEVENTTOOL
+        tool_type = V2C_Tool_Types::TYPE_PRELINKEVENT
+        info = V2C_Tool_PrePostBuildLink_Info_PreLinkEvent.new(
+          specific_info)
+      when TEXT_VCPOSTBUILDEVENTTOOL
+        tool_type = V2C_Tool_Types::TYPE_POSTBUILDEVENT
+        info = V2C_Tool_PrePostBuildLink_Info_PostBuildEvent.new(
+          specific_info)
+      end
+      elem_parser = V2C_VS7ToolPrePostBuildLinkEventToolParser.new(
+        @elem_xml,
+        info)
     else
+      unknown_attribute_value(
+        TEXT_NAME,
+        toolname)
       found = FOUND_FALSE
     end
     if not elem_parser.nil?
@@ -4376,6 +4585,9 @@ module V2C_VS10Defines_Tool_Types
   TEXT_MIDL = 'Midl'
   TEXT_RESOURCECOMPILE = 'ResourceCompile'
   TEXT_XSD = 'Xsd'
+  TEXT_PREBUILDEVENT = 'PreBuildEvent'
+  TEXT_PRELINKEVENT = 'PreLinkEvent'
+  TEXT_POSTBUILDEVENT = 'PostBuildEvent'
 end
 
 # XXX: many more types seem to be available -
@@ -5020,6 +5232,28 @@ class V2C_VS10ToolMIDLParser < V2C_VSToolMIDLParser
   include V2C_VS10Syntax # parse_boolean_property_value
 end
 
+class V2C_VS10ToolPrePostBuildLinkEventParser < V2C_VSToolPrePostBuildLinkEventParser
+  def parse_element(
+    subelem_xml)
+    found = be_optimistic()
+    setting_key = subelem_xml.name
+    setting_value = subelem_xml.text
+    case setting_key
+    when 'Command'
+      @info_elem.arr_commandline = parse_commandline(
+        setting_value)
+    when 'Message'
+      @info_elem.message = parse_message(
+        setting_value)
+    when TEXT_NAME
+      # to be ignored
+    else
+      found = super
+    end
+    return found
+  end
+end
+
 class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
   private
 
@@ -5046,6 +5280,31 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
       tool_type = V2C_Tool_Types::TYPE_MIDL
       info = V2C_Tool_MIDL_Info.new(V2C_Tool_MIDL_Specific_Info_MSVC10.new)
       item_def_group_parser = V2C_VS10ToolMIDLParser.new(subelem_xml, info)
+    when TEXT_PREBUILDEVENT, TEXT_PRELINKEVENT, TEXT_POSTBUILDEVENT
+      specific_info = V2C_Tool_PrePostBuildLink_Specific_Info_MSVC10.new
+      case setting_key
+      when TEXT_PREBUILDEVENT
+        tool_type = V2C_Tool_Types::TYPE_PREBUILDEVENT
+        info = V2C_Tool_PrePostBuildLink_Info_PreBuildEvent.new(
+          specific_info)
+      when TEXT_PRELINKEVENT
+        tool_type = V2C_Tool_Types::TYPE_PRELINKEVENT
+        info = V2C_Tool_PrePostBuildLink_Info_PreLinkEvent.new(
+          specific_info)
+      when TEXT_POSTBUILDEVENT
+        tool_type = V2C_Tool_Types::TYPE_POSTBUILDEVENT
+        info = V2C_Tool_PrePostBuildLink_Info_PostBuildEvent.new(
+          specific_info)
+      else
+        error_unknown_case_value(
+          'V2C_VS10ItemDefinitionGroupParser',
+          setting_key)
+      end
+      if nil != info
+        item_def_group_parser = V2C_VS10ToolPrePostBuildLinkEventParser.new(
+          subelem_xml,
+          info)
+      end
     end
     if not item_def_group_parser.nil?
       found = item_def_group_parser.parse
@@ -9283,7 +9542,8 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_includes_translated = arr_includes.collect { |elem_inc_dir|
       vs7_create_config_variable_translation(
         elem_inc_dir,
-        @arr_config_var_handling)
+        @arr_config_var_handling,
+        false)
     }
     write_build_attributes('include_directories', arr_includes_translated, map_includes, nil)
   end
@@ -9292,7 +9552,8 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_lib_dirs_translated = arr_lib_dirs.collect { |elem_lib_dir|
       vs7_create_config_variable_translation(
         elem_lib_dir,
-        @arr_config_var_handling)
+        @arr_config_var_handling,
+        false)
     }
     arr_lib_dirs_translated.push(get_dereferenced_variable_name('V2C_LIB_DIRS'))
     write_comment_at_level(COMMENT_LEVEL_VERBOSE,
