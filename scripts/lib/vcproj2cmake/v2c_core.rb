@@ -7055,9 +7055,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
           # but let's just do it like that for now since it's required
           # by our current data model:
           tools.arr_compiler_info.each { |compiler_info_curr|
-
             print_marker_line('per-compiler_info')
-
             project_info.arr_target_config_info.each { |target_config_info_curr|
               next if not condition_entails(condition, target_config_info_curr.condition)
 
@@ -7098,7 +7096,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
             # is fully configured (it needs to be able to correctly gather
             # all settings of the target it is supposed to be used for).
             write_precompiled_header(condition, compiler_info_curr.precompiled_header_info)
-
           } # config_info_curr.tools.arr_compiler_info.each
 
           # TODO: perhaps that stuff ought to be grouped in a cleaner way:
