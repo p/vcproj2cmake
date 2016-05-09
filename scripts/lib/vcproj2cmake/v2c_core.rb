@@ -7119,6 +7119,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
           # translated-from-high-level flags separately (since the property
           # write does specify APPEND this is no problem).
           tools.arr_linker_info.each { |linker_info_curr|
+            print_marker_line('per-linker_info')
             linker_info_curr.arr_tool_variant_specific_info.each { |linker_specific|
               arr_conditional_linker_platform = map_tool_name_to_cmake_platform_conditional(linker_specific.tool_id)
               # Probably more linker flags support needed? (mention via
