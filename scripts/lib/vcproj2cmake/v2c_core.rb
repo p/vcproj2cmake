@@ -4375,7 +4375,7 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
     item_def_group_parser = nil # IMPORTANT: reset it!
     arr_info = nil
     info = nil
-    log_debug(setting_key)
+    logger.debug(setting_key)
     case setting_key
     when 'ClCompile'
       arr_info = get_tools_info().arr_compiler_info
@@ -4552,7 +4552,7 @@ class V2C_VS10ProjectExtensionsVisualStudioParser < V2C_VS10BaseElemParser
     found = be_optimistic()
     setting_key = subelem_xml.name
     parser = nil # IMPORTANT: reset it!
-    log_debug(setting_key)
+    logger.debug(setting_key)
     case setting_key
     when 'UserProperties'
       parser = V2C_VS10UserPropertiesParser.new(subelem_xml, get_project().user_properties)
@@ -4574,7 +4574,7 @@ class V2C_VS10ProjectExtensionsParser < V2C_VS10BaseElemParser
     found = be_optimistic()
     setting_key = subelem_xml.name
     parser = nil # IMPORTANT: reset it!
-    log_debug(setting_key)
+    logger.debug(setting_key)
     case setting_key
     when 'VisualStudio'
       parser = V2C_VS10ProjectExtensionsVisualStudioParser.new(subelem_xml, get_project())
