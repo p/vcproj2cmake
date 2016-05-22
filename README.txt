@@ -814,15 +814,29 @@ While TFS is an awful lot better than VSS, it still has some painful
 shortcomings, among these:
 - non-cross-platform tool
   --> inescapable (hard) dependency on non-performant Windows servers
+      (and then you *still* need to have virus scanning installed as well,
+      on top of existing non-performance)
      --> filename case sensitivity issue:
         - certain TFS 2008 API functions
-          return *other* case insensitive results
-          for *different* case sensitive input
+          return *other* (read: WRONG!) case insensitive results
+          for *different* case sensitive client-side requests
+        - I have even heard reports of
+          TFS returning a differently-cased "other" file
+          for *every other* fetch attempt
+          (read: a very annoying insufficiently deterministic
+          "toggling" effect)
+          It might even be thinkable
+          that TFS is unable to provide a "good" solution to this,
+          since they quite possibly *are* forced to do
+          alternate-toggling between differently-cased items
+          in case both item names *are* equally valid. D'oh...
 - interfacing towards much more strongly cross-platform SCMs such as SVN or git
   is h*ll:
   - SvnBridge project rates itself as "stable" - everything but
     as of 2013... (I'm working on getting this fixed -
-    with my public patch applied it's much improved now)
+    with my currently available public patch state applied
+    - see http://github.com/andim2/SvnBridge -
+    it's already much improved now)
   - git-tfs requires installation on a Windows server as well,
     or Mono-tainted untested alternative use
   - the "new" second git-tfs project (Java-based) that was just released
@@ -830,30 +844,39 @@ shortcomings, among these:
   - also, OpenTF hasn't seen a commit since 2008
 - does not support sub modules (as supported by git, SVN, CVS etc.)
   Rather, one is expected to do
-  wild
-  branching between various Team Projects.
+  (potentially sufficiently wild
+  if one isn't cautious enough)
+  branching between various Team Projects
+  (with the ensuing risk of introducing full-circle criss-cross branching).
   For strongly upstream-based mix-and-match bundling-type project organisation
-  (AFAICT The Way It Should Be), this sounds like h*ll.
+  (AFAICT The Way It Should Be), this sounds like h*ll
+  (at least unless applying sufficiently strict discipline).
   Sub modules are an important way to divide-and-conquer, as mentioned by
   http://git.661346.n2.nabble.com/Git-performance-results-on-a-large-repository-td7250867.html
 - no disconnected SCM operation (server connection required;
   server is managing client state on server side
   [and BTW their solution of working "disconnected" is annoyingly cumbersome
-  at both disconnecting *and* reconnecting ops])
+  at both disconnecting *and* reconnecting ops -
+  it is claimed to be much improved
+  in sufficiently new TFS versions though])
 - installation is a veritable PITA (e.g. due to multi-server setup for
   perfect spreading of Microsoft infrastructure lockin)
 - astonishing stability issues
   - a work item tracking exception occurring in server layers
     that was caused by one client will cause (TFS2008):
     a) the server to not handle the NullPtrException in a benign way
+       i.e., to crash, hard
        (no client input whatsoever should ever cause a server to croak,
        ideally ["INPUT VALIDATION"])
     b) several *other*, *unrelated* VS clients
        which happen to have ongoing TFS transmissions to be affected
-       by this single-client server session failure (WTH?)
-    c) those other clients to *not* handle this failure in a benign way
-       (final failure due to simply locking up as an entirely inadequate
-        "handling" of this problem that originated on the side of the server)
+       by this server session failure caused by single-client (WTH?)
+    c) those other clients to *not* handle *this* *rippling* failure
+       in a benign way
+       (final failure
+       due to simply locking up
+       as an entirely inadequate "handling" of this problem
+       that originated on the side of the server)
     --> whoa, triple FAIL!! This behaviour is surely being acerbated
         by the fact that TFS is a centralized (non-disconnected operation)
         lock-in type infrastructure
@@ -863,26 +886,154 @@ shortcomings, among these:
     despite both original blobs emphatically NOT containing any embedded NUL
     [quite likely the root cause is a string handling off-by-1 in
     TFS's merge code!]
+- relatively immature GUI support at least on VS2010/TFS2008
+  - picking of specific history changeset ranges within history view
+    is not possible
+    (need to either scroll to the world's end
+    in a very large root-level history,
+    or determine an item
+    which has a change at the commit that you are interested in
+    yet still is peripheral enough
+    to have few history entries in total)
+  - non-searchable views
+    (history view i.e. changeset list can *not* be content-searched - OUCH!)
+  - non-scrollable views in some cases
+  - TFS does *not* provide a whole-commit view
+    of *all* changes within a commit by default
+    ("git show" will directly list *all* change hunks
+    within an entire *atomic* and thus *whole-scope-relevant* commit)
+  - renames not shown properly, or even completely vanished in some cases,
+    even in history of more root-level items
+  - annotate (blame) cannot be passed a specific changeset range in advance -
+    as opposed to e.g. SVN (you have to go to history and then via context
+    menu choose to do an annotate on a certain older revision
+  - result: TFS Web interface somehow actually manages
+    to have more features than VS Source Control Explorer,
+    in certain areas
+  - consequences: git has *MUCH* better tracking
+    (searchable "git log", whole-history "git log -p", multi-file "git show")
+    of source change traces, i.e. a source-history-focussed view
+    (which after all is what counts for good development productivity)
+    vs. TFS (there's no comparison, really!)
+- entire folder hierarchy in local working copy of SCM
+  is *read-only* unless checked out:
+  this means that it is impossible
+  to simply and directly have
+  modifications of SCM items
+  be done by any tools -
+  rather, these tools need to aggregate
+  a rather very ill-desired dependency
+  on SCM mechanisms
+  (since they themselves
+  need to be able to
+  checkout all relevant items
+  prior to modification)
+- maximum path length limit in SCM repo operations
+  (c.f. universally annoying
+  Win32 MAX_PATH 260 chars limitation issue),
+  causing fetching of repo parts with longish paths
+  into potentially longish client-side folders to fail
+  with annoying error messages
+  (this is an issue at least on the client side in case of Windows clients -
+  it is not known whether there is a server-side path length issue, too)
+- one *never* knows
+  which official SCM state
+  a local workstation is at
+  (very helpful for regression hunting / bisection - NOT!):
+  - TFS allows for *single-item* updates
+    to SCM-side HEAD revision
+    (does *NOT* stay at per-commit boundaries
+    *which would usually properly guarantee WHOLE-COMMIT CONSISTENCY*!!),
+    and does so even while editing an item
+    ("oh look, there is a newer version of that file,
+    I'll have it checked out for ya,
+    I'm sure you'll like it")
+  - determine HEAD revision
+    (TFS: changeset of checkout)
+    of local working copy:
+    - TFS: tf history . /r /noprompt /stopafter:1 /version:W
+           [not provided by GUI I believe]
+    - git: git show
+  - folder compare of specific revision vs. base folder:
+    - TFS2013: compare folder view
+      will list changes within *entire* local directory space
+      (and there is *no* dialog checkbox available
+      "compare against SCM-registered items only")
+    - git: will list changes of items which are SCM-registered only
+      (non-SCM items are to be handled
+      via "git status")
+    Impact of TFS use:
+    the compare result will be rendered ultimately unusable
+    since it will be flooded with thousands of *.tlog files
+    due to also (and unconditionally) taking into account
+    all non-SCM-registered items
+    (such as all build artefact directories!!)
+    within SCM scope
+  --> result:
+  Differentiation of *local* modifications vs.
+  *officially published*
+  (*and thus often test-proven*!)
+  SCM state
+  is sufficiently unclear
+  --> much higher risk of "zombie change hunting"
+      on "degraded developer workstations"
+      due to rather insufficiently differentiating between
+      SCM-side base and local state
+  OTOH due to TFS
+  weirdly centrally maintaining state of all workstations
+  on the server side,
+  perhaps there is a way
+  to centrally (and sufficiently reliably) determine
+  which workstation currently is at which state -
+  this might enable
+  pinpointing good candidates
+  (since one knows in advance
+  which machines might currently show bug symptoms)
+  for a "distributed form" of regression hunting
 - no three-way-merges via common base version, i.e. base-less merge
   http://jamesmckay.net/2011/01/baseless-merges-in-team-foundation-server-why/
-  (uncertain whether this is still true nowadays)
+  (I guess this is not the case any more nowadays,
+  but I don't know for sure)
 
 For a very revealing discussion with many experienced SCM/ALM people,
 you may look at
 http://jamesmckay.net/2011/02/team-foundation-server-is-the-lotus-notes-of-version-control-tools/
+Another interesting article:
+http://benscheirman.com/2009/10/how-the-tfs-team-is-listening/
 
 In short, it is strongly advisable to also check out
 other
 (possibly much more transparently developed)
-ALM solutions such as Trac, Jira, Polarion
-before committing to a specific product
+ALM-enabling solutions such as Trac, Jira, Polarion
+before committing to a specific SCM/ALM combo
 (these environments make up a large part of your team's development inner loop,
 thus a wrong choice will cost dearly in wasted time and inefficiency).
 http://almatters.wordpress.com/2010/08/19/alm-open-source-tools-eclipse-mylyn-subclipse-trac-subversion/
 
 
 While git might be an obvious cross-platform SCM candidate,
-Windows integration of Mercurial probably is somewhat better.
+its user interface arguably is pretty complex,
+and
+Windows integration of Mercurial probably is somewhat better
+(but Mercurial is much less common).
+
+OTOH when choosing an SCM
+it might be best to shoot for a maximum of compatibility,
+and in that case choosing Subversion (SVN) actually seems to be a good idea,
+for the following reasons:
+- very mature
+- very strong Internet support
+- pretty wide use (although quite a bit less than git I believe)
+- broad compatibility of other SCMs with SVN (git-svn, Mercurial etc.) -
+  power users will thus relatively easily be able to use
+  "their" SCM of choice
+  against a central SVN repo
+- quite possibly one will encounter e.g. older EDA tools
+  which support SVN only
+- much more "simple" operation
+  (higher user interface usability)
+  than distributed SCMs such as git
+
 Useful URLs:
 http://mercurial.selenic.com/wiki/SourceSafeConversion
 http://code.google.com/p/vss2git/
