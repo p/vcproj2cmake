@@ -583,6 +583,54 @@ module ResultsFound
   FOUND_SKIP = 2
 end
 
+class V2C_ParserBase < V2C_LoggerBase
+  include ResultsFound
+
+  # Hmm, we might want to keep @info_elem in this class,
+  # to be able to reference it for logging.
+  def initialize(
+    info_elem_out)
+    super(
+      )
+    @info_elem = info_elem_out
+  end
+  attr_accessor :info_elem
+
+  # @brief Descriptively named helper, to save a ton of useless comments :) ("be optimistic :)")
+  def be_optimistic; FOUND_TRUE end
+
+  def log_call; logger.debug 'CALLED' end
+  def log_found(found, label); logger.debug "FOUND: #{found} #{label}" end
+  def parser_error(str_description, critical)
+    do_raise = false
+    if true == critical
+      # TODO: should check a user-side config setting on whether to actually abort.
+      do_raise = true
+    end
+    if true == do_raise
+      raise V2C_ParserError, str_description
+    else
+      logger.error(str_description)
+    end
+  end
+  # TODO: should probably be providing lowlevel helper with a number of bit flags
+  # (info/warn/error | logic/syntax | please_report/critical)
+  def parser_warn_syntax(str_description); logger.warn('syntax: ' + str_description) end
+  def parser_error_logic(str_description); parser_error('logic: ' + str_description, false) end
+  def parser_error_syntax(str_description); parser_error('syntax: ' + str_description, false) end
+  def parser_warn_syntax_semi_compatible(str_description)
+    parser_warn_syntax(str_description + ' Possibly other tools might choke when encountering this issue, thus you should correct the file content.')
+  end
+  def parser_error_todo(str_description)
+    # Could add a config flag to indicate whether to aggressively report
+    # such issues as an (often abort-inducing) error or using warn instead.
+    parser_error('todo: ' + str_description, false)
+  end
+  def error_unknown_case_value(description, val)
+    parser_error("unknown/unsupported/corrupt #{description} case value! (#{val})", true)
+  end
+end
+
 class V2C_Info_Condition
   def initialize(
     str_condition = nil)
@@ -1866,54 +1914,6 @@ EOF
 
   #log_info "str is now #{str}, was #{str_scan_copy}"
   return str
-end
-
-class V2C_ParserBase < V2C_LoggerBase
-  include ResultsFound
-
-  # Hmm, we might want to keep @info_elem in this class,
-  # to be able to reference it for logging.
-  def initialize(
-    info_elem_out)
-    super(
-      )
-    @info_elem = info_elem_out
-  end
-  attr_accessor :info_elem
-
-  # @brief Descriptively named helper, to save a ton of useless comments :) ("be optimistic :)")
-  def be_optimistic; FOUND_TRUE end
-
-  def log_call; logger.debug 'CALLED' end
-  def log_found(found, label); logger.debug "FOUND: #{found} #{label}" end
-  def parser_error(str_description, critical)
-    do_raise = false
-    if true == critical
-      # TODO: should check a user-side config setting on whether to actually abort.
-      do_raise = true
-    end
-    if true == do_raise
-      raise V2C_ParserError, str_description
-    else
-      logger.error(str_description)
-    end
-  end
-  # TODO: should probably be providing lowlevel helper with a number of bit flags
-  # (info/warn/error | logic/syntax | please_report/critical)
-  def parser_warn_syntax(str_description); logger.warn('syntax: ' + str_description) end
-  def parser_error_logic(str_description); parser_error('logic: ' + str_description, false) end
-  def parser_error_syntax(str_description); parser_error('syntax: ' + str_description, false) end
-  def parser_warn_syntax_semi_compatible(str_description)
-    parser_warn_syntax(str_description + ' Possibly other tools might choke when encountering this issue, thus you should correct the file content.')
-  end
-  def parser_error_todo(str_description)
-    # Could add a config flag to indicate whether to aggressively report
-    # such issues as an (often abort-inducing) error or using warn instead.
-    parser_error('todo: ' + str_description, false)
-  end
-  def error_unknown_case_value(description, val)
-    parser_error("unknown/unsupported/corrupt #{description} case value! (#{val})", true)
-  end
 end
 
 # XML support as required by VS7+/VS10 parsers:
