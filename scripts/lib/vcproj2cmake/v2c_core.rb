@@ -577,6 +577,12 @@ end
 class V2C_ParserError < V2C_ChainedError
 end
 
+module ResultsFound
+  FOUND_FALSE = 0
+  FOUND_TRUE = 1
+  FOUND_SKIP = 2
+end
+
 class V2C_Info_Condition
   def initialize(
     str_condition = nil)
@@ -1863,9 +1869,7 @@ EOF
 end
 
 class V2C_ParserBase < V2C_LoggerBase
-  FOUND_FALSE = 0
-  FOUND_TRUE = 1
-  FOUND_SKIP = 2
+  include ResultsFound
 
   # Hmm, we might want to keep @info_elem in this class,
   # to be able to reference it for logging.
