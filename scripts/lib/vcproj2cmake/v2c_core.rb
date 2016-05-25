@@ -2510,6 +2510,7 @@ end
 
 module V2C_VSToolCompilerDefines
   include V2C_Compiler_Defines
+  include V2C_VSToolDefines
   include V2C_VSToolDefineDefines
   TEXT_ADDITIONALINCLUDEDIRECTORIES = 'AdditionalIncludeDirectories'
   TEXT_ASSEMBLERLISTINGLOCATION = 'AssemblerListingLocation'
