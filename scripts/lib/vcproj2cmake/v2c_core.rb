@@ -10900,16 +10900,20 @@ def v2c_convert_local_projects_inner(
     # Q&D parser switch...
     parser = nil # IMPORTANT: reset it!
     case parser_project_extension
-    when '.csproj'
-      log_warn 'Detected C# .csproj - not supported.'
+    when '.vcxproj', '.csproj'
+      is_fully_supported = true
+      if '.csproj' == parser_project_extension
+        is_fully_supported = false
+      end
+      if not is_fully_supported
+        log_warn "Detected #{parser_project_extension} - not fully supported."
+      end
       parser = V2C_VS10ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
     when '.vcproj'
       parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
     when '.vfproj'
       log_warn 'Detected Fortran .vfproj - parsing is VERY experimental, needs much more work!'
       parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
-    when '.vcxproj'
-      parser = V2C_VS10ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
     end
 
     if not parser.nil?
