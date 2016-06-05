@@ -9747,7 +9747,7 @@ end
 # "does this really need a conversion update?"
 # checks
 # (well, at least at parsing time!).
-def v2c_convert_project_inner(
+def v2c_convert_local_projects_inner(
   p_script,
   p_master_project,
   arr_p_parser_proj_files,
@@ -9854,7 +9854,7 @@ def v2c_convert_local_projects_outer(
   script_location = File.expand_path(project_converter_script_filename)
   p_script = Pathname.new(script_location)
 
-  v2c_convert_project_inner(
+  v2c_convert_local_projects_inner(
     p_script,
     p_master_project,
     arr_p_parser_proj_files,
