@@ -314,8 +314,8 @@ FILENAME_MAP_LIB_DIRS = File.join($v2c_config_dir_local, 'lib_dirs_mappings.txt'
 FILENAME_MAP_LIB_DIRS_DEP = File.join($v2c_config_dir_local, 'lib_dirs_dep_mappings.txt')
 
 
-# Additionally enable Ruby's $DEBUG in case
-# we want at least debug level.
+# Additionally enable Ruby's $DEBUG in case:
+# - we want at least debug level
 if $v2c_log_level >= V2C_LOG_LEVEL_DEBUG
   $DEBUG=true
 end

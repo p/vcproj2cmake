@@ -651,14 +651,14 @@ sln2mak (.sln to Makefile converter),
   http://www.codeproject.com/KB/cross-platform/sln2mak.aspx
 
 I just have to state that we have a very unfair advantage here:
-while this script implementation possibly might be better
-than our converter (who knows...), the fact that we are converting
-towards CMake (and thus to a whole universe of supported build environments
-/IDEs via CMake's generators) probably renders any shortcomings
-that we might have rather very moot.
-Plus, sln2mak is C#-based (requiring an awkwardly _disconnected_ conversion
-of Non-Windows-targeted build settings on a Windows box),
-whereas vcproj2cmake is a fully cross-platform-deployable (Ruby) converter.
+- while this script implementation possibly might be better
+  than our converter (who knows...), the fact that we are converting
+  towards CMake (and thus to a whole universe of supported build environments
+  /IDEs via CMake's generators) probably renders any shortcomings
+  that we might have rather very moot
+- sln2mak is C#-based (requiring an awkwardly _disconnected_ conversion
+  of Non-Windows-targeted build settings on a Windows box),
+  whereas vcproj2cmake is a fully cross-platform-deployable (Ruby) converter
 
 
 http://sourceforge.net/projects/folders4cmake/
