@@ -5263,7 +5263,7 @@ class V2C_GenerateIntoTempFile
   end
   def generate
     tmpfile_path = nil
-    Tempfile.open(@tempfile_prefix) { |tmpfile|
+    Tempfile.open(tempfile_prefix()) { |tmpfile|
       textOut = V2C_TextStreamSyntaxGeneratorBase.new(tmpfile, @textstream_attributes)
       yield textOut
       tmpfile_path = tmpfile.path
@@ -5284,6 +5284,13 @@ class V2C_GenerateIntoTempFile
       mover = V2C_CMakeFilePermanentizer.new(tmpfile_path, @destination_file, @file_create_permissions)
       mover.process
     }
+  end
+
+  # https://mauricio.github.io/2014/08/03/quick-tips-for-doing-io-with-ruby.html
+  #   "Also, always set at least a prefix for your temp folders to make sure you can spot them if they aren’t deleted or if your app crashes and doesn’t remove them for some reason, at least you’ll know which code failed to execute."
+  def tempfile_prefix(
+    )
+    @tempfile_prefix
   end
 end
 
