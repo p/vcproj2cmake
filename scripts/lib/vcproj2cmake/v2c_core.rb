@@ -5861,10 +5861,10 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     write_comment_at_level(COMMENT_LEVEL_STANDARD, "See function implementation/docs in #{VCPROJ2CMAKE_FUNC_CMAKE_LOCATION}")
   end
   def put_converter_script_location(
-    script_location_relative_to_master)
+    p_script_location_relative_to_master)
     return if $v2c_generator_one_time_conversion_only
 
-    if script_location_relative_to_master.nil?
+    if p_script_location_relative_to_master.nil?
       generator_error('converter script location missing!?')
     end
 
@@ -5880,7 +5880,7 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     v2c_converter_script_location = path_join(
       get_dereferenced_variable_name(
         NAME_V2C_MASTER_PROJECT_SOURCE_DIR),
-      script_location_relative_to_master)
+      p_script_location_relative_to_master)
     gen_put_converter_script_location(
       v2c_converter_script_location)
   end
@@ -7507,11 +7507,11 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
   def initialize(
     textOut,
     relative_path_to_root,
-    script_location_relative_to_master)
+    p_script_location_relative_to_master)
     super(
       textOut)
     @relative_path_to_root = relative_path_to_root
-    @script_location_relative_to_master = script_location_relative_to_master
+    @p_script_location_relative_to_master = p_script_location_relative_to_master
   end
   def generate
     put_per_scope_setup(@relative_path_to_root)
@@ -7545,7 +7545,7 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
       # with differing scripts, such a use case can be considered
       # sufficiently pathological, thus we will not support it.
       put_converter_script_location(
-        @script_location_relative_to_master)
+        @p_script_location_relative_to_master)
       write_set_var_bool(str_per_scope_definition_guard, true)
     end
   end
@@ -7664,19 +7664,19 @@ end
 class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
   def initialize(
     textOut,
-    local_dir,
+    p_local_dir,
     p_solution_dir,
     arr_local_project_targets,
-    script_location_relative_to_master)
+    p_script_location_relative_to_master)
     super(
       textOut)
-    @local_dir = local_dir
+    @p_local_dir = p_local_dir
     @p_solution_dir = p_solution_dir
     @master_project_dir = p_solution_dir.to_s
     @arr_local_project_targets = arr_local_project_targets
-    @script_location_relative_to_master = script_location_relative_to_master
+    @p_script_location_relative_to_master = p_script_location_relative_to_master
     local_dir_fqpn = File.expand_path(
-      local_dir)
+      p_local_dir)
     p_local_dir_fqpn = Pathname.new(
       local_dir_fqpn)
     p_root = Pathname.new(
@@ -7766,7 +7766,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
   def generate_body
     # FIXME: all these function arguments are temporary crap! - they're supposed to be per-ProjectTarget mostly.
     generate_projects(
-      @local_dir,
+      @p_local_dir,
       @generator_base,
       @map_lib_dirs,
       @map_lib_dirs_dep,
@@ -7777,7 +7777,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     write_func_v2c_directory_post_setup
   end
   def generate_projects(
-    local_dir,
+    p_local_dir,
     generator_base,
     map_lib_dirs,
     map_lib_dirs_dep,
@@ -7786,7 +7786,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     @arr_local_project_targets.each { |project_info|
       project_generator = V2C_CMakeProjectTargetGenerator.new(
         project_info,
-        local_dir,
+        p_local_dir,
         self,
         @textOut)
 
@@ -7807,7 +7807,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     bootstrap_generator = V2C_CMakeGlobalBootstrapCodeGenerator.new(
       @textOut,
       str_conversion_root_rel,
-      @script_location_relative_to_master)
+      @p_script_location_relative_to_master)
     bootstrap_generator.generate
     put_include_vcproj2cmake_defs()
     put_hook_pre()
@@ -8087,10 +8087,10 @@ class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
     @p_generator_proj_file = p_generator_proj_file
     @p_local_dir = @p_generator_proj_file.dirname
     @arr_projects = arr_projects
-    @script_location_relative_to_master = p_v2c_script.relative_path_from(
+    @p_script_location_relative_to_master = p_v2c_script.relative_path_from(
       p_master_project)
     @flag_source_groups_enabled = flag_source_groups_enabled
-    #logger.debug "p_v2c_script #{p_v2c_script} | p_master_project #{p_master_project} | @script_location_relative_to_master #{@script_location_relative_to_master}"
+    #logger.debug "p_v2c_script #{p_v2c_script} | p_master_project #{p_master_project} | @p_script_location_relative_to_master #{@p_script_location_relative_to_master}"
   end
   def generate
     output_file_location = @p_generator_proj_file.to_s
@@ -8108,7 +8108,7 @@ class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
           @p_local_dir,
           @p_master_project,
           @arr_projects,
-          @script_location_relative_to_master)
+          @p_script_location_relative_to_master)
       end
       content_generator.generate
       # Keep per-project source group generation as close together
@@ -8195,13 +8195,13 @@ class V2C_CMakeRootFileContentGenerator < V2C_CMakeLocalFileContentGenerator
   def initialize(
     textOut,
     projects_list_file,
-    script_location_relative_to_master)
+    p_script_location_relative_to_master)
     super(
       textOut,
-      '.',
+      Pathname.new('.'),
       Pathname.new('.'),
       [ ],
-      script_location_relative_to_master)
+      p_script_location_relative_to_master)
     @projects_list_file = projects_list_file
   end
   def generate_footer
@@ -8222,12 +8222,12 @@ end
 def v2c_source_root_write_cmakelists_skeleton_file(p_master_project, p_script, path_cmakelists_txt, projects_list_file)
   generate_skeleton = V2C_GenerateIntoTempFile.new('vcproj2cmake_root_skeleton', path_cmakelists_txt)
   generate_skeleton.generate { |textOut|
-    script_location_relative_to_master = p_script.relative_path_from(
+    p_script_location_relative_to_master = p_script.relative_path_from(
       p_master_project)
     content_generator = V2C_CMakeRootFileContentGenerator.new(
       textOut,
       projects_list_file,
-      script_location_relative_to_master)
+      p_script_location_relative_to_master)
     content_generator.generate
   }
 rescue Exception
