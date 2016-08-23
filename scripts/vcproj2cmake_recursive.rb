@@ -519,7 +519,7 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
 
     workPackage.each { |arr_work_units_per_worker|
       threads << Thread.new(arr_work_units_per_worker) { |arr_work_units|
-        log_info "Thread #{Thread.current.object_id} started."
+        log_info("Thread #{Thread.current.object_id} started.")
         execute_work_units(unitGlobal, arr_work_units)
       }
     }
