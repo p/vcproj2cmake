@@ -475,15 +475,27 @@ def execute_work_unit(
 end
 
 def execute_work_units(
+    scope_id,
     unitGlobal,
     arr_work_units)
-  log_info 'Worker starting.'
-  arr_work_units.each { |work_unit|
-    execute_work_unit(
-      unitGlobal,
-      work_unit)
-  }
-  log_info 'Worker finished.'
+  begin
+    log_info "#{scope_id}: worker starting."
+    arr_work_units.each { |work_unit|
+      execute_work_unit(
+        unitGlobal,
+        work_unit)
+    }
+  # Need to have open-coded exception logging lines here
+  # since foreign-process exceptions will be swallowed silently!
+  rescue # NoMethodError etc.
+    log_error "#{scope_id}: EXCEPTION!! [context info not available]"
+    raise
+  rescue Exception => e
+    log_error "#{scope_id}: EXCEPTION!! #{e.inspect} #{e.backtrace}"
+    raise
+  else
+    log_info "#{scope_id}: worker ended/finished normally."
+  end
 end
 
 def execute_work_package(unitGlobal, workPackage, want_multi_processing)
@@ -493,18 +505,11 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
     workPackage.each { |arr_work_units_per_worker|
       childpid = fork {
         mypid = Process.pid()
-        log_info("Process ID #{mypid} started.")
-        # Nope, does not seem to be true - anyway,
-        # we'll keep this code since I'm not entirely sure...
-        #begin
-          execute_work_units(
-            unitGlobal,
-            arr_work_units_per_worker)
-        #rescue Exception => e
-        #  # Need to add an open-coded exception logging line
-        #  # since foreign-process exceptions will be swallowed silently!
-        #  log_error "EXCEPTION!! #{e.inspect} #{e.backtrace}"
-        #end
+        scope_id = "Process ID #{mypid}"
+        execute_work_units(
+          scope_id,
+          unitGlobal,
+          arr_work_units_per_worker)
       }
       log_info("Worker PID #{childpid} forked.")
     }
@@ -534,8 +539,9 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
     workPackage.each { |arr_work_units_per_worker|
       threads << Thread.new(arr_work_units_per_worker) { |arr_work_units|
         mytid = Thread.current.object_id
-        log_info("Thread #{mytid} started.")
+        scope_id = "Thread ID #{mytid}"
         execute_work_units(
+          scope_id,
           unitGlobal,
           arr_work_units)
       }
@@ -564,8 +570,10 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
     log_info 'Waiting for all worker threads: done.'
   else # single-process
     log_info 'Recursively converting projects, single-process.'
+    scope_id = "Process"
     workPackage.each { |arr_work_units_per_worker|
       execute_work_units(
+        scope_id,
         unitGlobal,
         arr_work_units_per_worker)
     }
