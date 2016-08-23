@@ -10544,7 +10544,7 @@ def v2c_is_project_file_generated_by_cmake_grep(str_proj_file)
 end
 
 def v2c_vcproj_look_for_cmake_content(str_proj_file)
-  is_cmake = false
+  is_generated_by_cmake = false
   File.open(str_proj_file) { |io|
     doc = REXML::Document.new io
     attr_defines = LoopVarPreconstruct()
@@ -10554,21 +10554,21 @@ def v2c_vcproj_look_for_cmake_content(str_proj_file)
           attr_defines = compiler_xml.attributes['PreprocessorDefinitions']
           if not attr_defines.nil?
             if attr_defines.to_s.match(VCPROJ_DEF_CONTENT_CMAKE_INTDIR_REGEX_OBJ)
-              is_cmake = true
+              is_generated_by_cmake = true
               break
             end
           end
         }
         # http://stackoverflow.com/questions/5286861/how-to-break-from-nested-loops-in-ruby
-        break if is_cmake
+        break if is_generated_by_cmake
       }
     }
   }
-  is_cmake
+  is_generated_by_cmake
 end
 
 def v2c_vcxproj_look_for_cmake_content(str_proj_file)
-  is_cmake = false
+  is_generated_by_cmake = false
   File.open(str_proj_file) { |io|
     doc = REXML::Document.new io
     attr_defines = attr_add_in = LoopVarPreconstruct()
@@ -10578,31 +10578,31 @@ def v2c_vcxproj_look_for_cmake_content(str_proj_file)
           attr_defines = compiler_xml.elements['PreprocessorDefinitions']
           if not attr_defines.nil?
             if attr_defines.to_s.match(VCPROJ_DEF_CONTENT_CMAKE_INTDIR_REGEX_OBJ)
-              is_cmake = true
+              is_generated_by_cmake = true
               break
             end
           end
         }
         # http://stackoverflow.com/questions/5286861/how-to-break-from-nested-loops-in-ruby
-        break if is_cmake
+        break if is_generated_by_cmake
       }
-      break if is_cmake
+      break if is_generated_by_cmake
       project_xml.elements.each('ItemGroup') { |itemgroup_xml|
         itemgroup_xml.elements.each(V2C_VS10Defines_File_List_Types::TEXT_CUSTOMBUILD) { |cbuild_xml|
           attr_add_in = cbuild_xml.elements['AdditionalInputs']
           if not attr_add_in.nil?
             if attr_add_in.to_s.match(VCXPROJ_CMAKEFILES_REGEX_OBJ)
-              is_cmake = true
+              is_generated_by_cmake = true
               break
             end
           end
         }
         # http://stackoverflow.com/questions/5286861/how-to-break-from-nested-loops-in-ruby
-        break if is_cmake
+        break if is_generated_by_cmake
       }
     }
   }
-  is_cmake
+  is_generated_by_cmake
 end
 
 # New variant to check for a CMake-generated project file:
@@ -10616,34 +10616,34 @@ end
 VCPROJ_EXT_REGEX_OBJ = %r{\.vcproj$}
 VCXPROJ_EXT_REGEX_OBJ = %r{\.vcxproj$}
 def v2c_is_project_file_generated_by_cmake_xml(str_proj_file)
-  is_cmake = false
+  is_generated_by_cmake = false
   case str_proj_file
   when VCPROJ_EXT_REGEX_OBJ
-    is_cmake = v2c_vcproj_look_for_cmake_content(str_proj_file)
+    is_generated_by_cmake = v2c_vcproj_look_for_cmake_content(str_proj_file)
   when VCXPROJ_EXT_REGEX_OBJ
-    is_cmake = v2c_vcxproj_look_for_cmake_content(str_proj_file)
+    is_generated_by_cmake = v2c_vcxproj_look_for_cmake_content(str_proj_file)
   else
     log_error "unsupported project file type #{str_proj_file}!"
   end
-  is_cmake
+  is_generated_by_cmake
 end
 
 # Originally I wanted to do analysis via encoding-aware XML parser,
 # but that is so dog slow (10s+ for a processing of about 30s)
 # that I decided to go for the initial fast-grep then XML-after-crash route.
 def v2c_is_project_file_generated_by_cmake(str_proj_file)
-  is_cmake = false
+  is_generated_by_cmake = false
   begin
-    is_cmake = v2c_is_project_file_generated_by_cmake_grep(str_proj_file)
+    is_generated_by_cmake = v2c_is_project_file_generated_by_cmake_grep(str_proj_file)
   rescue Exception => e
     # If a rough UTF-8 grep crashed&burned, then switch to full XML parsing
     if V2C_Ruby_Compat::string_start_with(e.message, 'invalid byte sequence')
-      is_cmake = v2c_is_project_file_generated_by_cmake_xml(str_proj_file)
+      is_generated_by_cmake = v2c_is_project_file_generated_by_cmake_xml(str_proj_file)
     else
       raise
     end
   end
-  is_cmake
+  is_generated_by_cmake
 end
 
 # Check whether the directory already contains a CMakeLists.txt,
