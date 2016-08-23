@@ -7364,12 +7364,11 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     config_name.clone.upcase.tr(' ','_')
   end
   def get_name_of_per_config_type_property(property_name, config_name)
-    if config_name.nil?
-      res = property_name
-    else
+    res = property_name
+    if not config_name.nil?
       config_name_upper = get_config_name_upcase(
         config_name)
-      res = property_name + '_' + config_name_upper
+      res += '_' + config_name_upper
     end
     return res
   end
@@ -8078,13 +8077,12 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeFileListGeneratorBase
     # in case of parent_source_group being "Source Files":
     # "Re: [CMake] SOURCE_GROUP does not function in Visual Studio 8"
     #   http://www.mail-archive.com/cmake@cmake.org/msg05002.html
-    if parent_source_group.nil?
-      this_source_group = ''
-    else
-      if parent_source_group == ''
-        this_source_group = group_name
-      else
+    this_source_group = ''
+    if not parent_source_group.nil?
+      if parent_source_group != ''
         this_source_group = parent_source_group + CMAKE_SOURCE_GROUP_HIERARCHY_SEPARATOR + group_name
+      else
+        this_source_group = group_name
       end
     end
 
