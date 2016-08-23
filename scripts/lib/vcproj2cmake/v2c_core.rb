@@ -8218,7 +8218,7 @@ class V2C_CMakeCompilerInfoGenerator < V2C_CMakeTargetGenerator
     arr_defs_assignments = Array.new
     str_define = LoopVarPreconstruct()
     hash_ensure_sorted_each(hash_defines_augmented).each { |key, value|
-      str_define = value.empty? ? key.dup : "#{key}=#{value}"
+      str_define = value.empty? ? key.dup : key + '=' + value
       arr_defs_assignments.push(str_define)
     }
     write_property_compile_definitions(condition, arr_defs_assignments, map_defines)
@@ -10076,7 +10076,7 @@ class V2C_CMakeSourceGroupFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
   def generate_project_source_groups(target_name, arr_group_info)
     logger.debug "SOURCEGROUPS: #{arr_group_info.inspect}"
     hide_within_function_scope("source_groups_setup_#{target_name}") {
-      sg_var_prefix = "#{target_name}_sg_"
+      sg_var_prefix = target_name + '_sg_'
       sg_name = sg_var_prefix + 'name_'
       sg_regex = sg_var_prefix + 'regex_'
       sg_files = sg_var_prefix + 'files_'
