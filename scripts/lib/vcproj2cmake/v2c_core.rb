@@ -5413,12 +5413,12 @@ class V2C_ProjectValidator
     }
   end
   def validate_project
-    validate_target_configs(@project_info.arr_target_config_info)
     #log_debug "project data: #{@project_info.inspect}"
     if @project_info.name.nil?; validation_error('name not set!?') end
     if @project_info.orig_environment_shortname.nil?; validation_error('original environment not set!?') end
     # FIXME: Disabled for TESTING only - should re-enable a fileset check once VS10 parsing is complete.
     #if @project_info.main_files.nil?; validation_error('no files!?') end
+    validate_target_configs(@project_info.arr_target_config_info)
     need_config_info = true
     # An external-build Makefile config type does not need config information
     # (compiler, linker, MIDL etc.)
