@@ -5436,7 +5436,87 @@ end
 class V2C_ValidationError < StandardError
 end
 
-class V2C_ProjectValidator
+# TODO: please note that at least some of the objects to be validated
+# probably ought to directly have their own inner validation method
+# (many checks can be done internally already), to then be invoked first.
+class V2C_ValidatorBase
+  def validate
+    validation_error(
+      'Derived validate() not implemented!?')
+  end
+  private
+  def validate_via_class_name(
+    validator_class_name,
+    object)
+    validator = Object::const_get(validator_class_name).new(object)
+    validator.validate
+  end
+  def validation_error(
+    str_message)
+    raise V2C_ValidationError, str_message
+  end
+  def validate_filesystem_item(
+    fs_item)
+    # FIXME!
+  end
+end
+
+class V2C_SimpleObjectValidator < V2C_ValidatorBase
+  def initialize(object)
+    @object = object
+  end
+  def validate
+    validate_object(
+      @object)
+  end
+end
+
+class V2C_TargetConfigValidator < V2C_SimpleObjectValidator
+  private
+  def validate_object(
+    object)
+    target_config_info = object
+    if target_config_info.cfg_type == V2C_TargetConfig_Defines::CFG_TYPE_INVALID
+      validation_error('config type not set!?')
+    end
+  end
+end
+
+class V2C_LinkerInfoValidator < V2C_SimpleObjectValidator
+  def validate_object(
+    object)
+    linker_info = object
+    validate_filesystem_item(
+      linker_info.module_definition_file)
+  end
+end
+
+class V2C_ConfigInfoToolsValidator < V2C_SimpleObjectValidator
+  def validate_object(
+    object)
+    tools = object
+    arr_linker_info = tools.get(
+      V2C_Tool_Types::TYPE_LINK)
+    arr_linker_info.each do |linker_info_curr|
+      validate_via_class_name(
+        'V2C_LinkerInfoValidator',
+        linker_info_curr)
+    end
+  end
+end
+
+class V2C_ConfigInfoValidator < V2C_SimpleObjectValidator
+  private
+  def validate_object(
+    object)
+    config_info = object
+    validate_via_class_name(
+      'V2C_ConfigInfoToolsValidator',
+      config_info.tools)
+  end
+end
+
+class V2C_ProjectValidator < V2C_ValidatorBase
   def initialize(
     project_info)
     @project_info = project_info
@@ -5445,18 +5525,10 @@ class V2C_ProjectValidator
     validate_project
   end
   private
-  def validate_config(
-    target_config_info)
-    if target_config_info.cfg_type == V2C_TargetConfig_Defines::CFG_TYPE_INVALID
-      validation_error('config type not set!?')
-    end
-  end
-  def validate_target_configs(
-    arr_target_config_info)
-    arr_target_config_info.each { |target_config_info|
-      validate_config(
-        target_config_info)
-    }
+  def validation_error(
+    str_message)
+    super(
+      "Project #{@project_info.name}: #{str_message}; #{@project_info.inspect}")
   end
   def validate_project
     #log_debug "project data: #{@project_info.inspect}"
@@ -5474,14 +5546,23 @@ class V2C_ProjectValidator
         @project_info.arr_config_info)
     end
   end
-  def validation_error(
-    str_message)
-    raise V2C_ValidationError, "Project #{@project_info.name}: #{str_message}; #{@project_info.inspect}"
+  def validate_target_configs(
+    arr_target_config_info)
+    arr_target_config_info.each { |target_config_info|
+      validate_via_class_name(
+        'V2C_TargetConfigValidator',
+        target_config_info)
+    }
   end
   def validate_config_infos(
     arr_config_info)
     if obj_nil_or_empty(arr_config_info)
       validation_error('no config information for a project type which probably requires it!?')
+    end
+    arr_config_info.each do |config_info|
+      validate_via_class_name(
+        'V2C_ConfigInfoValidator',
+        config_info)
     end
   end
 end
