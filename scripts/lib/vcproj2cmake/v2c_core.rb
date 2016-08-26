@@ -5445,14 +5445,17 @@ class V2C_ProjectValidator
     validate_project
   end
   private
-  def validate_config(target_config_info)
+  def validate_config(
+    target_config_info)
     if target_config_info.cfg_type == V2C_TargetConfig_Defines::CFG_TYPE_INVALID
       validation_error('config type not set!?')
     end
   end
-  def validate_target_configs(arr_target_config_info)
+  def validate_target_configs(
+    arr_target_config_info)
     arr_target_config_info.each { |target_config_info|
-      validate_config(target_config_info)
+      validate_config(
+        target_config_info)
     }
   end
   def validate_project
@@ -5471,7 +5474,8 @@ class V2C_ProjectValidator
         @project_info.arr_config_info)
     end
   end
-  def validation_error(str_message)
+  def validation_error(
+    str_message)
     raise V2C_ValidationError, "Project #{@project_info.name}: #{str_message}; #{@project_info.inspect}"
   end
   def validate_config_infos(
