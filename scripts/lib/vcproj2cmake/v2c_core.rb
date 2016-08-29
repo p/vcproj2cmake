@@ -7791,7 +7791,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         arr_target_expr = get_target_syntax_expression(@target.name)
         build_type = condition.get_build_type()
         property_name = get_name_of_per_config_type_property('COMPILE_FLAGS', build_type)
-        put_property(arr_target_expr, PROP_APPEND, property_name, arr_flags)
+        put_property(
+          arr_target_expr,
+          PROP_APPEND,
+          property_name,
+          arr_flags)
       end
     end
   end
