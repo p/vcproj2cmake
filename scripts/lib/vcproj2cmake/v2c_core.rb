@@ -1501,9 +1501,9 @@ class V2C_File_List_Info
   APPEND_CASE_INSENSITIVE = 1
   APPEND_WARN_MISMATCH = 2
   def append_file(
-    file_info,
+    info_file,
     flags)
-    path_new = file_info.path_relative
+    path_new = info_file.path_relative
     # Always try a fast precise match lookup first,
     # irrespective of additional case insensitivity desires.
     existing_file = @hash_files[
@@ -1527,12 +1527,12 @@ class V2C_File_List_Info
     end
     if existing_file.nil?
       @arr_files.push(
-        file_info)
+        info_file)
       @hash_files[
-        path_new] = file_info
+        path_new] = info_file
     else
       existing_file.extend(
-        file_info)
+        info_file)
     end
   end
   def get_file(
@@ -1560,10 +1560,10 @@ class V2C_File_List_Info
     return list_types[type]
   end
   def get_generated_files
-    array_collect_compact(@arr_files) do |file_info|
-      #puts "#{file_info.path_relative} #{file_info.is_generated}"
-      next if false == file_info.is_generated
-      file_info.path_relative
+    array_collect_compact(@arr_files) do |info_file|
+      #puts "#{info_file.path_relative} #{info_file.is_generated}"
+      next if false == info_file.is_generated
+      info_file.path_relative
     end
   end
 end
@@ -1863,7 +1863,7 @@ VS7_PROP_VAR_MATCH_REGEX_OBJ = %r{\$\([[:alnum:]_]+\)}
 Files_str = Struct.new(
   :filter_info,
   :arr_sub_filters,
-  :arr_file_infos)
+  :arr_info_file)
 
 def is_known_environment_variable_convention(config_var, config_var_type_descr)
   # Side note: need to use String.replace()
@@ -3409,14 +3409,14 @@ end
 class V2C_VS7FileParser < V2C_VS7ParserBase
   def initialize(
     file_xml,
-    arr_file_infos_out)
+    arr_info_file_out)
     super(
       file_xml,
-      arr_file_infos_out)
+      arr_info_file_out)
     @info_file = V2C_Info_File.new
     @add_to_build = false
   end
-  def get_arr_file_infos; @info_elem end
+  def get_arr_info_file; @info_elem end
   def parse
     logger.debug('parse')
 
@@ -3485,7 +3485,7 @@ class V2C_VS7FileParser < V2C_VS7ParserBase
   def parse_verify
     found = super
     if true == @add_to_build
-      get_arr_file_infos().push(@info_file)
+      get_arr_info_file().push(@info_file)
     end
     found
   end
@@ -3495,10 +3495,10 @@ end
 # (C/C++/ObjectiveC etc.):
 BUILD_UNIT_FILE_TYPES_REGEX_OBJ = %r{\.(c|C|m|M)}
 # VERY DIRTY interim helper, not sure at all where it will finally end up at
-def check_have_build_units_in_file_list(arr_file_infos)
+def check_have_build_units_in_file_list(arr_info_file)
   have_build_units = false
-  arr_file_infos.each { |file|
-    if BUILD_UNIT_FILE_TYPES_REGEX_OBJ.match(file.path_relative)
+  arr_info_file.each { |info_file|
+    if BUILD_UNIT_FILE_TYPES_REGEX_OBJ.match(info_file.path_relative)
       have_build_units = true
       break
     end
@@ -3559,13 +3559,13 @@ class V2C_VS7FilterParser < V2C_VS7ParserBase
       end
     end
 
-    arr_file_infos = Array.new
+    arr_info_file = Array.new
     vcproj_filter_xml.elements.each { |subelem_xml|
       elem_parser = nil # IMPORTANT: reset it!
       case subelem_xml.name
       when 'File'
         logger.debug('FOUND File')
-        elem_parser = V2C_VS7FileParser.new(subelem_xml, arr_file_infos)
+        elem_parser = V2C_VS7FileParser.new(subelem_xml, arr_info_file)
         elem_parser.parse
       when 'Filter'
         logger.debug('FOUND Filter')
@@ -3580,11 +3580,11 @@ class V2C_VS7FilterParser < V2C_VS7ParserBase
       end
     } # |subelem_xml|
 
-    if not arr_file_infos.empty?
-      files_str[:arr_file_infos] = arr_file_infos
+    if not arr_info_file.empty?
+      files_str[:arr_info_file] = arr_info_file
 
       if true != get_project().have_build_units
-        get_project().have_build_units = check_have_build_units_in_file_list(arr_file_infos)
+        get_project().have_build_units = check_have_build_units_in_file_list(arr_info_file)
       end
     end
     return true
@@ -4270,12 +4270,12 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
       parser_warn_syntax_semi_compatible("Incompatible ItemGroup element! Item group name #{@group_type_name} vs. element name #{subelem_xml.name}! Visual Studio seems to correctly handle even such differently-typed elements within a group.")
     end
     list_curr = select_list(subelem_xml.name)
-    file_info = V2C_Info_File.new
-    file_parser = V2C_VS10ItemGroupFileElemParser.new(subelem_xml, file_info)
+    info_file = V2C_Info_File.new
+    file_parser = V2C_VS10ItemGroupFileElemParser.new(subelem_xml, info_file)
     found = file_parser.parse
     if FOUND_TRUE == found
       list_curr.append_file(
-        file_info,
+        info_file,
         V2C_File_List_Info::APPEND_CASE_INSENSITIVE|V2C_File_List_Info::APPEND_WARN_MISMATCH)
     else
       found = super
@@ -6621,14 +6621,14 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
     @skip_non_sources = skip_non_sources
   end
   def filter_files(
-    arr_file_infos)
+    arr_info_file)
     arr_local_sources = nil
-    if not arr_file_infos.nil?
-      arr_local_sources = array_collect_compact(arr_file_infos) do |file|
-        f = file.path_relative
+    if not arr_info_file.nil?
+      arr_local_sources = array_collect_compact(arr_info_file) do |info_file|
+        f = info_file.path_relative
 
         # We fully expect ALL non-generated files to already be available!
-        if false == file.is_generated
+        if false == info_file.is_generated
           v2c_generator_check_file_accessible(
             @project_dir,
             f,
@@ -6638,8 +6638,8 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
         end
 
         ## Ignore all generated files, for now.
-        #if true == file.is_generated
-        #  logger.fixme "#{file.path_relative} is a generated file - skipping!"
+        #if true == info_file.is_generated
+        #  logger.fixme "#{info_file.path_relative} is a generated file - skipping!"
         #  next # no complex handling, just skip
         #end
 
@@ -6724,10 +6724,10 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeFileListGeneratorBase
     if not files_str[:arr_sub_filters].nil?
       arr_sub_filters = files_str[:arr_sub_filters]
     end
-    arr_file_infos = files_str[:arr_file_infos]
+    arr_info_file = files_str[:arr_info_file]
 
     arr_local_sources = filter_files(
-      arr_file_infos)
+      arr_info_file)
 
     # TODO: CMake is said to have a weird bug in case of parent_source_group being "Source Files":
     # "Re: [CMake] SOURCE_GROUP does not function in Visual Studio 8"
@@ -7055,7 +7055,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
     midl_info = arr_midl_info[0]
 
-    file_list_midl.arr_files.each { | idl_file|
+    file_list_midl.arr_files.each { | info_file_idl|
       #put_v2c_target_midl_preprocessor_definitions(...)
       #put_v2c_target_midl_options(GENERATESTUBLESSPROXIES ... MKTYPLIBCOMPATIBLE ... VALIDATEALLPARAMETERS ...)
       # put_v2c_target_midl_compile() will be the last line to be generated - the invoked function
@@ -7064,7 +7064,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         @target.name,
         config_info.condition,
         midl_info,
-        idl_file.path_relative)
+        info_file_idl.path_relative)
     }
   end
   def put_v2c_target_pdb_configure(
@@ -8310,8 +8310,8 @@ class V2C_CMakeSourceGroupFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
         name_flattened = util_flatten_string(group_info.name)
         write_set_var_quoted(sg_name + name_flattened, group_info.name)
         write_list_quoted(sg_regex + name_flattened, group_info.arr_filters)
-        arr_files = group_info.arr_files.collect { |file_info|
-          file_info.path_relative
+        arr_files = group_info.arr_files.collect { |info_file|
+          info_file.path_relative
         }
         write_list_quoted(sg_files + name_flattened, arr_files)
         arr_source_group_names_flattened.push(name_flattened)
@@ -8812,17 +8812,17 @@ class V2C_ProjectPostProcess < V2C_LoggerBase
     }
 
     project_info.file_lists.arr_file_lists.each { |file_list|
-      file_list.arr_files.each { |file|
-        if not file.filter.nil?
-          logger.debug "file #{file.path_relative} (filter #{file.filter})"
-          group_info = hash_group_info[file.filter]
+      file_list.arr_files.each { |info_file|
+        if not info_file.filter.nil?
+          logger.debug "file #{info_file.path_relative} (filter #{info_file.filter})"
+          group_info = hash_group_info[info_file.filter]
           if not group_info.nil?
-            logger.debug "Sorting file #{file.path_relative} into filter #{file.filter}"
-            group_info.arr_files.push(file)
+            logger.debug "Sorting file #{info_file.path_relative} into filter #{info_file.filter}"
+            group_info.arr_files.push(info_file)
           else
             # Hrmm, that should actually be a parser_error_syntax(),
             # which we don't have here...
-            logger.error "File #{file.path_relative} references unknown filter #{file.filter}!?"
+            logger.error "File #{info_file.path_relative} references unknown filter #{info_file.filter}!?"
           end
         end
       }
@@ -8830,12 +8830,12 @@ class V2C_ProjectPostProcess < V2C_LoggerBase
 
     sg_testing = false
     if false != sg_testing
-      file_c = V2C_Info_File.new; file_c.path_relative = 'test1.c'
-      file_cpp = V2C_Info_File.new; file_cpp.path_relative = 'test1.cpp'
-      sg1 = V2C_File_Filters_Group_Info.new('Sources', [ 'c', 'cpp' ], [ file_c, file_cpp ])
-      file_h = V2C_Info_File.new; file_h.path_relative = 'test1.h'
-      file_hpp = V2C_Info_File.new; file_hpp.path_relative = 'test1.hpp'
-      sg2 = V2C_File_Filters_Group_Info.new('Headers', [ 'h', 'hpp' ], [ file_h, file_hpp ])
+      info_file_c = V2C_Info_File.new; info_file_c.path_relative = 'test1.c'
+      info_file_cpp = V2C_Info_File.new; info_file_cpp.path_relative = 'test1.cpp'
+      sg1 = V2C_File_Filters_Group_Info.new('Sources', [ 'c', 'cpp' ], [ info_file_c, info_file_cpp ])
+      info_file_h = V2C_Info_File.new; info_file_h.path_relative = 'test1.h'
+      info_file_hpp = V2C_Info_File.new; info_file_hpp.path_relative = 'test1.hpp'
+      sg2 = V2C_File_Filters_Group_Info.new('Headers', [ 'h', 'hpp' ], [ info_file_h, info_file_hpp ])
       project_info.arr_filtered_file_lists = [ sg1, sg2 ]
     else
       project_info.arr_filtered_file_lists = hash_ensure_sorted_values(hash_group_info) # NOT: hash.values
@@ -8844,8 +8844,8 @@ class V2C_ProjectPostProcess < V2C_LoggerBase
   def detect_build_units(project_info)
     if not true == project_info.have_build_units
       project_info.file_lists.arr_file_lists.each { |file_list|
-        arr_file_infos = file_list.arr_files
-        have_build_units = check_have_build_units_in_file_list(arr_file_infos)
+        arr_info_file = file_list.arr_files
+        have_build_units = check_have_build_units_in_file_list(arr_info_file)
         if true == have_build_units
           project_info.have_build_units = have_build_units
           break
