@@ -7011,7 +7011,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       "Hook include after all definitions have been made\n" \
       "(but _before_ target is created using the source list!)")
   end
-  def put_v2c_target_midl_compile(target_name, condition, midl_info, idl_file)
+  def put_v2c_target_midl_compile(
+    target_name,
+    condition,
+    midl_info,
+    idl_file)
     # TODO: should use condition to alternatively open-code the conditional variable
     # here in case self-contained mode is requested.
     # ... = get_buildcfg_var_name_of_condition(condition)
@@ -7056,7 +7060,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       #put_v2c_target_midl_options(GENERATESTUBLESSPROXIES ... MKTYPLIBCOMPATIBLE ... VALIDATEALLPARAMETERS ...)
       # put_v2c_target_midl_compile() will be the last line to be generated - the invoked function
       # will then implement the MIDL custom command using all previously configured MIDL target properties settings.
-      put_v2c_target_midl_compile(@target.name, config_info.condition, midl_info, idl_file.path_relative)
+      put_v2c_target_midl_compile(
+        @target.name,
+        config_info.condition,
+        midl_info,
+        idl_file.path_relative)
     }
   end
   def put_v2c_target_pdb_configure(
