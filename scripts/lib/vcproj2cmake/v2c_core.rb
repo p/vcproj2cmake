@@ -5862,13 +5862,14 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     write_command_list_single_line(NAME_SET_PROPERTY, arr_prop_parms)
   end
   def put_property_source(
-    source_list_expr,
+    arr_file_elems,
     prop_key,
     arr_prop_vals)
     arr_arg_sources = [
       'SOURCE',
-      source_list_expr,
     ]
+    arr_arg_sources.concat(
+      arr_file_elems)
     put_property(
       arr_arg_sources,
       PROP_SET,
@@ -5883,9 +5884,12 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     write_list_quoted(file_list_var, arr_generated_files)
     deref_file_list_var = get_dereferenced_variable_name(
       file_list_var)
+    arr_file_elems = [
+      deref_file_list_var,
+    ]
     str_generated = get_keyword_bool(is_generated)
     put_property_source(
-      deref_file_list_var,
+      arr_file_elems,
       'GENERATED',
       [ str_generated ])
   end
