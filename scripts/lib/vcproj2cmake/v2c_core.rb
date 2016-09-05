@@ -5877,10 +5877,11 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def mark_files_as_generated(file_list_description, arr_generated_files, is_generated)
     file_list_var = "SOURCES_GENERATED_#{file_list_description}"
     write_list_quoted(file_list_var, arr_generated_files)
+    deref_file_list_var = get_dereferenced_variable_name(
+      file_list_var)
     str_generated = get_keyword_bool(is_generated)
     put_property_source(
-      get_dereferenced_variable_name(
-        file_list_var),
+      deref_file_list_var,
       'GENERATED',
       [ str_generated ])
   end
