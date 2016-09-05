@@ -5890,7 +5890,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def put_property_directory__compile_flags(attr_opts, flag_append)
     put_property([ 'DIRECTORY' ], flag_append, 'COMPILE_FLAGS', [ attr_opts ])
   end
-  def mark_files_as_generated(
+  def put_file_list_marked_as_generated(
     file_list_description,
     arr_generated_files,
     is_generated)
@@ -5901,11 +5901,9 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     arr_file_elems = [
       deref_file_list_var,
     ]
-    str_generated = get_keyword_bool(is_generated)
-    put_property_source(
+    file_list_mark_as_generated(
       arr_file_elems,
-      'GENERATED',
-      [ str_generated ])
+      is_generated)
   end
   # We'll enforce generating source_group() with a source list var _name_
   # parameter (since in many cases there are *many* files grouped here,
@@ -7013,7 +7011,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       arr_generated = file_list.get_generated_files
       #puts "file_list.name #{file_list.name} arr_generated #{arr_generated.inspect}"
       if not arr_generated.nil? and arr_generated.length > 0
-        mark_files_as_generated(
+        put_file_list_marked_as_generated(
           file_list.name,
           arr_generated,
           true)
@@ -7053,6 +7051,14 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         end
       end
     end
+  end
+  def file_list_mark_as_generated(
+    arr_file_elems,
+    is_generated)
+    put_property_source_bool(
+      arr_file_elems,
+      'GENERATED',
+      is_generated)
   end
   def file_list_mark_as_external_objects(arr_file_elems, is_external_obj)
     put_property_source_bool(arr_file_elems, 'EXTERNAL_OBJECT', is_external_obj)
