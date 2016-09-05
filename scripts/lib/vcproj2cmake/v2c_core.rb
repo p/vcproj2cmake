@@ -5890,7 +5890,10 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def put_property_directory__compile_flags(attr_opts, flag_append)
     put_property([ 'DIRECTORY' ], flag_append, 'COMPILE_FLAGS', [ attr_opts ])
   end
-  def mark_files_as_generated(file_list_description, arr_generated_files, is_generated)
+  def mark_files_as_generated(
+    file_list_description,
+    arr_generated_files,
+    is_generated)
     file_list_var = "SOURCES_GENERATED_#{file_list_description}"
     write_list_quoted(file_list_var, arr_generated_files)
     deref_file_list_var = get_dereferenced_variable_name(
@@ -7010,7 +7013,10 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       arr_generated = file_list.get_generated_files
       #puts "file_list.name #{file_list.name} arr_generated #{arr_generated.inspect}"
       if not arr_generated.nil? and arr_generated.length > 0
-        mark_files_as_generated(file_list.name, arr_generated, true)
+        mark_files_as_generated(
+          file_list.name,
+          arr_generated,
+          true)
       end
       #puts "file_list.name #{file_list.name}, arr_generated #{arr_generated}"
     }
