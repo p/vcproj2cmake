@@ -131,6 +131,8 @@
 			/>
 			<Tool
 				Name="VCMIDLTool"
+				MkTypLibCompatible="true"
+				SuppressStartupBanner="true"
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
