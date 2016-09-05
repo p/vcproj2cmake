@@ -5865,8 +5865,12 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     source_list_expr,
     prop_key,
     arr_prop_vals)
+    arr_arg_sources = [
+      'SOURCE',
+      source_list_expr,
+    ]
     put_property(
-      [ 'SOURCE', source_list_expr ],
+      arr_arg_sources,
       PROP_SET,
       prop_key,
       arr_prop_vals)
