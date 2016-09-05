@@ -332,8 +332,11 @@ arr_filtered_dirs.each do |dir|
   if not arr_dir_proj_files.nil?
     arr_dir_proj_files.delete_if { |proj_file_candidate|
       delete_element = false
-      if DETECT_MAC_OS_RESOURCE_FORK_FILES_REGEX_OBJ.match(proj_file_candidate)
-        proj_file_candidate_location = File.join(dir, proj_file_candidate)
+      if DETECT_MAC_OS_RESOURCE_FORK_FILES_REGEX_OBJ.match(
+        proj_file_candidate)
+        proj_file_candidate_location = File.join(
+          dir,
+          proj_file_candidate)
         log_info "Deleting element containing unrelated Mac OS resource fork file #{proj_file_candidate_location}"
         delete_element = true
       end
@@ -344,7 +347,9 @@ arr_filtered_dirs.each do |dir|
   # No project file at all? Skip directory.
   next if arr_dir_proj_files.nil?
 
-  str_cmakelists_file = File.join(dir, CMAKELISTS_FILE_NAME)
+  str_cmakelists_file = File.join(
+    dir,
+    CMAKELISTS_FILE_NAME)
 
   # Check whether the directory already contains a CMakeLists.txt,
   # and if so, whether it can be safely rewritten.
@@ -353,7 +358,8 @@ arr_filtered_dirs.each do |dir|
   if (!dir_entries.grep(/^#{CMAKELISTS_FILE_NAME}$/i).empty?)
     log_debug dir_entries
     log_debug "#{CMAKELISTS_FILE_NAME} exists in #{dir}, checking!"
-    want_new_cmakelists_file = v2c_want_cmakelists_rewritten(str_cmakelists_file)
+    want_new_cmakelists_file = v2c_want_cmakelists_rewritten(
+      str_cmakelists_file)
     next if false == want_new_cmakelists_file
   end
 
