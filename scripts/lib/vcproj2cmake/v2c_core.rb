@@ -6853,8 +6853,7 @@ class V2C_CMakeFileListGenerator_VS10 < V2C_CMakeFileListGeneratorBase
     source_files_variable = write_sources_list(
       file_list.name,
       arr_local_sources)
-    register_new_source_list_variable(
-      source_files_variable)
+    source_files_variable
   end
 end
 
@@ -6979,13 +6978,16 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # in some environments this might happen. Thus we might want to skip adding
     # the resource files list (VS10: ResourceCompile list) to the target.
     file_lists.arr_file_lists.each { |file_list|
+      arr_dummy = [] # TODO: temporary dummy, to satisfy existing crap (remove!)
       filelist_generator = V2C_CMakeFileListGenerator_VS10.new(
         @textOut,
         project_name,
         @project_dir,
         file_list,
-        arr_sub_sources_for_parent)
-      filelist_generator.generate
+        arr_dummy)
+      source_files_variable = filelist_generator.generate
+      arr_sub_sources_for_parent.push(
+        source_files_variable)
       arr_generated = file_list.get_generated_files
       #puts "file_list.name #{file_list.name} arr_generated #{arr_generated.inspect}"
       if not arr_generated.nil? and arr_generated.length > 0
