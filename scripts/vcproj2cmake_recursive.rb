@@ -41,7 +41,7 @@ v2c_path_config = v2c_get_path_config(source_root)
 v2c_config_dir_source_root = v2c_path_config.get_abs_config_dir_source_root()
 time_cmake_root_folder = 0
 arr_excl_proj_expr = Array.new()
-time_cmake_root_folder = File.stat(v2c_config_dir_source_root).mtime.to_i
+time_cmake_root_folder = V2C_File_Stuff::file_stat_mtime_stamp_value_get(v2c_config_dir_source_root)
 excluded_projects = File.join(v2c_config_dir_source_root, 'project_exclude_list.txt')
 if File.exist?(excluded_projects)
   begin
@@ -230,13 +230,13 @@ end
 # FIXME: completely broken - should stat command_output_file against the file dependencies
 # in the array, to determine whether to rebuild.
 def command_file_dependencies_changed(command_output_file, arr_file_deps)
-  time_proj = File.stat(str_proj_file).mtime.to_i
+  time_proj = V2C_File_Stuff::file_stat_mtime_stamp_value_get(str_proj_file)
   time_cmake_folder = 0
   config_dir_local = File.join(f, $v2c_config_dir_local)
   if File.exist?(config_dir_local)
-    time_cmake_folder = File.stat(config_dir_local).mtime.to_i
+    time_cmake_folder = V2C_File_Stuff::file_stat_mtime_stamp_value_get(config_dir_local)
   end
-  time_CMakeLists = File.stat(str_cmakelists_file).mtime.to_i
+  time_CMakeLists = V2C_File_Stuff::file_stat_mtime_stamp_value_get(str_cmakelists_file)
   log_debug "TIME: CMakeLists #{time_CMakeLists} proj #{time_proj} cmake_folder #{time_cmake_folder} cmake_root_folder #{time_cmake_root_folder}"
   if time_proj > time_CMakeLists
     log_debug "modified: project!"

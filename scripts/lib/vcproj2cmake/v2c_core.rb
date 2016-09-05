@@ -39,6 +39,16 @@ end
 
 
 
+module V2C_File_Stuff
+  def file_stat_mtime_stamp_value_get(
+    filepath)
+    File.stat(
+      filepath).mtime.to_i
+  end
+
+  module_function :file_stat_mtime_stamp_value_get
+end
+
 V2C_LOG_LEVEL_OFF = 0
 V2C_LOG_LEVEL_FATAL = 1
 V2C_LOG_LEVEL_ERROR = 2
