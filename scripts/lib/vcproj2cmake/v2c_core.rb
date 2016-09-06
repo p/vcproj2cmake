@@ -2478,6 +2478,7 @@ class V2C_VSProjectParserBase < V2C_VSXmlParserBase
 end
 
 class V2C_VS7ProjectParserBase < V2C_VSProjectParserBase
+  private
   include V2C_VS7Syntax
 end
 
@@ -3922,6 +3923,7 @@ module V2C_VS10Syntax
 end
 
 class V2C_VS10ParserBase < V2C_VSXmlParserBase
+  private
   include V2C_VS10Syntax
 end
 
@@ -4814,6 +4816,7 @@ class V2C_VS10ProjectFileXmlParser < V2C_VSProjectFileXmlParserBase
     @flag_populate_existing = flag_populate_existing
     @project_idx = 0
   end
+  private
   include V2C_VS10Syntax
   def parse_element(subelem_xml)
     found = be_optimistic()
@@ -4835,7 +4838,6 @@ class V2C_VS10ProjectFileXmlParser < V2C_VSProjectFileXmlParserBase
     end
     return found
   end
-  private
   def populate_existing_projects; @flag_populate_existing end
 end
 
