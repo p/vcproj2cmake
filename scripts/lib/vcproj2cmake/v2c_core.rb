@@ -2688,7 +2688,12 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
     #arr_str.each { |str| logger.debug "SPLIT #{str}" }
     return arr_str
   end
-  def array_discard_empty(arr_values); arr_values.delete_if { |elem| elem.empty? } end
+  def array_discard_empty(
+    arr_values)
+    arr_values.delete_if { |elem|
+      elem.empty?
+    }
+  end
   def split_values_list_discard_empty(str_value)
     arr_values = split_values_list(str_value)
     #logger.debug "arr_values #{arr_values.class.name}"
