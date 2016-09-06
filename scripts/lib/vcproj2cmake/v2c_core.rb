@@ -6862,11 +6862,19 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def put_file_list(
     project_info,
     arr_sub_source_list_var_names)
-    do_put_source_group = true
+    # We currently have some unclean (separate) parsing of file list and source group info,
+    # resulting in different data structures.
+    # Thus skip some generation as suitable.
+    proj_main_files = project_info.main_files
+    do_put_source_group = nil != proj_main_files
     if false != do_put_source_group
+      # We should start reworking this handling on MSVS7 side
+      # once it's verified that source_group() support on MSVS10 side
+      # does work properly.
+      logger.fixme 'This source group generation ought to be removed in favour of the new source group handling'
       put_file_list_source_group_recursive(
         project_info.name,
-        project_info.main_files,
+        proj_main_files,
         nil,
         arr_sub_source_list_var_names)
     end
