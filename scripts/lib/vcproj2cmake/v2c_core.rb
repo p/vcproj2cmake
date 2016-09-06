@@ -9046,6 +9046,43 @@ class V2C_CMakeSourceGroupFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
   end
 end
 
+# Class extended with root/solution location specific parts
+# in addition to standard handling of content of a local CMakeLists.txt
+# file.
+class V2C_CMakeRootFileContentGenerator < V2C_CMakeLocalFileContentGenerator
+  def initialize(
+    textOut,
+    projects_list_file,
+    p_script_location_relative_to_master)
+    p_local_dir = Pathname.new('.')
+    p_solution_dir = Pathname.new('.')
+    arr_local_project_targets = [
+    ]
+    super(
+      textOut,
+      p_solution_dir,
+      p_script_location_relative_to_master,
+      p_local_dir,
+      arr_local_project_targets)
+    @projects_list_file = projects_list_file
+  end
+  def generate_footer
+    put_projects_list_file_include()
+    next_paragraph()
+    super
+  end
+  def put_projects_list_file_include
+    write_comment_at_level(COMMENT_LEVEL_MINIMUM,
+      "Includes the generated file that adds all sub directories\n" \
+      "which contain projects converted by V2C.")
+    # FIXME: asymmetric:
+    # self-contained mode (write_include()) adopts specific location,
+    # whereas the V2C helper function properly knows the location internally.
+    #write_include(@projects_list_file)
+    write_command_single_line('v2c_build_sub_projects_include', nil)
+  end
+end
+
 # Hrmm, I'm not quite sure yet where to aggregate this function...
 # (missing some proper generator base class or so...)
 def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name, raise_error)
@@ -9403,43 +9440,6 @@ rescue Exception
   raise V2C_FileGeneratorError, "Failed to generate projects list file to #{output_file_fqpn}."
 end
 
-
-# Class extended with root/solution location specific parts
-# in addition to standard handling of content of a local CMakeLists.txt
-# file.
-class V2C_CMakeRootFileContentGenerator < V2C_CMakeLocalFileContentGenerator
-  def initialize(
-    textOut,
-    projects_list_file,
-    p_script_location_relative_to_master)
-    p_local_dir = Pathname.new('.')
-    p_solution_dir = Pathname.new('.')
-    arr_local_project_targets = [
-    ]
-    super(
-      textOut,
-      p_solution_dir,
-      p_script_location_relative_to_master,
-      p_local_dir,
-      arr_local_project_targets)
-    @projects_list_file = projects_list_file
-  end
-  def generate_footer
-    put_projects_list_file_include()
-    next_paragraph()
-    super
-  end
-  def put_projects_list_file_include
-    write_comment_at_level(COMMENT_LEVEL_MINIMUM,
-      "Includes the generated file that adds all sub directories\n" \
-      "which contain projects converted by V2C.")
-    # FIXME: asymmetric:
-    # self-contained mode (write_include()) adopts specific location,
-    # whereas the V2C helper function properly knows the location internally.
-    #write_include(@projects_list_file)
-    write_command_single_line('v2c_build_sub_projects_include', nil)
-  end
-end
 
 def v2c_source_root_write_cmakelists_skeleton_file(p_master_project, p_script, path_cmakelists_txt, projects_list_file)
   generate_skeleton = V2C_GenerateIntoTempFile.new('vcproj2cmake_root_skeleton', path_cmakelists_txt)
