@@ -6358,6 +6358,44 @@ class V2C_ToolProcessorMIDL < V2C_ToolProcessorBase
   end
 end
 
+module V2C_ProjectInfoProvider
+  def get_project_info(
+    p_parser_proj_file)
+    arr_projects = Array.new
+
+    log_info "About to parse #{p_parser_proj_file}"
+    parser_project_extension = p_parser_proj_file.extname
+    # Q&D parser switch...
+    parser = nil # IMPORTANT: reset it!
+    case parser_project_extension
+    when '.vcxproj', '.csproj'
+      is_fully_supported = true
+      if '.csproj' == parser_project_extension
+        is_fully_supported = false
+      end
+      if not is_fully_supported
+        log_warn "Detected #{parser_project_extension} - not fully supported."
+      end
+      parser = V2C_VS10ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
+    when '.vcproj'
+      parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
+    when '.vfproj'
+      log_warn 'Detected Fortran .vfproj - parsing is VERY experimental, needs much more work!'
+      parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
+    end
+
+    if not parser.nil?
+      parser.parse
+    else
+      log_implementation_bug "No project parser found for project file #{p_parser_proj_file.to_s}!?"
+    end
+
+    arr_projects
+  end
+
+  module_function :get_project_info
+end
+
 class Util_TempFilePermanentizer
   MOVE_RES_OK = 1
   MOVE_RES_SAMECONTENT = 3
@@ -11027,32 +11065,10 @@ def v2c_convert_local_projects_inner(
   arr_projects = Array.new
 
   arr_p_parser_proj_files.each { |p_parser_proj_file|
-    log_info "About to parse #{p_parser_proj_file}"
-    parser_project_extension = p_parser_proj_file.extname
-    # Q&D parser switch...
-    parser = nil # IMPORTANT: reset it!
-    case parser_project_extension
-    when '.vcxproj', '.csproj'
-      is_fully_supported = true
-      if '.csproj' == parser_project_extension
-        is_fully_supported = false
-      end
-      if not is_fully_supported
-        log_warn "Detected #{parser_project_extension} - not fully supported."
-      end
-      parser = V2C_VS10ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
-    when '.vcproj'
-      parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
-    when '.vfproj'
-      log_warn 'Detected Fortran .vfproj - parsing is VERY experimental, needs much more work!'
-      parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
-    end
-
-    if not parser.nil?
-      parser.parse
-    else
-      log_implementation_bug "No project parser found for project file #{p_parser_proj_file.to_s}!?"
-    end
+    arr_projects_new = V2C_ProjectInfoProvider.get_project_info(
+      p_parser_proj_file)
+    arr_projects.concat(
+      arr_projects_new)
   }
 
   # E.g. in the case of solution root,
