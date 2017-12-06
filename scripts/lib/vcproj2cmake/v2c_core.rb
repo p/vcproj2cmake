@@ -144,6 +144,10 @@ def load_configuration
   puts str_msg
 end
 
+def load_configuration_get_load_paths
+  $: # == $LOAD_PATH
+end
+
 load_configuration()
 
 class V2C_Path_Config
@@ -362,6 +366,8 @@ end
 def log_implementation_bug(str); log_fatal(str) end
 
 
+# Place rather modest log level demands (such usability-affecting info should be visible at < Debug already!)
+log_info "Config file load search paths:\n#{load_configuration_get_load_paths().join("\n")}"
 
 if 0 < $v2c_validate_vcproj_abort_on_error
   # Definitely log a warning explicitly mentioning "exceptions",
