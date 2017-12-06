@@ -328,6 +328,7 @@ def log_debug(str)
 end
 
 def log_info(str)
+  return if $v2c_log_level < V2C_LOG_LEVEL_INFO
   # We choose to not log an INFO: prefix (reduce log spew).
   puts str
 end
