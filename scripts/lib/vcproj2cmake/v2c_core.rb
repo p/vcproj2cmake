@@ -271,7 +271,7 @@ def log_error(str); $stderr.puts "ERROR: #{str}" if $v2c_log_level >= V2C_LOG_LE
 # one would want to have _partial_ aborts of processing only.
 # Soft error handling via exceptions would apply to errors due to problematic input -
 # but errors due to bugs in our code should cause immediate abort.
-def log_fatal(str); log_error str + '. Aborting!' if $v2c_log_level > V2C_LOG_LEVEL_OFF; exit 1 end
+def log_fatal(str); log_error str + '. Aborting!' if $v2c_log_level >= V2C_LOG_LEVEL_FATAL; exit 1 end
 
 def log_implementation_bug(str); log_fatal(str) end
 
