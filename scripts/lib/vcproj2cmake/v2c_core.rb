@@ -260,18 +260,31 @@ def log_info(str)
   puts str
 end
 
-def log_warn(str); puts "WARNING: #{str}" if $v2c_log_level >= V2C_LOG_LEVEL_WARN end
+def log_warn(str)
+  return if $v2c_log_level < V2C_LOG_LEVEL_WARN
+  puts "WARNING: #{str}"
+end
 
-def log_todo(str); puts "TODO: #{str}" if $v2c_log_level >= V2C_LOG_LEVEL_ERROR end
+def log_todo(str)
+  return if $v2c_log_level < V2C_LOG_LEVEL_ERROR
+  puts "TODO: #{str}"
+end
 
-def log_error(str); $stderr.puts "ERROR: #{str}" if $v2c_log_level >= V2C_LOG_LEVEL_ERROR end
+def log_error(str)
+  return if $v2c_log_level < V2C_LOG_LEVEL_ERROR
+  $stderr.puts "ERROR: #{str}"
+end
 
 # FIXME: should probably replace most log_fatal()
 # with exceptions since in many cases
 # one would want to have _partial_ aborts of processing only.
 # Soft error handling via exceptions would apply to errors due to problematic input -
 # but errors due to bugs in our code should cause immediate abort.
-def log_fatal(str); log_error str + '. Aborting!' if $v2c_log_level >= V2C_LOG_LEVEL_FATAL; exit 1 end
+def log_fatal(str)
+  # Note: code flow here deviates from similar functions! (exit() *needs* to be executed, unconditionally *and* finally!)
+  log_error str + '. Aborting!' if $v2c_log_level >= V2C_LOG_LEVEL_FATAL;
+  exit 1
+end
 
 def log_implementation_bug(str); log_fatal(str) end
 
