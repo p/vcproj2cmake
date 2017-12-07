@@ -391,26 +391,63 @@ class Logger
   # filenames).
   # E.g. a dot directly following a filename would disrupt proper
   # filename-only selection.
-  def escape_item(file); "\"#{file}\"" end
+  def escape_item(file)
+    "\"#{file}\""
+  end
 
-  def error(str); log_error(formatter(str)) end
-  def fixme(str); log_warn(formatter('FIXME: ' + str)) end
-  def warn(str); log_warn(formatter(str)) end
-  def info(str); log_info(formatter(str)) end
-  def debug(str); log_debug(formatter(str)) end
+  def error(
+    str)
+    log_error(
+      formatter(
+        str))
+  end
+  def fixme(
+    str)
+    log_warn(
+      formatter(
+        'FIXME: ' + str))
+  end
+  def warn(
+    str)
+    log_warn(
+      formatter(
+        str))
+  end
+  def info(
+    str)
+    log_info(
+      formatter(
+        str))
+  end
+  def debug(
+    str)
+    log_debug(
+      formatter(
+        str))
+  end
 
   # "Ruby Exceptions", http://rubylearning.com/satishtalim/ruby_exceptions.html
   # NOTE: user side should probably re-raise() the exception in most cases...
   # VERY useful discussion:
   # "Does Ruby support exception wrapping (exception chaining)?"
   #   http://www.ruby-forum.com/topic/148193#977439
-  def unhandled_exception(e, action)
+  def unhandled_exception(
+    e,
+    action)
     log_error "unhandled exception occurred during #{action}! #{e.message}, #{e.backtrace.inspect}"
   end
-  def unhandled_functionality(str_description); fixme 'unhandled functionality: ' + str_description end
+  def unhandled_functionality(
+    str_description)
+    fixme 'unhandled functionality: ' + str_description
+  end
 
   private
-  def formatter(str) @class_name + ': ' + str end
+  def formatter(
+    str)
+    @class_name +
+    ': ' +
+    str
+  end
 end
 
 module Logging
@@ -421,10 +458,13 @@ module Logging
 
   # Global, memoized, lazy initialized instance of a logger
   def self.logger
-    @logger ||= Logger.new(self.class.name, STDOUT)
+    @logger ||= Logger.new(
+      self.class.name,
+      STDOUT)
   end
 
-  def todo(str)
+  def todo(
+    str)
     log_todo str
   end
 end
@@ -446,14 +486,17 @@ module Logging_Redirector
 
   # Global, memoized, lazy initialized instance of a logger
   def self.logger
-    @logger ||= Logger.new(self.class.name, STDOUT)
+    @logger ||= Logger.new(
+      self.class.name,
+      STDOUT)
   end
 
   def logger_member
     self # HACK - we're currently the base class of certain classes, but ultimately the logger target should be a ctor param (i.e., member) of all classes). This trick allows us to do a gradual migration :)
   end
 
-  def todo(str)
+  def todo(
+    str)
     log_todo str
   end
 end
