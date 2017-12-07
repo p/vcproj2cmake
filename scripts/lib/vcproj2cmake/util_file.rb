@@ -27,6 +27,13 @@ rescue LoadError
 end
 
 
+module UtilFileCommon
+  def chmod(mode, *files)
+    return File.chmod(mode, *files)
+  end
+  module_function :chmod
+end
+
 # http://wiki.ruby-portal.de/Modul
 
 # Unfortunately it seems modules cannot include a "base" module
@@ -35,13 +42,6 @@ end
 # Will thus simply make use of ftools/fileutils ternaries
 # (now updated to use different module variants) for now
 # until I actually know what to do...
-
-module UtilFileCommon
-  def chmod(mode, *files)
-    return File.chmod(mode, *files)
-  end
-  module_function :chmod
-end
 
 if have_ftools
 module V2C_Util_File # ftools variant
