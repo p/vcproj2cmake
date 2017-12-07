@@ -6,6 +6,7 @@
 
 require 'nokogiri' # missing? --> Debian distros: install ruby-nokogiri / libnokogiri-ruby package; TODO: perhaps have dynamically switching support for multiple [non-]available alternatives?
 require 'open-uri'
+puts 'open-uri: WARNING EXTREMELY INSECURE METHOD-PATCHING CODE!!!!!!! "Using open-uri? Check your code - you\'re playing with fire!" https://sakurity.com/blog/2015/02/28/openuri.html' # FIXME we should thus do something about it...
 
 require 'find'
 
