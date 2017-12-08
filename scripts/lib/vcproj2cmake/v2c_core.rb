@@ -6764,10 +6764,6 @@ class V2C_GeneratorBase < V2C_LoggerBase
   def error_unknown_case_value(description, val)
     raise V2C_GeneratorError, "unknown/unsupported/corrupt #{description} case value! (#{val})"
   end
-  def generator_error_unknown_case(
-    value)
-    raise V2C_GeneratorError, "Missing case (unsupported/corrupt?) for #{value}"
-  end
 end
 
 class V2C_SyntaxGeneratorBase < V2C_GeneratorBase
@@ -8913,8 +8909,9 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     when V2C_Item_List_Types::TYPE_NONE
       # There's nothing to be done here, right?
     else
-      generator_error_unknown_case(
-        'File list type ' + file_list_type.to_s)
+      error_unknown_case_value(
+        'File list type',
+        file_list_type)
     end
   end
   def file_list_generate_callback_invoker(project_name, file_list_type_magic, arr_file_elems, add_to_target)
@@ -9252,7 +9249,8 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     when V2C_Tool_PrePostBuildLink_Info::VARIANT_POSTBUILD
       str_cmake_build_event_type = 'POST_BUILD'
     else
-      generator_error_unknown_case(
+      error_unknown_case_value(
+        'build event',
         variant)
     end
     write_comment_at_level(
