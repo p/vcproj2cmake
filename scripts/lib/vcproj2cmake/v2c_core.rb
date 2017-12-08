@@ -395,6 +395,12 @@ class Logger
     "\"#{file}\""
   end
 
+  def fatal(
+    str)
+    log_fatal(
+      formatter(
+        str))
+  end
   def error(
     str)
     log_error(
