@@ -2222,7 +2222,10 @@ module V2C_Item_List_Types
   TYPE_CS_BOOTSTRAPPERPACKAGE = 14 # .csproj only?
   TYPE_CS_WEBREFERENCES = 15 # .csproj only?
   TYPE_CS_WEBREFERENCEURL = 16 # .csproj only?
-  TYPE_NONE = 17 # KEEP LAST ELEMENT
+  TYPE_FONT = 17
+  TYPE_IMAGE = 18
+  TYPE_TEXT = 19
+  TYPE_NONE = 20 # KEEP LAST ELEMENT
 end
 
 ITEM_LIST_DESCRIPTIONS = [
@@ -2244,6 +2247,9 @@ ITEM_LIST_DESCRIPTIONS = [
   File_List_Descr.new('bootstrapper_package', 'Probably a .csproj bootstrapper package entry'), # VS10: BootstrapperPackage
   File_List_Descr.new('web_references', 'Probably a .csproj WebReferences entry'), # VS10: WebReferences
   File_List_Descr.new('web_reference_url', 'Probably a .csproj WebReferenceUrl entry'), # VS10: WebReferenceUrl
+  File_List_Descr.new('font', 'Font'), # VS15: Font
+  File_List_Descr.new('image', 'Image'), # VS15: Image
+  File_List_Descr.new('text', 'Text'), # VS15: Text
   File_List_Descr.new('none', 'Does not participate in build'), # VS10: None
 ]
 
@@ -5144,6 +5150,9 @@ module V2C_VS10Defines_File_List_Types
   TEXT_BOOTSTRAPPERPACKAGE = 'BootstrapperPackage'
   TEXT_WEBREFERENCES = 'WebReferences'
   TEXT_WEBREFERENCEURL = 'WebReferenceUrl'
+  TEXT_FONT = 'Font'
+  TEXT_IMAGE = 'Image'
+  TEXT_TEXT = 'Text'
 end
 
 module V2C_VS10Defines
@@ -5485,6 +5494,12 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10BaseElemParser
       type = V2C_Item_List_Types::TYPE_CS_WEBREFERENCES
     when TEXT_WEBREFERENCEURL
       type = V2C_Item_List_Types::TYPE_CS_WEBREFERENCEURL
+    when TEXT_FONT
+      type = V2C_Item_List_Types::TYPE_FONT
+    when TEXT_IMAGE
+      type = V2C_Item_List_Types::TYPE_IMAGE
+    when TEXT_TEXT
+      type = V2C_Item_List_Types::TYPE_TEXT
     else
       logger.unhandled_functionality(
         'item list name ' +
@@ -9098,10 +9113,16 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
       file_list_mark_as_header_files(arr_file_elems, true)
     when V2C_Item_List_Types::TYPE_MIDL
       file_list_mark_as_idl_files(arr_file_elems)
-    when V2C_Item_List_Types::TYPE_RESOURCES_RC, V2C_Item_List_Types::TYPE_MANAGED_RESOURCES_RC
+    when V2C_Item_List_Types::TYPE_EMBEDDED_RESOURCES , V2C_Item_List_Types::TYPE_RESOURCES_RC , V2C_Item_List_Types::TYPE_MANAGED_RESOURCES_RC
       file_list_mark_as_resource_files(arr_file_elems)
     when V2C_Item_List_Types::TYPE_CS_BOOTSTRAPPERPACKAGE
       # quite likely not supported by CMake?
+    when V2C_Item_List_Types::TYPE_FONT
+      file_list_mark_as_font(arr_file_elems)
+    when V2C_Item_List_Types::TYPE_IMAGE
+      file_list_mark_as_image(arr_file_elems)
+    when V2C_Item_List_Types::TYPE_TEXT
+      file_list_mark_as_text(arr_file_elems)
     when V2C_Item_List_Types::TYPE_NONE
       # There's nothing to be done here, right?
     else
@@ -9188,6 +9209,15 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     # CMake VS7 local generator has some IDL language handling.
     # Not sure whether this is what we can or should do.
     file_list_set_language_source_property(arr_file_elems, 'IDL')
+  end
+  def file_list_mark_as_font(arr_file_elems)
+    file_list_report_type_handling_unknown('Font')
+  end
+  def file_list_mark_as_image(arr_file_elems)
+    file_list_report_type_handling_unknown('Image')
+  end
+  def file_list_mark_as_text(arr_file_elems)
+    file_list_report_type_handling_unknown('Text')
   end
   def file_list_set_language_source_property(arr_file_elems, lang)
     arr_lang = [
@@ -9921,6 +9951,13 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
   end
 
   private
+  def file_list_report_type_handling_unknown(
+    type)
+    # Some environments might have specifics which apply - perhaps:
+    # - XCODE_EXPLICIT_FILE_TYPE
+    # - XCODE_FILE_ATTRIBUTES
+    logger.todo('Not sure how to mark an item as type ' + type + '.')
+  end
   def generate_compiler_infos_all(
     tools,
     condition_target,
