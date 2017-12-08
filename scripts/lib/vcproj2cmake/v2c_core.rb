@@ -6766,7 +6766,7 @@ class V2C_GeneratorBase < V2C_LoggerBase
   end
   def generator_error_unknown_case(
     value)
-    logger.error("Missing case (unsupported/corrupt?) for #{value}")
+    raise V2C_GeneratorError, "Missing case (unsupported/corrupt?) for #{value}"
   end
 end
 
