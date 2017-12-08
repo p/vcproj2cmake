@@ -688,6 +688,9 @@ def report_and_reraise_unless_disallowed(
   # Hohumm, this variable is not really what we should be having here...
   if (V2C_Cfg::validate_vcproj_abort_on_error > 0)
     raise # escalate the problem
+  else
+    # Use very visible style:
+    log_warn '== ** IGNORING error condition - continuing! ** =='
   end
 end
 
@@ -5531,7 +5534,8 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10BaseElemParser
         elem_parser = V2C_VS10ItemGroupFiltersParser.new(
           @elem_xml,
           get_project().filters)
-      else # Treat *all* other (not specially handled) entries as files!
+      else
+        logger.warn "Unknown (not specially handled) entry #{elem_name} - treating as a file-typed item."
         elem_parser = V2C_VS10ItemGroupFilesParser.new(
           @elem_xml,
           elem_name,
