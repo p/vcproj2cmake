@@ -10551,7 +10551,7 @@ class V2C_CMakeSourceGroupFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
   end
   private
   def generate_project_source_groups(target_name, arr_group_info)
-    logger.debug "SOURCEGROUPS: #{arr_group_info.inspect}"
+    #logger.debug "SOURCEGROUPS: #{arr_group_info.inspect}" # extremely large
     hide_within_function_scope("source_groups_setup_#{target_name}") {
       sg_var_prefix = target_name + '_sg_'
       sg_name = sg_var_prefix + 'name_'
