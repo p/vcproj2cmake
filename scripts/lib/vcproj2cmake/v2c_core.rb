@@ -933,14 +933,12 @@ end
 # the condition chain and yield a resulting combined condition
 # for any sub element that's being queried.
 
-class V2C_Info_Elem_Base < Logger
-  include Logging_Redirector
+class V2C_Info_Elem_Base < V2C_LoggerBase
 
   def initialize(
     )
     super(
-      self.class.name,
-      STDOUT)
+      )
     @condition = nil # V2C_Info_Condition
   end
   attr_accessor :condition
