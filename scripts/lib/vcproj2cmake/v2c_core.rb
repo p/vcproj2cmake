@@ -138,6 +138,14 @@ def quoted_string_from_obj(
     "#{obj}")
 end
 
+# Helper to reliably emulate/mark abstract virtuals (C++)
+# [emulating C++ mechanisms may be a good thing or NOT...]
+# Related:
+# - https://stackoverflow.com/questions/512466/how-to-implement-an-abstract-class-in-ruby
+def raise_error_abstract_base_method
+  raise NotImplementedError,
+    'Abstract base method.'
+end
 
 # http://blog.robseaman.com/2009/7/11/detecting-the-number-of-processors-with-ruby
 # FIXME: it's rather undocumented
@@ -997,6 +1005,28 @@ class V2C_Tool_Define_Base_Info < V2C_Tool_Base_Info
     @hash_defines = Hash.new
   end
   attr_accessor :hash_defines
+  # Returns an array of the output locations (or file patterns)
+  # as specific to this tool type.
+  def get_output_locations_patterns
+    arr_outfiles = get_output_files_patterns()
+    arr_outfiles.compact!
+    arr_out = nil
+    if @output_directory.nil?
+      arr_out = arr_outfiles
+    else
+      arr_out = arr_outfiles.collect do |outfile|
+        File.join(
+          @output_directory,
+          outfile)
+      end
+    end
+    arr_out
+  end
+  # Helper to return an array of output files patterns
+  # as specific to this tool type. Ought to be derived per-tool-type.
+  def get_output_files_patterns
+    raise_error_abstract_base_method
+  end
 end
 
 class V2C_Tool_Specific_Info_Base
@@ -1372,6 +1402,14 @@ class V2C_Tool_MIDL_Info < V2C_Tool_Define_Base_Info
   attr_accessor :target_environment
   attr_accessor :type_library_name
   attr_accessor :validate_all_parameters
+  def get_output_files_patterns
+    [
+      @header_file_name,
+      @iface_id_file_name,
+      @proxy_file_name,
+      @type_library_name,
+    ]
+  end
 end
 
 module V2C_TargetConfig_Defines
@@ -9330,11 +9368,8 @@ class V2C_ProjectPostProcess < V2C_LoggerBase
       arr_midl_info = config_info.tools.get(
         V2C_Tool_Types::TYPE_MIDL)
       arr_midl_info.each { |midl_info|
-        arr_output_items.push(
-          midl_info.header_file_name,
-          midl_info.iface_id_file_name,
-          midl_info.proxy_file_name,
-          midl_info.type_library_name)
+        arr_output_items.concat(
+          midl_info.get_output_locations_patterns())
       }
     }
     arr_output_items.compact.each { |candidate|
