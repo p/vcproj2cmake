@@ -84,6 +84,18 @@ end
 
 
 
+def quoted_string_from_string(
+  str)
+   res = ''
+   res << '"' << str << '"'
+end
+
+def quoted_string_from_obj(
+  obj)
+  quoted_string_from_string(
+    "#{obj}")
+end
+
 
 module V2C_File_Stuff
   def file_stat_mtime_stamp_value_get(
@@ -392,7 +404,8 @@ class Logger
   # E.g. a dot directly following a filename would disrupt proper
   # filename-only selection.
   def escape_item(file)
-    "\"#{file}\""
+    quoted_string_from_obj(
+      file)
   end
 
   def fatal(
@@ -5941,7 +5954,8 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     doc_policy
   end
   def element_manual_quoting(elem)
-    return "\"#{elem}\""
+    return quoted_string_from_obj(
+      elem)
   end
   # Oh well... I don't know whether this helper is useful,
   # but it's probably useful to have a helper which indicates
