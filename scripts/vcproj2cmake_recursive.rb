@@ -637,8 +637,8 @@ def execute_work_units(
   end
 end
 
-def execute_work_package(unitGlobal, workPackage, want_multi_processing)
-  if (want_multi_processing and v2c_recursive_enable_processes)
+def execute_work_package(unitGlobal, workPackage, want_multiple_workers)
+  if (want_multiple_workers and v2c_recursive_enable_processes)
     # See also http://stackoverflow.com/a/1076445
     log_info 'Recursively converting projects, multi-process.'
     workPackage.each { |arr_work_units_per_worker|
@@ -667,7 +667,7 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
         exit worker_exitstatus
       end
     }
-  elsif (want_multi_processing and v2c_recursive_enable_threads)
+  elsif (want_multiple_workers and v2c_recursive_enable_threads)
     log_info 'Recursively converting projects, multi-threaded.'
 
     # "Ruby-Threads erzeugen"
@@ -728,14 +728,14 @@ def submit_work(unitGlobal, arr_work_units)
 
   num_work_units = arr_work_units.length
 
-  want_multi_processing = (num_work_units > 4)
+  want_multiple_workers = (num_work_units > 4)
 
   num_workers = 1
   # In case of parallel processing, do *not* spawn as many
   # workers as we have work units (for big project source trees
   # this could amount to a DoS of the machine).
   # Do that expensive CPU count query only if we need it...
-  if want_multi_processing
+  if want_multiple_workers
     num_cpu_cores = number_of_processors()
 
     # Definitely have one more worker than number of processing units created,
@@ -767,7 +767,7 @@ def submit_work(unitGlobal, arr_work_units)
     workPackage.push(arr_worker_work_units)
   end
 
-  execute_work_package(unitGlobal, workPackage, want_multi_processing)
+  execute_work_package(unitGlobal, workPackage, want_multiple_workers)
 end
 
 unitGlobal = UnitGlobalData.new(File.join(script_path, 'vcproj2cmake.rb'), source_root)
