@@ -99,6 +99,27 @@ STR_CTRL_TAB = "\t"
 STR_QUOTE = '"'
 
 
+# CENTRAL EXIT CODE PROTOCOL PARTS
+
+Exit_code_str = Struct.new(
+  :value,
+  :reason)
+
+V2C_EXIT_CODE_ERROR_MISC = :misc
+
+def get_exit_codes(
+)
+  h = Hash.new(
+  )
+
+  h[V2C_EXIT_CODE_ERROR_MISC] = Exit_code_str.new(
+    1,
+    'uncategorized error')
+
+  h
+end
+
+
 ### RUBY VERSION COMPAT STUFF BEGIN ###
 
 if (RUBY_VERSION < '1.9') # FIXME exact version where it got introduced?
@@ -435,7 +456,7 @@ def log_fatal(str)
   # Note: code flow here deviates from similar functions! (reason:
   # exit() *needs* to be executed, unconditionally *and* finally!)
   log_error str + '. Aborting!' if $v2c_log_level >= V2C_LOG_LEVEL_FATAL;
-  exit 1
+  exit get_exit_codes()[V2C_EXIT_CODE_ERROR_MISC].value
 end
 
 def log_implementation_bug(str); log_fatal(str) end
