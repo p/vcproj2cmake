@@ -718,13 +718,7 @@ def submit_work(unitGlobal, arr_work_units)
   # of a thread/process pool, but for now... I don't care. ;)
 
 
-  # Well, what I'd actually like to check is whether Process.fork()
-  # is supported or not. But this doesn't seem to be possible,
-  # thus we'll have to check for non-Windows (or possibly some
-  # check for POSIX might be doable somehow).
-  is_hampered_os = (ENV['OS'] == 'Windows_NT')
-
-  $v2c_enable_processes = (false == is_hampered_os)
+  $v2c_enable_processes = V2C_Ruby_Compat::have_support_Process_fork
 
   num_work_units = arr_work_units.length
 

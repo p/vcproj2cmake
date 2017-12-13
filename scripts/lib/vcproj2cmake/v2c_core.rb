@@ -114,6 +114,16 @@ end
 module V2C_Ruby_Compat
   alias string_start_with rc_string_start_with
   module_function :string_start_with
+
+  def have_support_Process_fork
+    # Well, what I'd actually like to check is whether Process.fork()
+    # is supported or not. But this doesn't seem to be possible,
+    # thus we'll have to check for non-Windows (or possibly some
+    # check for POSIX might be doable somehow).
+    is_hampered_os = (ENV['OS'] == 'Windows_NT')
+    (false == is_hampered_os)
+  end
+  module_function :have_support_Process_fork
 end
 
 ### RUBY VERSION COMPAT STUFF END ###
