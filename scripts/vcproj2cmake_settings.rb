@@ -106,6 +106,10 @@ $v2c_target_precompiled_header_enable = false
 # CMakeLists.txt, to allow for more flexibility.
 $v2c_generator_source_groups_enable = true
 
+# Whether we would like to have multi-process operation
+# for project conversion (vcproj2cmake_recursive.rb).
+$v2c_enable_processes = true
+
 # Whether we would like to have multi-threaded operation
 # for project conversion (vcproj2cmake_recursive.rb).
 # Not very useful since several Ruby implementations
