@@ -7650,7 +7650,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     doc_policy
   end
   def element_manual_quoting(elem)
-    return quoted_string_from_obj(
+    return quoted_string_from_string(
       elem)
   end
   # Oh well... I don't know whether this helper is useful,
