@@ -6794,7 +6794,7 @@ class V2C_SyntaxGeneratorBase < V2C_GeneratorBase
   def need_add_customization_hooks; false == is_one_time_conversion_only; end
 
   def handle_file_temporary_marker
-    return if $v2c_generator_one_time_conversion_only
+    return if is_one_time_conversion_only
     @textOut.put_file_header_temporary_marker()
   end
 end
@@ -7299,6 +7299,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   end
 
   private
+
   # http://www.cmake.org/Wiki/CMake/Language_Syntax says
   # one can use any of TRUE/FALSE, ON/OFF, YES/NO,
   # thus we'll obviously choose the shortest solution.
@@ -7596,7 +7597,7 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
   end
   def put_converter_script_location(
     p_script_location_relative_to_master)
-    return if $v2c_generator_one_time_conversion_only
+    return if is_one_time_conversion_only
 
     if p_script_location_relative_to_master.nil?
       generator_error('converter script location missing!?')
@@ -7672,15 +7673,15 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     put_include_directories(target_name, arr_include_path_to_pch_header, V2C_Include_Dir_Defines::BEFORE)
   end
   def put_customization_hook(include_file)
-    return if $v2c_generator_one_time_conversion_only
+    return if false == need_add_customization_hooks
     gen_put_customization_hook(include_file)
   end
   def put_customization_hook_from_cmake_var(include_file_var)
-    return if $v2c_generator_one_time_conversion_only
+    return if false == need_add_customization_hooks
     gen_put_customization_hook_from_cmake_var(include_file_var)
   end
   def put_customization_hook_commented_from_cmake_var(include_file_var, comment_level, comment)
-    return if $v2c_generator_one_time_conversion_only
+    return if false == need_add_customization_hooks
     write_comment_at_level(comment_level, comment)
     put_customization_hook_from_cmake_var(include_file_var)
   end
@@ -9999,7 +10000,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     # This function invokes CMakeLists.txt rebuilder only
     # (TODO: should be changed into specific naming!),
     # thus skip on one-time generation.
-    return if $v2c_generator_one_time_conversion_only
+    return if is_one_time_conversion_only
 
     # Rationale: keep count of generated lines of CMakeLists.txt
     # to a bare minimum -
