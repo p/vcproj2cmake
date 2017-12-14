@@ -236,6 +236,7 @@ DETECT_MAC_OS_RESOURCE_FORK_FILES_REGEX_OBJ = %r{^\._}
 def filter_unwanted_project_files(
   arr_dir_proj_files)
   if not arr_dir_proj_files.nil?
+    delete_element = LoopVarPreconstruct()
     arr_dir_proj_files.delete_if { |proj_file_candidate|
       delete_element = false
       if DETECT_MAC_OS_RESOURCE_FORK_FILES_REGEX_OBJ.match(

@@ -118,6 +118,22 @@ end
 
 
 
+# Comment-only helper:
+# Variable assignments in very heavy loops
+# better ought to have
+# an initial pre-loop assignment
+# (pre-construction in more globally-/longer-living outer scope):
+# http://ruby-doc.org/docs/ruby-doc-bundle/ProgrammingRuby/book/trouble.html
+# "Create Locals Outside Blocks"
+# NOTE: this aspect does *not* seem to apply to block variables
+# (at least in sufficiently new Ruby versions [1.9.3p484]),
+# since for block variables (used by .each, .delete_if etc.)
+# that will then output
+#    file.rb:NNNN: warning: shadowing outer local variable - VAR
+#    file.rb:NNNN: warning: assigned but unused variable - VAR
+def LoopVarPreconstruct; nil end
+
+
 # WARNING: the direct concatenation used here
 # ('"' << file << '"')
 # may lead to
@@ -732,6 +748,8 @@ def read_mappings(filename_mappings, mappings)
   # "tag:PLATFORM1:PLATFORM2=tag_replacement2:PLATFORM3=tag_replacement3"
   if File.exist?(filename_mappings)
     #Hash[*File.read(filename_mappings).scan(/^(.*)=(.*)$/).flatten]
+    line_cooked = arr_comments_separator = line_payload = LoopVarPreconstruct()
+    pattern_orig = expr_replacement = LoopVarPreconstruct()
     File.open(filename_mappings, 'r').each do |line|
       line_cooked = line.chomp
       arr_comments_separator = line_cooked.split('#')
@@ -2957,6 +2975,7 @@ class V2C_VSToolParserBase < V2C_VSXmlParserBase
     split_vs_tool_property_elements(attr_options, VS_ADDOPT_VALUE_SEPARATOR_REGEX_OBJ)
   end
   def parse_list_fs_items(attr_fs_items)
+    elem_fs = LoopVarPreconstruct()
     array_collect_compact(split_values_list_preserve_ws_discard_empty(attr_fs_items)) do |elem|
       next if skip_vs10_item_metadata_macro_var(elem)
       elem_fs = get_filesystem_location(elem)
@@ -3013,6 +3032,7 @@ class V2C_VSToolDefineParserBase < V2C_VSToolParserBase
     return found
   end
   def parse_preprocessor_definitions(hash_defines, attr_defines)
+    str_define_key = str_define_value = LoopVarPreconstruct()
     split_values_list_discard_empty(attr_defines).each { |elem_define|
       str_define_key, str_define_value = elem_define.strip.split('=')
       next if skip_vs10_item_metadata_macro_var(str_define_key)
@@ -5038,6 +5058,7 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
       "tools_info #{tools_info.inspect}")
 
     is_unmodified = true
+    tool_type = LoopVarPreconstruct()
     arr_const_tool_type.each { |const_tool_type|
       tool_type = V2C_Tool_Types.const_get(
         const_tool_type)
@@ -6468,6 +6489,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     arr_prefix,
     arr_suffix)
     arr_paths = Array.new
+    path = LoopVarPreconstruct()
     arr_prefix.each do |prefix|
       arr_suffix.each do |suffix|
         path = path_join(
@@ -6865,6 +6887,7 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     put_customization_hook_from_cmake_var(include_file_var)
   end
   def parse_platform_conversions_internal(platform_defs, arr_defs, map_defs, skip_failed_lookups)
+    map_line = LoopVarPreconstruct()
     arr_defs.each { |curr_defn|
       #log_debug map_defs[curr_defn]
       map_line = map_defs[curr_defn]
@@ -7231,6 +7254,7 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
     arr_info_file)
     arr_local_sources = nil
     if not arr_info_file.nil?
+      f = LoopVarPreconstruct()
       arr_local_sources = array_collect_compact(arr_info_file) do |info_file|
         f = info_file.path_relative
 
@@ -7617,6 +7641,7 @@ class V2C_CMakeCompilerInfoGenerator < V2C_CMakeTargetGenerator
     # within the regex matching parts done by it).
     # TODO: this might be relocatable to a common generator base helper method.
     arr_defs_assignments = Array.new
+    str_define = LoopVarPreconstruct()
     hash_ensure_sorted_each(hash_defines_augmented).each { |key, value|
       str_define = value.empty? ? key.dup : "#{key}=#{value}"
       arr_defs_assignments.push(str_define)
@@ -7913,6 +7938,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     # While this doesn't lead to rogue rebuilds of the independent target,
     # in some environments this might happen. Thus we might want to skip adding
     # the resource files list (VS10: ResourceCompile list) to the target.
+    virtual_only = arr_dummy = source_files_variable = arr_generated = arr_file_elems = add_to_target = LoopVarPreconstruct()
     item_lists.arr_item_lists.each { |item_list|
       arr_dummy = [] # TODO: temporary dummy, to satisfy existing crap (remove!)
       filelist_generator = V2C_CMakeFileListGenerator_VS10.new(
@@ -8435,6 +8461,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
   def set_properties_user_properties(
     target_name,
     user_properties)
+    cmake_value = LoopVarPreconstruct()
     user_properties.each_pair { |key, value|
       # Need escaping (happened e.g. for the case of a
       # RESOURCE_FILE user property located within a sub dir).
@@ -9199,6 +9226,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     # the list of _actual_ dependencies as stated by the project
     all_platform_defs = Hash.new
     parse_platform_conversions(all_platform_defs, arr_defs, map_defs, skip_failed_lookups)
+    arr_conditional_platform = LoopVarPreconstruct()
     # HACK: yes, we do need to re-sort this Hash _right before_ using it...
     hash_ensure_sorted_each(all_platform_defs).each { |key, arr_platdefs|
       #logger.info "key #{key}, arr_platdefs: #{arr_platdefs}"
@@ -9316,6 +9344,7 @@ class V2C_CMakeSourceGroupFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
       sg_files = sg_var_prefix + 'files_'
 
       arr_source_group_names_flattened = Array.new
+      name_flattened = arr_files = LoopVarPreconstruct()
       arr_group_info.each { |group_info|
         name_flattened = util_flatten_string(group_info.name)
         write_set_var_quoted(sg_name + name_flattened, group_info.name)
@@ -9487,6 +9516,7 @@ def v2c_vcproj_look_for_cmake_content(str_proj_file)
   is_cmake = false
   File.open(str_proj_file) { |io|
     doc = REXML::Document.new io
+    attr_defines = LoopVarPreconstruct()
     doc.elements.each('VisualStudioProject') { |project_xml|
       project_xml.elements.each('Configurations/Configuration') { |config_xml|
         config_xml.elements.each('Tool[@Name="VCCLCompilerTool"]') { |compiler_xml|
@@ -9510,6 +9540,7 @@ def v2c_vcxproj_look_for_cmake_content(str_proj_file)
   is_cmake = false
   File.open(str_proj_file) { |io|
     doc = REXML::Document.new io
+    attr_defines = attr_add_in = LoopVarPreconstruct()
     doc.elements.each('Project') { |project_xml|
       project_xml.elements.each('ItemDefinitionGroup') { |itemdef_xml|
         itemdef_xml.elements.each(V2C_VS10Defines_Tool_Types::TEXT_CLCOMPILE) { |compiler_xml|
@@ -9695,6 +9726,7 @@ class V2C_CMakeLocalFileGenerator < V2C_CMakeFileGenerator
     :arr_file_lists)
   def generate_source_groups(dest_dir)
     arr_sg_info_str = Array.new
+    arr_filtered_file_lists = sg_info_str = LoopVarPreconstruct()
     @arr_projects.each do |project_info|
       arr_filtered_file_lists = project_info.arr_filtered_file_lists
       next if obj_nil_or_empty(arr_filtered_file_lists)
@@ -9851,6 +9883,7 @@ class V2C_ProjectPostProcess < V2C_LoggerBase
           midl_info.get_output_locations_patterns())
       }
     }
+    info_item = LoopVarPreconstruct()
     arr_output_items.compact.each { |candidate|
       info_item = project_info.item_lists.lookup_from_item_name(
         candidate)
@@ -9971,6 +10004,8 @@ def v2c_convert_local_projects_inner(
   }
 
   # Post-process all projects.
+  project_processed = LoopVarPreconstruct()
+  post_processor = LoopVarPreconstruct()
   arr_projects.delete_if { |project_info|
     log_debug "Parsed project #{project_info.name}."
 
@@ -9980,6 +10015,8 @@ def v2c_convert_local_projects_inner(
     (false == project_processed)
   }
 
+  project_valid = LoopVarPreconstruct()
+  validator = LoopVarPreconstruct()
   arr_projects.delete_if { |project|
     project_valid = true
     begin
