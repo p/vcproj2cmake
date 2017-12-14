@@ -5890,6 +5890,11 @@ class V2C_GeneratorError < V2C_ChainedError
 end
 
 class V2C_GeneratorBase < V2C_LoggerBase
+  def initialize(
+    )
+    super(
+      )
+  end
   def generator_error(str_description); logger.error(str_description) end
   def ensure_string_nonempty(str_test)
     if string_nil_or_empty(str_test)
@@ -7305,6 +7310,11 @@ class V2C_CMakeFileListGenerator_VS10 < V2C_CMakeFileListGeneratorBase
 end
 
 class V2C_ToolFlagsGenerator_Base < V2C_LoggerBase
+  def initialize(
+    )
+    super(
+      )
+  end
 end
 
 class V2C_ToolFlagsGenerator_Linker_MSVC < V2C_ToolFlagsGenerator_Base
