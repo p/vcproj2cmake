@@ -6690,7 +6690,6 @@ class V2C_TextStreamSyntaxGeneratorBase
 
   def write_empty_line; @out.puts end
   def put_file_header_temporary_marker
-    return if $v2c_generator_one_time_conversion_only
     # WARNING: since this comment header is meant to advertise
     # _generated_ vcproj2cmake files, user-side code _will_ check for this
     # particular wording to tell apart generated text files
@@ -6786,6 +6785,17 @@ class V2C_SyntaxGeneratorBase < V2C_GeneratorBase
     super(
       )
     @textOut = textOut
+  end
+
+  private
+
+  def is_one_time_conversion_only; $v2c_generator_one_time_conversion_only; end
+
+  def need_add_customization_hooks; false == is_one_time_conversion_only; end
+
+  def handle_file_temporary_marker
+    return if $v2c_generator_one_time_conversion_only
+    @textOut.put_file_header_temporary_marker()
   end
 end
 
@@ -10350,7 +10360,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
   end
 
   def put_file_header(str_conversion_root_rel)
-    @textOut.put_file_header_temporary_marker()
+    handle_file_temporary_marker
     bootstrap_generator = V2C_CMakeGlobalBootstrapCodeGenerator.new(
       @textOut,
       str_conversion_root_rel,
@@ -10393,7 +10403,7 @@ class V2C_CMakeSourceGroupFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     @arr_filtered_file_lists = arr_filtered_file_lists
   end
   def generate
-    @textOut.put_file_header_temporary_marker()
+    handle_file_temporary_marker
 
     generate_project_source_groups(@target_name, @arr_filtered_file_lists)
   end
