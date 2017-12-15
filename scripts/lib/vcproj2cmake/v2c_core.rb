@@ -911,6 +911,13 @@ def condition_entails(this, other)
   this.entails(other)
 end
 
+def condition_get_build_type(
+  this)
+  return nil if this.nil?
+  this.get_build_type(
+    )
+end
+
 # @brief Mostly used to manage the condition element...
 class V2C_Info_Elem_Base < Logger
   include Logging_Redirector
@@ -7699,27 +7706,25 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       "E.g. to be used for tweaking target properties etc.")
   end
   def put_property_compile_definitions(
-    config_name,
+    condition,
     arr_compile_defn)
     arr_compile_defn_cooked = cmake_escape_compile_definitions(
       arr_compile_defn)
-    property_name = get_name_of_per_config_type_property(
-      'COMPILE_DEFINITIONS',
-      config_name)
     # make sure to specify APPEND for greater flexibility (hooks etc.)
-    set_property(
+    set_property_per_config(
+      condition,
       @target.name,
       PROP_APPEND,
-      property_name,
+      'COMPILE_DEFINITIONS',
       arr_compile_defn_cooked)
   end
   def generate_property_compile_definitions_per_platform(
-    config_name,
+    condition,
     arr_platdefs,
     arr_conditional_platform)
     write_conditional_block(arr_conditional_platform) do
       put_property_compile_definitions(
-        config_name,
+        condition,
         arr_platdefs)
     end
   end
@@ -7766,13 +7771,12 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # conditions, and some VS conditions might contain further specifics
     # (Exists(...)).
     gen_condition.generate(condition) do
-      build_type = condition.get_build_type()
       hash_ensure_sorted_each(all_platform_defs).each { |key, arr_platdefs|
         #logger.info "key #{key}, arr_platdefs: #{arr_platdefs}"
         next_paragraph()
         arr_conditional_platform = key.eql?(V2C_ALL_PLATFORMS_MARKER) ? nil : split_string_to_array(key)
         generate_property_compile_definitions_per_platform(
-          build_type,
+          condition,
           arr_platdefs,
           arr_conditional_platform)
       }
@@ -7788,13 +7792,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         # it does NOT provide a per-config COMPILE_FLAGS property! Need to verify ASAP
         # whether compile flags do get passed properly in debug / release.
         # Strangely enough it _does_ have LINK_FLAGS_<CONFIG>, though!
-        arr_target_expr = get_target_syntax_expression(@target.name)
-        build_type = condition.get_build_type()
-        property_name = get_name_of_per_config_type_property('COMPILE_FLAGS', build_type)
-        put_property(
-          arr_target_expr,
+        set_property_per_config(
+          condition,
+          @target.name,
           PROP_APPEND,
-          property_name,
+          'COMPILE_FLAGS',
           arr_flags)
       end
     end
@@ -8298,6 +8300,23 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   # _target_ generator specific method.
   def set_property(target_name, flag_append, property, arr_values)
     put_property(get_target_syntax_expression(target_name), flag_append, property, arr_values)
+  end
+  def set_property_per_config(
+    condition,
+    target_name,
+    flag_append,
+    property,
+    arr_values)
+    build_type = condition_get_build_type(
+      condition)
+    property_name_per_config = get_name_of_per_config_type_property(
+      property,
+      build_type)
+    set_property(
+      target_name,
+      flag_append,
+      property_name_per_config,
+      arr_values)
   end
   # Writes the build-specific parts (compile, link, resources, MIDL etc.)
   # of the project target, i.e. the things that always need to be done
