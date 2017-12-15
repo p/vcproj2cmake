@@ -2299,6 +2299,8 @@ class V2C_XmlParserBase < V2C_ParserBase
     # while iterating through the XML hierarchy
     found = parse_verify
     verify_calls
+    logger.debug(
+      "found #{found}")
     found
   end
   def unknown_attribute(key, value); unknown_something_key_value('attribute', key, value) end
@@ -4840,6 +4842,8 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
     end
     if not item_def_group_parser.nil?
       if FOUND_FALSE != item_def_group_parser.parse
+        logger.debug(
+          "info #{info.inspect}")
         arr_info.push(info)
       end
     end
@@ -5101,7 +5105,12 @@ class V2C_VS10ProjectParser < V2C_VSProjectParserBase
       config_info_curr = V2C_Project_Config_Info.new
       elem_parser = V2C_VS10ItemDefinitionGroupParser.new(subelem_xml, config_info_curr)
       if FOUND_FALSE != elem_parser.parse
+        logger.debug(
+          "ACI #{config_info_curr.inspect}")
         get_project().arr_config_info.push(config_info_curr)
+      else
+        logger.debug(
+          'ACI FAILED')
       end
     when 'ItemGroup'
       elem_parser = V2C_VS10ItemGroupForwarderParser.new(subelem_xml, get_project())
