@@ -1928,6 +1928,32 @@ class V2C_XmlParserError < V2C_ChainedError
 end
 
 class V2C_XmlParserBase < V2C_ParserBase
+  def initialize(
+    elem_xml,
+    info_elem_out)
+    super(
+      info_elem_out)
+    @elem_xml = elem_xml
+    @called_base_parse_element = false
+    @called_base_parse_attribute = false
+    @called_base_parse_setting = false
+    @called_base_parse_verify = false
+  end
+  # THE MAIN PARSER ENTRY POINT.
+  # Will invoke all methods of derived parser classes, whenever available.
+  def parse
+    logger.debug('parse')
+    # Do strict traversal over _all_ elements, parse what's supported by us,
+    # and yell loudly for any element which we don't know about!
+    parse_attributes
+    parse_elements
+    # This is e.g. an opportunity for the derived class
+    # to verify (and thus indicate) completeness of the data it collected
+    # while iterating through the XML hierarchy
+    found = parse_verify
+    verify_calls
+    found
+  end
   def unknown_attribute(key, value); unknown_something_key_value('attribute', key, value) end
   def unknown_element_key(name); unknown_something('element', name) end
   def unknown_element(key, value); unknown_something_key_value('element', key, value) end
@@ -2131,28 +2157,9 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
     elem_xml,
     info_elem_out)
     super(
+      elem_xml,
       info_elem_out)
-    @elem_xml = elem_xml
-    @called_base_parse_element = false
-    @called_base_parse_attribute = false
-    @called_base_parse_setting = false
-    @called_base_parse_verify = false
     @arr_config_var_dummy = Array.new
-  end
-  # THE MAIN PARSER ENTRY POINT.
-  # Will invoke all methods of derived parser classes, whenever available.
-  def parse
-    logger.debug('parse')
-    # Do strict traversal over _all_ elements, parse what's supported by us,
-    # and yell loudly for any element which we don't know about!
-    parse_attributes
-    parse_elements
-    # This is e.g. an opportunity for the derived class
-    # to verify (and thus indicate) completeness of the data it collected
-    # while iterating through the XML hierarchy
-    found = parse_verify
-    verify_calls
-    found
   end
   def get_boolean_value(str_value)
     parse_boolean_property_value(str_value)
