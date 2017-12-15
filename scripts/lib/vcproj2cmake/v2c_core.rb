@@ -7477,7 +7477,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     args_generator.add('VALIDATE_ALL_PARAMETERS', midl_info.validate_all_parameters.to_s)
     write_invoke_object_conditional_v2c_function('v2c_target_midl_compile', target_name, condition, args_generator.array)
   end
-  def hook_up_midl_files(
+  TOOL_CONTEXT_STR = Struct.new(
+    :item_list_input,
+    :tool_info,
+    :tool_type)
+  def hook_up_tools(
     item_lists,
     config_info)
     # This helper used to provide a
@@ -7488,28 +7492,58 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # since they simply won't be available for the target --> error.
     # Instead, we do need to have an add_custom_command()
     # which generates them (or suitable dummy files if needed).
+    arr_tool_context = Array.new
+    item_list_midl = item_lists.lookup_from_list_type(
+      V2C_Item_List_Info::TYPE_MIDL)
     arr_midl_info = config_info.tools.get(
       V2C_Tool_Types::TYPE_MIDL)
 
     # Hmm, perhaps it's actually incorrect to skip IDL files
     # when no MIDL info provided (--> assume defaults??).
-    return if arr_midl_info.empty?
+    arr_midl_info.each do |midl_info|
+      #puts "generator midl_info #{midl_info.inspect}"
+      arr_tool_context.push(
+        TOOL_CONTEXT_STR.new(
+          item_list_midl,
+          midl_info,
+          V2C_Tool_Types::TYPE_MIDL))
+    end
 
-    item_list_midl = item_lists.lookup_from_list_type(
-      V2C_Item_List_Info::TYPE_MIDL)
-    return if item_list_midl.nil?
-
-    midl_info = arr_midl_info[0]
-
-    item_list_midl.arr_items.each { | info_item_idl|
-      # put_v2c_target_midl_compile() will be the last line to be generated - the invoked function
-      # will then implement the MIDL custom command using all previously configured MIDL target properties settings.
-      put_v2c_target_midl_compile(
+    arr_tool_context.each do |tool_context|
+      # TODO: this method and anything below it could be moved
+      # into a PerToolGenerator class. But I'll defer that for now
+      # since it's not obvious yet whether this is the way to go
+      # (possibly we need to keep more decision-making per each tool,
+      # thus maybe we need to keep it within target generator).
+      do_hookup_tools(
         @target.name,
         config_info.condition,
-        midl_info,
-        info_item_idl.path_relative)
-    }
+        tool_context)
+    end
+  end
+  def do_hookup_tools(
+    target_name,
+    condition,
+    tool_context)
+    item_list_input = tool_context.item_list_input
+    return if item_list_input.nil?
+    tool_info = tool_context.tool_info
+    tool_type = tool_context.tool_type
+    arr_info_item_input = item_list_input.arr_items
+    arr_info_item_input.each do |info_item_input|
+      case tool_type
+      when V2C_Tool_Types::TYPE_MIDL
+        put_v2c_target_midl_compile(
+          target_name,
+          condition,
+          tool_info,
+          info_item_input.path_relative)
+      else
+        error_unknown_case_value(
+          'tool type',
+          tool_type)
+      end
+    end
   end
   def put_v2c_target_pdb_configure(
     target_name,
@@ -8432,7 +8466,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # buildcfg condition block handling...
       # Note that some may be dependent on the target already having
       # been established!
-      hook_up_midl_files(
+      hook_up_tools(
         project_info.item_lists,
         config_info_curr)
     } # [END per-config handling]
