@@ -3035,7 +3035,7 @@ class V2C_XmlParserBase < V2C_ParserBase
           end
         end
       rescue Exception
-        raise V2C_XmlParserError, "parse_attributes(\"#{attr_xml.name}\", \"#{attr_xml.value}\") failed"
+        raise V2C_XmlParserError, "name #{attr_xml.name}\" / value \"#{attr_xml.value}\""
       end
     }
   end
@@ -3050,7 +3050,7 @@ class V2C_XmlParserBase < V2C_ParserBase
           end
         end
       rescue Exception
-        raise V2C_XmlParserError, "parse_elements(\"#{subelem_xml.name}\", \"#{subelem_xml.text}\") failed"
+        raise V2C_XmlParserError, "name \"#{subelem_xml.name}\" / value \"#{subelem_xml.text}\""
       end
     }
   end
