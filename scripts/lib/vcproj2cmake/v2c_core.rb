@@ -5516,6 +5516,14 @@ class V2C_ConfigInfoValidator < V2C_SimpleObjectValidator
   end
 end
 
+# Helper class to validate the projects...
+# This validation should be a step that's _separate_
+# from parser, processor _and_ generator implementations,
+# since otherwise each individual parser/generator
+# would have to remember carrying out validation
+# (they could easily forget about that).
+# Besides, parsing/generating should be concerned about fast (KISS)
+# parsing/generating only anyway.
 class V2C_ProjectValidator < V2C_ValidatorBase
   def initialize(
     project_info)
@@ -7876,10 +7884,10 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_compile_defn)
     arr_compile_defn_cooked = cmake_escape_compile_definitions(
       arr_compile_defn)
-    # make sure to specify APPEND for greater flexibility (hooks etc.)
     set_property_per_config(
       condition,
       @target.name,
+      # make sure to specify APPEND for greater flexibility (hooks etc.)
       PROP_APPEND,
       'COMPILE_DEFINITIONS',
       arr_compile_defn_cooked)
@@ -9622,14 +9630,6 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
     (false == project_processed)
   }
 
-  # Now validate the projects...
-  # This validation should be a step that's _separate_
-  # from parser, processor _and_ generator implementations,
-  # since otherwise each individual parser/generator
-  # would have to remember carrying out validation
-  # (they could easily forget about that).
-  # Besides, parsing/generating should be concerned about fast (KISS)
-  # parsing/generating only anyway.
   arr_projects.delete_if { |project|
     project_valid = true
     begin
