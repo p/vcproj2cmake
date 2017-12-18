@@ -7839,6 +7839,32 @@ class V2C_CMakeV2CConditionGenerator < V2C_CMakeV2CConditionGeneratorBase
   end
 end
 
+# At least for certain uses of CMake syntax generation
+# (e.g. file lists),
+# it is preferable
+# to have "useless"/"bogus" path prefixes
+# such as "./" stripped.
+def cmake_pathname_relative_path_from(
+  p_dir_target,
+  p_dir_source)
+  p_path_rel = p_dir_target.relative_path_from(
+    p_dir_source)
+  path_rel = p_path_rel.to_s
+  has_leading_dotdir = rc_string_start_with(
+    path_rel,
+    './')
+  if (has_leading_dotdir)
+    p_path_rel = p_path_rel.cleanpath()
+  end
+  is_single_dot = ('.' == path_rel)
+  if (is_single_dot)
+    p_path_rel = Pathname.new(
+      '')
+  end
+  #puts "p_path_rel #{p_path_rel.inspect}"
+  p_path_rel
+end
+
 class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
   VS7_UNWANTED_FILE_TYPES_REGEX_OBJ = %r{\.(lex|y|ico|bmp|txt)$}
   VS7_LIB_FILE_TYPES_REGEX_OBJ = %r{\.lib$}
@@ -7846,12 +7872,16 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
   # to have additional information for inner logging activity.
   def initialize(
     textOut,
+    p_aggregating_dir,
     project_name,
     project_dir,
     arr_sub_sources_for_parent,
     skip_non_sources)
     super(
       textOut)
+    @p_item_aggregation_path_rel = cmake_pathname_relative_path_from(
+      project_dir,
+      p_aggregating_dir)
     @project_name = project_name
     @project_dir = project_dir
     @arr_sub_sources_for_parent = arr_sub_sources_for_parent
@@ -7919,9 +7949,15 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
         'File list: ' + source_list_description)
     end
     source_files_list_var_name = var_prefix + source_list_name
+    item_aggregation_path_rel = @p_item_aggregation_path_rel.to_s
+    arr_sources_aggregated = arr_sources.collect { |source|
+      path_join(
+        item_aggregation_path_rel,
+        source)
+    }
     write_list_quoted(
       source_files_list_var_name,
-      arr_sources)
+      arr_sources_aggregated)
     return source_files_list_var_name
   end
   # Side note: we will NOT prefix source variables within a newly
@@ -7940,6 +7976,7 @@ end
 class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeFileListGeneratorBase
   def initialize(
     textOut,
+    p_aggregating_dir,
     project_name,
     project_dir,
     files_str,
@@ -7947,6 +7984,7 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeFileListGeneratorBase
     arr_sub_sources_for_parent)
     super(
       textOut,
+      p_aggregating_dir,
       project_name,
       project_dir,
       arr_sub_sources_for_parent,
@@ -8042,12 +8080,14 @@ end
 class V2C_CMakeFileListGenerator_VS10 < V2C_CMakeFileListGeneratorBase
   def initialize(
     textOut,
+    p_aggregating_dir,
     project_name,
     project_dir,
     file_list,
     arr_sub_sources_for_parent)
     super(
       textOut,
+      p_aggregating_dir,
       project_name,
       project_dir,
       arr_sub_sources_for_parent,
@@ -8477,12 +8517,14 @@ end
 class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
   def initialize(
     textOut,
+    p_aggregating_dir,
     project_info,
     project_dir,
     localGenerator)
     super(
       textOut,
       project_info)
+    @p_aggregating_dir = p_aggregating_dir
     @project_info = project_info
     @project_dir = project_dir
     @localGenerator = localGenerator
@@ -8542,6 +8584,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     end
     filelist_generator = V2C_CMakeFileListGenerator_VS7.new(
       @textOut,
+      @p_aggregating_dir,
       project_name,
       @project_dir,
       files_str,
@@ -8583,6 +8626,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
       arr_dummy = [] # TODO: temporary dummy, to satisfy existing crap (remove!)
       filelist_generator = V2C_CMakeFileListGenerator_VS10.new(
         @textOut,
+        @p_aggregating_dir,
         project_name,
         @project_dir,
         item_list,
@@ -9934,6 +9978,7 @@ end
 class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
   def initialize(
     textOut,
+    p_aggregating_dir,
     p_solution_dir,
     p_script_location_relative_to_master,
     p_proj_base_dir,
@@ -9941,6 +9986,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_local_projects)
     super(
       textOut)
+    @p_aggregating_dir = p_aggregating_dir
     @p_solution_dir = p_solution_dir
     @master_project_dir = p_solution_dir.to_s
     @p_script_location_relative_to_master = p_script_location_relative_to_master
@@ -10066,6 +10112,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     @arr_local_projects.each { |project_info|
       project_generator = V2C_CMakeProjectGenerator.new(
         @textOut,
+        @p_aggregating_dir,
         project_info,
         p_local_dir,
         self)
@@ -10202,6 +10249,7 @@ end
 class V2C_CMakeRootFileContentGenerator < V2C_CMakeLocalFileContentGenerator
   def initialize(
     textOut,
+    p_aggregating_dir,
     p_solution_dir,
     p_script_location_relative_to_master,
     p_proj_base_dir,
@@ -10209,6 +10257,7 @@ class V2C_CMakeRootFileContentGenerator < V2C_CMakeLocalFileContentGenerator
     arr_local_projects)
     super(
       textOut,
+      p_aggregating_dir,
       p_solution_dir,
       p_script_location_relative_to_master,
       p_proj_base_dir,
@@ -10479,9 +10528,11 @@ class V2C_CMakeLocalFileGenerator < V2C_CMakeFileGenerator
   def generate_local_projects(output_file_location)
     temp_generator_local = V2C_GenerateIntoTempFile.new('vcproj2cmake', output_file_location)
     temp_generator_local.generate { |textOutLocal|
+      p_aggregating_dir = @p_generator_proj_file.dirname
       if @is_solution_dir
         content_generator = V2C_CMakeRootFileContentGenerator.new(
           textOutLocal,
+          p_aggregating_dir,
           @p_master_project,
           @p_script_location_relative_to_master,
           @p_proj_base_dir,
@@ -10490,6 +10541,7 @@ class V2C_CMakeLocalFileGenerator < V2C_CMakeFileGenerator
       else
         content_generator = V2C_CMakeLocalFileContentGenerator.new(
           textOutLocal,
+          p_aggregating_dir,
           @p_master_project,
           @p_script_location_relative_to_master,
           @p_proj_base_dir,
