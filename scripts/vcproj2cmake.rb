@@ -132,6 +132,8 @@ if not master_project_dir
   master_project_dir = '.'
 end
 
+log_debug "master_project_dir #{master_project_dir} output_dir #{output_dir} output_filename #{output_filename}"
+
 arr_parser_proj_files = [ vcproj_filename ]
 v2c_convert_local_projects_outer(
   script_name,

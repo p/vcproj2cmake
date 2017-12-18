@@ -8237,6 +8237,7 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
     @project_dir = project_dir
     @arr_sub_sources_for_parent = arr_sub_sources_for_parent
     @skip_non_sources = skip_non_sources
+    logger.debug "project_dir #{@project_dir}"
   end
   def filter_files(
     arr_info_file)
@@ -8890,6 +8891,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     @project_info = project_info
     @project_dir = project_dir
     @localGenerator = localGenerator
+    logger.debug "PROJECT_DIR #{@project_dir}"
   end
 
   # File-related TODO:
@@ -9842,6 +9844,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     next_paragraph()
 
     arr_orig_proj_files = project_info.arr_p_original_project_files.collect { |orig_proj_file|
+      logger.debug "PREFIX #{orig_proj_file} vs. #{@project_dir}"
       orig_proj_file.relative_path_from(@project_dir)
     }
     write_func_v2c_project_post_setup(
@@ -10381,6 +10384,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     read_mappings_combined(FILENAME_MAP_DEP, @map_dependencies, @master_project_dir)
     @map_defines = Hash.new
     read_mappings_combined(FILENAME_MAP_DEF, @map_defines, @master_project_dir)
+    logger.debug "arr_local_projects #{@arr_local_projects.inspect}"
   end
 
   def generate
@@ -10478,6 +10482,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     map_dependencies,
     map_defines)
     @arr_local_projects.each { |project_info|
+      logger.debug "LOCAL_DIR #{p_local_dir}"
       project_generator = V2C_CMakeProjectGenerator.new(
         @textOut,
         @p_aggregating_dir,
@@ -10652,6 +10657,7 @@ end
 # (missing some proper generator base class or so...)
 def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name, abort_on_error)
   file_accessible = false
+  log_debug "project_dir #{project_dir} file_relative #{file_relative} project_name #{project_name}"
   if $v2c_validate_vcproj_ensure_files_ok
     msg_error = nil
     instance_ref = "File #{quoted_string_from_string(file_relative)} (#{file_item_description}) as listed by project named #{project_name}"
@@ -11269,6 +11275,8 @@ def v2c_convert_local_projects_inner(
   arr_p_parser_proj_files,
   p_generator_proj_file,
   is_solution_dir)
+
+  log_debug "p_script #{p_script} p_master_project #{p_master_project} arr_p_parser_proj_files #{arr_p_parser_proj_files.inspect} p_generator_proj_file #{p_generator_proj_file}"
 
   arr_projects = Array.new
 
