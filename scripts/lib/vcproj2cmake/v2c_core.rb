@@ -2361,7 +2361,7 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
       # since our language setup currently is way too weak to be pretending
       # that we know what we're doing...
       descr_autodetect_active = 'Still keeping CMake-side auto-detection active anyway.'
-      logger.info "Project #{@project_info.name} seems to have no build units. #{descr_autodetect_active}"
+      logger.info "Project named #{@project_info.name} seems to have no build units. #{descr_autodetect_active}"
       #logger.info 'project seems to have no build units --> language set to NONE'
       #@arr_languages.push('NONE')
     end
@@ -6123,7 +6123,7 @@ class V2C_ProjectValidator < V2C_ValidatorBase
   def validation_error(
     str_message)
     super(
-      "Project #{@project_info.name}: #{str_message}; #{@project_info.inspect}")
+      "Project named #{@project_info.name}: #{str_message}; #{@project_info.inspect}")
   end
   def validate_project
     #log_debug "project data: #{@project_info.inspect}"
@@ -9637,7 +9637,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     arr_config_info = project_info.arr_config_info
 
     if arr_config_info.empty?
-      logger.warn "Empty config info for project #{project_info.name}: perhaps an external-build Makefile project?"
+      logger.warn "Empty config info for the project named #{project_info.name}: perhaps an external-build Makefile project?"
       return false
     end
 
@@ -10072,7 +10072,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
       begin
         project_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
       rescue V2C_GeneratorError => e
-        logger.error("project #{project_info.name} generation failed: #{e.message}")
+        logger.error("generation of project (named #{project_info.name}) failed: #{e.message}")
         # Hohumm, this variable is not really what we should be having here...
         if ($v2c_validate_vcproj_abort_on_error > 0)
           raise # escalate the problem
@@ -10245,7 +10245,7 @@ def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_de
         # TODO: should perhaps queue such errors in a cleverly sorted way,
         # to be printed as a summary
         # after a project's conversion step ended.
-        log_error "File #{file_relative} (#{file_item_description}) as listed by project #{project_name} does not exist!? (perhaps filename with wrong case, or wrong path, ..., in either file lists or perhaps source group filter lists)"
+        log_error "File #{file_relative} (#{file_item_description}) as listed by project named #{project_name} does not exist!? (perhaps filename with wrong case, or wrong path, ..., in either file lists or perhaps source group filter lists)"
         if raise_error
           # FIXME: should be
           # raising an exception rather than exiting, to
@@ -10855,7 +10855,7 @@ def v2c_convert_local_projects_inner(
   project_processed = LoopVarPreconstruct()
   post_processor = LoopVarPreconstruct()
   arr_projects.delete_if { |project_info|
-    log_debug "Parsed project #{project_info.name}."
+    log_debug "Parsed project named #{project_info.name}."
 
     project_processed = false
     post_processor = V2C_ProjectPostProcess.new(project_info)
