@@ -7359,6 +7359,84 @@ class V2C_CMakeTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   end
 end
 
+class V2C_CMakeLinkerInfoGenerator < V2C_CMakeTargetGenerator
+  def generate(
+    condition,
+    linker_info_curr)
+    generate_linker_info(
+      condition,
+      get_target_name(),
+      linker_info_curr)
+  end
+
+  private
+  def generate_linker_info(
+    condition,
+    target_name,
+    linker_info_curr)
+    # TODO: perhaps that stuff ought to be grouped in a cleaner way:
+    # for each platform-specific linker, figure out the combined set of
+    # flags (both open-coded and from high-level [booleans etc.]),
+    # then write out the combined set in one go.
+    # OTOH it's perhaps nice
+    # to write out
+    # open-coded flags and translated-from-high-level flags
+    # separately
+    # (since the property write does specify APPEND
+    # this is no problem).
+    linker_info_curr.arr_tool_variant_specific_info.each { |linker_specific|
+      arr_conditional_linker_platform = map_tool_name_to_cmake_platform_conditional(linker_specific.tool_id)
+      # Probably more linker flags support needed? (mention via
+      # CMAKE_SHARED_LINKER_FLAGS / CMAKE_MODULE_LINKER_FLAGS / CMAKE_EXE_LINKER_FLAGS
+      # depending on target type, and make sure to filter out options
+      # pre-defined by CMake platform setup modules)
+      write_property_link_flags(condition, target_name, linker_specific.arr_flags, arr_conditional_linker_platform, 'Original set of linker-specific flags')
+
+      # Very dirty MSVC-specific HACK to make some stuff work.
+      # This part should go into a platform-specific-linker generator
+      # (with a nice base class virtuals hierarchy)
+      # for translation of linker_info_curr high-level data to an array
+      # of open-coded linker flags.
+      # This generator of course will generate linker-specific args
+      # and *not* CMake code instead, since that way
+      # it will be reusable by generators of other build envs, too.
+      linker_flags_generator = linker_flags_generator_factory(linker_specific.tool_id)
+      if not linker_flags_generator.nil?
+        arr_flags = linker_flags_generator.generate(linker_info_curr)
+        write_property_link_flags(condition, target_name, arr_flags, arr_conditional_linker_platform, 'Set of linker flags translated from project link settings')
+      end
+    } # linker.tool_specific.each
+  end
+  def write_property_link_flags(condition, target_name, arr_flags, arr_conditional, comment)
+    return if arr_flags.empty?
+    next_paragraph()
+    gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
+    gen_condition.generate(condition) do
+      write_conditional_block(arr_conditional) do
+        write_comment_at_level(
+          COMMENT_LEVEL_STANDARD,
+          comment)
+        set_property_per_config(
+          condition,
+          target_name,
+          PROP_APPEND,
+          'LINK_FLAGS',
+          arr_flags)
+      end
+    end
+  end
+  def linker_flags_generator_factory(tool_id)
+    generator = nil
+    case tool_id
+    when V2C_TOOL_MSVC_REGEX_OBJ
+      generator = V2C_ToolFlagsGenerator_Linker_MSVC.new
+    else
+      error_unknown_case_value('platform-specific linker (flag conversion generator)', tool_id)
+    end
+    generator
+  end
+end
+
 class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
   def initialize(
     textOut,
@@ -8014,39 +8092,6 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
       end
     end
   end
-  def write_property_link_flags(condition, arr_flags, arr_conditional, comment)
-    return if arr_flags.empty?
-    next_paragraph()
-    gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
-    gen_condition.generate(condition) do
-      write_conditional_block(arr_conditional) do
-        arr_target_expr = get_target_syntax_expression(
-          get_target_name())
-        build_type = condition.get_build_type()
-        property_name = get_name_of_per_config_type_property(
-          'LINK_FLAGS',
-          build_type)
-        write_comment_at_level(
-          COMMENT_LEVEL_STANDARD,
-          comment)
-        put_property(
-          arr_target_expr,
-          PROP_APPEND,
-          property_name,
-          arr_flags)
-      end
-    end
-  end
-  def linker_flags_generator_factory(tool_id)
-    generator = nil
-    case tool_id
-    when V2C_TOOL_MSVC_REGEX_OBJ
-      generator = V2C_ToolFlagsGenerator_Linker_MSVC.new
-    else
-      error_unknown_case_value('platform-specific linker (flag conversion generator)', tool_id)
-    end
-    generator
-  end
   def write_link_libraries(arr_dependencies, map_dependencies)
     arr_dependencies_augmented = arr_dependencies.clone
     arr_dependencies_augmented.push(get_dereferenced_variable_name('V2C_LIBS'))
@@ -8304,42 +8349,12 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
             write_precompiled_header(condition, compiler_info_curr.precompiled_header_info)
           } # arr_compiler_info.each
 
-          # TODO: perhaps that stuff ought to be grouped in a cleaner way:
-          # for each platform-specific linker, figure out the combined set of
-          # flags (both open-coded and from high-level [booleans etc.]),
-          # then write out the combined set in one go.
-          # OTOH it's perhaps nice
-          # to write out
-          # open-coded flags and translated-from-high-level flags
-          # separately
-          # (since the property write does specify APPEND
-          # this is no problem).
+          linker_info_generator = V2C_CMakeLinkerInfoGenerator.new(@textOut, @project_info)
           arr_linker_info = tools.get(
             V2C_Tool_Types::TYPE_LINK)
           arr_linker_info.each { |linker_info_curr|
             print_marker_line('per-linker_info')
-            linker_info_curr.arr_tool_variant_specific_info.each { |linker_specific|
-              arr_conditional_linker_platform = map_tool_name_to_cmake_platform_conditional(linker_specific.tool_id)
-              # Probably more linker flags support needed? (mention via
-              # CMAKE_SHARED_LINKER_FLAGS / CMAKE_MODULE_LINKER_FLAGS / CMAKE_EXE_LINKER_FLAGS
-              # depending on target type, and make sure to filter out options
-              # pre-defined by CMake platform setup modules)
-              write_property_link_flags(condition, linker_specific.arr_flags, arr_conditional_linker_platform, 'Original set of linker-specific flags')
-
-              # Very dirty MSVC-specific HACK to make some stuff work.
-              # This part should go into a platform-specific-linker generator
-              # (with a nice base class virtuals hierarchy)
-              # for translation of linker_info_curr high-level data to an array
-              # of open-coded linker flags.
-              # This generator of course will generate linker-specific args
-              # and *not* CMake code instead, since that way
-              # it will be reusable by generators of other build envs, too.
-              linker_flags_generator = linker_flags_generator_factory(linker_specific.tool_id)
-              if not linker_flags_generator.nil?
-                arr_flags = linker_flags_generator.generate(linker_info_curr)
-                write_property_link_flags(condition, arr_flags, arr_conditional_linker_platform, 'Set of linker flags translated from project link settings')
-              end
-            } # linker.tool_specific.each
+            linker_info_generator.generate(condition, linker_info_curr)
           } # arr_linker_info.each
         } # config_info_curr
       }
