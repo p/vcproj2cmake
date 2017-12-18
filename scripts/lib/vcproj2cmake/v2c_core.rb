@@ -7561,6 +7561,31 @@ class V2C_CMakeTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       property_name_per_config,
       arr_values)
   end
+  def write_target_output_names(
+    arr_target_output_name)
+    arr_target_output_name.each do |output_name|
+      # Perhaps we should add an output_name.name != target_name check here.
+      write_property_output_name(
+        output_name.condition,
+        output_name.name)
+    end
+  end
+  def write_property_output_name(
+    condition,
+    output_name)
+    gen_condition = V2C_CMakeV2CConditionGenerator.new(
+      @textOut,
+      false)
+    gen_condition.generate(condition) do
+      set_property_per_config(
+        condition,
+        get_target_name(),
+        PROP_SET,
+        'OUTPUT_NAME',
+        [ output_name ])
+      next_paragraph()
+    end
+  end
   # Returns name of the project's *target* that is defined within the project.
   # May or may not be identical with the outer project's name.
   def get_target_name
@@ -8323,6 +8348,12 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
           map_dependencies)
       }
       logger.debug "TARGET_LINK_LIBRARIES: #{arr_linker_info.inspect}"
+      do_write_target_output_names = false
+      if false != do_write_target_output_names
+        arr_target_output_name = get_target_output_names()
+        write_target_output_names(
+          arr_target_output_name)
+      end
     end # target_is_valid
     logger.debug "TARGET_LINK_LIBRARIES: target_is_valid #{target_is_valid}"
     return target_is_valid
