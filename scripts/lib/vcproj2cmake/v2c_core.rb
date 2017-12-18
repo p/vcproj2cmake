@@ -7335,7 +7335,27 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     @project_dir = project_dir
     @localGenerator = localGenerator
   end
-
+  # _target_ generator specific method.
+  def set_property(target_name, flag_append, property, arr_values)
+    put_property(get_target_syntax_expression(target_name), flag_append, property, arr_values)
+  end
+  def set_property_per_config(
+    condition,
+    target_name,
+    flag_append,
+    property,
+    arr_values)
+    build_type = condition_get_build_type(
+      condition)
+    property_name_per_config = get_name_of_per_config_type_property(
+      property,
+      build_type)
+    set_property(
+      target_name,
+      flag_append,
+      property_name_per_config,
+      arr_values)
+  end
   # File-related TODO:
   # should definitely support the following CMake properties, as needed:
   # PUBLIC_HEADER (cmake --help-property PUBLIC_HEADER), PRIVATE_HEADER, HEADER_FILE_ONLY, EXTERNAL_OBJECT
@@ -8484,27 +8504,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       project_name,
       project_info.build_platform_configs)
     put_hook_project()
-  end
-  # _target_ generator specific method.
-  def set_property(target_name, flag_append, property, arr_values)
-    put_property(get_target_syntax_expression(target_name), flag_append, property, arr_values)
-  end
-  def set_property_per_config(
-    condition,
-    target_name,
-    flag_append,
-    property,
-    arr_values)
-    build_type = condition_get_build_type(
-      condition)
-    property_name_per_config = get_name_of_per_config_type_property(
-      property,
-      build_type)
-    set_property(
-      target_name,
-      flag_append,
-      property_name_per_config,
-      arr_values)
   end
   # Writes the build-specific parts (compile, link, resources, MIDL etc.)
   # of the project target, i.e. the things that always need to be done
