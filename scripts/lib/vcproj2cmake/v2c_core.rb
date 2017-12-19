@@ -2757,7 +2757,7 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
     end
     [
       success,
-      bool_out
+      bool_out,
     ]
   end
 end
@@ -4779,7 +4779,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
     TEXT_DEFAULT, # 0
     'StackFrameRuntimeCheck', # 1, /RTCs
     'UninitializedLocalUsageCheck', # 2, /RTCu
-    'EnableFastChecks' # 3, /RTC1
+    'EnableFastChecks', # 3, /RTC1
   ]
   def parse_basic_runtime_checks(str_basic_runtime_checks)
     return string_to_index(ARR_BASIC_RUNTIME_CHECKS, str_basic_runtime_checks, 0)
@@ -4787,7 +4787,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
   ARR_COMPILE_AS = [
     TEXT_DEFAULT, # 0
     'CompileAsC', # 1 (MSVC /TC)
-    'CompileAsCpp' # 2 (MSVC /TP)
+    'CompileAsCpp', # 2 (MSVC /TP)
   ]
   def parse_compile_as(str_compile_as)
     return string_to_index(ARR_COMPILE_AS, str_compile_as, 0)
@@ -4797,7 +4797,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
     'OldStyle', # 1, /Z7
     'None', # 2
     'ProgramDatabase', # 3, /Zi
-    'EditAndContinue' # 4, /ZI
+    'EditAndContinue', # 4, /ZI
   ]
   def parse_debug_information_format(str_debug_information_format)
     return string_to_index(ARR_DEBUG_INFORMATION_FORMAT, str_debug_information_format, 0)
@@ -4806,7 +4806,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
     TEXT_FALSE_LOWER, # 0, false
     'Sync', # 1, Sync, /EHsc
     'Async', # 2, Async, /EHa
-    'SyncCThrow' # 3, SyncCThrow, /EHs
+    'SyncCThrow', # 3, SyncCThrow, /EHs
   ]
   def parse_exception_handling(str_exception_handling)
     return string_to_index(ARR_EXCEPT, str_exception_handling, 0)
@@ -4814,7 +4814,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
   ARR_INLINE_FUNC = [
     TEXT_DISABLED, # 0, /Ob0
     'OnlyExplicitInline', # 1, /Ob1
-    'AnySuitable' # 2, /Ob2
+    'AnySuitable', # 2, /Ob2
   ]
   def parse_inline_function_expansion(str_inline_func_expand)
     return string_to_index(ARR_INLINE_FUNC, str_inline_func_expand, INLINE_FUNCTION_EXPANSION_DEFAULT)
@@ -4823,7 +4823,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
     TEXT_DISABLED, # 0, /Od
     'MinSpace', # 1, /O1
     'MaxSpeed', # 2, /O2
-    'Full' # 3, /Ox
+    'Full', # 3, /Ox
   ]
   def parse_optimization(str_optimization)
     return string_to_index(ARR_OPTIMIZATION, str_optimization, 0)
@@ -4841,7 +4841,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
   ARR_USE_PCH = [
     'NotUsing',
     'Create',
-    'Use'
+    'Use',
   ]
   def parse_use_precompiled_header(str_use_precompiled_header)
     return string_to_index(ARR_USE_PCH, string_value_preprocess(str_use_precompiled_header), 0)
@@ -4852,7 +4852,7 @@ class V2C_VS10ToolCompilerParser < V2C_VSToolCompilerParser
     'Level2', # /W2
     'Level3', # /W3
     'Level4', # /W4
-    'EnableAllWarnings' # /Wall
+    'EnableAllWarnings', # /Wall
   ]
   def parse_warning_level(str_warning_level)
     return string_to_index(ARR_WARN_LEVEL, str_warning_level, VS_DEFAULT_SETTING_WARNINGLEVEL)
@@ -4911,7 +4911,7 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
     'EFIROM', # VS7: 6
     'EFIRuntime', # VS7: 7
     'Posix', # VS7: 8
-    'WindowsCE' # VS7: 9
+    'WindowsCE', # VS7: 9
   ]
   def parse_subsystem(str_subsystem)
     return string_to_index(ARR_SUBSYSTEM, str_subsystem, VS_DEFAULT_SETTING_SUBSYSTEM)
@@ -5041,7 +5041,7 @@ private
   ARR_CHARSET = [
     TEXT_VS10_NOTSET,  # 0 (SBCS [ASCII etc.])
     'Unicode', # 1 (The Healthy Choice)
-    'MultiByte' # 2 (MBCS)
+    'MultiByte', # 2 (MBCS)
   ]
   def parse_charset(str_charset)
     # Possibly useful related link: "[CMake] Bug #12189"
@@ -5053,7 +5053,7 @@ private
     'Application', # 1, typeApplication (.exe)
     'DynamicLibrary', # 2, typeDynamicLibrary (.dll)
     'UNKNOWN_FIXME', # 3
-    'StaticLibrary' # 4, typeStaticLibrary
+    'StaticLibrary', # 4, typeStaticLibrary
   ]
   def parse_configuration_type(str_configuration_type)
     return string_to_index(ARR_CONFIG_TYPE, str_configuration_type, VS_DEFAULT_SETTING_CONFIGURATIONTYPE)
@@ -5061,7 +5061,7 @@ private
   ARR_USE_OF_ATL_MFC = [
     TEXT_FALSE_LOWER,
     'Static',
-    'Dynamic'
+    'Dynamic',
   ]
   def parse_use_of_atl_mfc(str_use_of_atl_mfc)
     return string_to_index(ARR_USE_OF_ATL_MFC, str_use_of_atl_mfc, VS_DEFAULT_SETTING_MFC)
@@ -6227,7 +6227,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     ensure_string_nonempty(str_cmake_minimum_version)
     arr_args = [
       'VERSION',
-      str_cmake_minimum_version
+      str_cmake_minimum_version,
     ]
     write_command_list_single_line('cmake_minimum_required', arr_args)
   end
@@ -6236,7 +6236,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     str_policy = '%s%04d' % [ 'CMP', policy_num ]
     arr_conditional = [
       'POLICY',
-      str_policy
+      str_policy,
     ]
     write_conditional_block(arr_conditional) do
       if not comment.nil?
@@ -6246,7 +6246,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
       arr_args_set_policy = [
         'SET',
         str_policy,
-        str_OLD_NEW
+        str_OLD_NEW,
       ]
       write_command_list_single_line('cmake_policy', arr_args_set_policy)
     end
@@ -6624,7 +6624,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def get_target_syntax_expression(target_name);
     arr_target_syntax = [
       'TARGET',
-      target_name
+      target_name,
     ]
     arr_target_syntax
   end
@@ -6868,7 +6868,7 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     else
       arr_args_func = [
         use_of_atl.to_s(),
-        use_of_mfc.to_s()
+        use_of_mfc.to_s(),
       ]
       write_invoke_object_conditional_v2c_function('v2c_local_set_cmake_atl_mfc_flags', target_name, condition, arr_args_func)
     end
@@ -6892,7 +6892,7 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
   def write_invoke_object_conditional_v2c_function(str_function, object_name, condition, arr_args_func_other)
     arr_args_func = [
       prepare_string_literal(condition.get_build_platform()),
-      prepare_string_literal(condition.get_build_type())
+      prepare_string_literal(condition.get_build_type()),
     ]
     arr_args_func.concat(arr_args_func_other)
     write_invoke_config_object_v2c_function_quoted(str_function, object_name, arr_args_func)
@@ -7032,14 +7032,14 @@ class V2C_CMakeV2CConditionGeneratorBase < V2C_CMakeV2CSyntaxGenerator
             'OR',
             'CMAKE_BUILD_TYPE',
             'STREQUAL',
-            build_type_cooked
+            build_type_cooked,
           ]
         else
           # YES, this condition is supposed to NOT trigger in case of a multi-configuration generator
           arr_cmake_build_type_condition = [
             'CMAKE_BUILD_TYPE',
             'STREQUAL',
-            build_type_cooked
+            build_type_cooked,
           ]
         end
         write_set_var_bool_conditional(get_buildcfg_var_name_of_condition(condition), arr_cmake_build_type_condition)
@@ -7567,7 +7567,7 @@ class V2C_CMakeCompilerInfoGenerator < V2C_CMakeTargetGenerator
       log_implementation_bug('unknown charset type!?')
     end
     arr_args_func_other = [
-      charset_type
+      charset_type,
     ]
     write_invoke_object_conditional_v2c_function(
       'v2c_target_config_charset_set',
@@ -7691,7 +7691,7 @@ class V2C_CMakeCompilerInfoGenerator < V2C_CMakeTargetGenerator
     arr_args_precomp_header = [
       pch_use_mode.to_s,
       pch_source_name,
-      pch_binary_name
+      pch_binary_name,
     ]
     write_invoke_object_conditional_v2c_function('v2c_target_add_precompiled_header',
       target_name, condition, arr_args_precomp_header)
@@ -7849,7 +7849,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     write_set_var_bool(var_name_add_to_target, add_to_target)
     arr_args = [
       file_list_type_magic,
-      var_name_add_to_target
+      var_name_add_to_target,
     ]
     arr_args.concat(arr_file_elems)
     write_command_list_quoted('_v2c_target_filelist_route', project_name, arr_args)
@@ -7919,7 +7919,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
   end
   def file_list_set_language_source_property(arr_file_elems, lang)
     arr_lang = [
-      lang
+      lang,
     ]
     put_property_source(arr_file_elems, 'LANGUAGE', arr_lang)
   end
@@ -8164,7 +8164,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     # right at target instantiation.
     arr_args = [
       target_name,
-      string_sources_list
+      string_sources_list,
     ]
     write_command_list_single_line('add_executable', arr_args)
   end
@@ -8173,7 +8173,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     arr_args = [
       target_name,
       'SHARED',
-      string_sources_list
+      string_sources_list,
     ]
     write_command_list_single_line('add_library', arr_args)
   end
@@ -8182,7 +8182,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     arr_args = [
       target_name,
       'STATIC',
-      string_sources_list
+      string_sources_list,
     ]
     write_command_list_single_line('add_library', arr_args)
   end
@@ -8280,7 +8280,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     if project_keyword.nil?; project_keyword = V2C_ATTRIBUTE_NOT_PROVIDED_MARKER end
     arr_args_func = [
       project_name,
-      project_keyword
+      project_keyword,
     ]
     write_invoke_config_object_v2c_function_quoted(
       'v2c_target_post_setup',
@@ -8560,7 +8560,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     arr_args = [
       project_name,
       str_time,
-      str_from_buildtool_version
+      str_from_buildtool_version,
     ]
     write_invoke_v2c_function_quoted('v2c_project_conversion_info_set', arr_args)
   end
@@ -8574,7 +8574,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
       "depending on user choice.\n")
     arr_args = [
       project_name,
-      project_guid
+      project_guid,
     ]
     write_invoke_v2c_function_quoted('v2c_project_indicate_original_guid', arr_args)
   end
@@ -8876,7 +8876,7 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
       get_dereferenced_variable_name(
         NAME_V2C_MASTER_PROJECT_SOURCE_DIR),
       get_dereferenced_variable_name(
-        NAME_CMAKE_SOURCE_DIR)
+        NAME_CMAKE_SOURCE_DIR),
     ]
     arr_paths = path_combine(
       arr_cmake_refs,
@@ -9145,7 +9145,7 @@ class V2C_CMakeSourceGroupFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
       write_list(sg_names_flattened, arr_source_group_names_flattened)
       arr_foreach_elems = [
         'sg_name_flattened_',
-        get_dereferenced_variable_name(sg_names_flattened)
+        get_dereferenced_variable_name(sg_names_flattened),
       ]
       gen_foreach(arr_foreach_elems) do
         sg_name_flat_deref = get_dereferenced_variable_name('sg_name_flattened_')
@@ -9164,13 +9164,13 @@ class V2C_CMakeSourceGroupFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
           arr_func_parms = [
             element_manual_quoting(get_dereferenced_variable_name(name)),
             element_manual_quoting(get_dereferenced_variable_name(regex)),
-            element_manual_quoting(get_dereferenced_variable_name(files))
+            element_manual_quoting(get_dereferenced_variable_name(files)),
           ]
         else
           arr_func_parms = [
             element_manual_quoting(sg_name + sg_name_flat_deref),
             element_manual_quoting(sg_regex + sg_name_flat_deref),
-            element_manual_quoting(sg_files + sg_name_flat_deref)
+            element_manual_quoting(sg_files + sg_name_flat_deref),
           ]
         end
         # XXX: the rather ugly manual quoting handling above
@@ -9707,7 +9707,7 @@ class V2C_ProjectPostProcess < V2C_LoggerBase
       sg2 = V2C_File_Filters_Group_Info.new('Headers', [ 'h', 'hpp' ], [ info_file_h, info_file_hpp ])
       project_info.arr_filtered_file_lists = [
         sg1,
-        sg2
+        sg2,
       ]
     else
       project_info.arr_filtered_file_lists = hash_ensure_sorted_values(hash_group_info) # NOT: hash.values
