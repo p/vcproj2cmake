@@ -6377,9 +6377,16 @@ module CMake_Syntax_base_language
   CMAKE_ENV_VAR_MATCH_REGEX_STR = '\\$ENV\\{[[:alnum:]_]+\\}'
   CMAKE_SOURCE_GROUP_HIERARCHY_SEPARATOR = '\\\\'
   WHITESPACE_REGEX_OBJ = %r{\s}
+
+  NAME_COMMAND = 'COMMAND'
+  NAME_COMMENT = 'COMMENT'
+  NAME_STREQUAL = 'STREQUAL'
+  NAME_VERBATIM = 'VERBATIM'
+  NAME_WIN32 = 'WIN32'
 end
 
 module CMake_Syntax_cmakecommands
+  NAME_ADD_CUSTOM_COMMAND = 'add_custom_command'
   NAME_SET_PROPERTY = 'set_property'
 end
 
@@ -6390,6 +6397,7 @@ module CMake_Syntax_cmakeprops
 end
 
 module CMake_Syntax_cmakevars
+  NAME_CMAKE_BUILD_TYPE = 'CMAKE_BUILD_TYPE'
   NAME_CMAKE_CURRENT_SOURCE_DIR = 'CMAKE_CURRENT_SOURCE_DIR'
   NAME_CMAKE_CURRENT_BINARY_DIR = 'CMAKE_CURRENT_BINARY_DIR'
   NAME_CMAKE_MODULE_PATH = 'CMAKE_MODULE_PATH'
@@ -6525,7 +6533,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def get_var_conditional_command(
     command_name)
     [
-      'COMMAND',
+      NAME_COMMAND,
       command_name,
     ]
   end
@@ -7446,16 +7454,16 @@ class V2C_CMakeV2CConditionGeneratorBase < V2C_CMakeV2CSyntaxGenerator
           arr_cmake_build_type_condition = [
             'CMAKE_CONFIGURATION_TYPES',
             'OR',
-            'CMAKE_BUILD_TYPE',
-            'STREQUAL',
+            NAME_CMAKE_BUILD_TYPE,
+            NAME_STREQUAL,
             build_type_cooked,
           ]
         else
           # YES, this condition is supposed to NOT trigger
           # in case of a multi-configuration generator
           arr_cmake_build_type_condition = [
-            'CMAKE_BUILD_TYPE',
-            'STREQUAL',
+            NAME_CMAKE_BUILD_TYPE,
+            NAME_STREQUAL,
             build_type_cooked,
           ]
         end
@@ -8580,8 +8588,120 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
         true)
     }
 
+    arr_prepostbuildlink_info = arr_prepostbuildlink_info_determine(
+      tools)
+    arr_prepostbuildlink_info.each { |prepostbuildlink_info_curr|
+      put_prepostbuildlink_event(
+        project_target_name,
+        prepostbuildlink_info_curr)
+    }
+
     put_hook_post_target()
     return target_is_valid
+  end
+  # Helper to collect all prepostbuildlink_info elements,
+  # regardless of variant
+  # (reason: CMake does not have much of a distinction here,
+  # thus decided to have a common handling implementation)
+  def arr_prepostbuildlink_info_determine(
+    tools)
+    arr_prepostbuildlink_info = Array.new
+    arr_prepostbuildlink_info_types = [
+      V2C_Tool_Types::TYPE_PREBUILDEVENT,
+      V2C_Tool_Types::TYPE_PRELINKEVENT,
+      V2C_Tool_Types::TYPE_POSTBUILDEVENT,
+    ]
+    arr_prepostbuildlink_info_types.each { |tool_type_curr|
+      arr_prepostbuildlink_info_curr = tools.get(
+        tool_type_curr)
+      arr_prepostbuildlink_info.concat(
+        arr_prepostbuildlink_info_curr)
+    }
+    logger.debug(
+      "arr_prepostbuildlink_info #{arr_prepostbuildlink_info.inspect}")
+    arr_prepostbuildlink_info
+  end
+  def put_prepostbuildlink_event(
+    target_name,
+    prepostbuildlink_info)
+    # Q&D implementation - currently hardcodes a WIN32 conditional dependency,
+    # etc.
+    # (should iterate over a block of per-system conditional/cmd/text).
+    # Also, we should provide the option of user-side conditionals
+    # to optionally skip specific build events of a project target
+    # on certain platforms.
+    # And we should also support VS10 PreBuildEventUseInBuild etc. bool
+    # values - this could be done by generating the custom command
+    # into a function, to then be called within each of the
+    # potentially multiple conditionals generated from each of the
+    # conditional-specific PropertyGroup PreBuildEventUseInBuild flags.
+    empty_build_event = (prepostbuildlink_info.arr_commandline.nil? && prepostbuildlink_info.message.nil?)
+    return if false != empty_build_event
+
+    str_cmake_build_event_type = nil
+    variant = prepostbuildlink_info.variant
+    case variant
+    when V2C_Tool_PrePostBuildLink_Info::VARIANT_PREBUILD
+      str_cmake_build_event_type = 'PRE_BUILD'
+    when V2C_Tool_PrePostBuildLink_Info::VARIANT_PRELINK
+      str_cmake_build_event_type = 'PRE_LINK'
+    when V2C_Tool_PrePostBuildLink_Info::VARIANT_POSTBUILD
+      str_cmake_build_event_type = 'POST_BUILD'
+    else
+      generator_error_unknown_case(
+        variant)
+    end
+    write_comment_at_level(
+      COMMENT_LEVEL_STANDARD,
+      "build/link event (#{str_cmake_build_event_type})")
+    arr_conditional = [ NAME_WIN32 ]
+    write_conditional_block(
+      arr_conditional) do
+      arr_target_conditional = get_target_syntax_expression(
+        target_name)
+      command_arg = array_to_string(
+        arr_target_conditional)
+      arr_func = [
+        str_cmake_build_event_type,
+      ]
+      gen_arr = ParameterArrayGenerator.new
+      # It seems VS10 can have build/link events with *only* message
+      # or command defined. Hmm, does CMake add_custom_command()
+      # also support that? If not, then we might need to add
+      # a suitable dummy command in case of message-only input.
+      arr_commandline = prepostbuildlink_info.arr_commandline
+      if not arr_commandline.nil?
+        arr_commandline.each do |commandline|
+          gen_arr.add(
+            NAME_COMMAND,
+            escape_content_for_cmake_string(
+              commandline))
+        end
+      end
+      want_comment = true
+      if false != want_comment
+        gen_arr.add(
+          NAME_COMMENT,
+          escape_content_for_cmake_string(
+            prepostbuildlink_info.message))
+      end
+      arr_func.concat(
+        gen_arr.array)
+      # not sure whether we really do want to specify VERBATIM...
+      want_verbatim = true
+      if false != want_verbatim
+        arr_func.push(
+          NAME_VERBATIM)
+      end
+      write_command_list(
+        NAME_ADD_CUSTOM_COMMAND,
+        command_arg,
+        arr_func)
+      write_conditional_else(
+        arr_conditional)
+      gen_message_info(
+        "#{target_name}: skipping #{str_cmake_build_event_type} target event on this platform - TODO!")
+    end
   end
   def put_target_type(target, map_dependencies, target_info_curr, target_config_info_curr)
     target_is_valid = false
@@ -9567,7 +9687,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     # .vcproj to indicate tool specifics, thus these seem to
     # be settings for ANY PARTICULAR tool that is configured
     # on the Win32 side (.vcproj in general).
-    arr_conditional_platform = [ 'WIN32' ]
+    arr_conditional_platform = [ NAME_WIN32 ]
     write_conditional_block(arr_conditional_platform) do
       put_property_directory__compile_flags(attr_opts, true)
     end
