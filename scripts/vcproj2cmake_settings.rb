@@ -136,3 +136,6 @@ $v2c_enable_processes = true
 # Should implement scoped/per-instance output management if this turns out to be
 # a problem.
 $v2c_enable_threads = false
+
+# Whether to (dynamically try to) have memory profiling activated.
+$v2c_profiling_memory_enable = false

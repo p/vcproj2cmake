@@ -583,6 +583,7 @@ $config_multi_authoritative = ''
 module V2C_Cfg_Common
   def enable_processes; $v2c_enable_processes; end
   def enable_threads; $v2c_enable_threads; end
+  def profiling_memory_enable; $v2c_profiling_memory_enable; end
 end
 
 module V2C_Cfg_Parser
@@ -625,6 +626,49 @@ module V2C_Cfg
   extend V2C_Cfg_Parser
   extend V2C_Cfg_Validator
   extend V2C_Cfg_Generator_CMake
+end
+
+# "How I spent two weeks hunting a memory leak in Ruby"
+#   http://www.be9.io/2015/09/21/memory-leak/
+# https://samsaffron.com/archive/2015/03/31/debugging-memory-leaks-in-ruby
+module SupportMemoryProfiling
+  def report_memory_profiling(
+    active)
+    str_active = active ? 'Now' : 'Not'
+    log_info str_active + ' trying to provide memory profiling.'
+  end
+  module_function :report_memory_profiling
+  try_mp = V2C_Cfg::profiling_memory_enable
+  report_memory_profiling(
+    try_mp)
+  have_mp = false
+  if try_mp
+    begin
+      require 'memory_profiler' # https://github.com/SamSaffron/memory_profiler
+      have_mp = true
+    rescue LoadError => e
+      log_warn 'memory_profiler module could not be loaded: ' + e.message
+    end
+  end
+  if have_mp
+    def memory_profiling_optional(
+      enable)
+      if enable
+        MemoryProfiler.report do
+          yield
+        end.pretty_print
+      else
+        yield
+      end
+    end
+  else
+    def memory_profiling_optional(
+      enable)
+      yield
+      log_info 'No memory profiling available.'
+    end
+  end
+  module_function :memory_profiling_optional
 end
 
 def v2c_can_use_processes
@@ -11487,26 +11531,28 @@ def v2c_convert_local_projects_outer(
   generator_proj_dir,
   generator_proj_filename,
   is_solution_dir)
-  arr_p_parser_proj_files = arr_parser_proj_files.collect { |parser_proj_file|
-    Pathname.new(parser_proj_file)
-  }
-  if generator_proj_filename.nil?
-    generator_proj_filename = CMake_Syntax_Filesystem::CMAKELISTS_FILE_NAME
+  SupportMemoryProfiling::memory_profiling_optional(V2C_Cfg::profiling_memory_enable) do
+    arr_p_parser_proj_files = arr_parser_proj_files.collect { |parser_proj_file|
+      Pathname.new(parser_proj_file)
+    }
+    if generator_proj_filename.nil?
+      generator_proj_filename = CMake_Syntax_Filesystem::CMAKELISTS_FILE_NAME
+    end
+    generator_proj_file_location = File.join(generator_proj_dir, generator_proj_filename)
+    p_generator_proj_file_location = Pathname.new(generator_proj_file_location)
+    master_project_location = File.expand_path(master_project_dir)
+    p_master_project = Pathname.new(master_project_location)
+
+    script_location = File.expand_path(project_converter_script_filename)
+    p_script = Pathname.new(script_location)
+
+    v2c_convert_local_projects_inner(
+      p_script,
+      p_master_project,
+      arr_p_parser_proj_files,
+      p_generator_proj_file_location,
+      is_solution_dir)
   end
-  generator_proj_file_location = File.join(generator_proj_dir, generator_proj_filename)
-  p_generator_proj_file_location = Pathname.new(generator_proj_file_location)
-  master_project_location = File.expand_path(master_project_dir)
-  p_master_project = Pathname.new(master_project_location)
-
-  script_location = File.expand_path(project_converter_script_filename)
-  p_script = Pathname.new(script_location)
-
-  v2c_convert_local_projects_inner(
-    p_script,
-    p_master_project,
-    arr_p_parser_proj_files,
-    p_generator_proj_file_location,
-    is_solution_dir)
 end
 
 # Writes the final message.
