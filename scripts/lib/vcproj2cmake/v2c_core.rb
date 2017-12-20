@@ -2141,7 +2141,6 @@ class V2C_XmlParserBase < V2C_ParserBase
   def unknown_element_key(name); unknown_something('element', name) end
   def unknown_element(key, value); unknown_something_key_value('element', key, value) end
   def unknown_element_text(name); unknown_something('element text', name) end
-  def unknown_setting(name); unknown_something('VS7/10 setting', name) end
   def unknown_value(name); unknown_something('value', name) end
   def skipped_attribute_warn(elem_name)
     logger.todo "#{self.class.name}: unhandled less important XML attribute (#{elem_name})!"
