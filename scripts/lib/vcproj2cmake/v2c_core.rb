@@ -3880,6 +3880,9 @@ end
 class V2C_ProjectFileParserError < V2C_ParserError
 end
 
+class V2C_ProjectFileParserErrorNonExistentFile < V2C_ProjectFileParserError
+end
+
 # Project parser variant which works on file-based input
 class V2C_VSProjectFileParserBase < V2C_ParserBase
   def initialize(
@@ -4890,7 +4893,6 @@ class V2C_VS10ProjectFileParser < V2C_VSProjectFileParserBase
       arr_projects_out)
     @flag_populate_existing = flag_populate_existing # whether to extend existing project information (are we parsing main file or an extension file (e.g. .filters)?)
   end
-  STR_PROTOCOL_KEYWORD_NONEXISTENT = 'open non-existent'
   def parse_file
     success = false
     # Parse the project-related file if it exists (_separate_ .filters file in VS10, which is entirely *optional*!):
@@ -4910,7 +4912,7 @@ class V2C_VS10ProjectFileParser < V2C_VSProjectFileParserBase
         end
       }
     rescue Errno::ENOENT
-      raise V2C_ProjectFileParserError.new("Failed to #{STR_PROTOCOL_KEYWORD_NONEXISTENT} project file #{@proj_filename}")
+      raise V2C_ProjectFileParserErrorNonExistentFile.new("project file #{@proj_filename}")
     rescue Exception
       raise_project_error()
     end
@@ -5060,10 +5062,8 @@ class V2C_VS10ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
 
         proj_filters_file_parser.parse_file
       # For .filters, swallow some exceptions (.filters files are *optional*)
-      rescue V2C_ProjectFileParserError => e
-        if not e.message.match(/#{V2C_VS10ProjectFileParser::STR_PROTOCOL_KEYWORD_NONEXISTENT}/)
-          raise
-        end
+      rescue V2C_ProjectFileParserErrorNonExistentFile
+        # swallow!
       end
     end
   end
