@@ -7875,17 +7875,17 @@ end
 class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
   def initialize(
     textOut,
-    p_local_dir,
     p_solution_dir,
-    arr_local_project_targets,
-    p_script_location_relative_to_master)
+    p_script_location_relative_to_master,
+    p_local_dir,
+    arr_local_project_targets)
     super(
       textOut)
-    @p_local_dir = p_local_dir
     @p_solution_dir = p_solution_dir
     @master_project_dir = p_solution_dir.to_s
-    @arr_local_project_targets = arr_local_project_targets
     @p_script_location_relative_to_master = p_script_location_relative_to_master
+    @p_local_dir = p_local_dir
+    @arr_local_project_targets = arr_local_project_targets
     local_dir_fqpn = File.expand_path(
       p_local_dir)
     p_local_dir_fqpn = Pathname.new(
@@ -8292,18 +8292,18 @@ class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
     p_v2c_script,
     p_master_project,
     p_generator_proj_file,
-    arr_projects,
-    flag_source_groups_enabled)
+    flag_source_groups_enabled,
+    arr_projects)
     super(
       )
     @p_master_project = p_master_project
 
-    @p_generator_proj_file = p_generator_proj_file
-    @p_local_dir = @p_generator_proj_file.dirname
-    @arr_projects = arr_projects
     @p_script_location_relative_to_master = p_v2c_script.relative_path_from(
       p_master_project)
+    @p_generator_proj_file = p_generator_proj_file
     @flag_source_groups_enabled = flag_source_groups_enabled
+    @p_local_dir = @p_generator_proj_file.dirname
+    @arr_projects = arr_projects
     #logger.debug "p_v2c_script #{p_v2c_script} | p_master_project #{p_master_project} | @p_script_location_relative_to_master #{@p_script_location_relative_to_master}"
   end
   def generate
@@ -8319,10 +8319,10 @@ class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
       if false != do_generate_local
         content_generator = V2C_CMakeLocalFileContentGenerator.new(
           textOutLocal,
-          @p_local_dir,
           @p_master_project,
-          @arr_projects,
-          @p_script_location_relative_to_master)
+          @p_script_location_relative_to_master,
+          @p_local_dir,
+          @arr_projects)
       end
       content_generator.generate
       # Keep per-project source group generation as close together
@@ -8418,10 +8418,10 @@ class V2C_CMakeRootFileContentGenerator < V2C_CMakeLocalFileContentGenerator
     ]
     super(
       textOut,
-      p_local_dir,
       p_solution_dir,
-      arr_local_project_targets,
-      p_script_location_relative_to_master)
+      p_script_location_relative_to_master,
+      p_local_dir,
+      arr_local_project_targets)
     @projects_list_file = projects_list_file
   end
   def generate_footer
@@ -8446,8 +8446,8 @@ def v2c_source_root_write_cmakelists_skeleton_file(p_master_project, p_script, p
       p_master_project)
     content_generator = V2C_CMakeRootFileContentGenerator.new(
       textOut,
-      projects_list_file,
-      p_script_location_relative_to_master)
+      p_script_location_relative_to_master,
+      projects_list_file)
     content_generator.generate
   }
 rescue Exception
@@ -8657,8 +8657,8 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
         p_script,
         p_master_project,
         p_generator_proj_file,
-        arr_projects,
-        $v2c_generator_source_groups_enable)
+        $v2c_generator_source_groups_enable,
+        arr_projects)
     end
 
     if not generator.nil?
