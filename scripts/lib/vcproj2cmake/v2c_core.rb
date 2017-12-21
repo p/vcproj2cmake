@@ -3894,7 +3894,7 @@ class V2C_VSProjectFileParserBase < V2C_ParserBase
   end
   def raise_project_error()
     # Make sure to have an annotation of the project file which bombed.
-    raise V2C_ProjectFileParserError.new("Exception parsing project file #{@p_parser_proj_file}")
+    raise V2C_ProjectFileParserError.new("Exception while parsing project file #{@p_parser_proj_file}")
   end
 end
 
