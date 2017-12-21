@@ -3806,6 +3806,8 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
 end
 
 class V2C_VSProjectFilesBundleParserBase < V2C_LoggerBase
+  include V2C_ParserGenericLogging
+
   def initialize(
     p_parser_proj_file,
     str_orig_environment_shortname,
@@ -5066,6 +5068,13 @@ class V2C_VS10ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
         proj_filters_file_parser.parse_file
       # For .filters, swallow some exceptions (.filters files are *optional*)
       rescue V2C_ProjectFileParserErrorNonExistentFile
+        # Supply diagnostics to:
+        # - pinpoint issue
+        # - avoid confusion (in certain configs, exception traces do get logged despite *not* being unhandled)
+        # Use level warn since:
+        # - file unintentionally missing?
+        # - useful feature not provided
+        parser_warn_syntax("skipping non-existent (optional) #{p_parser_proj_file_filters.to_s}")
         # swallow!
       end
     end
