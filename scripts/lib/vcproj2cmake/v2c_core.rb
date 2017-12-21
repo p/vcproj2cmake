@@ -7323,17 +7323,13 @@ class V2C_ToolFlagsGenerator_Linker_MSVC < V2C_ToolFlagsGenerator_Base
   end
 end
 
-class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
+class V2C_CMakeTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def initialize(
     textOut,
-    target,
-    project_dir,
-    localGenerator)
+    target)
     super(
       textOut)
     @target = target
-    @project_dir = project_dir
-    @localGenerator = localGenerator
   end
   # _target_ generator specific method.
   def set_property(target_name, flag_append, property, arr_values)
@@ -7361,6 +7357,22 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def get_target_name
      @target.name
   end
+end
+
+class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
+  def initialize(
+    textOut,
+    project_info,
+    project_dir,
+    localGenerator)
+    super(
+      textOut,
+      project_info)
+    @project_info = project_info
+    @project_dir = project_dir
+    @localGenerator = localGenerator
+  end
+
   # File-related TODO:
   # should definitely support the following CMake properties, as needed:
   # PUBLIC_HEADER (cmake --help-property PUBLIC_HEADER), PRIVATE_HEADER, HEADER_FILE_ONLY, EXTERNAL_OBJECT
@@ -7888,7 +7900,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # The most challenging part will be achieving
       # flexible cross-platform translation of any system-specific commands
       # that are executed by the command.
-      log_debug "#{@target.inspect}"
+      log_debug "#{@project_info.inspect}"
       raise V2C_GeneratorError, "#{target_name}: project type #{cfg_type} not supported."
     end
     return target_is_valid
@@ -8192,7 +8204,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
   def generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
 
-    project_info = @target # HACK
+    project_info = @project_info # HACK
 
     generate_project_leadin(project_info)
 
@@ -8381,7 +8393,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   private
   def put_dotnet_references(
     )
-    list_references = @target.item_lists.lookup_from_list_type(
+    list_references = @project_info.item_lists.lookup_from_list_type(
       V2C_Item_List_Info::TYPE_CS_REFERENCE)
     return if list_references.nil?
     arr_references = array_collect_compact(list_references.arr_items) do |info_item|
@@ -8619,8 +8631,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   end
   # Returns name of *project*.
   def get_project_name
-    project_info = @target # HACK
-    project_info.name
+    @project_info.name
   end
 end
 
@@ -8806,14 +8817,14 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     p_solution_dir,
     p_script_location_relative_to_master,
     p_local_dir,
-    arr_local_project_targets)
+    arr_local_projects)
     super(
       textOut)
     @p_solution_dir = p_solution_dir
     @master_project_dir = p_solution_dir.to_s
     @p_script_location_relative_to_master = p_script_location_relative_to_master
     @p_local_dir = p_local_dir
-    @arr_local_project_targets = arr_local_project_targets
+    @arr_local_projects = arr_local_projects
     local_dir_fqpn = File.expand_path(
       p_local_dir)
     p_local_dir_fqpn = Pathname.new(
@@ -8927,8 +8938,8 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     map_lib_dirs_dep,
     map_dependencies,
     map_defines)
-    @arr_local_project_targets.each { |project_info|
-      project_generator = V2C_CMakeProjectTargetGenerator.new(
+    @arr_local_projects.each { |project_info|
+      project_generator = V2C_CMakeProjectGenerator.new(
         @textOut,
         project_info,
         p_local_dir,
@@ -9065,14 +9076,14 @@ class V2C_CMakeRootFileContentGenerator < V2C_CMakeLocalFileContentGenerator
     p_script_location_relative_to_master)
     p_local_dir = Pathname.new('.')
     p_solution_dir = Pathname.new('.')
-    arr_local_project_targets = [
+    arr_local_projects = [
     ]
     super(
       textOut,
       p_solution_dir,
       p_script_location_relative_to_master,
       p_local_dir,
-      arr_local_project_targets)
+      arr_local_projects)
     @projects_list_file = projects_list_file
   end
   def generate_footer
@@ -9370,7 +9381,7 @@ class V2C_CMakeLocalFileGenerator < V2C_CMakeFileGenerator
       content_generator.generate
     }
   rescue Exception
-    raise V2C_FileGeneratorError, "Failed to generate source groups file for project #{target_name} to #{output_file_location}."
+    raise V2C_FileGeneratorError, "Failed to generate source groups file for [project] target #{target_name} to #{output_file_location}."
   end
   SG_INFO_STR = Struct.new(
     :proj_name,
