@@ -3894,7 +3894,7 @@ class V2C_VSProjectFileParserBase < V2C_ParserBase
   end
   def raise_project_error()
     # Make sure to have an annotation of the project file which bombed.
-    raise V2C_ProjectFileParserError.new("Exception while parsing project file #{@p_parser_proj_file}")
+    raise V2C_ProjectFileParserError.new("Failed to parse project file #{@p_parser_proj_file}")
   end
 end
 
@@ -4910,7 +4910,7 @@ class V2C_VS10ProjectFileParser < V2C_VSProjectFileParserBase
         end
       }
     rescue Errno::ENOENT
-      raise V2C_ProjectFileParserError.new("Exception trying to #{STR_PROTOCOL_KEYWORD_NONEXISTENT} project file #{@proj_filename}")
+      raise V2C_ProjectFileParserError.new("Failed to #{STR_PROTOCOL_KEYWORD_NONEXISTENT} project file #{@proj_filename}")
     rescue Exception
       raise_project_error()
     end
@@ -8340,7 +8340,7 @@ class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
       end
     }
   rescue Exception
-    raise V2C_FileGeneratorError.new("Exception while generating local #{CMAKELISTS_FILE_NAME} to #{output_file_location}.")
+    raise V2C_FileGeneratorError.new("Failed to generate local #{CMAKELISTS_FILE_NAME} to #{output_file_location}.")
   end
   def source_groups_enabled; true == @flag_source_groups_enabled end
   def generate_per_project_source_groups(dest_dir, target_name, arr_filtered_file_lists)
@@ -8353,7 +8353,7 @@ class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
       content_generator.generate
     }
   rescue Exception
-    raise V2C_FileGeneratorError.new("Exception while generating source groups file for project #{target_name} to #{output_file_location}.")
+    raise V2C_FileGeneratorError.new("Failed to generate source groups file for project #{target_name} to #{output_file_location}.")
   end
   def generate_source_groups(dest_dir)
     @arr_projects.each { |project_info|
@@ -8400,7 +8400,7 @@ def v2c_source_root_write_projects_list_file(output_file_fqpn, output_file_permi
     }
   }
 rescue Exception
-  raise V2C_FileGeneratorError.new("Exception while generating projects list file to #{output_file_fqpn}.")
+  raise V2C_FileGeneratorError.new("Failed to generate projects list file to #{output_file_fqpn}.")
 end
 
 
@@ -8447,7 +8447,7 @@ def v2c_source_root_write_cmakelists_skeleton_file(p_master_project, p_script, p
     content_generator.generate
   }
 rescue Exception
-  raise V2C_FileGeneratorError.new("Exception while generating root skeleton #{CMAKELISTS_FILE_NAME} to #{path_cmakelists_txt}.")
+  raise V2C_FileGeneratorError.new("Failed to generate root skeleton #{CMAKELISTS_FILE_NAME} to #{path_cmakelists_txt}.")
 end
 
 # For collections of project configs,
