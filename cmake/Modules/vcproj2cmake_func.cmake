@@ -2395,7 +2395,8 @@ function(v2c_target_tool_midl_compile _target _build_platform _build_type)
   # implicitly adding this directory
   # to a project's default include path.
   # Hah! In newer CMake versions
-  # the CMAKE_BUILD_INTERFACE_INCLUDES variable
+  # the CMAKE_INCLUDE_CURRENT_DIR_IN_INTERFACE variable
+  # (formerly CMAKE_BUILD_INTERFACE_INCLUDES)
   # seems to be exactly provided for this purpose
   # (TODO enable it?).
   _v2c_fs_item_make_relative_to_path("${v2c_target_tool_midl_compile_HEADER_FILE_NAME}" "${PROJECT_SOURCE_DIR}" header_file_location_)

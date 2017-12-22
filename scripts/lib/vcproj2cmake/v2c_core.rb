@@ -33,7 +33,7 @@
 #   by some aggregating, hosting classes -
 #   this allows for:
 #   - a rather tiny scope of local implementation,
-#     which yields both high testability (minimal dependencies)
+#     which achieves both high testability (minimal dependencies)
 #     and very good reviewability
 #   - a very flexible, elegant, minimalist-change rework
 #     (re-grouping, basically)
@@ -276,6 +276,7 @@ load_configuration()
 # Will cause e.g. the following log output activity:
 # - will still log Exception records/traces
 #   for handled/silenced (rescue:d) exceptions even!
+# Also, ensure that this feature gets enabled ASAP.
 if $v2c_log_level >= V2C_LOG_LEVEL_DEBUG
   $DEBUG=true
 end
@@ -308,13 +309,17 @@ end
 
 # FIXME: should probably replace most log_fatal()
 # with exceptions since in many cases
-# one would want to have _partial_ aborts of processing only.
+# one would want to have _partial_ aborts of processing only
+# (due to being able to
+# optionally _recover_ from exceptional errors
+# occurring within certain sub components).
 # Soft error handling via exceptions
 # would apply to errors due to problematic input -
 # but errors due to bugs in our code
 # should cause immediate abort.
 def log_fatal(str)
-  # Note: code flow here deviates from similar functions! (exit() *needs* to be executed, unconditionally *and* finally!)
+  # Note: code flow here deviates from similar functions! (reason:
+  # exit() *needs* to be executed, unconditionally *and* finally!)
   log_error str + '. Aborting!' if $v2c_log_level >= V2C_LOG_LEVEL_FATAL;
   exit 1
 end
@@ -3193,7 +3198,7 @@ end
 
 module V2C_VSToolDefines
   TEXT_ADDITIONALOPTIONS = 'AdditionalOptions'
-  TEXT_SHOWPROGRESS = 'ShowProgress' # Houston... differing VS7/10 elements don't fit into our class hierarchy all too well...
+  TEXT_SHOWPROGRESS = 'ShowProgress' # Houston... differing VS7/10 elements don't fit into our class hierarchy all too well... (XXX)
   VS_DEFAULT_SETTING_SHOWPROGRESS = false # VS10 default: "not set"
   TEXT_SUPPRESSSTARTUPBANNER = 'SuppressStartupBanner'
 end
@@ -5861,8 +5866,8 @@ class V2C_VS10ProjectFileParser < V2C_VSProjectFileParserBase
   end
   def parse_file
     success = false
-    # Parse the project-related file if it exists
-    # (_separate_ .filters file in VS10, which
+    # Parse the project-related file - if it exists...
+    # (e.g. there's a _separate_ .filters file type in VS10, which
     # is entirely *optional*!):
     begin
       File.open(@proj_filename) { |io|
@@ -6047,8 +6052,14 @@ end
 # since otherwise each individual parser/generator
 # would have to remember carrying out validation
 # (they could easily forget about that).
+# So, this class is expected to verify that
+# every *parser* type supplies all the information
+# that any of the *generator* types will need
+# in order to be able to do their job.
 # Besides, parsing/generating should be concerned about fast (KISS)
-# parsing/generating only anyway.
+# parsing/generating only anyway,
+# thus validation should be a *separate* step
+# that sits in the *middle* between parsing and generating.
 class V2C_ProjectValidator < V2C_ValidatorBase
   def initialize(
     project_info)
@@ -6349,7 +6360,9 @@ class V2C_GenerateIntoTempFile
       #
       # Note that since we "steal" the file from
       # the Tempfile object
-      # by renaming it away,
+      # by renaming it away
+      # [rather than copying it - which likely would bring along
+      # its own share of atomicity problems...],
       # Tempfile when deciding to do a final deletion
       # will then complain with message
       #     removing [FILENAME]...Exception `Errno::ENOENT' at /usr/lib/ruby/1.9.1/tempfile.rb:282 - No such file or directory - [FILENAME]
@@ -9210,7 +9223,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     # NOTE: needed to clone() this string above
     # since otherwise modifying (same) source object!!
     # We used to escape_char!('"') below, but this was problematic
-    # on VS7 .vcproj generator since
+    # on CMake's VS7 .vcproj generator since
     # that one is BUGGY (GIT trunk 201007xx):
     # it should escape quotes into XMLed "&quot;" yet
     # it doesn't. Thus it's us who has to do that and pray that it
