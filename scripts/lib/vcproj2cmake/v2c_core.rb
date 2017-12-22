@@ -8551,7 +8551,6 @@ class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
           @p_local_dir.to_s)
         generated_files_dir = File.join(temp_store_dir_local, 'generated_items')
         source_groups_dir = File.join(generated_files_dir, 'source_groups')
-        V2C_Util_File.mkdir_p(source_groups_dir)
         generate_source_groups(source_groups_dir)
       end
     }
@@ -8560,7 +8559,6 @@ class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
   end
   def source_groups_enabled; true == @flag_source_groups_enabled end
   def generate_per_project_source_groups(dest_dir, target_name, arr_filtered_file_lists)
-    return if obj_nil_or_empty(arr_filtered_file_lists)
     sg_file_name = target_name + '.cmake'
     output_file_location = File.join(dest_dir, sg_file_name)
     temp_generator_sg = V2C_GenerateIntoTempFile.new('vcproj2cmake', output_file_location)
@@ -8571,12 +8569,38 @@ class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
   rescue Exception
     raise V2C_FileGeneratorError, "Failed to generate source groups file for project #{target_name} to #{output_file_location}."
   end
+  SG_INFO_STR = Struct.new(
+    :proj_name,
+    :arr_file_lists)
   def generate_source_groups(dest_dir)
+    arr_sg_info_str = Array.new
     @arr_projects.each do |project_info|
+      arr_filtered_file_lists = project_info.arr_filtered_file_lists
+      next if obj_nil_or_empty(arr_filtered_file_lists)
+      sg_info_str = SG_INFO_STR.new(
+        project_info.name,
+        arr_filtered_file_lists)
+      arr_sg_info_str.push(
+        sg_info_str)
+    end
+    generate_source_group_info(
+      dest_dir,
+      arr_sg_info_str)
+  end
+  def generate_source_group_info(
+    dest_dir,
+    arr_sg_info_str)
+    return if arr_sg_info_str.empty?
+    # Definitely have directory (tree) created only
+    # once we verified
+    # that we do have any content to create!
+    V2C_Util_File.mkdir_p(
+      dest_dir)
+    arr_sg_info_str.each do |sg_info_str|
       generate_per_project_source_groups(
         dest_dir,
-        project_info.name,
-        project_info.arr_filtered_file_lists)
+        sg_info_str.proj_name,
+        sg_info_str.arr_file_lists)
     end
   end
 end
