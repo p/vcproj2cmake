@@ -2387,13 +2387,17 @@ function(v2c_target_tool_midl_compile _target _build_platform _build_type)
     _v2c_msg_warning("IDL file ${idl_file_location_} not found - bailing out...")
     return()
   endif(NOT EXISTS "${idl_file_location_}")
-  # Hrmpf, unfortunately this *generated* item is relative to project
-  # *source* dir. Eventually we might want to offer a config option to
-  # relocate such things to a build tree directory.
-  # However this would require implicitly adding this directory
+  # Hrmpf, unfortunately this *generated* item
+  # is relative to project *source* dir.
+  # Eventually we might want to offer a config option
+  # to relocate such things to a build tree directory.
+  # However this would require
+  # implicitly adding this directory
   # to a project's default include path.
-  # Hah! In newer CMake versions the CMAKE_BUILD_INTERFACE_INCLUDES variable
-  # seems to be exactly provided for this purpose (TODO enable it?).
+  # Hah! In newer CMake versions
+  # the CMAKE_BUILD_INTERFACE_INCLUDES variable
+  # seems to be exactly provided for this purpose
+  # (TODO enable it?).
   _v2c_fs_item_make_relative_to_path("${v2c_target_tool_midl_compile_HEADER_FILE_NAME}" "${PROJECT_SOURCE_DIR}" header_file_location_)
 
   ## SWITCHEROO FOR PER-MODE HANDLING ##

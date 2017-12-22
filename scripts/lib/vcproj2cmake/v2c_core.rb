@@ -8184,8 +8184,8 @@ end
 class V2C_CMakeCompilerInfoGenerator < V2C_CMakeTargetGenerator
   # FIXME: I'm really not sure whether passing the map_defines param here
   # like this is actually sufficiently clean.
-  # Since this is a *mapping*, one could argue
-  # that mapping should have been done beforehand already,
+  # Since this is a *mapping*, one could argue that
+  # mapping should have been done beforehand already,
   # *prior* to proceeding with *generating* (pushing out)
   # supposedly-final data...
   def generate(condition, compiler_info_curr, target_config_info_curr, map_defines)
@@ -9210,8 +9210,9 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     # NOTE: needed to clone() this string above
     # since otherwise modifying (same) source object!!
     # We used to escape_char!('"') below, but this was problematic
-    # on VS7 .vcproj generator since that one is BUGGY (GIT trunk
-    # 201007xx): it should escape quotes into XMLed "&quot;" yet
+    # on VS7 .vcproj generator since
+    # that one is BUGGY (GIT trunk 201007xx):
+    # it should escape quotes into XMLed "&quot;" yet
     # it doesn't. Thus it's us who has to do that and pray that it
     # won't fail on us... (but this bogus escaping within
     # CMakeLists.txt space might lead to severe trouble
