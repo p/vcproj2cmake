@@ -156,7 +156,7 @@ class V2C_Path_Config
   # (entire content can be ignored easily,
   # by mentioning this directory in SCM config files
   # such as .gitignore)
-  TEMP_STORE_DIR_NAME = 'generated_temporary_content'
+  TEMP_STORE_DIR_NAME = 'temporary_scm_ignored_content'
   def initialize(
     master_project_source_dir)
     @source_root = master_project_source_dir
@@ -8364,6 +8364,9 @@ class V2C_FileGeneratorError < V2C_ChainedError
 end
 
 class V2C_FileGeneratorBase < V2C_GeneratorBase
+  def get_path_config(master_project_source_dir)
+    v2c_get_path_config(master_project_source_dir)
+  end
 end
 
 class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
@@ -8407,15 +8410,19 @@ class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
       # Keep per-project source group generation as close together
       # with local file generation as possible scope-wise
       # (we might want to change things
-      # into keeping file handling completely outside,
+      # into keeping file-dependent handling completely outside,
       # passing proper textOut params
       # to a generator which generates
-      # both local file content *and* source group stuff)
+      # both *per-project* content *and* its source group stuff)
       if source_groups_enabled()
-        path_config = v2c_get_path_config(@p_master_project.to_s)
-        temp_store_dir = path_config.get_abs_temp_store_dir(
+        # FIXME: very ugly path handling - ought to be refactored eventually
+        path_config = get_path_config(@p_master_project.to_s)
+        temp_store_dir_local = path_config.get_abs_temp_store_dir(
           @p_local_dir.to_s)
-        generate_source_groups(temp_store_dir)
+        generated_files_dir = File.join(temp_store_dir_local, 'generated_items')
+        source_groups_dir = File.join(generated_files_dir, 'source_groups')
+        V2C_Util_File.mkdir_p(source_groups_dir)
+        generate_source_groups(source_groups_dir)
       end
     }
   rescue Exception
@@ -8424,7 +8431,7 @@ class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
   def source_groups_enabled; true == @flag_source_groups_enabled end
   def generate_per_project_source_groups(dest_dir, target_name, arr_filtered_file_lists)
     return if obj_nil_or_empty(arr_filtered_file_lists)
-    sg_file_name = "source_groups_#{target_name}.cmake"
+    sg_file_name = target_name + '.cmake'
     output_file_location = File.join(dest_dir, sg_file_name)
     temp_generator_sg = V2C_GenerateIntoTempFile.new('vcproj2cmake', output_file_location)
     temp_generator_sg.generate { |textOutSG|

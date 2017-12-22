@@ -485,7 +485,7 @@ If you get an obscure (without a suitable location pinpointed)
 CMake configure error,
 then either analyze a log file of cmake --trace,
 or comment ('#') many/several entries in
-cmake/vcproj2cmake/generated_temporary_content/all_sub_projects.txt
+cmake/vcproj2cmake/temporary_scm_ignored_content/generated_items/all_sub_projects.txt
 until you see an enlightening change in CMake configure run result
 (i.e. once the project(s) that contain script parts which cause it to fail
 are disabled). As a potential complication, please remember
