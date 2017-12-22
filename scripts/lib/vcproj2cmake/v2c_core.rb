@@ -2986,7 +2986,7 @@ class V2C_VS7ToolForwarderParser < V2C_VS7ParserBase
     toolname = @elem_xml.attributes[TEXT_NAME]
     arr_info = nil
     info = nil
-    elem_parser = nil
+    elem_parser = nil # IMPORTANT: reset it!
     case toolname
     when TEXT_VCCLCOMPILERTOOL
       arr_info = get_tools_info().arr_compiler_info
@@ -4116,7 +4116,7 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10BaseElemParser
     if not elem_first.nil?
       found = be_optimistic()
       elem_name = elem_first.name
-      elem_parser = nil
+      elem_parser = nil # IMPORTANT: reset it!
       case elem_name
       when 'Filter'
         elem_parser = V2C_VS10ItemGroupFiltersParser.new(@elem_xml, get_project().filters)
@@ -4147,7 +4147,7 @@ class V2C_VS10ItemGroupForwarderParser < V2C_VS10ParserBase
     found = be_optimistic()
     itemgroup_label = @elem_xml.attributes[TEXT_LABEL]
     logger.debug("#{TEXT_LABEL} #{itemgroup_label}!")
-    item_group_parser = nil
+    item_group_parser = nil # IMPORTANT: reset it!
     case itemgroup_label
     when 'ProjectConfigurations'
       item_group_parser = V2C_VS10ItemGroupProjectConfigurationsParser.new(@elem_xml, get_project().build_platform_configs)
@@ -8347,6 +8347,7 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
       project_valid = false
       error_msg = "project validation failed: #{e.message}"
       log_error error_msg
+      # Hohumm, this variable is not really what we should be having here...
       if ($v2c_validate_vcproj_abort_on_error > 0)
         raise # escalate the problem
       end
