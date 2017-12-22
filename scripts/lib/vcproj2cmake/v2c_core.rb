@@ -542,7 +542,7 @@ def normalize_path(p)
   File.join(felems).concat(trailing_slash_status)
 end
 
-def escape_char(in_string, foreign_payload_char)
+def escape_char!(in_string, foreign_payload_char)
   #puts "in_string #{in_string}"
   # WARNING!! It's NOT possible to simply pass "foreign_payload_char," param here
   # (gsub replacement will FAIL) - we need actual pattern syntax here.
@@ -557,7 +557,7 @@ end
 # hrmm, seems we need some more even...
 RUBY_GSUB_PER_BACKSLASH_MAGIC = '\\\\'
 
-def escape_backslash(in_string)
+def escape_backslash!(in_string)
   in_string.gsub!('\\', RUBY_GSUB_PER_BACKSLASH_MAGIC + RUBY_GSUB_PER_BACKSLASH_MAGIC)
 end
 
@@ -565,7 +565,7 @@ want_bs_test = false
 if false != want_bs_test
   test_bs = 'hi\\there'
   puts "ESCAPED PRE: #{test_bs}"
-  escape_backslash(test_bs)
+  escape_backslash!(test_bs)
   puts "ESCAPED POST: #{test_bs}"
 end
 
@@ -5977,7 +5977,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     return nil if in_string.nil?
     str = in_string.clone
     # Hmm, any other special chars to be escaped here?
-    escape_backslash(str)
+    escape_backslash!(str)
     # Note that CMake currently does not properly handle an escaped
     # semi-colon (CMake list separator). See CMake bug #13806.
     str.gsub!(REGEX_OBJ_SEMICOLON, '\\;')
@@ -6079,8 +6079,8 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     arr_compile_defn.each do |compile_defn|
       # Need to escape the value part of the key=value definition:
       if COMPILE_DEF_NEEDS_CMAKE_ESCAPING_REGEX_OBJ.match(compile_defn)
-        escape_char(compile_defn, '\\(')
-        escape_char(compile_defn, '\\)')
+        escape_char!(compile_defn, '\\(')
+        escape_char!(compile_defn, '\\)')
       end
       compile_defn
     end
@@ -7334,7 +7334,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
     # Hmm, perhaps need to use CGI.escape since chars other than just '"' might need to be escaped?
     # NOTE: needed to clone() this string above since otherwise modifying (same) source object!!
-    # We used to escape_char('"') below, but this was problematic
+    # We used to escape_char!('"') below, but this was problematic
     # on VS7 .vcproj generator since that one is BUGGY (GIT trunk
     # 201007xx): it should escape quotes into XMLed "&quot;" yet
     # it doesn't. Thus it's us who has to do that and pray that it
@@ -7349,15 +7349,15 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # as in CMake's EscapeForXML() method.
     scc_info_cmake.project_name.gsub!('"', '&quot;')
     if scc_info_cmake.local_path
-      escape_backslash(scc_info_cmake.local_path)
-      escape_char(scc_info_cmake.local_path, '"')
+      escape_backslash!(scc_info_cmake.local_path)
+      escape_char!(scc_info_cmake.local_path, '"')
     end
     if scc_info_cmake.provider
-      escape_char(scc_info_cmake.provider, '"')
+      escape_char!(scc_info_cmake.provider, '"')
     end
     if scc_info_cmake.aux_path
-      escape_backslash(scc_info_cmake.aux_path)
-      escape_char(scc_info_cmake.aux_path, '"')
+      escape_backslash!(scc_info_cmake.aux_path)
+      escape_char!(scc_info_cmake.aux_path, '"')
     end
 
     next_paragraph()
