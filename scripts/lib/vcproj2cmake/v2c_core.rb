@@ -7320,46 +7320,61 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     end
 
     # In case there's a valid target,
-    # optionally mark as needing WinMain() (Win32 non-Console executables)
-    # and write target_link_libraries().
-    # TODO: for Console ConfigurationType, it might be useful to already
-    # automatically provide the semi-standard _CONSOLE define:
-    # http://stackoverflow.com/questions/4839181/is-there-a-define-associated-with-the-subsystem
+    # configure its requirements.
     tools = target_info_curr.tools
     if target_is_valid
       arr_linker_info = tools.arr_linker_info
       arr_linker_info.each { |linker_info_curr|
-        if V2C_TargetConfig_Defines::CFG_TYPE_APP == target_config_info_curr.cfg_type
-          write_WinMain() if false != linker_info_curr.need_WinMain()
-        end
+        put_target_attributes(
+          target_config_info_curr,
+          linker_info_curr)
 
-        arr_dependency_names = array_collect_compact(linker_info_curr.arr_dependencies) do |dep|
-          next if not dep.is_library_type()
-          dependency_path = dep.dependency
-          # We'll strip the path (plus system-specific .lib extension)
-          # from the dependency,
-          # since CMake has a high-level "target name" dependency operation,
-          # and dependency_mappings.txt currently is expected to map
-          # from name-only to a destination expression.
-          # We might actually want to give up name-only handling eventually,
-          # since it's possibly undesired information loss.
-          # A prime example of trouble would be dependencies on two libraries
-          # in different paths yet same name!! (I would consider
-          # this to be a pathological case - but with full paths kept in MSVS
-          # it most likely works).
-          # We'll do that handling here rather than within helper getters of
-          # data classes: e.g. .lib extension is very system-specific,
-          # and this place here has much more knowledge to figure out details
-          # of the originating system...
-          dependency_name = File.basename(dependency_path, '.lib')
-          dependency_name
-        end
-        write_link_libraries(arr_dependency_names, map_dependencies)
+        put_target_dependencies(
+          linker_info_curr,
+          map_dependencies)
       }
       logger.debug "TARGET_LINK_LIBRARIES: #{arr_linker_info.inspect}"
     end # target_is_valid
     logger.debug "TARGET_LINK_LIBRARIES: target_is_valid #{target_is_valid}"
     return target_is_valid
+  end
+  # optionally mark as needing WinMain() (Win32 non-Console executables)
+  # TODO: for Console ConfigurationType, it might be useful to already
+  # automatically provide the semi-standard _CONSOLE define:
+  # http://stackoverflow.com/questions/4839181/is-there-a-define-associated-with-the-subsystem
+  def put_target_attributes(
+    target_config_info_curr,
+    linker_info_curr)
+    if V2C_TargetConfig_Defines::CFG_TYPE_APP == target_config_info_curr.cfg_type
+      write_WinMain() if false != linker_info_curr.need_WinMain()
+    end
+  end
+  # write target_link_libraries().
+  def put_target_dependencies(
+    linker_info_curr,
+    map_dependencies)
+    arr_dependency_names = array_collect_compact(linker_info_curr.arr_dependencies) do |dep|
+      next if not dep.is_library_type()
+      dependency_path = dep.dependency
+      # We'll strip the path (plus system-specific .lib extension)
+      # from the dependency,
+      # since CMake has a high-level "target name" dependency operation,
+      # and dependency_mappings.txt currently is expected to map
+      # from name-only to a destination expression.
+      # We might actually want to give up name-only handling eventually,
+      # since it's possibly undesired information loss.
+      # A prime example of trouble would be dependencies on two libraries
+      # in different paths yet same name!! (I would consider
+      # this to be a pathological case - but with full paths kept in MSVS
+      # it most likely works).
+      # We'll do that handling here rather than within helper getters of
+      # data classes: e.g. .lib extension is very system-specific,
+      # and this place here has much more knowledge to figure out details
+      # of the originating system...
+      dependency_name = File.basename(dependency_path, '.lib')
+      dependency_name
+    end
+    write_link_libraries(arr_dependency_names, map_dependencies)
   end
   def write_target_executable(target_name, string_sources_list)
     # We will NOT add the WIN32 param here -
