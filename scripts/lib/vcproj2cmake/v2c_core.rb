@@ -51,7 +51,7 @@ require 'vcproj2cmake/util_file' # V2C_Util_File.cmp()
 $VERBOSE=true
 
 
-# RUBY VERSION COMPAT STUFF
+### RUBY VERSION COMPAT STUFF BEGIN ###
 
 if (RUBY_VERSION < '1.9') # FIXME exact version where it got introduced?
   def rc_string_start_with(candidate, str_start)
@@ -67,6 +67,8 @@ module V2C_Ruby_Compat
   alias string_start_with rc_string_start_with
   module_function :string_start_with
 end
+
+### RUBY VERSION COMPAT STUFF END ###
 
 # https://blog.arkency.com/2017/07/nil-empty-blank-ruby-rails-difference/
 def obj_nil_or_empty(
@@ -315,7 +317,7 @@ FILENAME_MAP_LIB_DIRS_DEP = File.join($v2c_config_dir_local, 'lib_dirs_dep_mappi
 
 
 # Additionally enable Ruby's $DEBUG in case:
-# - we want at least debug level
+# - we want a log level of at least debug
 if $v2c_log_level >= V2C_LOG_LEVEL_DEBUG
   $DEBUG=true
 end
@@ -1256,7 +1258,7 @@ module V2C_TargetConfig_Defines
   MFC_DYNAMIC = 2
 end
 
-# FIXME: all related parts should be renamed into something like
+# XXX: all related parts should be renamed into something like
 # Framework_Config or Toolkit_Config or some such,
 # depending on which members this class ends up containing.
 class V2C_Target_Config_Build_Info < V2C_Info_Elem_Base
