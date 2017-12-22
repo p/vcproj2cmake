@@ -3726,7 +3726,7 @@ class V2C_VSProjectFileParserBase < V2C_ParserBase
     super(
       nil) # hrmpf - layering violation - we are an outer handler which is specifically file-based which produces an *array* of results, thus we do NOT service an info_elem!
     @p_parser_proj_file = p_parser_proj_file
-    @proj_filename = p_parser_proj_file.to_s
+    @proj_filename = p_parser_proj_file.to_s # FIXME: do we want to keep the string-based filename? We should probably change several sub classes to be Pathname-based...
     @arr_projects_out = arr_projects_out
     @proj_xml_parser = nil
   end
@@ -4126,8 +4126,7 @@ class V2C_VS10ItemGroupForwarderParser < V2C_VS10ParserBase
     item_group_parser = nil
     case itemgroup_label
     when 'ProjectConfigurations'
-      item_group_parser =
-      V2C_VS10ItemGroupProjectConfigurationsParser.new(@elem_xml, get_project().build_platform_configs)
+      item_group_parser = V2C_VS10ItemGroupProjectConfigurationsParser.new(@elem_xml, get_project().build_platform_configs)
     when nil
       item_group_parser = V2C_VS10ItemGroupAnonymousParser.new(@elem_xml, get_project())
     else
