@@ -2755,7 +2755,10 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
         end
       end
     end
-    [success, bool_out]
+    [
+      success,
+      bool_out
+    ]
   end
 end
 
@@ -6222,18 +6225,29 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   end
   def write_cmake_minimum_version(str_cmake_minimum_version)
     ensure_string_nonempty(str_cmake_minimum_version)
-    write_command_list_single_line('cmake_minimum_required', [ 'VERSION', str_cmake_minimum_version ])
+    arr_args = [
+      'VERSION',
+      str_cmake_minimum_version
+    ]
+    write_command_list_single_line('cmake_minimum_required', arr_args)
   end
   def write_cmake_policy(policy_num, set_to_new)
     comment = get_cmake_policy_docstring(policy_num)
     str_policy = '%s%04d' % [ 'CMP', policy_num ]
-    arr_conditional = [ 'POLICY', str_policy ]
+    arr_conditional = [
+      'POLICY',
+      str_policy
+    ]
     write_conditional_block(arr_conditional) do
       if not comment.nil?
         write_comment_at_level(COMMENT_LEVEL_VERBOSE, comment)
       end
       str_OLD_NEW = set_to_new ? 'NEW' : 'OLD'
-      arr_args_set_policy = [ 'SET', str_policy, str_OLD_NEW ]
+      arr_args_set_policy = [
+        'SET',
+        str_policy,
+        str_OLD_NEW
+      ]
       write_command_list_single_line('cmake_policy', arr_args_set_policy)
     end
   end
@@ -6607,7 +6621,13 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     end
     arr_compile_defn
   end
-  def get_target_syntax_expression(target_name); [ 'TARGET', target_name ] end
+  def get_target_syntax_expression(target_name);
+    arr_target_syntax = [
+      'TARGET',
+      target_name
+    ]
+    arr_target_syntax
+  end
   def when_target_valid_scriptlet_block(target_name)
     arr_target_conditional = get_target_syntax_expression(target_name)
     write_conditional_block(arr_target_conditional) do
@@ -6846,7 +6866,10 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
         #end
       end
     else
-      arr_args_func = [ use_of_atl.to_s(), use_of_mfc.to_s() ]
+      arr_args_func = [
+        use_of_atl.to_s(),
+        use_of_mfc.to_s()
+      ]
       write_invoke_object_conditional_v2c_function('v2c_local_set_cmake_atl_mfc_flags', target_name, condition, arr_args_func)
     end
   end
@@ -7543,7 +7566,9 @@ class V2C_CMakeCompilerInfoGenerator < V2C_CMakeTargetGenerator
     else
       log_implementation_bug('unknown charset type!?')
     end
-    arr_args_func_other = [ charset_type ]
+    arr_args_func_other = [
+      charset_type
+    ]
     write_invoke_object_conditional_v2c_function(
       'v2c_target_config_charset_set',
       get_target_name(),
@@ -7663,7 +7688,11 @@ class V2C_CMakeCompilerInfoGenerator < V2C_CMakeTargetGenerator
     # and should derive the header from that - but we could grep the
     # .cpp file for the similarly named include......).
     return if string_nil_or_empty(pch_source_name)
-    arr_args_precomp_header = [ pch_use_mode.to_s, pch_source_name, pch_binary_name ]
+    arr_args_precomp_header = [
+      pch_use_mode.to_s,
+      pch_source_name,
+      pch_binary_name
+    ]
     write_invoke_object_conditional_v2c_function('v2c_target_add_precompiled_header',
       target_name, condition, arr_args_precomp_header)
   end
@@ -7818,7 +7847,10 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
   def file_list_generate_callback_invoker(project_name, file_list_type_magic, arr_file_elems, add_to_target)
     var_name_add_to_target = 'fl_want_add_to_target'
     write_set_var_bool(var_name_add_to_target, add_to_target)
-    arr_args = [ file_list_type_magic, var_name_add_to_target ]
+    arr_args = [
+      file_list_type_magic,
+      var_name_add_to_target
+    ]
     arr_args.concat(arr_file_elems)
     write_command_list_quoted('_v2c_target_filelist_route', project_name, arr_args)
   end
@@ -7886,7 +7918,10 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     file_list_set_language_source_property(arr_file_elems, 'IDL')
   end
   def file_list_set_language_source_property(arr_file_elems, lang)
-    put_property_source(arr_file_elems, 'LANGUAGE', [ lang ])
+    arr_lang = [
+      lang
+    ]
+    put_property_source(arr_file_elems, 'LANGUAGE', arr_lang)
   end
   def put_source_vars_combined_list(arr_sub_source_list_var_names)
     next_paragraph()
@@ -8127,15 +8162,29 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     # via genex or conditionals etc.)
     # than inflexibly specifying it
     # right at target instantiation.
-    write_command_list_single_line('add_executable', [ target_name, string_sources_list ])
+    arr_args = [
+      target_name,
+      string_sources_list
+    ]
+    write_command_list_single_line('add_executable', arr_args)
   end
 
   def write_target_library_dynamic(target_name, string_sources_list)
-    write_command_list_single_line('add_library', [ target_name, 'SHARED', string_sources_list ])
+    arr_args = [
+      target_name,
+      'SHARED',
+      string_sources_list
+    ]
+    write_command_list_single_line('add_library', arr_args)
   end
 
   def write_target_library_static(target_name, string_sources_list)
-    write_command_list_single_line('add_library', [ target_name, 'STATIC', string_sources_list ])
+    arr_args = [
+      target_name,
+      'STATIC',
+      string_sources_list
+    ]
+    write_command_list_single_line('add_library', arr_args)
   end
   def write_target_type(cfg_type)
     target_is_valid = false
@@ -8231,7 +8280,8 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     if project_keyword.nil?; project_keyword = V2C_ATTRIBUTE_NOT_PROVIDED_MARKER end
     arr_args_func = [
       project_name,
-      project_keyword ]
+      project_keyword
+    ]
     write_invoke_config_object_v2c_function_quoted(
       'v2c_target_post_setup',
       get_target_name(),
@@ -8507,7 +8557,12 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     write_comment_at_level(COMMENT_LEVEL_VERBOSE,
       "For this project's file, indicates originating build environment / IDE,\n" \
       "and indicates conversion moment in time (UTC, format #{timestamp_format_docs})")
-    write_invoke_v2c_function_quoted('v2c_project_conversion_info_set', [ project_name, str_time, str_from_buildtool_version ])
+    arr_args = [
+      project_name,
+      str_time,
+      str_from_buildtool_version
+    ]
+    write_invoke_v2c_function_quoted('v2c_project_conversion_info_set', arr_args)
   end
   def put_guid(
     project_name,
@@ -8517,7 +8572,11 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
       "Indicates the GUID that the project of the original environment carried.\n" \
       "May or may not be adopted by the newly generated project target as well,\n" \
       "depending on user choice.\n")
-    write_invoke_v2c_function_quoted('v2c_project_indicate_original_guid', [ project_name, project_guid ])
+    arr_args = [
+      project_name,
+      project_guid
+    ]
+    write_invoke_v2c_function_quoted('v2c_project_indicate_original_guid', arr_args)
   end
   def detect_programming_languages(project_info)
     language_detector = V2C_CMakeProjectLanguageDetector.new(project_info)
@@ -9084,7 +9143,11 @@ class V2C_CMakeSourceGroupFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
       gen_message_info("#{target_name}: defining source groups #{arr_source_group_names_flattened.join(', ')}.")
       sg_names_flattened = sg_var_prefix + 'names_flattened_'
       write_list(sg_names_flattened, arr_source_group_names_flattened)
-      gen_foreach([ 'sg_name_flattened_', get_dereferenced_variable_name(sg_names_flattened) ]) do
+      arr_foreach_elems = [
+        'sg_name_flattened_',
+        get_dereferenced_variable_name(sg_names_flattened)
+      ]
+      gen_foreach(arr_foreach_elems) do
         sg_name_flat_deref = get_dereferenced_variable_name('sg_name_flattened_')
         arr_func_parms = nil
         generate_helper_vars = false
@@ -9642,7 +9705,10 @@ class V2C_ProjectPostProcess < V2C_LoggerBase
       info_file_h = V2C_Info_File.new; info_file_h.path_relative = 'test1.h'
       info_file_hpp = V2C_Info_File.new; info_file_hpp.path_relative = 'test1.hpp'
       sg2 = V2C_File_Filters_Group_Info.new('Headers', [ 'h', 'hpp' ], [ info_file_h, info_file_hpp ])
-      project_info.arr_filtered_file_lists = [ sg1, sg2 ]
+      project_info.arr_filtered_file_lists = [
+        sg1,
+        sg2
+      ]
     else
       project_info.arr_filtered_file_lists = hash_ensure_sorted_values(hash_group_info) # NOT: hash.values
     end
