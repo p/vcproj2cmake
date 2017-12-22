@@ -280,43 +280,45 @@ log_info "Doing case-#{str_case_match_type}SENSITIVE matching on project file ca
 # ("Local Jump Error" http://www.ruby-forum.com/topic/153730 )
 arr_filtered_dirs = Array.new
 
-Find.find('./') do |f|
-  next if not test(?d, f)
+Find.find('./') do |dir_candidate|
+  next if not test(?d, dir_candidate)
   # skip symlinks since they might be pointing _backwards_!
-  next if FileTest.symlink?(f)
+  next if FileTest.symlink?(dir_candidate)
+
+  dir = dir_candidate
 
   is_excluded_recursive = false
   if not excl_regex_recursive.nil?
-    #puts "MATCH: #{f} vs. #{excl_regex_recursive}"
-    if f.match(excl_regex_recursive)
+    #puts "MATCH: #{dir} vs. #{excl_regex_recursive}"
+    if dir.match(excl_regex_recursive)
       is_excluded_recursive = true
     end
   end
   # Also, skip CMake build directories! (containing CMake-generated .vcproj files!)
   # FIXME: more precise checking: check file _content_ against CMake generation!
   if true != is_excluded_recursive
-    if f =~ /\/build[^\/]*$/i
+    if dir =~ /\/build[^\/]*$/i
       is_excluded_recursive = true
     end
   end
   if true == is_excluded_recursive
-    log_debug "EXCLUDED RECURSIVELY #{f}!"
+    log_debug "EXCLUDED RECURSIVELY #{dir}!"
     Find.prune() # throws exception to skip entire recursive directories block
   end
 
   is_excluded_single = false
   if not excl_regex_single.nil?
-    #puts "MATCH: #{f} vs. #{excl_regex_single}"
-    if f.match(excl_regex_single)
+    #puts "MATCH: #{dir} vs. #{excl_regex_single}"
+    if dir.match(excl_regex_single)
       is_excluded_single = true
     end
   end
   #puts "excluded: #{is_excluded_single}"
   if true == is_excluded_single
-    log_debug "EXCLUDED SINGLE #{f}!"
+    log_debug "EXCLUDED SINGLE #{dir}!"
     next
   end
-  arr_filtered_dirs.push(f)
+  arr_filtered_dirs.push(dir)
 end
 
 csproj_extension = 'csproj'
