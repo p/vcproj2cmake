@@ -5467,14 +5467,18 @@ class V2C_ProjectValidator
     # (compiler, linker, MIDL etc.)
     need_config_info = false if @project_info.vs_keyword == V2C_Project_Info::KEYWORD_MAKEFILE
     if false != need_config_info
-      arr_config_info = @project_info.arr_config_info
-      if obj_nil_or_empty(arr_config_info)
-        validation_error('no config information for a project type which probably requires it!?')
-      end
+      validate_config_infos(
+        @project_info.arr_config_info)
     end
   end
   def validation_error(str_message)
     raise V2C_ValidationError, "Project #{@project_info.name}: #{str_message}; #{@project_info.inspect}"
+  end
+  def validate_config_infos(
+    arr_config_info)
+    if obj_nil_or_empty(arr_config_info)
+      validation_error('no config information for a project type which probably requires it!?')
+    end
   end
 end
 
