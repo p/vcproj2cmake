@@ -7466,17 +7466,6 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     # we better *always* add a full include path.
     put_include_directories(target_name, arr_include_path_to_pch_header, V2C_Include_Dir_Defines::BEFORE)
   end
-  def write_invoke_config_object_v2c_function_quoted(str_function, str_object, arr_args_func)
-    write_vcproj2cmake_func_comment()
-    write_invoke_config_object_function_quoted(str_function, str_object, arr_args_func)
-  end
-  def write_invoke_v2c_function_quoted(str_function, arr_args_func)
-    write_vcproj2cmake_func_comment()
-    write_invoke_function_quoted(str_function, arr_args_func)
-  end
-  def put_v2c_hook_invoke(str_filename)
-      write_invoke_v2c_function_quoted('v2c_hook_invoke', [ str_filename ])
-  end
   def put_customization_hook(include_file)
     return if $v2c_generator_one_time_conversion_only
     gen_put_customization_hook(include_file)
@@ -7575,31 +7564,40 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     # See also "Re: [CMake] CMAKE_MFC_FLAG not working in functions"
     #   http://www.mail-archive.com/cmake@cmake.org/msg38677.html
 
-    if 1 == $v2c_generate_self_contained_file
-      gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
-      gen_condition.generate(condition) do
-        #if use_of_mfc > V2C_TargetConfig_Defines::MFC_FALSE
-          write_set_var('CMAKE_MFC_FLAG', use_of_mfc)
-        #end
-        # ok, there's no CMAKE_ATL_FLAG yet, AFAIK, but still prepare
-        # for it (also to let people probe on this in hook includes)
-        # FIXME: since this flag does not exist yet in CMake
-        # yet MFC sort-of includes ATL configuration,
-        # perhaps as a workaround one should
-        # set the MFC flag
-        # if use_of_atl is true?
-        #if use_of_atl > 0
-          # TODO: should also set the per-configuration-type variable variant
-          write_set_var('CMAKE_ATL_FLAG', use_of_atl)
-        #end
-      end
-    else
-      arr_args_func = [
-        use_of_atl.to_s(),
-        use_of_mfc.to_s(),
-      ]
-      write_invoke_object_conditional_v2c_function('v2c_local_set_cmake_atl_mfc_flags', target_name, condition, arr_args_func)
-    end
+    raise_error_abstract_base_method
+  end
+end
+
+class V2C_CMakeV2CSyntaxGeneratorV2CFunc < V2C_CMakeV2CSyntaxGeneratorBase
+  private
+  def gen_put_customization_hook(include_file)
+    put_v2c_hook_invoke(include_file)
+  end
+  def gen_put_customization_hook_from_cmake_var(include_file_var)
+    put_v2c_hook_invoke(get_dereferenced_variable_name(include_file_var))
+  end
+  def gen_put_target_include_directories(target_name, arr_args)
+    write_command_list_quoted('v2c_target_include_directories', target_name, arr_args)
+  end
+  # Interface-global docs see abstract base.
+  def do_configure_atl_mfc_flag(target_name, condition, use_of_atl, use_of_mfc)
+    arr_args_func = [
+      use_of_atl.to_s(),
+      use_of_mfc.to_s(),
+    ]
+    write_invoke_object_conditional_v2c_function('v2c_local_set_cmake_atl_mfc_flags', target_name, condition, arr_args_func)
+  end
+  def gen_put_converter_script_location(script_location)
+    write_invoke_v2c_function_quoted('v2c_converter_script_set_location', [ script_location ])
+  end
+  def put_v2c_target_source_groups_definitions_include(target_name)
+    write_comment_at_level(COMMENT_LEVEL_STANDARD,
+      "Optionally include()s a generated file which contains source_group() defs\n" \
+      "for this project target.")
+    write_command_single_line('_v2c_target_source_groups_definitions_include', target_name)
+  end
+  def gen_message_info(msg)
+    write_command_list_quoted('_v2c_msg_info', msg, nil)
   end
   # FIXME: intermingling and stupifying condition handling like this
   # likely isn't such a smart idea (there might easily turn up conditions
@@ -7631,30 +7629,16 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     arr_args_func.concat(arr_args_func_other)
     write_invoke_config_object_v2c_function_quoted(str_function, object_name, arr_args_func)
   end
-end
-
-class V2C_CMakeV2CSyntaxGeneratorV2CFunc < V2C_CMakeV2CSyntaxGeneratorBase
-  private
-  def gen_put_customization_hook(include_file)
-    put_v2c_hook_invoke(include_file)
+  def write_invoke_config_object_v2c_function_quoted(str_function, str_object, arr_args_func)
+    write_vcproj2cmake_func_comment()
+    write_invoke_config_object_function_quoted(str_function, str_object, arr_args_func)
   end
-  def gen_put_customization_hook_from_cmake_var(include_file_var)
-    put_v2c_hook_invoke(get_dereferenced_variable_name(include_file_var))
+  def write_invoke_v2c_function_quoted(str_function, arr_args_func)
+    write_vcproj2cmake_func_comment()
+    write_invoke_function_quoted(str_function, arr_args_func)
   end
-  def gen_put_target_include_directories(target_name, arr_args)
-    write_command_list_quoted('v2c_target_include_directories', target_name, arr_args)
-  end
-  def gen_put_converter_script_location(script_location)
-    write_invoke_v2c_function_quoted('v2c_converter_script_set_location', [ script_location ])
-  end
-  def put_v2c_target_source_groups_definitions_include(target_name)
-    write_comment_at_level(COMMENT_LEVEL_STANDARD,
-      "Optionally include()s a generated file which contains source_group() defs\n" \
-      "for this project target.")
-    write_command_single_line('_v2c_target_source_groups_definitions_include', target_name)
-  end
-  def gen_message_info(msg)
-    write_command_list_quoted('_v2c_msg_info', msg, nil)
+  def put_v2c_hook_invoke(str_filename)
+      write_invoke_v2c_function_quoted('v2c_hook_invoke', [ str_filename ])
   end
 end
 
@@ -7680,6 +7664,26 @@ class V2C_CMakeV2CSyntaxGeneratorSelfContained < V2C_CMakeV2CSyntaxGeneratorBase
     write_comment_at_level(COMMENT_LEVEL_MINIMUM,
       "User override mechanism (don't prevent specifying a custom location of this script)")
     write_set_var_if_unset('V2C_SCRIPT_LOCATION', element_manual_quoting(script_location))
+  end
+  # Interface-global docs see abstract base.
+  def do_configure_atl_mfc_flag(target_name, condition, use_of_atl, use_of_mfc)
+    gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
+    gen_condition.generate(condition) do
+      #if use_of_mfc > V2C_TargetConfig_Defines::MFC_FALSE
+        write_set_var('CMAKE_MFC_FLAG', use_of_mfc)
+      #end
+      # ok, there's no CMAKE_ATL_FLAG yet, AFAIK, but still prepare
+      # for it (also to let people probe on this in hook includes)
+      # FIXME: since this flag does not exist yet in CMake
+      # yet MFC sort-of includes ATL configuration,
+      # perhaps as a workaround one should
+      # set the MFC flag
+      # if use_of_atl is true?
+      #if use_of_atl > 0
+        # TODO: should also set the per-configuration-type variable variant
+        write_set_var('CMAKE_ATL_FLAG', use_of_atl)
+      #end
+    end
   end
 end
 
