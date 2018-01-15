@@ -10474,7 +10474,8 @@ def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_de
         # TODO: should perhaps queue such errors in a cleverly sorted way,
         # to be printed as a summary
         # after a project's conversion step ended.
-        log_error "#{instance_ref} does not exist!? (perhaps filename with wrong case, or wrong path, ..., in either file lists or perhaps source group filter lists)"
+        msg_error = "#{instance_ref} does not exist!? (perhaps filename with wrong case, or wrong path, ..., in either file lists or perhaps source group filter lists)"
+        str_report = "Improper original file. Please fix content of the original project file! [#{msg_error}]"
         if abort_on_error
           # FIXME: should be
           # raising an exception rather than exiting, to
@@ -10482,7 +10483,9 @@ def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_de
           # completely directly exit out on
           # entire possibly recursive (global) operation
           # when a single project is in error...
-          log_fatal "Improper original file - will abort and NOT generate a broken converted project file. Please fix content of the original project file!"
+          log_fatal "#{str_report} - will abort and NOT generate a broken converted project file."
+        else
+          log_error str_report
         end
       end
     end
