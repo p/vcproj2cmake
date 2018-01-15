@@ -463,6 +463,13 @@ if 0 < $v2c_validate_vcproj_abort_on_error
   # Thus, also do NOT obfuscate (hide) the "exc*ption" keyword here
   # since searching for "xcept"
   # SHOULD be successful to point people at this fact.
+  # Swallowing/ignoring exceptions is questionable since:
+  # - this often means that
+  #   an unknown/problematic state,
+  #   where it's unknown how application processing is supposed to
+  #   react properly,
+  #   gets ignored, thus
+  #   there is further state progress, but on unknown terrain!! (--> CORRUPTION??)
   log_warn "$v2c_validate_vcproj_abort_on_error set to #{$v2c_validate_vcproj_abort_on_error} --> some exceptions will get swallowed."
 end
 
@@ -763,9 +770,18 @@ end
 # since they _are required_ to end up with
 # reproducible, identical content -
 # if content happened to change
-# from one conversion run to the next one, then
+# from one conversion run to the next one
+# (thus resulting in touching i.e. *modifying* filesystem content via write), then
 # a huge penalty of
-# a _full rebuild_ of an entire build tree would ensue!
+# potentially up to a _full rebuild_ of an entire build tree may ensue!
+# Detect recently modified files: find . -mmin +0 -mmin -1
+# https://stackoverflow.com/questions/21036109/maintaining-order-of-iteration-on-a-hash-ruby-1-8-7
+# "Preserve insert order in a Hash"
+#   https://www.ruby-forum.com/topic/166075
+# "Inconsistent hash order with Ruby 1.8"
+#   https://tickets.puppetlabs.com/browse/PUP-1755
+# "Hash iteration order in a template not consistent"
+#   https://projects.puppetlabs.com/issues/16266
 
 # See syntax at http://www.ruby-mine.de/2006/12/4/gef-hrliche-sicherheitsl-cken-in-cgi-rb
 if (RUBY_VERSION < '1.9') # FIXME exact version where it got introduced?
@@ -982,6 +998,7 @@ end
 # '%(_OutputFileFromLib.FullPath)' != '$([System.IO.Path]::GetFullPath($(TargetPath)))'
 # '%(PreLinkEvent.Message)' != ''
 # '@(BuildMacro)' != ''
+# '$(WixTargetsPath)' == '' AND '$(MSBuildExtensionsPath32)' != ''
 class V2C_Info_Condition
   def initialize(
     str_condition = nil)
@@ -2181,7 +2198,7 @@ class V2C_Item_Lists_Container < V2C_Info_Elem_Base
   end
 
   private
-  # registers an item list (does NOT do collision checks!)
+  # registers an item list (does NOT do collision checks at insertion!)
   def register(
     item_list)
     @arr_item_lists.push(
@@ -3006,9 +3023,10 @@ class V2C_XmlParserBase < V2C_ParserBase
       raw)
     # See also http://stackoverflow.com/questions/14899734/unescape-numeric-xml-entities-with-lua
     # XXX this is a very incomplete / improperly hard-coded list,
-    # should try to possibly find
+    # should alternatively use
     # an existing toolkit API
-    # for this purpose.
+    # for this purpose; candidates:
+    # - REXML::Text::[un]normalize()
     cooked.gsub!('&#x0A;', STR_CTRL_LF)
     cooked.gsub!('&#x0D;', STR_CTRL_CR)
     # Commands in Custom Build Tools are said to have any % signs
@@ -10481,9 +10499,13 @@ def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_de
         file_accessible = true
       else
         # TODO: should perhaps queue such errors in a cleverly sorted way,
-        # for the following purposes:
-        # - to be printed as a summary
-        #   after a project's conversion step ended
+        # for the following purposes,
+        # right when a project's conversion step scope ends:
+        # - to be printed as a total summary
+        # - to be able to provide a
+        #   very, very useful ("awesome!")
+        #   fully precisely location-referenced interactive-correction user mode,
+        #   when flag-requested by the user
         msg_error = "#{instance_ref} does not exist!? (perhaps filename with wrong case, or wrong path, ..., in either file lists or perhaps source group filter lists)"
       end
     end

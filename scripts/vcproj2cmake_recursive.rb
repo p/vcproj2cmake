@@ -488,7 +488,7 @@ def execute_work_units(
         work_unit)
     }
   # Need to have open-coded exception logging lines here
-  # since foreign-process exceptions will be swallowed silently!
+  # (reason: foreign-process exceptions will be swallowed silently!)
   rescue # NoMethodError etc.
     log_error "#{scope_id}: EXCEPTION!! [context info not available]"
     raise

@@ -34,6 +34,13 @@ $v2c_validate_vcproj_ensure_files_ok = 1
 #   necessitating a painful manual re-execution
 #   of vcproj2cmake_recursive.rb plus arguments
 #   after having fixed all problematic .vcproj settings
+# - swallowing/ignoring error conditions is questionable since:
+#   - this often means that
+#     an unknown/problematic state,
+#     where it's unknown how application processing is supposed to
+#     react properly,
+#     gets ignored, thus
+#     there is further state progress, but on unknown terrain!! (--> CORRUPTION??)
 $v2c_validate_vcproj_abort_on_error = 1
 
 # Whether to have a case insensitive match for the smart project file
@@ -117,6 +124,6 @@ $v2c_enable_processes = true
 # multi-core!), IOW it's _SLOWER_ than serialized operation!
 # Currently still disabled by default (better have some more testing).
 # Also, console output is likely to get intermingled (semi-readable).
-# Should implement scoped output management if this turns out to be
+# Should implement scoped/per-instance output management if this turns out to be
 # a problem.
 $v2c_enable_threads = false
