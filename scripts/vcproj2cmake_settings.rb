@@ -26,14 +26,14 @@ $v2c_module_path_local = "./#{$v2c_module_path_root}"
 $v2c_validate_vcproj_ensure_files_ok = 1
 
 # Whether to actively fail the conversion in case any errors have been
-# encountered. Strongly recommended to active this,
-# since generating an incorrect CMakeLists.txt
-# will make a CMake configure run barf,
-# at which point the previous CMake-generated build system is history
-# and thus targets for automatic rebuild of CMakeLists.txt are gone, too,
-# necessitating a painful manual re-execution
-# of vcproj2cmake_recursive.rb plus arguments
-# after having fixed all problematic .vcproj settings.
+# encountered. Strongly recommended to active this, since:
+# - generating an incorrect CMakeLists.txt
+#   will make a CMake configure run barf,
+#   at which point the previous CMake-generated build system is history
+#   and thus targets for automatic rebuild of CMakeLists.txt are gone, too,
+#   necessitating a painful manual re-execution
+#   of vcproj2cmake_recursive.rb plus arguments
+#   after having fixed all problematic .vcproj settings
 $v2c_validate_vcproj_abort_on_error = 1
 
 # Whether to have a case insensitive match for the smart project file

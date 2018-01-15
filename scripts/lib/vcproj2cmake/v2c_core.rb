@@ -2913,12 +2913,11 @@ class V2C_XmlParserBase < V2C_ParserBase
       end
     rescue ArgumentError => e
       # Ruby's ArgumentError, unfortunately,
-      # may happen for BOTH
-      # syntax errors in arguments
-      # to certain Ruby functions (integer parsing)
-      # AND
-      # for function argument count errors
-      # in Ruby functions.
+      # may happen in *several* diverse cases:
+      # - syntax errors in arguments
+      #   to certain Ruby functions (integer parsing)
+      # - function argument count errors
+      #   in Ruby functions
       # I.e. for issues in BOTH
       # implementation-time
       # AND
@@ -10482,8 +10481,9 @@ def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_de
         file_accessible = true
       else
         # TODO: should perhaps queue such errors in a cleverly sorted way,
-        # to be printed as a summary
-        # after a project's conversion step ended.
+        # for the following purposes:
+        # - to be printed as a summary
+        #   after a project's conversion step ended
         msg_error = "#{instance_ref} does not exist!? (perhaps filename with wrong case, or wrong path, ..., in either file lists or perhaps source group filter lists)"
       end
     end
