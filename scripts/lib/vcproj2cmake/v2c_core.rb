@@ -10290,7 +10290,7 @@ end
 
 # Hrmm, I'm not quite sure yet where to aggregate this function...
 # (missing some proper generator base class or so...)
-def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name, raise_error)
+def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name, abort_on_error)
   file_accessible = false
   if $v2c_validate_vcproj_ensure_files_ok
     instance_ref = "File #{quoted_string_from_string(file_relative)} (#{file_item_description}) as listed by project named #{project_name}"
@@ -10306,7 +10306,7 @@ def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_de
         # to be printed as a summary
         # after a project's conversion step ended.
         log_error "#{instance_ref} does not exist!? (perhaps filename with wrong case, or wrong path, ..., in either file lists or perhaps source group filter lists)"
-        if raise_error
+        if abort_on_error
           # FIXME: should be
           # raising an exception rather than exiting, to
           # not be unconditionally *forced* to
