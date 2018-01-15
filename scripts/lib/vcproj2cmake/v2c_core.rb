@@ -10293,8 +10293,9 @@ end
 def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name, raise_error)
   file_accessible = false
   if $v2c_validate_vcproj_ensure_files_ok
+    instance_ref = "File #{quoted_string_from_string(file_relative)} (#{file_item_description}) as listed by project named #{project_name}"
     if string_nil_or_empty(file_relative)
-      log_warn "#{project_name}: empty file argument! (#{file_item_description})"
+      log_warn "#{instance_ref} is an empty string!?"
     else
       # TODO: perhaps we need to add a permissions check, too?
       file_location = File.join(project_dir, file_relative)
@@ -10304,7 +10305,7 @@ def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_de
         # TODO: should perhaps queue such errors in a cleverly sorted way,
         # to be printed as a summary
         # after a project's conversion step ended.
-        log_error "File #{file_relative} (#{file_item_description}) as listed by project named #{project_name} does not exist!? (perhaps filename with wrong case, or wrong path, ..., in either file lists or perhaps source group filter lists)"
+        log_error "#{instance_ref} does not exist!? (perhaps filename with wrong case, or wrong path, ..., in either file lists or perhaps source group filter lists)"
         if raise_error
           # FIXME: should be
           # raising an exception rather than exiting, to
