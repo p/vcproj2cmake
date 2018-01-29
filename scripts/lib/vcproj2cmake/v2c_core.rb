@@ -2090,8 +2090,8 @@ class V2C_XmlParserBase < V2C_ParserBase
 
   def parse_attributes
     @elem_xml.attributes.each_attribute { |attr_xml|
+      logger.debug "ATTR: #{attr_xml.name}"
       begin
-        logger.debug "ATTR: #{attr_xml.name}"
         if not call_parse_attribute(attr_xml)
           if not call_parse_setting(attr_xml.name, attr_xml.value)
             unknown_attribute(attr_xml.name, attr_xml.value)
