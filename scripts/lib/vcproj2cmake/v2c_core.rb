@@ -2899,43 +2899,7 @@ end
 # XML support as required by VS7+/VS10 parsers:
 require 'rexml/document' # FIXME PERFORMANCE: THIS LINE IS SLOOOW
 
-# TODO: oerks, it seems making use of rexml/streamlistener
-# may be a much better way of parsing content in a linear way.
-# Should probably rework the core of our classes to use the StreamListener,
-# and hopefully keep servicing our existing overrides.
-
-class V2C_XmlParserError < V2C_ChainedError
-end
-
-class V2C_XmlParserBase < V2C_ParserBase
-  def initialize(
-    elem_xml,
-    info_elem_out)
-    super(
-      info_elem_out)
-    @elem_xml = elem_xml
-    @called_base_parse_element = false
-    @called_base_parse_attribute = false
-    @called_base_parse_setting = false
-    @called_base_parse_verify = false
-  end
-  # THE MAIN PARSER ENTRY POINT.
-  # Will invoke all methods of derived parser classes, whenever available.
-  def parse
-    logger.debug('parse')
-    # Do strict traversal over _all_ elements, parse what's supported by us,
-    # and yell loudly for any element which we don't know about!
-    parse_attributes
-    parse_elements
-    # This is e.g. an opportunity for the derived class
-    # to verify (and thus indicate) completeness of the data it collected
-    # while iterating through the XML hierarchy
-    found = parse_verify
-    verify_calls
-    logger.debug(
-      "found #{found}")
-    found
-  end
+module V2C_XmlDiagnostics
   def unknown_attribute(key, value); unknown_something_key_value('attribute', key, value) end
   def unknown_attribute_value(key, value)
     unknown_something_key_value('attribute value', key, value)
@@ -2963,6 +2927,102 @@ class V2C_XmlParserBase < V2C_ParserBase
   end
   def unknown_something_key_value(something_name, key, value)
     logger.todo "#{self.class.name}: unknown/incorrect XML #{something_name} (#{key}: #{value})!"
+  end
+end
+
+module V2C_XmlEntityEscaping
+  def string_unescape_from_xml__extended(
+    raw)
+    # I'm not quite sure what exactly the total set is (or: will end up)
+    # that we're supposed to be unescaping here.
+    # Once everything is said and done, we might want to rename it
+    # to a more precise string_unescape_from_xml_msvs().
+
+    cooked = string_xml_unescape_predefined_entities(
+      raw)
+    # See also http://stackoverflow.com/questions/14899734/unescape-numeric-xml-entities-with-lua
+    # XXX this is a very incomplete / improperly hard-coded list,
+    # should alternatively use
+    # an existing toolkit API
+    # for this purpose; candidates:
+    # - REXML::Text::[un]normalize()
+    cooked.gsub!('&#x0A;', STR_CTRL_LF)
+    cooked.gsub!('&#x0D;', STR_CTRL_CR)
+    # Commands in Custom Build Tools are said to have any % signs
+    # (e.g. for %WINDIR%) escaped.
+    # So add this here - but I'm unsure of two things:
+    # - we should perhaps add escaping of *all* (or "many"?) HTML-derived
+    #   % escapes
+    # - this might be a transcoding transition layer
+    #   that's different from the layer
+    #   of the usual XML entities escaping transition
+    #   (especially since docs say
+    #   that it's MSBuild where the '%' sign is "reserved")
+    #   --> move that handling to a logically separate method?
+    # And finally, the resulting %VAR% envvar syntax
+    # ought to be translated by a cross-platform command equivalence layer
+    # (i.e., which would translate commands / parameters / environment vars)
+    cooked.gsub!('%25', '%')
+    cooked
+  end
+  # Translates the 5 well-known predefined XML entities
+  def string_xml_unescape_predefined_entities(
+    raw)
+    # Attention ordering: '&' should get translated last!!
+    # (otherwise false matches possible!)
+
+    # http://stackoverflow.com/questions/14761474/performance-implications-of-stringgsub-chains
+    # --> perhaps switch to a loop over StringScanner/StringIO,
+    # but only if it's relevant (and it might be less portable even!).
+    cooked = obj_deep_copy(raw)
+    cooked.gsub!('&quot;', '"')
+    cooked.gsub!('&apos;', '\'')
+    cooked.gsub!('&lt;', '<')
+    cooked.gsub!('&gt;', '>')
+    cooked.gsub!('&amp;', '&')
+    cooked
+  end
+end
+
+# TODO: oerks, it seems making use of rexml/streamlistener
+# may be a much better way of parsing content in a linear way.
+# Should probably rework the core of our classes to use the StreamListener,
+# and hopefully keep servicing our existing overrides.
+
+class V2C_XmlParserError < V2C_ChainedError
+end
+
+class V2C_XmlParserBase < V2C_ParserBase
+  include V2C_XmlEntityEscaping
+  include V2C_XmlDiagnostics
+
+  def initialize(
+    elem_xml,
+    info_elem_out)
+    super(
+      info_elem_out)
+    @elem_xml = elem_xml
+    @called_base_parse_element = false
+    @called_base_parse_attribute = false
+    @called_base_parse_setting = false
+    @called_base_parse_verify = false
+  end
+  # THE MAIN PARSER ENTRY POINT.
+  # Will invoke all methods of derived parser classes, whenever available.
+  def parse
+    logger.debug('parse')
+    # Do strict traversal over _all_ elements, parse what's supported by us,
+    # and yell loudly for any element which we don't know about!
+    parse_attributes
+    parse_elements
+    # This is e.g. an opportunity for the derived class
+    # to verify (and thus indicate) completeness of the data it collected
+    # while iterating through the XML hierarchy
+    found = parse_verify
+    verify_calls
+    logger.debug(
+      "found #{found}")
+    found
   end
 
   def parse_attributes
@@ -3131,57 +3191,6 @@ class V2C_XmlParserBase < V2C_ParserBase
       # Should not forget to call super, unless not wanted,
       # in which case at least set the bool flag to not fail this check
     end
-  end
-  def string_unescape_from_xml__extended(
-    raw)
-    # I'm not quite sure what exactly the total set is (or: will end up)
-    # that we're supposed to be unescaping here.
-    # Once everything is said and done, we might want to rename it
-    # to a more precise string_unescape_from_xml_msvs().
-
-    cooked = string_xml_unescape_predefined_entities(
-      raw)
-    # See also http://stackoverflow.com/questions/14899734/unescape-numeric-xml-entities-with-lua
-    # XXX this is a very incomplete / improperly hard-coded list,
-    # should alternatively use
-    # an existing toolkit API
-    # for this purpose; candidates:
-    # - REXML::Text::[un]normalize()
-    cooked.gsub!('&#x0A;', STR_CTRL_LF)
-    cooked.gsub!('&#x0D;', STR_CTRL_CR)
-    # Commands in Custom Build Tools are said to have any % signs
-    # (e.g. for %WINDIR%) escaped.
-    # So add this here - but I'm unsure of two things:
-    # - we should perhaps add escaping of *all* (or "many"?) HTML-derived
-    #   % escapes
-    # - this might be a transcoding transition layer
-    #   that's different from the layer
-    #   of the usual XML entities escaping transition
-    #   (especially since docs say
-    #   that it's MSBuild where the '%' sign is "reserved")
-    #   --> move that handling to a logically separate method?
-    # And finally, the resulting %VAR% envvar syntax
-    # ought to be translated by a cross-platform command equivalence layer
-    # (i.e., which would translate commands / parameters / environment vars)
-    cooked.gsub!('%25', '%')
-    cooked
-  end
-  # Translates the 5 well-known predefined XML entities
-  def string_xml_unescape_predefined_entities(
-    raw)
-    # Attention ordering: '&' should get translated last!!
-    # (otherwise false matches possible!)
-
-    # http://stackoverflow.com/questions/14761474/performance-implications-of-stringgsub-chains
-    # --> perhaps switch to a loop over StringScanner/StringIO,
-    # but only if it's relevant (and it might be less portable even!).
-    cooked = obj_deep_copy(raw)
-    cooked.gsub!('&quot;', '"')
-    cooked.gsub!('&apos;', '\'')
-    cooked.gsub!('&lt;', '<')
-    cooked.gsub!('&gt;', '>')
-    cooked.gsub!('&amp;', '&')
-    cooked
   end
 end
 
