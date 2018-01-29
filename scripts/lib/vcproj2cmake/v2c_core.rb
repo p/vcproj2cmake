@@ -2958,6 +2958,12 @@ class V2C_XmlParserBase < V2C_ParserBase
   def skipped_element_warn(elem_name)
     logger.todo "#{self.class.name}: unhandled less important XML element (#{elem_name})!"
   end
+  def unknown_something(something_name, name)
+    logger.todo "#{self.class.name}: unknown/incorrect XML #{something_name} (#{name})!"
+  end
+  def unknown_something_key_value(something_name, key, value)
+    logger.todo "#{self.class.name}: unknown/incorrect XML #{something_name} (#{key}: #{value})!"
+  end
 
   def parse_attributes
     @elem_xml.attributes.each_attribute { |attr_xml|
@@ -3125,12 +3131,6 @@ class V2C_XmlParserBase < V2C_ParserBase
       # Should not forget to call super, unless not wanted,
       # in which case at least set the bool flag to not fail this check
     end
-  end
-  def unknown_something(something_name, name)
-    logger.todo "#{self.class.name}: unknown/incorrect XML #{something_name} (#{name})!"
-  end
-  def unknown_something_key_value(something_name, key, value)
-    logger.todo "#{self.class.name}: unknown/incorrect XML #{something_name} (#{key}: #{value})!"
   end
   def string_unescape_from_xml__extended(
     raw)
