@@ -7104,10 +7104,12 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     write_command_list_quoted('_v2c_target_filelist_route', project_name, arr_args)
   end
   def put_obj_files_as_sources(project_info, arr_sub_source_list_var_names)
-    project_info.arr_config_info.each do |config_info_curr|
+    arr_config_info = project_info.arr_config_info
+    arr_config_info.each do |config_info_curr|
       condition = config_info_curr.condition
       tools = config_info_curr.tools
-      tools.arr_linker_info.each do |linker_info_curr|
+      arr_linker_info = tools.arr_linker_info
+      arr_linker_info.each do |linker_info_curr|
         arr_obj = linker_info_curr.get_deps_objs()
         if not arr_obj.empty?
           # Since that .obj handling remains totally platform-specific
@@ -7286,7 +7288,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
     # BEFORE establishing a target, generate:
     # - link_directories()
-    config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
+    tools = config_info_curr.tools
+    arr_linker_info = tools.arr_linker_info
+    arr_linker_info.each { |linker_info_curr|
       @localGenerator.write_link_directories(linker_info_curr.arr_lib_dirs, map_lib_dirs)
     }
 
@@ -7295,7 +7299,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # Add a special collection of those library dependencies
     # which we successfully translated from a bare link directory auto-link dependency
     # (AFTER establishing a target!):
-    config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
+    arr_linker_info.each { |linker_info_curr|
       @localGenerator.write_build_attributes(
         'target_link_libraries',
         linker_info_curr.arr_lib_dirs,
@@ -7321,8 +7325,10 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # TODO: for Console ConfigurationType, it might be useful to already
     # automatically provide the semi-standard _CONSOLE define:
     # http://stackoverflow.com/questions/4839181/is-there-a-define-associated-with-the-subsystem
+    tools = target_info_curr.tools
     if target_is_valid
-      target_info_curr.tools.arr_linker_info.each { |linker_info_curr|
+      arr_linker_info = tools.arr_linker_info
+      arr_linker_info.each { |linker_info_curr|
         if V2C_TargetConfig_Defines::CFG_TYPE_APP == target_config_info_curr.cfg_type
           write_WinMain() if false != linker_info_curr.need_WinMain()
         end
@@ -7350,7 +7356,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         end
         write_link_libraries(arr_dependency_names, map_dependencies)
       }
-      logger.debug "TARGET_LINK_LIBRARIES: #{target_info_curr.tools.arr_linker_info.inspect}"
+      logger.debug "TARGET_LINK_LIBRARIES: #{arr_linker_info.inspect}"
     end # target_is_valid
     logger.debug "TARGET_LINK_LIBRARIES: target_is_valid #{target_is_valid}"
     return target_is_valid
@@ -7769,9 +7775,11 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
           # I don't know WhyTH we're *iterating* over a compiler_info here,
           # but let's just do it like that for now since
           # it's required by our current data model:
-          tools.arr_compiler_info.each { |compiler_info_curr|
+          arr_compiler_info = tools.arr_compiler_info
+          arr_compiler_info.each { |compiler_info_curr|
             print_marker_line('per-compiler_info')
             project_info.get_arr_target_config_info_matching(condition).each { |target_config_info_curr|
+              condition_target = target_config_info_curr.condition
 
               hash_defines_augmented = compiler_info_curr.hash_defines.clone
 
@@ -7786,7 +7794,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
                 str_define = value.empty? ? key.dup : "#{key}=#{value}"
                 arr_defs_assignments.push(str_define)
               }
-              condition_target = target_config_info_curr.condition
               write_property_compile_definitions(condition_target, arr_defs_assignments, map_defines)
               if not compiler_info_curr.pdb_info.nil?
                 configure_pdb(condition, compiler_info_curr.pdb_info)
@@ -7810,7 +7817,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
             # is fully configured (it needs to be able to correctly gather
             # all settings of the target it is supposed to be used for).
             write_precompiled_header(condition, compiler_info_curr.precompiled_header_info)
-          } # tools.arr_compiler_info.each
+          } # arr_compiler_info.each
 
           # TODO: perhaps that stuff ought to be grouped in a cleaner way:
           # for each platform-specific linker, figure out the combined set of
@@ -7822,7 +7829,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
           # separately
           # (since the property write does specify APPEND
           # this is no problem).
-          tools.arr_linker_info.each { |linker_info_curr|
+          arr_linker_info = tools.arr_linker_info
+          arr_linker_info.each { |linker_info_curr|
             print_marker_line('per-linker_info')
             linker_info_curr.arr_tool_variant_specific_info.each { |linker_specific|
               arr_conditional_linker_platform = map_tool_name_to_cmake_platform_conditional(linker_specific.tool_id)
@@ -8061,10 +8069,12 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_config_info.each { |config_info_curr|
       next_paragraph()
 
+      tools = config_info_curr.tools
       condition = config_info_curr.condition
       gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
       gen_condition.generate(condition) do
-        config_info_curr.tools.arr_compiler_info.each { |compiler_info_curr|
+        arr_compiler_info = tools.arr_compiler_info
+        arr_compiler_info.each { |compiler_info_curr|
           arr_includes = compiler_info_curr.get_include_dirs(false, false)
           @localGenerator.write_include_directories(arr_includes, generator_base.map_includes)
         }
@@ -8996,7 +9006,8 @@ class V2C_ProjectPostProcess < V2C_LoggerBase
     # Mark some items as generated
     # (e.g. output items as produced by MIDL etc.).
     arr_generated_items = Array.new
-    project_info.arr_config_info.each { |config_info|
+    arr_config_info = project_info.arr_config_info
+    arr_config_info.each { |config_info|
       arr_midl_info = config_info.tools.arr_midl_info
       arr_midl_info.each { |midl_info|
         arr_generated_items.push(
