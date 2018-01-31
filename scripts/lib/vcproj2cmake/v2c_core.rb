@@ -469,7 +469,11 @@ end
 STR_CTRL_LFTAB = STR_CTRL_LF + STR_CTRL_TAB
 def get_exception_dump(
   e)
-  "#{e.message}\nBacktrace: #{e.backtrace.join(STR_CTRL_LFTAB)}"
+  # Taken from
+  # http://stackoverflow.com/questions/376513/how-do-i-get-ruby-to-print-a-full-backtrace-instead-of-a-truncated-one
+  # Note: "unhandled exception" not handled properly
+  # (reported as RuntimeError).
+  e.backtrace.join(STR_CTRL_LFTAB).sub(STR_CTRL_LFTAB, ": #{e}#{e.class ? " (#{e.class})" : ''}" + STR_CTRL_LFTAB)
 end
 
 
