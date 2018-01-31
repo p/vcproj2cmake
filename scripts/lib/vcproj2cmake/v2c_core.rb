@@ -8020,6 +8020,16 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       end
     end
   end
+  def linker_flags_generator_factory(tool_id)
+    generator = nil
+    case tool_id
+    when V2C_TOOL_MSVC_REGEX_OBJ
+      generator = V2C_ToolFlagsGenerator_Linker_MSVC.new
+    else
+      error_unknown_case_value('platform-specific linker (flag conversion generator)', tool_id)
+    end
+    generator
+  end
   def write_link_libraries(arr_dependencies, map_dependencies)
     arr_dependencies_augmented = arr_dependencies.clone
     arr_dependencies_augmented.push(get_dereferenced_variable_name('V2C_LIBS'))
@@ -8586,16 +8596,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         config_info_curr)
     } # [END per-config handling]
     target_is_valid
-  end
-  def linker_flags_generator_factory(tool_id)
-    generator = nil
-    case tool_id
-    when V2C_TOOL_MSVC_REGEX_OBJ
-      generator = V2C_ToolFlagsGenerator_Linker_MSVC.new
-    else
-      error_unknown_case_value('platform-specific linker (flag conversion generator)', tool_id)
-    end
-    generator
   end
   def write_func_v2c_project_post_setup(project_name, arr_proj_files)
     # This function invokes CMakeLists.txt rebuilder only
