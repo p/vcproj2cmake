@@ -2390,7 +2390,7 @@ function(v2c_target_tool_midl_compile _target _build_platform _build_type)
   # Hrmpf, unfortunately this *generated* item
   # is relative to project *source* dir.
   # Eventually we might want to offer a config option
-  # to relocate such things to a build tree directory.
+  # to have such things relocated to a build tree directory.
   # However this would require
   # implicitly adding this directory
   # to a project's default include path.

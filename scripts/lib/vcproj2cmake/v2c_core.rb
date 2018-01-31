@@ -8185,7 +8185,7 @@ class V2C_CMakeCompilerInfoGenerator < V2C_CMakeTargetGenerator
   # FIXME: I'm really not sure whether passing the map_defines param here
   # like this is actually sufficiently clean.
   # Since this is a *mapping*, one could argue that
-  # mapping should have been done beforehand already,
+  # this mapping should have been done beforehand already,
   # *prior* to proceeding with *generating* (pushing out)
   # supposedly-final data...
   def generate(condition, compiler_info_curr, target_config_info_curr, map_defines)
