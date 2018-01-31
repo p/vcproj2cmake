@@ -431,30 +431,50 @@ if $v2c_log_level >= V2C_LOG_LEVEL_DEBUG
     msg)
 end
 
+if $v2c_log_level < V2C_LOG_LEVEL_DEBUG
 def log_debug(str)
-  return if $v2c_log_level < V2C_LOG_LEVEL_DEBUG
+end
+else
+def log_debug(str)
   puts str
 end
+end
 
+if $v2c_log_level < V2C_LOG_LEVEL_INFO
 def log_info(str)
-  return if $v2c_log_level < V2C_LOG_LEVEL_INFO
+end
+else
+def log_info(str)
   # We choose to not log an INFO: prefix (reduce log spew).
   puts str
 end
+end
 
+if $v2c_log_level < V2C_LOG_LEVEL_WARN
 def log_warn(str)
-  return if $v2c_log_level < V2C_LOG_LEVEL_WARN
+end
+else
+def log_warn(str)
   puts "WARNING: #{str}"
 end
-
-def log_todo(str)
-  return if $v2c_log_level < V2C_LOG_LEVEL_ERROR
-  puts "TODO: #{str}"
 end
 
+if $v2c_log_level < V2C_LOG_LEVEL_ERROR
+def log_todo(str)
+end
+else
+def log_todo(str)
+  puts "TODO: #{str}"
+end
+end
+
+if $v2c_log_level < V2C_LOG_LEVEL_ERROR
 def log_error(str)
-  return if $v2c_log_level < V2C_LOG_LEVEL_ERROR
+end
+else
+def log_error(str)
   $stderr.puts "ERROR: #{str}"
+end
 end
 
 # FIXME: should probably replace most log_fatal()
