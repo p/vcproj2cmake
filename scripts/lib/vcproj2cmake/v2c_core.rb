@@ -10482,7 +10482,8 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
 
       begin
         project_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
-      rescue V2C_GeneratorError => e
+      #rescue V2C_GeneratorError => e
+      rescue Exception => e # *all* exception types are a sign of fatal sub component failure...
         logger.error("generation of project (named #{project_info.name}) failed: #{get_exception_dump(e)}")
         raise_unless_disallowed
       end
@@ -11305,7 +11306,8 @@ def v2c_convert_local_projects_inner(
     begin
       validator = V2C_ProjectValidator.new(project)
       validator.validate
-    rescue V2C_ValidationError => e
+    #rescue V2C_ValidationError => e
+    rescue Exception => e # *all* exception types are a sign of fatal sub component failure...
       project_valid = false
       error_msg = "project validation failed: #{get_exception_dump(e)}"
       log_error error_msg
