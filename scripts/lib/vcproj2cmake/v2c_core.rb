@@ -756,6 +756,14 @@ class V2C_Info_Elem_Base
   attr_accessor :condition
 end
 
+def get_arr_elems_where_condition_satisfied(
+  arr_elems,
+  condition)
+  arr_elems.reject { |elem|
+    false == condition_entails(condition, elem.condition)
+  }
+end
+
 module V2C_Include_Dir_Defines
   SYSTEM = 1
   BEFORE = 2
@@ -1641,6 +1649,13 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
     # thus it should be ok now (and then add custom build commands/targets
     # _other_ than source-file-based executable targets).
     @have_build_units = false
+  end
+
+  def get_arr_target_config_info_matching(
+    condition)
+    get_arr_elems_where_condition_satisfied(
+      @arr_target_config_info,
+      condition)
   end
 
   attr_accessor :type
@@ -7233,8 +7248,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
           # by our current data model:
           tools.arr_compiler_info.each { |compiler_info_curr|
             print_marker_line('per-compiler_info')
-            project_info.arr_target_config_info.each { |target_config_info_curr|
-              next if not condition_entails(condition, target_config_info_curr.condition)
+            project_info.get_arr_target_config_info_matching(condition).each { |target_config_info_curr|
 
               hash_defines_augmented = compiler_info_curr.hash_defines.clone
 
@@ -7495,8 +7509,6 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     gen_condition_setup = V2C_CMakeV2CConditionGeneratorBase.new(@textOut)
     gen_condition_setup.generate(arr_config_info)
 
-    arr_target_config_info = project_info.arr_target_config_info
-
     target_is_valid = false
 
     arr_config_info.each { |config_info_curr|
@@ -7514,8 +7526,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         # would want to), we'll have to iterate through target configs
         # for all settings which are target related but are (stupidly)
         # NOT being applied as target properties (i.e. post-target-setup).
-        arr_target_config_info.each { |target_config_info_curr|
-          next if not condition_entails(condition, target_config_info_curr.condition)
+        arr_target_config_info_matching = project_info.get_arr_target_config_info_matching(
+          condition)
+        arr_target_config_info_matching.each { |target_config_info_curr|
         # FIXME: put_atl_mfc_config() does not need
         # buildcfg condition i.e. should be outside of that block
         # (already does own condition handling) - how to resolve this?
@@ -7542,8 +7555,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 
         # create a target only in case we do have any meat at all
         if project_info.have_build_units
-          arr_target_config_info.each { |target_config_info_curr|
-            next if not condition_entails(condition, target_config_info_curr.condition)
+          arr_target_config_info_matching.each { |target_config_info_curr|
             target_is_valid = put_target_and_stuff(project_info, arr_sub_source_list_var_names, map_lib_dirs, map_lib_dirs_dep, map_dependencies, config_info_curr, target_config_info_curr)
           }
         end # target.have_build_units
