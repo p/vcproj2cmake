@@ -7403,20 +7403,25 @@ class V2C_CMakeTargetGenerator < V2C_CMakeV2CSyntaxGenerator
 end
 
 class V2C_CMakeLinkerInfoGenerator < V2C_CMakeTargetGenerator
+  # FIXME: target_config_info_curr currently unused, but it shouldn't be
+  # (contains several linker-related items)
   def generate(
     condition,
-    linker_info_curr)
+    linker_info_curr,
+    target_config_info_curr)
     generate_linker_info(
       condition,
       get_target_name(),
-      linker_info_curr)
+      linker_info_curr,
+      target_config_info_curr)
   end
 
   private
   def generate_linker_info(
     condition,
     target_name,
-    linker_info_curr)
+    linker_info_curr,
+    target_config_info_curr)
     # TODO: perhaps that stuff ought to be grouped in a cleaner way:
     # for each platform-specific linker, figure out the combined set of
     # flags (both open-coded and from high-level [booleans etc.]),
@@ -8406,12 +8411,6 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     # _iterate through the configs again_ and add config-specific
     # definitions. This is necessary (fix for multi-config
     # environment).
-    #
-    # UGH, now added yet another loop iteration.
-    # FIXME This is getting waaaaay too messy, need to refactor it to have a
-    # clean hierarchy.
-    # Yup, this stuff should perhaps be shoved into
-    # write_project_target_config(), too.
     if target_is_valid
       when_target_valid_scriptlet_block(
         get_target_name()) {
@@ -8423,13 +8422,22 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
           condition = config_info_curr.condition
           tools = config_info_curr.tools
 
-          # NOTE: the commands below can stay in the general section (outside of
-          # the buildcfg condition above), but only since they define properties
-          # which are clearly named as being configuration-_specific_ already!
+          project_info.get_arr_target_config_info_matching(condition).each { |target_config_info_curr|
+            condition_target = target_config_info_curr.condition
 
-          generate_compiler_infos_all(tools, condition, condition_target, map_defines)
+            # We might need to revise handling of data elements here -
+            # these are potentially multiple elements in *arrays*, e.g.
+            # since they may easily have different condition configuration.
+            # We might end up having to determine the total number of
+            # varying conditions, then iterate over the grand outer loop
+            # giving each condition as input, then determining
+            # which of the condition-carrying elements match the condition
+            # and feed (arrays of?) these into the inner generator handling
+            # (target/compiler/linker etc.).
+            generate_compiler_infos_all(tools, condition_target, target_config_info_curr, map_defines)
 
-          generate_linker_infos_all(tools, condition)
+            generate_linker_infos_all(tools, condition_target, target_config_info_curr)
+          } # arr_target_config_info.each
         } # config_info_curr
       }
 
@@ -8482,35 +8490,29 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
   private
   def generate_compiler_infos_all(
     tools,
-    condition,
     condition_target,
+    target_config_info_curr,
     map_defines)
     compiler_info_generator = V2C_CMakeCompilerInfoGenerator.new(
       @textOut,
       @project_info)
-    # I don't know WhyTH we're *iterating* over a compiler_info here,
-    # but let's just do it like that for now since
-    # it's required by our current data model:
     arr_compiler_info = tools.get(
       V2C_Tool_Types::TYPE_CL_COMPILES)
     arr_compiler_info.each { |compiler_info_curr|
       print_marker_line(
-         'per-compiler_info')
-      project_info.get_arr_target_config_info_matching(condition).each { |target_config_info_curr|
-        condition_target = target_config_info_curr.condition
-
-        compiler_info_generator.generate(
-          condition_target,
-          compiler_info_curr,
-          target_config_info_curr,
-          map_defines)
-      } # arr_target_config_info.each
+        'per-compiler_info')
+      compiler_info_generator.generate(
+        condition_target,
+        compiler_info_curr,
+        target_config_info_curr,
+        map_defines)
     } # arr_compiler_info.each
   end
 
   def generate_linker_infos_all(
     tools,
-    condition)
+    condition,
+    target_config_info_curr)
     linker_info_generator = V2C_CMakeLinkerInfoGenerator.new(
       @textOut,
       @project_info)
@@ -8521,7 +8523,8 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
         'per-linker_info')
       linker_info_generator.generate(
         condition,
-        linker_info_curr)
+        linker_info_curr,
+        target_config_info_curr)
     } # arr_linker_info.each
   end
 
