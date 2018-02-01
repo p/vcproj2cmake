@@ -453,10 +453,23 @@ if (RUBY_VERSION < '1.9') # FIXME exact version where it got introduced?
   def hash_ensure_sorted_each(hash_out)
     return hash_out.sort # returns an _Array_
   end
+  def hash_ensure_sorted_values(hash_out) # returns Array
+    ## comparison operator <=> required at target object:
+    ## http://www.rubyinside.com/how-to/ruby-sort-hash
+    #return hash_out.values.sort # Array
+    values = Array.new
+    hash_ensure_sorted_each(hash_out).each do |k, v|
+      values.push(v)
+    end
+    values
+  end
 else
   def hash_ensure_sorted(hash_out); end # DUMMY (>= 1.9 hash is sorted by default)
   def hash_ensure_sorted_each(hash_out)
     return hash_out.sort # returns a _Hash_
+  end
+  def hash_ensure_sorted_values(hash_out) # returns Array
+    return hash_out.values
   end
 end
 
@@ -7900,7 +7913,7 @@ class V2C_ProjectPostProcess < V2C_LoggerBase
       sg2 = V2C_File_Filters_Group_Info.new('Headers', [ 'h', 'hpp' ], [ file_h, file_hpp ])
       project_info.arr_filtered_file_lists = [ sg1, sg2 ]
     else
-      project_info.arr_filtered_file_lists = hash_group_info.values
+      project_info.arr_filtered_file_lists = hash_ensure_sorted_values(hash_group_info) # NOT: hash.values
     end
   end
   def detect_build_units(project_info)
