@@ -7029,22 +7029,37 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       map_dependencies,
       @target.name)
   end
-  def write_func_v2c_target_post_setup(project_name, project_keyword)
+  def write_func_v2c_target_post_setup(
+    project_name,
+    project_keyword)
     # Rationale: keep count of generated lines of CMakeLists.txt to a bare minimum -
     # call v2c_project_post_setup(), by simply passing all parameters that are _custom_ data
     # of the current generated CMakeLists.txt file - all boilerplate handling functionality
     # that's identical for each project should be implemented by the v2c_project_post_setup() function
     # _internally_.
     if project_keyword.nil?; project_keyword = V2C_ATTRIBUTE_NOT_PROVIDED_MARKER end
-    arr_args_func = [ project_name, project_keyword ]
-    write_invoke_config_object_v2c_function_quoted('v2c_target_post_setup', @target.name, arr_args_func)
+    arr_args_func = [
+      project_name,
+      project_keyword ]
+    write_invoke_config_object_v2c_function_quoted(
+      'v2c_target_post_setup',
+      @target.name,
+      arr_args_func)
   end
-  def set_property_project_types(target_name, project_types)
+  def set_property_project_types(
+    target_name,
+    project_types)
     # This one does NOT follow VS_GLOBAL_* pattern i.e.
     # VS_GLOBAL_ProjectTypes (property does not use same case as VS side).
-    set_property(target_name, PROP_SET, format_global_prefix('PROJECT_TYPES'), [ project_types ])
+    set_property(
+      target_name,
+      PROP_SET,
+      format_global_prefix('PROJECT_TYPES'),
+      [ project_types ])
   end
-  def set_properties_user_properties(target_name, user_properties)
+  def set_properties_user_properties(
+    target_name,
+    user_properties)
     user_properties.each_pair { |key, value|
       # Need escaping (happened e.g. for the case of a
       # RESOURCE_FILE user property located within a sub dir).
@@ -7052,11 +7067,19 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # since user properties are *opaque* values
       # i.e. they are NOT to be treated in the knowledge
       # of some of them happening to be filesystem items.
-      cmake_value = escape_content_for_cmake_string(value)
-      set_property(target_name, PROP_SET, format_global_prefix(key), [ cmake_value ])
+      cmake_value = escape_content_for_cmake_string(
+        value)
+      set_property(
+        target_name,
+        PROP_SET,
+        format_global_prefix(
+          key),
+        [ cmake_value ])
     }
   end
-  def set_properties_vs_scc(target_name, scc_info_in)
+  def set_properties_vs_scc(
+    target_name,
+    scc_info_in)
     # Keep source control integration in our conversion!
     # FIXME: does it really work? Then reply to
     # http://www.itk.org/Bug/view.php?id=10237 !!
@@ -7096,8 +7119,15 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     end
 
     next_paragraph()
-    arr_args_func = [ scc_info_cmake.project_name, scc_info_cmake.local_path, scc_info_cmake.provider, scc_info_cmake.aux_path ]
-    write_invoke_config_object_v2c_function_quoted('v2c_target_set_properties_vs_scc', target_name, arr_args_func)
+    arr_args_func = [
+      scc_info_cmake.project_name,
+      scc_info_cmake.local_path,
+      scc_info_cmake.provider,
+      scc_info_cmake.aux_path ]
+    write_invoke_config_object_v2c_function_quoted(
+      'v2c_target_set_properties_vs_scc',
+      target_name,
+      arr_args_func)
   end
 
   def add_target_config_specific_definitions(target_config_info, hash_defines)
@@ -7278,16 +7308,24 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         } # config_info_curr
       }
 
-      write_func_v2c_target_post_setup(project_info.name, project_info.vs_keyword)
+      write_func_v2c_target_post_setup(
+        project_info.name,
+        project_info.vs_keyword)
 
       if project_info.project_types != nil
-        set_property_project_types(project_info.name, project_info.project_types)
+        set_property_project_types(
+          project_info.name,
+          project_info.project_types)
       end
       if project_info.user_properties.length > 0
-        set_properties_user_properties(project_info.name, project_info.user_properties)
+        set_properties_user_properties(
+          project_info.name,
+          project_info.user_properties)
       end
 
-      set_properties_vs_scc(@target.name, project_info.scc_info)
+      set_properties_vs_scc(
+        @target.name,
+        project_info.scc_info)
 
       # TODO: might want to set a target's FOLDER property, too...
       # (and perhaps a .vcproj has a corresponding attribute
