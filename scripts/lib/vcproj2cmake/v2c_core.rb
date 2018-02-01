@@ -948,7 +948,9 @@ def get_arr_elems_where_condition_satisfied(
   arr_elems,
   condition)
   arr_elems.reject { |elem|
-    false == condition_entails(condition, elem.condition)
+    false == condition_entails(
+      condition,
+      elem.condition)
   }
 end
 
@@ -8483,18 +8485,25 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     condition,
     condition_target,
     map_defines)
-    compiler_info_generator = V2C_CMakeCompilerInfoGenerator.new(@textOut, @project_info)
+    compiler_info_generator = V2C_CMakeCompilerInfoGenerator.new(
+      @textOut,
+      @project_info)
     # I don't know WhyTH we're *iterating* over a compiler_info here,
     # but let's just do it like that for now since
     # it's required by our current data model:
     arr_compiler_info = tools.get(
       V2C_Tool_Types::TYPE_CL_COMPILES)
     arr_compiler_info.each { |compiler_info_curr|
-      print_marker_line('per-compiler_info')
+      print_marker_line(
+         'per-compiler_info')
       project_info.get_arr_target_config_info_matching(condition).each { |target_config_info_curr|
         condition_target = target_config_info_curr.condition
 
-        compiler_info_generator.generate(condition_target, compiler_info_curr, target_config_info_curr, map_defines)
+        compiler_info_generator.generate(
+          condition_target,
+          compiler_info_curr,
+          target_config_info_curr,
+          map_defines)
       } # arr_target_config_info.each
     } # arr_compiler_info.each
   end
@@ -8502,12 +8511,17 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
   def generate_linker_infos_all(
     tools,
     condition)
-    linker_info_generator = V2C_CMakeLinkerInfoGenerator.new(@textOut, @project_info)
+    linker_info_generator = V2C_CMakeLinkerInfoGenerator.new(
+      @textOut,
+      @project_info)
     arr_linker_info = tools.get(
       V2C_Tool_Types::TYPE_LINK)
     arr_linker_info.each { |linker_info_curr|
-      print_marker_line('per-linker_info')
-      linker_info_generator.generate(condition, linker_info_curr)
+      print_marker_line(
+        'per-linker_info')
+      linker_info_generator.generate(
+        condition,
+        linker_info_curr)
     } # arr_linker_info.each
   end
 
