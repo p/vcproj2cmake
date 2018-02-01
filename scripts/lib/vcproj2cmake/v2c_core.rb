@@ -7277,9 +7277,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
           } # arr_linker_info.each
         } # config_info_curr
       }
-    end # target_is_valid
 
-    if target_is_valid
       write_func_v2c_target_post_setup(project_info.name, project_info.vs_keyword)
 
       if project_info.project_types != nil
