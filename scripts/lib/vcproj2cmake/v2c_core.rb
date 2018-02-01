@@ -1680,8 +1680,9 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
     # (with a "string-type" setting and a string member -
     # in case of custom languages...).
     if true == @project_info.have_build_units
-      if not @project_info.type.nil?
-        case @project_info.type
+      proj_type = @project_info.type
+      if not proj_type.nil?
+        case proj_type
         when 'Visual C++'
           # FIXME: how to configure C vs. CXX?
           # Even a C-only project I have is registered as 'Visual C++'.
@@ -1697,11 +1698,12 @@ class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
           # CompileAs attribute to indicate specific language of a file.
           @arr_languages.push('C', 'CXX')
         else
-          logger.fixme("unknown project type #{@project_info.type}, cannot determine programming language!")
+          logger.fixme("unknown project type #{proj_type}, cannot determine programming language!")
         end
       end
-      if not @project_info.creator.nil?
-        if @project_info.creator.include?('Fortran')
+      proj_creator = @project_info.creator
+      if not proj_creator.nil?
+        if proj_creator.include?('Fortran')
           @arr_languages.push('Fortran')
         end
       end
@@ -7308,24 +7310,30 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
         } # config_info_curr
       }
 
+      target_name = project_info.name
+
+      proj_vs_keyword = project_info.vs_keyword
       write_func_v2c_target_post_setup(
-        project_info.name,
-        project_info.vs_keyword)
+        target_name,
+        proj_vs_keyword)
 
-      if project_info.project_types != nil
+      proj_project_types = project_info.project_types
+      if proj_project_types != nil
         set_property_project_types(
-          project_info.name,
-          project_info.project_types)
+          target_name,
+          proj_project_types)
       end
-      if project_info.user_properties.length > 0
+      proj_user_properties = project_info.user_properties
+      if proj_user_properties.length > 0
         set_properties_user_properties(
-          project_info.name,
-          project_info.user_properties)
+          target_name,
+          proj_user_properties)
       end
 
+      proj_scc_info = project_info.scc_info
       set_properties_vs_scc(
         @target.name,
-        project_info.scc_info)
+        proj_scc_info)
 
       # TODO: might want to set a target's FOLDER property, too...
       # (and perhaps a .vcproj has a corresponding attribute
