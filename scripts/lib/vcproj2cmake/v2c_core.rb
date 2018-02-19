@@ -665,28 +665,7 @@ end
 class V2C_ParserError < V2C_ChainedError
 end
 
-module ResultsFound
-  FOUND_FALSE = 0
-  FOUND_TRUE = 1
-  FOUND_SKIP = 2
-end
-
-class V2C_ParserBase < V2C_LoggerBase
-  include ResultsFound
-
-  # Hmm, we might want to keep @info_elem in this class,
-  # to be able to reference it for logging.
-  def initialize(
-    info_elem_out)
-    super(
-      )
-    @info_elem = info_elem_out
-  end
-  attr_accessor :info_elem
-
-  # @brief Descriptively named helper, to save a ton of useless comments :) ("be optimistic :)")
-  def be_optimistic; FOUND_TRUE end
-
+module V2C_ParserGenericLogging
   def log_call; logger.debug 'CALLED' end
   def log_found(found, label); logger.debug "FOUND: #{found} #{label}" end
   def parser_error(str_description, critical)
@@ -717,6 +696,30 @@ class V2C_ParserBase < V2C_LoggerBase
   def error_unknown_case_value(description, val)
     parser_error("unknown/unsupported/corrupt #{description} case value! (#{val})", true)
   end
+end
+
+module ResultsFound
+  FOUND_FALSE = 0
+  FOUND_TRUE = 1
+  FOUND_SKIP = 2
+end
+
+class V2C_ParserBase < V2C_LoggerBase
+  include V2C_ParserGenericLogging
+  include ResultsFound
+
+  # Hmm, we might want to keep @info_elem in this class,
+  # to be able to reference it for logging.
+  def initialize(
+    info_elem_out)
+    super(
+      )
+    @info_elem = info_elem_out
+  end
+  attr_accessor :info_elem
+
+  # @brief Descriptively named helper, to save a ton of useless comments :) ("be optimistic :)")
+  def be_optimistic; FOUND_TRUE end
 end
 
 class V2C_Info_Condition
