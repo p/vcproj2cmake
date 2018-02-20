@@ -2907,19 +2907,49 @@ class V2C_XmlParserBase < V2C_ParserBase
   def unknown_something_key_value(something_name, key, value)
     logger.todo "#{self.class.name}: unknown/incorrect XML #{something_name} (#{key}: #{value})!"
   end
-  def string_unescape_from_xml(
+  def string_unescape_from_xml__extended(
     raw)
+    # I'm not quite sure what exactly the total set is (or: will end up)
+    # that we're supposed to be unescaping here.
+    # Once everything is said and done, we might want to rename it
+    # to a more precise string_unescape_from_xml_msvs().
+
+    cooked = string_xml_unescape_predefined_entities(
+      raw)
     # See also http://stackoverflow.com/questions/14899734/unescape-numeric-xml-entities-with-lua
     # XXX this is a very incomplete / improperly hard-coded list,
     # should try to possibly find
     # an existing toolkit API
     # for this purpose.
-    cooked = raw.clone
     cooked.gsub!('&#x0A;', "\n")
     cooked.gsub!('&#x0D;', "\r")
-    # Translate the 5 predefined XML entities:
+    # Commands in Custom Build Tools are said to have any % signs
+    # (e.g. for %WINDIR%) escaped.
+    # So add this here - but I'm unsure of two things:
+    # - we should perhaps add escaping of *all* (or "many"?) HTML-derived
+    #   % escapes
+    # - this might be a transcoding transition layer
+    #   that's different from the layer
+    #   of the usual XML entities escaping transition
+    #   (especially since docs say
+    #   that it's MSBuild where the '%' sign is "reserved")
+    #   --> move that handling to a logically separate method?
+    # And finally, the resulting %VAR% envvar syntax
+    # ought to be translated by a cross-platform command equivalence layer
+    # (i.e., which would translate commands / parameters / environment vars)
+    cooked.gsub!('%25', '%')
+    cooked
+  end
+  # Translates the 5 well-known predefined XML entities
+  def string_xml_unescape_predefined_entities(
+    raw)
     # Attention ordering: '&' should get translated last!!
     # (otherwise false matches possible!)
+
+    # http://stackoverflow.com/questions/14761474/performance-implications-of-stringgsub-chains
+    # --> perhaps switch to a loop over StringScanner/StringIO,
+    # but only if it's relevant (and it might be less portable even!).
+    cooked = raw.clone
     cooked.gsub!('&quot;', '"')
     cooked.gsub!('&apos;', '\'')
     cooked.gsub!('&lt;', '<')
@@ -3835,7 +3865,7 @@ class V2C_VSToolPrePostBuildLinkEventParser < V2C_VSToolParserBase
 
     arr_commandline_raw = str_in.split("\n")
     array_collect_compact(arr_commandline_raw) do |commandline_raw|
-      str_unescaped = string_unescape_from_xml(
+      str_unescaped = string_unescape_from_xml__extended(
         string_value_preprocess(
           commandline_raw))
 
