@@ -6,6 +6,9 @@
 # For certain central documentation, see relevant central location (implementation files).
 
 require 'find'
+# http://ruby-doc.org/stdlib-1.8.6/libdoc/optparse/rdoc/OptionParser.html
+# https://stackoverflow.com/questions/9577478/optionparser-returning-bool-instead-of-argument
+require 'optparse'
 require 'pathname'
 
 # HACK: have $script_dir as global variable currently
@@ -41,10 +44,24 @@ end
 # FIXME: currently this code below still is a bit unstructured / dirty
 # (some parts open-coded rather than clean helpers).
 
+options = {}
+OptionParser.new do |opts|
+  opts.banner = 'Usage: ' + $0 + ' [options]'
+
+  options[:root] = nil
+  opts.on("-R s", "--root-dir=s", "Source root dir") do |oR|
+    options[:root] = oR
+  end
+  options[:solution_dir] = nil
+  opts.on("-S s", "--solution-dir=s", "Solution dir") do |oS|
+    options[:solution_dir] = oS
+  end
+end.parse!
 
 script_fqpn = File.expand_path $0
 script_path = Pathname.new(script_fqpn).parent
-source_root = Dir.pwd
+source_root = options[:root]
+source_root ||= Dir.pwd
 
 v2c_path_config = v2c_get_path_config(source_root)
 
@@ -472,7 +489,8 @@ arr_proj_file_regex = [
 ]
 
 # The (usually root-level) directory of the whole "emulated" "solution".
-solution_dir = source_root # currently hard-coded (FIXME): solution_dir == source_root
+solution_dir = options[:solution_dir]
+solution_dir ||= source_root # fallback: set solution_dir == source_root
 
 arr_project_subdir_infos = Array.new
 
