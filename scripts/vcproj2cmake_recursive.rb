@@ -383,7 +383,7 @@ arr_filtered_dirs = Array.new
 dir_crawler = V2C_CrawlerDirs.new(
   $v2c_parser_recursive_follow_symlinks)
 
-dir_crawler.crawl('./') do |dir, dir_deref|
+dir_crawler.crawl(source_root) do |dir, dir_deref|
 
   log_debug "CRAWLED: #{dir}, #{dir_deref}"
 
@@ -472,7 +472,7 @@ arr_proj_file_regex = [
 ]
 
 # The (usually root-level) directory of the whole "emulated" "solution".
-solution_dir = './'
+solution_dir = source_root # currently hard-coded (FIXME): solution_dir == source_root
 
 arr_project_subdir_infos = Array.new
 
