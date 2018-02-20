@@ -7000,7 +7000,7 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
     if not source_list_description.nil?
       write_comment_at_level(
         COMMENT_LEVEL_STANDARD,
-        "File list: " + source_list_description)
+        'File list: ' + source_list_description)
     end
     source_files_list_var_name = var_prefix + source_list_name
     write_list_quoted(
@@ -7363,7 +7363,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
               arr_sub_source_list_var_names.push(var_name_obj_sources)
             end
           write_conditional_else(arr_conditional_linker)
-            gen_message_info("Platform-specific (condition: #{arr_conditional_linker.join(" ")}) .obj files not supported yet on this foreign platform!")
+            gen_message_info("Platform-specific (condition: #{arr_conditional_linker.join(' ')}) .obj files not supported yet on this foreign platform!")
           end
         end
       end
@@ -8817,7 +8817,7 @@ class V2C_CMakeSourceGroupFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
         write_list_quoted(sg_files + name_flattened, arr_files)
         arr_source_group_names_flattened.push(name_flattened)
       }
-      gen_message_info("#{target_name}: defining source groups #{arr_source_group_names_flattened.join(", ")}.")
+      gen_message_info("#{target_name}: defining source groups #{arr_source_group_names_flattened.join(', ')}.")
       sg_names_flattened = sg_var_prefix + 'names_flattened_'
       write_list(sg_names_flattened, arr_source_group_names_flattened)
       gen_foreach([ 'sg_name_flattened_', get_dereferenced_variable_name(sg_names_flattened) ]) do
