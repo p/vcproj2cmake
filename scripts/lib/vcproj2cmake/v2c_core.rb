@@ -422,13 +422,18 @@ class Logger
 
   # "Ruby Exceptions", http://rubylearning.com/satishtalim/ruby_exceptions.html
   # NOTE: user side should probably re-raise() the exception in most cases...
+  # Thus I am now force-wrappingly (thus achieving: "unless explicitly not desired"!) causing a re-raise here...
   # VERY useful discussion:
   # "Does Ruby support exception wrapping (exception chaining)?"
   #   http://www.ruby-forum.com/topic/148193#977439
   def unhandled_exception(
     e,
-    action)
+    action,
+    reraise = true)
     log_error "unhandled exception occurred during #{action}! #{e.message}, #{e.backtrace.inspect}"
+    if reraise
+      raise
+    end
   end
   def unhandled_functionality(
     str_description)
@@ -5096,7 +5101,6 @@ class V2C_VS10ProjectFiltersFileParser < V2C_ParserBase
     rescue Exception => e
       # File probably does not exist...
       logger.unhandled_exception(e, 'project file parsing')
-      raise
     end
     return success
   end
