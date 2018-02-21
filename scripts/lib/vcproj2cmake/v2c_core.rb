@@ -8910,6 +8910,27 @@ def v2c_is_project_file_generated_by_cmake(str_proj_file)
   is_cmake
 end
 
+# Check whether the directory already contains a CMakeLists.txt,
+# and if so, whether it can be safely rewritten.
+def cmakelists_may_get_created(
+  dir,
+  dir_entries)
+  want_new_cmakelists_file = true
+
+  str_cmakelists_file_name = CMake_Syntax_Filesystem::CMAKELISTS_FILE_NAME
+  str_cmakelists_file_path = File.join(
+    dir,
+    str_cmakelists_file_name)
+
+  if (!dir_entries.grep(/^#{str_cmakelists_file_name}$/i).empty?)
+    log_debug dir_entries
+    log_debug "#{str_cmakelists_file_name} exists in #{dir}, checking!"
+    want_new_cmakelists_file = v2c_want_cmakelists_rewritten(
+      str_cmakelists_file_path)
+  end
+  want_new_cmakelists_file
+end
+
 
 class V2C_FileGeneratorError < V2C_ChainedError
 end
