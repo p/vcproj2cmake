@@ -812,9 +812,14 @@ def condition_entails(this, other)
 end
 
 # @brief Mostly used to manage the condition element...
-class V2C_Info_Elem_Base
+class V2C_Info_Elem_Base < Logger
+  include Logging_Redirector
+
   def initialize(
     )
+    super(
+      self.class.name,
+      STDOUT)
     @condition = nil # V2C_Info_Condition
   end
   attr_accessor :condition
