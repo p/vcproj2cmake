@@ -284,7 +284,7 @@ Find.find('./') do |f|
     end
   end
   if true == is_excluded_recursive
-    puts "EXCLUDED RECURSIVELY #{f}!"
+    log_debug "EXCLUDED RECURSIVELY #{f}!"
     Find.prune() # throws exception to skip entire recursive directories block
   end
 
@@ -297,7 +297,7 @@ Find.find('./') do |f|
   end
   #puts "excluded: #{is_excluded_single}"
   if true == is_excluded_single
-    puts "EXCLUDED SINGLE #{f}!"
+    log_debug "EXCLUDED SINGLE #{f}!"
     next
   end
   arr_filtered_dirs.push(f)
@@ -473,7 +473,7 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
         #rescue Exception => e
         #  # Need to add an open-coded exception logging line
         #  # since foreign-process exceptions will be swallowed silently!
-        #  puts "EXCEPTION!! #{e.inspect} #{e.backtrace}"
+        #  log_error "EXCEPTION!! #{e.inspect} #{e.backtrace}"
         #end
       }
       log_info("Worker PID #{pid} forked.")

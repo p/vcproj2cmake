@@ -279,10 +279,10 @@ end
 def V2C_Core_Add_Plugin_Parser(plugin_parser)
   if 1 == plugin_parser.version
     $arr_plugin_parser.push(plugin_parser)
-    puts "registered parser plugin #{plugin_parser.parser_name} (.#{plugin_parser.extension_name})"
+    log_debug "registered parser plugin #{plugin_parser.parser_name} (.#{plugin_parser.extension_name})"
     return true
   else
-    puts "parser plugin #{plugin_parser.parser_name} indicates wrong version #{plugin_parser.version}"
+    log_warn "parser plugin #{plugin_parser.parser_name} indicates wrong version #{plugin_parser.version}"
     return false
   end
 end
@@ -294,7 +294,7 @@ v2c_plugin_dir = File.join($script_dir, 'v2c_plugins')
 PLUGIN_FILE_REGEX_OBJ = %r{v2c_(parser|generator)_.*\.rb$}
 Find.find(v2c_plugin_dir) { |f_plugin|
   if PLUGIN_FILE_REGEX_OBJ.match(f_plugin)
-    puts "loading plugin #{f_plugin}!"
+    log_info "loading plugin #{f_plugin}!"
     load f_plugin
   end
   # register project file extension name in plugin manager array, ...
@@ -542,12 +542,12 @@ def normalize_path(p)
 end
 
 def escape_char!(in_string, foreign_payload_char)
-  #puts "in_string #{in_string}"
+  #log_debug "in_string #{in_string}"
   # WARNING!! It's NOT possible to simply pass "foreign_payload_char," param here
   # (gsub replacement will FAIL) - we need actual pattern syntax here.
   # *Other* (char literal) uses of gsub! in our code do not need this. Weird.
   in_string.gsub!(/#{foreign_payload_char}/, '\\' + foreign_payload_char)
-  #puts "in_string quoted #{in_string}"
+  #log_debug "in_string quoted #{in_string}"
 end
 
 # "Escaping a Backslash In Ruby's Gsub": "The reason for this is that
@@ -563,9 +563,9 @@ end
 want_bs_test = false
 if false != want_bs_test
   test_bs = 'hi\\there'
-  puts "ESCAPED PRE: #{test_bs}"
+  log_debug "ESCAPED PRE: #{test_bs}"
   escape_backslash!(test_bs)
-  puts "ESCAPED POST: #{test_bs}"
+  log_debug "ESCAPED POST: #{test_bs}"
 end
 
 # This method's output is quite a bit better
@@ -6975,7 +6975,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   end
   def put_file_list_source_group_recursive(project_name, files_str, parent_source_group, arr_sub_sources_for_parent)
     if files_str.nil?
-      puts "ERROR: WHAT THE HELL, NO FILES!?"
+      logger.warn "ERROR: WHAT THE HELL, NO FILES!?"
       return
     end
     filelist_generator = V2C_CMakeFileListGenerator_VS7.new(
@@ -6992,7 +6992,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     file_lists,
     arr_sub_sources_for_parent)
     if file_lists.nil?
-      puts "ERROR: WHAT THE HELL, NO FILES!?"
+      logger.warn "ERROR: WHAT THE HELL, NO FILES!?"
       return
     end
     # FIXME: for resource files ('ResourceCompile' items),
@@ -8667,7 +8667,7 @@ def v2c_is_project_file_generated_by_cmake_xml(str_proj_file)
   when VCXPROJ_EXT_REGEX_OBJ
     is_cmake = v2c_vcxproj_look_for_cmake_content(str_proj_file)
   else
-    puts "ERROR: unsupported project file type #{str_proj_file}!"
+    log_error "unsupported project file type #{str_proj_file}!"
   end
   is_cmake
 end
