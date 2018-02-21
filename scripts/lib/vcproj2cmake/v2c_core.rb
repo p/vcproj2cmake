@@ -83,7 +83,8 @@ class V2C_Path_Config
   # supposed to be added to SCM (entire content can be ignored easily,
   # by mentioning this directory in SCM config files such as .gitignore)
   TEMP_STORE_DIR_NAME = 'generated_temporary_content'
-  def initialize(master_project_source_dir)
+  def initialize(
+    master_project_source_dir)
     @source_root = master_project_source_dir
     @rel_config_dir_source_root = $v2c_config_dir_local
     @config_dir_source_root = File.join(@source_root, @rel_config_dir_source_root)
@@ -139,7 +140,8 @@ end
 
 class V2C_Core_Plugin_Info_Parser < V2C_Core_Plugin_Info
   def initialize
-    super()
+    super(
+      )
     @parser_name = nil
     @extension_name = nil
   end
@@ -285,7 +287,9 @@ end
 
 
 class Logger
-  def initialize(class_name, log_descriptor)
+  def initialize(
+    class_name,
+    log_descriptor)
     @class_name = class_name
     # FIXME: log_descriptor not obeyed yet!
   end
@@ -366,8 +370,11 @@ end
 class V2C_LoggerBase < Logger
   include Logging_Redirector
 
-  def initialize
-    super(self.class.name, STDOUT)
+  def initialize(
+    )
+    super(
+      self.class.name,
+      STDOUT)
   end
 end
 
@@ -528,13 +535,16 @@ end
 #   http://www.ruby-forum.com/topic/148193#982947
 class V2C_ChainedError < StandardError
   attr_reader :original
-  def initialize(msg, original=$!)
+  def initialize(
+    msg,
+    original=$!)
     msg_extended = msg
     if not original.nil?
       # Do use a newline (the inner error will be *large*)
       msg_extended += " (inner error:\n#{original.message}\nBacktrace: #{original.backtrace.join("\n\t")})"
     end
-    super(msg_extended)
+    super(
+      msg_extended)
     @original = original
   end
 end
@@ -543,7 +553,8 @@ class V2C_ParserError < V2C_ChainedError
 end
 
 class V2C_Info_Condition
-  def initialize(str_condition = nil)
+  def initialize(
+    str_condition = nil)
     @str_condition = str_condition
     @build_type = nil # WARNING: it may contain spaces!
     @platform = nil
@@ -626,7 +637,8 @@ end
 
 # @brief Mostly used to manage the condition element...
 class V2C_Info_Elem_Base
-  def initialize
+  def initialize(
+    )
     @condition = nil # V2C_Info_Condition
   end
   attr_accessor :condition
@@ -639,8 +651,10 @@ module V2C_Include_Dir_Defines
 end
 
 class V2C_Info_Include_Dir < V2C_Info_Elem_Base
-  def initialize
-    super()
+  def initialize(
+    )
+    super(
+      )
     @dir = String.new
     @flags = 0 # V2C_Include_Dir_Defines::SYSTEM etc.
   end
@@ -652,7 +666,8 @@ class V2C_Info_Include_Dir < V2C_Info_Elem_Base
 end
 
 class V2C_Tool_Base_Info
-  def initialize(tool_variant_specific_info)
+  def initialize(
+    tool_variant_specific_info)
     @name = nil # Hmm, do we need this member? (do we really want to know the tool name??)
     @suppress_startup_banner_enable = false # used by at least VS10 Compiler _and_ Linker, thus it's member of the common base class.
     @show_progress_enable = false
@@ -679,15 +694,18 @@ class V2C_Tool_Base_Info
 end
 
 class V2C_Tool_Define_Base_Info < V2C_Tool_Base_Info
-  def initialize(tool_variant_specific_info)
-    super(tool_variant_specific_info)
+  def initialize(
+    tool_variant_specific_info)
+    super(
+      tool_variant_specific_info)
     @hash_defines = Hash.new
   end
   attr_accessor :hash_defines
 end
 
 class V2C_Tool_Specific_Info_Base
-  def initialize(tool_id)
+  def initialize(
+    tool_id)
     @original = false # bool: true == gathered from parsed project, false == converted from other original tool-specific entries
     @tool_id = tool_id # Contains an identifier of the specific tool (e.g. 'MSVC7', 'MSVC10')
   end
@@ -696,8 +714,10 @@ class V2C_Tool_Specific_Info_Base
 end
 
 class V2C_Tool_Compiler_Specific_Info_Base < V2C_Tool_Specific_Info_Base
-  def initialize(tool_id)
-    super(tool_id)
+  def initialize(
+    tool_id)
+    super(
+      tool_id)
     @arr_flags = Array.new
     @arr_disable_warnings = Array.new
   end
@@ -706,8 +726,10 @@ class V2C_Tool_Compiler_Specific_Info_Base < V2C_Tool_Specific_Info_Base
 end
 
 class V2C_Tool_Compiler_Specific_Info_MSVC_Base < V2C_Tool_Compiler_Specific_Info_Base
-  def initialize(tool_id)
-    super(tool_id)
+  def initialize(
+    tool_id)
+    super(
+      tool_id)
     @warning_level = 3 # numeric value (for /W4 etc.); TODO: translate into MSVC /W... flag
   end
   attr_accessor :warning_level
@@ -715,13 +737,15 @@ end
 
 class V2C_Tool_Compiler_Specific_Info_MSVC7 < V2C_Tool_Compiler_Specific_Info_MSVC_Base
   def initialize
-    super('MSVC7')
+    super(
+      'MSVC7')
   end
 end
 
 class V2C_Tool_Compiler_Specific_Info_MSVC10 < V2C_Tool_Compiler_Specific_Info_MSVC_Base
   def initialize
-    super('MSVC10')
+    super(
+      'MSVC10')
   end
 end
 
@@ -773,8 +797,10 @@ end
 
 class V2C_Tool_Compiler_Info < V2C_Tool_Define_Base_Info
   include V2C_Compiler_Defines
-  def initialize(tool_variant_specific_info = nil)
-    super(tool_variant_specific_info)
+  def initialize(
+    tool_variant_specific_info = nil)
+    super(
+      tool_variant_specific_info)
     @arr_info_include_dirs = Array.new
     @asm_listing_location = nil
     @basic_runtime_checks = BASIC_RUNTIME_CHECKS_DEFAULT
@@ -837,28 +863,36 @@ class V2C_Tool_Compiler_Info < V2C_Tool_Define_Base_Info
 end
 
 class V2C_Tool_Linker_Specific_Info < V2C_Tool_Specific_Info_Base
-  def initialize(tool_id)
-    super(tool_id)
+  def initialize(
+    tool_id)
+    super(
+      tool_id)
     @arr_flags = Array.new
   end
   attr_accessor :arr_flags
 end
 
 class V2C_Tool_Linker_Specific_Info_MSVC < V2C_Tool_Linker_Specific_Info
-  def initialize(tool_id)
-    super(tool_id)
+  def initialize(
+    tool_id)
+    super(
+      tool_id)
   end
 end
 
 class V2C_Tool_Linker_Specific_Info_MSVC7 < V2C_Tool_Linker_Specific_Info_MSVC
-  def initialize()
-    super('MSVC7')
+  def initialize(
+    )
+    super(
+      'MSVC7')
   end
 end
 
 class V2C_Tool_Linker_Specific_Info_MSVC10 < V2C_Tool_Linker_Specific_Info_MSVC
-  def initialize()
-    super('MSVC10')
+  def initialize(
+    )
+    super(
+      'MSVC10')
   end
 end
 
@@ -866,7 +900,9 @@ class V2C_Dependency_Info
   DEP_TYPE_LIBRARY = 1
   DEP_TYPE_OBJECT = 2
   DEP_TARGET_NAME_ONLY = 4
-  def initialize(dependency, flags)
+  def initialize(
+    dependency,
+    flags)
     @dependency = dependency # string (library or object path or target name)
     @flags = flags
   end
@@ -900,8 +936,10 @@ end
 
 class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
   include V2C_Linker_Defines
-  def initialize(tool_variant_specific_info = nil)
-    super(tool_variant_specific_info)
+  def initialize(
+    tool_variant_specific_info = nil)
+    super(
+      tool_variant_specific_info)
     # @arr_dependencies TODO: we need an attribute which indicates
     # whether this dependency is a library _file_ or a target name,
     # since we should be reliably able to decide whether we can add
@@ -975,22 +1013,28 @@ end
 #   "Appendix B. Builders"
 #   http://www.scons.org/doc/2.0.1/HTML/scons-user/a8524.html
 class V2C_Tool_MIDL_Specific_Info < V2C_Tool_Specific_Info_Base
-  def initialize(tool_id)
-    super(tool_id)
+  def initialize(
+    tool_id)
+    super(
+      tool_id)
     @arr_flags = Array.new
   end
   attr_accessor :arr_flags
 end
 
 class V2C_Tool_MIDL_Specific_Info_MSVC7 < V2C_Tool_MIDL_Specific_Info
-  def initialize()
-    super('MSVC7')
+  def initialize(
+    )
+    super(
+      'MSVC7')
   end
 end
 
 class V2C_Tool_MIDL_Specific_Info_MSVC10 < V2C_Tool_MIDL_Specific_Info
-  def initialize()
-    super('MSVC10')
+  def initialize(
+    )
+    super(
+      'MSVC10')
   end
 end
 
@@ -1001,8 +1045,10 @@ end
 # a project, too.
 
 class V2C_Tool_MIDL_Info < V2C_Tool_Define_Base_Info
-  def initialize(tool_variant_specific_info = nil)
-    super(tool_variant_specific_info)
+  def initialize(
+    tool_variant_specific_info = nil)
+    super(
+      tool_variant_specific_info)
     @dll_data_file_name = nil
     @header_file_name = nil # path to generated MIDL header file; !CONVENTION_VS_PROJECT_RELATIVE_PATH!
     @iface_id_file_name = nil
@@ -1086,7 +1132,8 @@ end
 # Carries project-global configuration data.
 class V2C_Project_Config_Info < V2C_Config_Base_Info
   def initialize
-    super()
+    super(
+      )
     @output_dir = nil
     @intermediate_dir = nil
   end
@@ -1098,7 +1145,8 @@ end
 # (which overrides the project-global ones).
 class V2C_File_Config_Info < V2C_Config_Base_Info
   def initialize
-    super()
+    super(
+      )
     @excluded_from_build = false
   end
   attr_accessor :excluded_from_build
@@ -1180,7 +1228,8 @@ end
 class V2C_Info_File
   ATTR_GENERATED = 1 # Whether it's an existing file or to be generated by build
   ATTR_SOURCE_CONTROL_FILE = 2
-  def initialize
+  def initialize(
+    )
     # FIXME: those two arguably shouldn't be in a file-specific class
     # (probably moved to a base instead?)
     @target_config_info = nil
@@ -1218,7 +1267,9 @@ end
 
 class V2C_File_List_Info
   include V2C_File_List_Types
-  def initialize(name, type = TYPE_NONE)
+  def initialize(
+    name,
+    type = TYPE_NONE)
     @name = name # VS10: One of None, ClCompile, ClInclude, ResourceCompile, Xsd; VS7: the name of the filter that contains these files (FIXME: filter stuff is not really useful, should be assigning the name based on the tool type GUID! And then perhaps use the VS10 tool file type names [ClCompile, ClInclude etc.])
     @type = type
     @arr_files = Array.new # V2C_Info_File elements
@@ -1388,7 +1439,10 @@ class V2C_Filters_Container
 end
 
 class V2C_File_Filters_Group_Info
-  def initialize(name, arr_filters, arr_files)
+  def initialize(
+    name,
+    arr_filters,
+    arr_files)
     # Name of the file filters source group. For subgroups,
     # contains names of parent groups, separated by
     # V2C_SOURCE_GROUP_HIERARCHY_SEPARATOR:
@@ -1492,7 +1546,8 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
 end
 
 class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
-  def initialize(project_info)
+  def initialize(
+    project_info)
     @project_info = project_info
     @arr_languages = Array.new
   end
@@ -1777,7 +1832,8 @@ class V2C_ParserBase < V2C_LoggerBase
 
   # Hmm, we might want to keep @info_elem in this class,
   # to be able to reference it for logging.
-  def initialize(info_elem_out)
+  def initialize(
+    info_elem_out)
     @info_elem = info_elem_out
   end
   attr_accessor :info_elem
@@ -2024,8 +2080,11 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
   VS_VALUE_SEPARATOR_REGEX_OBJ    = %r{[;,\s]} # (\s char set includes \n)
   VS_WS_VALUE_SEPARATOR_REGEX_OBJ = %r{[;,\n]}
   VS_SCC_ATTR_REGEX_OBJ = %r{^Scc}
-  def initialize(elem_xml, info_elem_out)
-    super(info_elem_out)
+  def initialize(
+    elem_xml,
+    info_elem_out)
+    super(
+      info_elem_out)
     @elem_xml = elem_xml
     @called_base_parse_element = false
     @called_base_parse_attribute = false
@@ -2202,7 +2261,8 @@ class V2C_VS7ParserBase < V2C_VSXmlParserBase
 end
 
 class V2C_VSProjectSCCParser < V2C_VSXmlParserBase
-  def initialize(scc_info)
+  def initialize(
+    scc_info)
     @scc_info = scc_info
   end
   def register_scc(setting_key, setting_value)
@@ -2233,8 +2293,12 @@ class V2C_VSProjectSCCParser < V2C_VSXmlParserBase
 end
 
 class V2C_VSProjectParserBase < V2C_VSXmlParserBase
-  def initialize(elem_xml, info_elem_out)
-    super(elem_xml, info_elem_out)
+  def initialize(
+    elem_xml,
+    info_elem_out)
+    super(
+      elem_xml,
+      info_elem_out)
     set_vs_specific_default_values(get_project())
   end
   private
@@ -2761,8 +2825,12 @@ module V2C_VS7ToolLinkerDefines
 end
 
 class V2C_VS7ToolLinkerParser < V2C_VSToolLinkerParser
-  def initialize(linker_xml, linker_info_out)
-    super(linker_xml, linker_info_out)
+  def initialize(
+    linker_xml,
+    linker_info_out)
+    super(
+      linker_xml,
+      linker_info_out)
   end
 
   private
@@ -2933,8 +3001,13 @@ end
 class V2C_VS7ConfigurationBaseParser < V2C_VS7ParserBase
   # VS10 has added a separation of these structs,
   # thus we need to pass _two_ distinct params even in VS7...
-  def initialize(elem_xml, target_config_info_out, config_info_out)
-    super(elem_xml, target_config_info_out)
+  def initialize(
+    elem_xml,
+    target_config_info_out,
+    config_info_out)
+    super(
+      elem_xml,
+      target_config_info_out)
     @config_info = config_info_out
   end
   private
@@ -3027,8 +3100,14 @@ end
 
 class V2C_VS7ConfigurationsParser < V2C_VS7ParserBase
   include V2C_VSConfigurationSetDefines
-  def initialize(elem_xml, info_elem_out, arr_target_config_info_out, build_platform_configs_out)
-    super(elem_xml, info_elem_out)
+  def initialize(
+    elem_xml,
+    info_elem_out,
+    arr_target_config_info_out,
+    build_platform_configs_out)
+    super(
+      elem_xml,
+      info_elem_out)
     @arr_target_config_info = arr_target_config_info_out
     @build_platform_configs = build_platform_configs_out
   end
@@ -3068,8 +3147,12 @@ class V2C_VS7ConfigurationsParser < V2C_VS7ParserBase
 end
 
 class V2C_VS7FileParser < V2C_VS7ParserBase
-  def initialize(file_xml, arr_file_infos_out)
-    super(file_xml, arr_file_infos_out)
+  def initialize(
+    file_xml,
+    arr_file_infos_out)
+    super(
+      file_xml,
+      arr_file_infos_out)
     @info_file = V2C_Info_File.new
     @add_to_build = false
   end
@@ -3172,8 +3255,13 @@ module V2C_VSFilterDefines
 end
 
 class V2C_VS7FilterParser < V2C_VS7ParserBase
-  def initialize(files_xml, project_out, files_str_out)
-    super(files_xml, project_out)
+  def initialize(
+    files_xml,
+    project_out,
+    files_str_out)
+    super(
+      files_xml,
+      project_out)
     @files_str = files_str_out
   end
   def parse
@@ -3306,8 +3394,12 @@ class V2C_VS7FilterParser < V2C_VS7ParserBase
 end
 
 class V2C_VS7ProjectGlobalParser < V2C_VS7ParserBase
-  def initialize(elem_xml, info_elem_out)
-    super(elem_xml, info_elem_out)
+  def initialize(
+    elem_xml,
+    info_elem_out)
+    super(
+      elem_xml,
+      info_elem_out)
     @name = nil
     @value = nil
   end
@@ -3339,8 +3431,12 @@ class V2C_VS7ProjectGlobalParser < V2C_VS7ParserBase
 end
 
 class V2C_VS7ProjectGlobalsParser < V2C_VS7ParserBase
-  def initialize(elem_xml, info_elem_out)
-    super(elem_xml, info_elem_out)
+  def initialize(
+    elem_xml,
+    info_elem_out)
+    super(
+      elem_xml,
+      info_elem_out)
   end
   private
   def get_user_properties; @info_elem end
@@ -3375,8 +3471,12 @@ end
 
 class V2C_VS7PlatformsParser < V2C_VS7ParserBase
   include V2C_VSConfigurationSetDefines
-  def initialize(elem_xml, info_elem_out)
-    super(elem_xml, info_elem_out)
+  def initialize(
+    elem_xml,
+    info_elem_out)
+    super(
+      elem_xml,
+      info_elem_out)
   end
   private
   def get_build_platform_configs(); @info_elem end
@@ -3405,8 +3505,12 @@ class V2C_VS7PlatformsParser < V2C_VS7ParserBase
 end
 
 class V2C_VS7ToolFilesParser < V2C_VS7ParserBase
-  def initialize(elem_xml, info_elem_out)
-    super(elem_xml, info_elem_out)
+  def initialize(
+    elem_xml,
+    info_elem_out)
+    super(
+      elem_xml,
+      info_elem_out)
   end
   def parse_element(subelem_xml)
     found = be_optimistic()
@@ -3428,8 +3532,12 @@ module V2C_VSProjectGlobalsDefines
 end
 
 class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
-  def initialize(subelem_xml, project)
-    super(subelem_xml, project)
+  def initialize(
+    subelem_xml,
+    project)
+    super(
+      subelem_xml,
+      project)
     @scc_parser = V2C_VSProjectSCCParser.new(get_project().scc_info)
   end
   private
@@ -3497,7 +3605,10 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
 end
 
 class V2C_VSProjectFilesBundleParserBase < V2C_LoggerBase
-  def initialize(p_parser_proj_file, str_orig_environment_shortname, arr_projects_out)
+  def initialize(
+    p_parser_proj_file,
+    str_orig_environment_shortname,
+    arr_projects_out)
     @p_parser_proj_file = p_parser_proj_file
     @proj_filename = p_parser_proj_file.to_s # FIXME: do we want to keep the string-based filename? We should probably change several sub classes to be Pathname-based...
     @str_orig_environment_shortname = str_orig_environment_shortname
@@ -3571,7 +3682,9 @@ end
 
 # Project parser variant which works on file-based input
 class V2C_VSProjectFileParserBase < V2C_ParserBase
-  def initialize(p_parser_proj_file, arr_projects_out)
+  def initialize(
+    p_parser_proj_file,
+    arr_projects_out)
     @p_parser_proj_file = p_parser_proj_file
     @proj_filename = p_parser_proj_file.to_s
     @arr_projects_out = arr_projects_out
@@ -3598,8 +3711,13 @@ class V2C_VS7ProjectFileParser < V2C_VSProjectFileParserBase
 end
 
 class V2C_VS7ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
-  def initialize(p_parser_proj_file, arr_projects_out)
-    super(p_parser_proj_file, V2C_Project_Info::ORIG_ENV_SHORTNAME_MSVS7, arr_projects_out)
+  def initialize(
+    p_parser_proj_file,
+    arr_projects_out)
+    super(
+      p_parser_proj_file,
+      V2C_Project_Info::ORIG_ENV_SHORTNAME_MSVS7,
+      arr_projects_out)
   end
   def parse_project_files
     proj_file_parser = V2C_VS7ProjectFileParser.new(@p_parser_proj_file, @arr_projects_new)
@@ -3644,8 +3762,12 @@ end
 
 # Parses elements with optional conditional information (Condition=xxx).
 class V2C_VS10BaseElemParser < V2C_VS10ParserBase
-  def initialize(elem_xml, info_elem_out)
-    super(elem_xml, info_elem_out)
+  def initialize(
+    elem_xml,
+    info_elem_out)
+    super(
+      elem_xml,
+      info_elem_out)
     @have_condition = false
   end
   private
@@ -3850,8 +3972,13 @@ class V2C_VS10ItemGroupFileElemParser < V2C_VS10ParserBase
 end
 
 class V2C_VS10ItemGroupFilesParser < V2C_VS10ParserBase
-  def initialize(elem_xml, group_type_name, file_lists_out)
-    super(elem_xml, file_lists_out)
+  def initialize(
+    elem_xml,
+    group_type_name,
+    file_lists_out)
+    super(
+      elem_xml,
+      file_lists_out)
     @group_type_name = group_type_name
     @cached_list_ptr = nil
   end
@@ -4226,8 +4353,12 @@ module V2C_VS10ConfigurationDefines
 end
 
 class V2C_VS10PropertyGroupConfigurationParser < V2C_VS10BaseElemParser
-  def initialize(elem_xml, info_elem_out)
-    super(elem_xml, info_elem_out)
+  def initialize(
+    elem_xml,
+    info_elem_out)
+    super(
+      elem_xml,
+      info_elem_out)
     set_vs_specific_default_values(info_elem_out)
   end
 private
@@ -4290,8 +4421,12 @@ private
 end
 
 class V2C_VS10PropertyGroupGlobalsParser < V2C_VS10BaseElemParser
-  def initialize(elem_xml, project)
-    super(elem_xml, project)
+  def initialize(
+    elem_xml,
+    project)
+    super(
+      elem_xml,
+      project)
     @scc_parser = V2C_VSProjectSCCParser.new(get_project().scc_info)
   end
   private
@@ -4505,8 +4640,13 @@ end
 
 # Project parser variant which works on XML-stream-based input
 class V2C_VS10ProjectFileXmlParser < V2C_VSProjectFileXmlParserBase
-  def initialize(doc_proj, arr_projects_out, flag_populate_existing)
-    super(doc_proj, arr_projects_out)
+  def initialize(
+    doc_proj,
+    arr_projects_out,
+    flag_populate_existing)
+    super(
+      doc_proj,
+      arr_projects_out)
     @flag_populate_existing = flag_populate_existing
     @project_idx = 0
   end
@@ -4536,8 +4676,13 @@ end
 
 # Project parser variant which works on file-based input
 class V2C_VS10ProjectFileParser < V2C_VSProjectFileParserBase
-  def initialize(p_parser_proj_file, arr_projects_out, flag_populate_existing)
-    super(p_parser_proj_file, arr_projects_out)
+  def initialize(
+    p_parser_proj_file,
+    arr_projects_out,
+    flag_populate_existing)
+    super(
+      p_parser_proj_file,
+      arr_projects_out)
     @flag_populate_existing = flag_populate_existing # whether to extend existing project information (are we parsing main file or an extension file (e.g. .filters)?)
   end
   def parse_file
@@ -4601,8 +4746,12 @@ end
 # Project filters parser variant which works on XML-stream-based input
 # FIXME: this class and its user are UNUSED and should perhaps be removed.
 class V2C_VS10ProjectFiltersXmlParser < V2C_VS10ParserBase
-  def initialize(doc_proj_filters, arr_projects)
-    super(doc_proj_filters, arr_projects)
+  def initialize(
+    doc_proj_filters,
+    arr_projects)
+    super(
+      doc_proj_filters,
+      arr_projects)
     @idx_target = 0 # to count the number of <project> elems in the XML stream
     logger.fixme 'filters file exists, needs parsing!'
   end
@@ -4628,7 +4777,9 @@ end
 
 # Project filters parser variant which works on file-based input
 class V2C_VS10ProjectFiltersFileParser < V2C_ParserBase
-  def initialize(proj_filters_filename, arr_projects_out)
+  def initialize(
+    proj_filters_filename,
+    arr_projects_out)
     @proj_filters_filename = proj_filters_filename
     @arr_projects_out = arr_projects_out
   end
@@ -4683,8 +4834,13 @@ end
 # For a list of XML file element names (i.e. schema info), see
 #   http://stackoverflow.com/questions/7899043/getting-lots-of-warnings-when-building-with-targets-in-visual-studio-2010
 class V2C_VS10ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
-  def initialize(p_parser_proj_file, arr_projects_out)
-    super(p_parser_proj_file, V2C_Project_Info::ORIG_ENV_SHORTNAME_MSVS10, arr_projects_out)
+  def initialize(
+    p_parser_proj_file,
+    arr_projects_out)
+    super(
+      p_parser_proj_file,
+      V2C_Project_Info::ORIG_ENV_SHORTNAME_MSVS10,
+      arr_projects_out)
   end
   def parse_project_files
     proj_file_parser = V2C_VS10ProjectFileParser.new(@p_parser_proj_file, @arr_projects_new, false)
@@ -4718,7 +4874,8 @@ class V2C_ValidationError < StandardError
 end
 
 class V2C_ProjectValidator
-  def initialize(project_info)
+  def initialize(
+    project_info)
     @project_info = project_info
   end
   def validate
@@ -4763,7 +4920,10 @@ class Util_TempFilePermanentizer
   MOVE_RES_SAMECONTENT = 3
   MOVE_RES_FAIL_ZEROSIZE = 2
 
-  def initialize(input_file_location, output_file_fqpn, target_file_permissions)
+  def initialize(
+    input_file_location,
+    output_file_fqpn,
+    target_file_permissions)
     @input_file_location = input_file_location
     @output_file_fqpn = output_file_fqpn
     @target_file_permissions = target_file_permissions
@@ -4815,8 +4975,14 @@ end
 class V2C_CMakeFilePermanentizer < Util_TempFilePermanentizer
   include Logging
 
-  def initialize(input_file_location, output_file_fqpn, target_file_permissions)
-    super(input_file_location, output_file_fqpn, target_file_permissions)
+  def initialize(
+    input_file_location,
+    output_file_fqpn,
+    target_file_permissions)
+    super(
+      input_file_location,
+      output_file_fqpn,
+      target_file_permissions)
   end
   def process
     file_moved = false
@@ -4847,7 +5013,9 @@ end
 # issues. Implement as scoped block operation.
 class V2C_GenerateIntoTempFile
   include Logging
-  def initialize(tempfile_prefix, destination_file)
+  def initialize(
+    tempfile_prefix,
+    destination_file)
     @tempfile_prefix = tempfile_prefix
     @destination_file = destination_file
     textstream_attributes = V2C_TextStream_Attributes.new(
@@ -4899,7 +5067,8 @@ class ParameterArrayGenerator
 end
 
 class V2C_BaseGlobalGenerator
-  def initialize(master_project_dir)
+  def initialize(
+    master_project_dir)
     @filename_map_inc = File.join($v2c_config_dir_local, 'include_mappings.txt')
     @master_project_dir = master_project_dir
     @map_includes = Hash.new
@@ -4920,7 +5089,10 @@ end
 V2C_TEXT_FILE_AUTO_GENERATED_MARKER = 'AUTO-GENERATED by'
 
 class V2C_TextStream_Attributes
-  def initialize(indent_start, indent_step, comments_level)
+  def initialize(
+    indent_start,
+    indent_step,
+    comments_level)
     @indent_start = indent_start
     @indent_step = indent_step
     @comments_level = comments_level
@@ -4932,7 +5104,9 @@ end
 
 # Contains functionality common to _any_ file-based generator
 class V2C_TextStreamSyntaxGeneratorBase
-  def initialize(out, textstream_attributes)
+  def initialize(
+    out,
+    textstream_attributes)
     @out = out
     @indent_now = textstream_attributes.indent_start
     @indent_step = textstream_attributes.indent_step
@@ -5032,7 +5206,8 @@ class V2C_SyntaxGeneratorBase < V2C_GeneratorBase
   COMMENT_LEVEL_STANDARD = 2 # standard setting
   COMMENT_LEVEL_VERBOSE = 3 # verbose mode - even more comments
   COMMENT_LEVEL_ALL = 4 # highly verbose, many comments
-  def initialize(textOut)
+  def initialize(
+    textOut)
     @textOut = textOut
   end
 end
@@ -5967,8 +6142,11 @@ class V2C_CMakeV2CConditionGeneratorBase < V2C_CMakeV2CSyntaxGenerator
 end
 
 class V2C_CMakeV2CConditionGenerator < V2C_CMakeV2CConditionGeneratorBase
-  def initialize(textOut, flag_skip_build_cfg_type_parts)
-    super(textOut)
+  def initialize(
+    textOut,
+    flag_skip_build_cfg_type_parts)
+    super(
+      textOut)
     # Flag to indicate that we don't want the build platform/type part
     # of the condition (probably since that will be handled elsewhere).
     @flag_skip_build_cfg_type_parts = flag_skip_build_cfg_type_parts
@@ -5998,8 +6176,14 @@ end
 class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
   VS7_UNWANTED_FILE_TYPES_REGEX_OBJ = %r{\.(lex|y|ico|bmp|txt)$}
   VS7_LIB_FILE_TYPES_REGEX_OBJ = %r{\.lib$}
-  def initialize(textOut, project_name, project_dir, arr_sub_sources_for_parent, skip_non_sources)
-    super(textOut)
+  def initialize(
+    textOut,
+    project_name,
+    project_dir,
+    arr_sub_sources_for_parent,
+    skip_non_sources)
+    super(
+      textOut)
     @project_name = project_name
     @project_dir = project_dir
     @arr_sub_sources_for_parent = arr_sub_sources_for_parent
@@ -6065,8 +6249,19 @@ end
 
 # FIXME: temporarily appended a _VS7 suffix since we're currently changing file list generation during our VS10 generator work.
 class V2C_CMakeFileListsGenerator_VS7 < V2C_CMakeFileListGeneratorBase
-  def initialize(textOut, project_name, project_dir, files_str, parent_source_group, arr_sub_sources_for_parent)
-    super(textOut, project_name, project_dir, arr_sub_sources_for_parent, true)
+  def initialize(
+    textOut,
+    project_name,
+    project_dir,
+    files_str,
+    parent_source_group,
+    arr_sub_sources_for_parent)
+    super(
+      textOut,
+      project_name,
+      project_dir,
+      arr_sub_sources_for_parent,
+      true)
     @files_str = files_str
     @parent_source_group = parent_source_group
   end
@@ -6149,8 +6344,19 @@ class V2C_CMakeFileListsGenerator_VS7 < V2C_CMakeFileListGeneratorBase
 end
 
 class V2C_CMakeFileListGenerator_VS10 < V2C_CMakeFileListGeneratorBase
-  def initialize(textOut, project_name, project_dir, file_list, parent_source_group, arr_sub_sources_for_parent)
-    super(textOut, project_name, project_dir, arr_sub_sources_for_parent, false)
+  def initialize(
+    textOut,
+    project_name,
+    project_dir,
+    file_list,
+    parent_source_group,
+    arr_sub_sources_for_parent)
+    super(
+      textOut,
+      project_name,
+      project_dir,
+      arr_sub_sources_for_parent,
+      false)
     @file_list = file_list
     @parent_source_group = parent_source_group
   end
@@ -6195,8 +6401,13 @@ class V2C_ToolFlagsGenerator_Linker_MSVC < V2C_ToolFlagsGenerator_Base
 end
 
 class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
-  def initialize(target, project_dir, localGenerator, textOut)
-    super(textOut)
+  def initialize(
+    target,
+    project_dir,
+    localGenerator,
+    textOut)
+    super(
+      textOut)
     @target = target
     @project_dir = project_dir
     @localGenerator = localGenerator
@@ -7152,8 +7363,12 @@ end
 # DEBUG_CONFIGURATIONS, originally parsed from all projects and/or the entire
 # solution configuration.
 class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
-  def initialize(textOut, relative_path_to_root, script_location_relative_to_master)
-    super(textOut)
+  def initialize(
+    textOut,
+    relative_path_to_root,
+    script_location_relative_to_master)
+    super(
+      textOut)
     @relative_path_to_root = relative_path_to_root
     @script_location_relative_to_master = script_location_relative_to_master
   end
@@ -7309,8 +7524,14 @@ end
 # This class generates the output of multiple input projects to a text output
 # (usually CMakeLists.txt within a local directory).
 class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
-  def initialize(textOut, local_dir, p_solution_dir, arr_local_project_targets, script_location_relative_to_master)
-    super(textOut)
+  def initialize(
+    textOut,
+    local_dir,
+    p_solution_dir,
+    arr_local_project_targets,
+    script_location_relative_to_master)
+    super(
+      textOut)
     @local_dir = local_dir
     @p_solution_dir = p_solution_dir
     @master_project_dir = p_solution_dir.to_s
@@ -7457,8 +7678,12 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
 end
 
 class V2C_CMakeSourceGroupFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
-  def initialize(textOut, target_name, arr_filtered_file_lists)
-    super(textOut)
+  def initialize(
+    textOut,
+    target_name,
+    arr_filtered_file_lists)
+    super(
+      textOut)
     @target_name = target_name
     @arr_filtered_file_lists = arr_filtered_file_lists
   end
@@ -7692,7 +7917,12 @@ class V2C_FileGeneratorBase < V2C_GeneratorBase
 end
 
 class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
-  def initialize(p_v2c_script, p_master_project, p_generator_proj_file, arr_projects, flag_source_groups_enabled)
+  def initialize(
+    p_v2c_script,
+    p_master_project,
+    p_generator_proj_file,
+    arr_projects,
+    flag_source_groups_enabled)
     @p_master_project = p_master_project
 
     @p_generator_proj_file = p_generator_proj_file
@@ -7793,8 +8023,16 @@ end
 # in addition to standard handling of content of a local CMakeLists.txt
 # file.
 class V2C_CMakeRootFileContentGenerator < V2C_CMakeLocalFileContentGenerator
-  def initialize(textOut, projects_list_file, script_location_relative_to_master)
-    super(textOut, '.', Pathname.new('.'), [ ], script_location_relative_to_master)
+  def initialize(
+    textOut,
+    projects_list_file,
+    script_location_relative_to_master)
+    super(
+      textOut,
+      '.',
+      Pathname.new('.'),
+      [ ],
+      script_location_relative_to_master)
     @projects_list_file = projects_list_file
   end
   def generate_footer
@@ -7862,7 +8100,8 @@ end
 # It should carry out all post-processing steps
 # which are to be *INDEPENDENT* from actual *specific* per-parser handling.
 class V2C_ProjectPostProcess < V2C_LoggerBase
-  def initialize(project_info)
+  def initialize(
+    project_info)
     @project_info = project_info
   end
   def process
