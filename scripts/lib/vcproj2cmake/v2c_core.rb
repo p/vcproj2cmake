@@ -5010,101 +5010,6 @@ class V2C_VS10ProjectFileParser < V2C_VSProjectFileParserBase
   def populate_existing_projects; @flag_populate_existing end
 end
 
-class V2C_VS10ProjectFiltersParser < V2C_VS10ParserBase
-
-  private
-
-  def get_project; @info_elem end
-  def parse_element(subelem_xml)
-    found = be_optimistic()
-    elem_parser = nil # IMPORTANT: reset it!
-    case subelem_xml.name
-    when 'ItemGroup'
-      # FIXME: _perhaps_ we should pass a boolean to V2C_VS10ItemGroupForwarderParser
-      # indicating whether we're .vcxproj or .filters.
-      # But then VS handling of file elements in .vcxproj and .filters
-      # might actually be completely identical, so a boolean split would be
-      # counterproductive (TODO verify!).
-      elem_parser = V2C_VS10ItemGroupForwarderParser.new(subelem_xml, get_project())
-    #when 'PropertyGroup'
-    #  proj_filters_elem_parser = V2C_VS10PropertyGroupForwarderParser.new(subelem_xml, get_project())
-    else
-      elem_parser = nil
-    end
-    if not elem_parser.nil?
-      elem_parser.parse
-    else
-      found = super
-    end
-    return found
-  end
-end
-
-# Project filters parser variant which works on XML-stream-based input
-# FIXME: this class and its user are UNUSED and should perhaps be removed.
-class V2C_VS10ProjectFiltersXmlParser < V2C_VS10ParserBase
-  def initialize(
-    doc_proj_filters,
-    arr_projects)
-    super(
-      doc_proj_filters,
-      arr_projects)
-    @idx_target = 0 # to count the number of <project> elems in the XML stream
-    logger.fixme 'filters file exists, needs parsing!'
-  end
-  def parse_element(subelem_xml)
-    found = be_optimistic()
-    elem_parser = nil # IMPORTANT: reset it!
-    case subelem_xml.name
-    when TEXT_PROJECT
-      # FIXME handle fetch() exception - somewhere!
-      project_info = get_arr_projects().fetch(@idx_target)
-      @idx_target += 1
-      elem_parser = V2C_VS10ProjectFiltersParser.new(subelem_xml, project_info)
-      elem_parser.parse
-    else
-      found = super
-    end
-    return found
-  end
-
-  private
-  def get_arr_projects; @info_elem end
-end
-
-# Project filters parser variant which works on file-based input
-class V2C_VS10ProjectFiltersFileParser < V2C_ParserBase
-  def initialize(
-    proj_filters_filename,
-    arr_projects_out)
-    super(
-      nil) # hrmpf - layering violation - we are an outer handler which is specifically file-based which produces an *array* of results, thus we do NOT service an info_elem!
-    @proj_filters_filename = proj_filters_filename
-    @arr_projects_out = arr_projects_out
-  end
-  def parse_file
-    success = false
-    # Parse the file filters file (_separate_ in VS10!)
-    # if it exists:
-    begin
-      File.open(@proj_filters_filename) { |io|
-        doc_proj_filters = REXML::Document.new io
-
-        arr_projects_work = Array.new
-        project_filters_parser = V2C_VS10ProjectFiltersXmlParser.new(doc_proj_filters, arr_projects_work)
-        project_filters_parser.parse
-        # Everything ok? Append to output...
-        @arr_projects_out.concat(arr_projects_work)
-        success = true
-      }
-    rescue Exception => e
-      # File probably does not exist...
-      logger.unhandled_exception(e, 'project file parsing')
-    end
-    return success
-  end
-end
-
 # VS10 project files bundle explanation:
 # For the relationship between .vcxproj and .vcxproj.filters, the following
 # has been experimentally determined:
@@ -5143,7 +5048,6 @@ class V2C_VS10ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
   def parse_project_files
     proj_file_parser = V2C_VS10ProjectFileParser.new(@p_parser_proj_file, @arr_projects_new, false)
     if false != proj_file_parser.parse_file
-      #proj_filters_file_parser = V2C_VS10ProjectFiltersFileParser.new(@proj_filename + '.filters', @arr_projects_new)
       p_parser_proj_file_filters = Pathname.new(@p_parser_proj_file.to_s + '.filters')
       begin
         proj_filters_file_parser = V2C_VS10ProjectFileParser.new(p_parser_proj_file_filters, @arr_projects_new, true)
