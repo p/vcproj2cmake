@@ -2673,12 +2673,12 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
   #   http://stackoverflow.com/questions/3058111/how-do-i-set-environment-variables-in-visual-studio-2010
   #   http://connect.microsoft.com/VisualStudio/feedback/details/606484/property-sheets-upgraded
   #   http://blogs.msdn.com/b/vcblog/archive/2010/02/16/project-settings-changes-with-vs2010.aspx
-  VS10_ITEM_METADATA_MACRO_MATCH_REGEX_OBJ = %r{%\([^\s]*\)}
+  VS10_ITEM_METADATA_MACRO_VAR_MATCH_REGEX_OBJ = %r{%\([^\s]*\)}
   def skip_vs10_item_metadata_macro_var(str_var)
     # shortcut :)
     return false if not str_var.include?('%')
 
-    return false if not VS10_ITEM_METADATA_MACRO_MATCH_REGEX_OBJ.match(str_var)
+    return false if not VS10_ITEM_METADATA_MACRO_VAR_MATCH_REGEX_OBJ.match(str_var)
     logger.fixme("skipping unhandled VS10 variable (#{str_var})")
     return true
   end
