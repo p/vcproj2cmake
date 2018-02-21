@@ -317,9 +317,7 @@ class Logger
   def unhandled_functionality(str_description); fixme 'unhandled functionality: ' + str_description end
 
   private
-  # I don't know WTH @class_name is not initialized. Probably an init order issue or whatever the heck is happening here. Oh well...
-  #def formatter(str) @class_name + ': ' + str end
-  def formatter(str) str end
+  def formatter(str) @class_name + ': ' + str end
 end
 
 module Logging
@@ -367,6 +365,20 @@ module Logging_Redirector
   end
 end
 
+# [most conveniently central and affected location for this comment:]
+# WARNING:
+# For derived class hierarchies,
+# Always make sure to call "super"
+# else base's initialize()
+# will NOT get invoked!!
+# (resulting in worse-than-nuisances such as
+#     warning: instance variable @class_name not initialized
+# , which possibly is decorated by something like
+#     FILE.rb:LLL - undefined method `+' for nil:NilClass (NoMethodError)
+# )
+# Makes you truly wonder again
+# whether massive class hierarchies
+# are such a good idea in general...
 class V2C_LoggerBase < Logger
   include Logging_Redirector
 
@@ -751,6 +763,7 @@ end
 
 class V2C_Precompiled_Header_Info < V2C_Info_Elem_Base
   def initialize
+    super
     # @use_mode: known VS10 content is "NotUsing" / "Create" / "Use"
     # (corresponding VS8 values are 0 / 1 / 2)
     # NOTE VS7 (2003) had 3 instead of 2 (i.e. changed to 2 after migration!)
@@ -1089,6 +1102,7 @@ end
 class V2C_Target_Config_Build_Info < V2C_Info_Elem_Base
   include V2C_TargetConfig_Defines
   def initialize
+    super
     @cfg_type = CFG_TYPE_INVALID
 
     # 0 == no MFC
@@ -1112,6 +1126,8 @@ end
 
 class V2C_Tools_Info < V2C_Info_Elem_Base
   def initialize
+    super(
+      )
     @arr_compiler_info = Array.new
     @arr_linker_info = Array.new
     @arr_midl_info = Array.new
@@ -1124,6 +1140,8 @@ end
 # Common base class of both file config and project config.
 class V2C_Config_Base_Info < V2C_Info_Elem_Base
   def initialize
+    super(
+      )
     @tools = V2C_Tools_Info.new
   end
   attr_accessor :tools
@@ -1230,6 +1248,8 @@ class V2C_Info_File
   ATTR_SOURCE_CONTROL_FILE = 2
   def initialize(
     )
+    super(
+      )
     # FIXME: those two arguably shouldn't be in a file-specific class
     # (probably moved to a base instead?)
     @target_config_info = nil
@@ -1475,6 +1495,8 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
   KEYWORD_MFC = 'MFCProj'
   KEYWORD_MAKEFILE = 'MakeFileProj'
   def initialize
+    super(
+      )
     @type = nil # project type
     # Interesting discussion about VS ProjectType:
     # "C vs C++ or any C varient"
@@ -1548,6 +1570,8 @@ end
 class V2C_CMakeProjectLanguageDetector < V2C_LoggerBase
   def initialize(
     project_info)
+    super(
+      )
     @project_info = project_info
     @arr_languages = Array.new
   end
@@ -1834,6 +1858,8 @@ class V2C_ParserBase < V2C_LoggerBase
   # to be able to reference it for logging.
   def initialize(
     info_elem_out)
+    super(
+      )
     @info_elem = info_elem_out
   end
   attr_accessor :info_elem
@@ -2263,7 +2289,10 @@ end
 class V2C_VSProjectSCCParser < V2C_VSXmlParserBase
   def initialize(
     scc_info)
-    @scc_info = scc_info
+    info_elem_out = scc_info
+    super(
+      nil, # layering violation - this class is a pseudo helper parser only...
+      info_elem_out)
   end
   def register_scc(setting_key, setting_value)
     found = be_optimistic()
@@ -2273,22 +2302,25 @@ class V2C_VSProjectSCCParser < V2C_VSXmlParserBase
     # exist, too... (one project had SccProvider missing). HOWEVER,
     # CMake generator does expect all three to exist when available! Hmm.
     when 'SccProjectName'
-      @scc_info.project_name = setting_value
+      result().project_name = setting_value
     # There's a special SAK (Should Already Know) entry marker
     # (see e.g. http://stackoverflow.com/a/6356615 ).
     # Currently I don't believe we need to handle "SAK" in special ways
     # (such as filling it in in case of missing entries),
     # transparent handling ought to be sufficient.
     when 'SccLocalPath'
-      @scc_info.local_path = setting_value
+      result().local_path = setting_value
     when 'SccProvider'
-      @scc_info.provider = setting_value
+      result().provider = setting_value
     when 'SccAuxPath'
-      @scc_info.aux_path = setting_value
+      result().aux_path = setting_value
     else
       found = FOUND_FALSE
     end
     return found
+  end
+  def result
+    @info_elem
   end
 end
 
@@ -3609,6 +3641,8 @@ class V2C_VSProjectFilesBundleParserBase < V2C_LoggerBase
     p_parser_proj_file,
     str_orig_environment_shortname,
     arr_projects_out)
+    super(
+      )
     @p_parser_proj_file = p_parser_proj_file
     @proj_filename = p_parser_proj_file.to_s # FIXME: do we want to keep the string-based filename? We should probably change several sub classes to be Pathname-based...
     @str_orig_environment_shortname = str_orig_environment_shortname
@@ -3685,6 +3719,8 @@ class V2C_VSProjectFileParserBase < V2C_ParserBase
   def initialize(
     p_parser_proj_file,
     arr_projects_out)
+    super(
+      nil) # hrmpf - layering violation - we are an outer handler which is specifically file-based which produces an *array* of results, thus we do NOT service an info_elem!
     @p_parser_proj_file = p_parser_proj_file
     @proj_filename = p_parser_proj_file.to_s
     @arr_projects_out = arr_projects_out
@@ -4780,6 +4816,8 @@ class V2C_VS10ProjectFiltersFileParser < V2C_ParserBase
   def initialize(
     proj_filters_filename,
     arr_projects_out)
+    super(
+      nil) # hrmpf - layering violation - we are an outer handler which is specifically file-based which produces an *array* of results, thus we do NOT service an info_elem!
     @proj_filters_filename = proj_filters_filename
     @arr_projects_out = arr_projects_out
   end
@@ -5208,6 +5246,8 @@ class V2C_SyntaxGeneratorBase < V2C_GeneratorBase
   COMMENT_LEVEL_ALL = 4 # highly verbose, many comments
   def initialize(
     textOut)
+    super(
+      )
     @textOut = textOut
   end
 end
@@ -7923,6 +7963,8 @@ class V2C_CMakeLocalFileGenerator < V2C_FileGeneratorBase
     p_generator_proj_file,
     arr_projects,
     flag_source_groups_enabled)
+    super(
+      )
     @p_master_project = p_master_project
 
     @p_generator_proj_file = p_generator_proj_file
@@ -8102,6 +8144,8 @@ end
 class V2C_ProjectPostProcess < V2C_LoggerBase
   def initialize(
     project_info)
+    super(
+      )
     @project_info = project_info
   end
   def process
