@@ -222,9 +222,13 @@ V2C_LOG_LEVEL_INFO = 4
 V2C_LOG_LEVEL_DEBUG = 5
 V2C_LOG_LEVEL_TRACE = 6
 
-def load_configuration_file(str_file, str_descr, arr_descr_loaded)
+def load_configuration_file(
+  str_file,
+  str_descr,
+  arr_descr_loaded)
   load str_file
-  arr_descr_loaded.push(str_descr + ' ' + str_file)
+  arr_descr_loaded.push(
+    str_descr + ' ' + str_file)
   true
 rescue LoadError
   # Ignore it (config file is optional!).
@@ -668,7 +672,9 @@ def escape_char!(in_string, foreign_payload_char)
   # to simply pass "foreign_payload_char," param here
   # (gsub replacement will FAIL) - we need actual pattern syntax here.
   # *Other* (char literal) uses of gsub! in our code do not need this. Weird.
-  in_string.gsub!(/#{foreign_payload_char}/, '\\' + foreign_payload_char)
+  in_string.gsub!(
+    /#{foreign_payload_char}/,
+    '\\' + foreign_payload_char)
   #log_debug "in_string quoted #{in_string}"
 end
 
@@ -861,16 +867,35 @@ module V2C_ParserGenericLogging
   # TODO: should probably be providing lowlevel helper
   # with a number of bit flags
   # (info/warn/error | logic/syntax | please_report/critical)
-  def parser_warn_syntax(str_description); logger.warn('syntax: ' + str_description) end
-  def parser_error_logic(str_description); parser_error('logic: ' + str_description, false) end
-  def parser_error_syntax(str_description); parser_error('syntax: ' + str_description, false) end
-  def parser_warn_syntax_semi_compatible(str_description)
-    parser_warn_syntax(str_description + ' Possibly other tools might choke when encountering this issue, thus you should correct the file content.')
+  def parser_warn_syntax(
+    str_description)
+    logger.warn(
+      'syntax: ' + str_description)
   end
-  def parser_error_todo(str_description)
+  def parser_error_logic(
+    str_description)
+    parser_error(
+      'logic: ' + str_description,
+      false)
+  end
+  def parser_error_syntax(
+    str_description)
+    parser_error(
+      'syntax: ' + str_description,
+      false)
+  end
+  def parser_warn_syntax_semi_compatible(
+    str_description)
+    parser_warn_syntax(
+      str_description + ' Possibly other tools might choke when encountering this issue, thus you should correct the file content.')
+  end
+  def parser_error_todo(
+    str_description)
     # Could add a config flag to indicate whether to aggressively report
     # such issues as an (often abort-inducing) error or using warn instead.
-    parser_error('todo: ' + str_description, false)
+    parser_error(
+      'todo: ' + str_description,
+      false)
   end
   def error_unknown_case_value(description, val)
     parser_error("unknown/unsupported/corrupt #{description} case value! (#{val})", true)
@@ -3356,7 +3381,9 @@ class V2C_VSToolDefineParserBase < V2C_VSToolParserBase
   private
   include V2C_VSToolDefineDefines
   def get_define_tool_info; @info_elem end
-  def parse_setting(setting_key, setting_value)
+  def parse_setting(
+    setting_key,
+    setting_value)
     found = be_optimistic()
     tool_info = get_define_tool_info()
     case setting_key
@@ -3431,7 +3458,9 @@ class V2C_VSToolCompilerParser < V2C_VSToolDefineParserBase
     end
     precompiled_header_info
   end
-  def parse_setting(setting_key, setting_value)
+  def parse_setting(
+    setting_key,
+    setting_value)
     found = be_optimistic()
     case setting_key
     when TEXT_ADDITIONALINCLUDEDIRECTORIES
@@ -5988,7 +6017,8 @@ class V2C_VS10ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
   def parse_project_files
     proj_file_parser = V2C_VS10ProjectFileParser.new(@p_parser_proj_file, @arr_projects_new, false)
     if false != proj_file_parser.parse_file
-      p_parser_proj_file_filters = Pathname.new(@p_parser_proj_file.to_s + '.filters')
+      p_parser_proj_file_filters = Pathname.new(
+        @p_parser_proj_file.to_s + '.filters')
       begin
         proj_filters_file_parser = V2C_VS10ProjectFileParser.new(p_parser_proj_file_filters, @arr_projects_new, true)
 
@@ -6293,7 +6323,9 @@ class Util_TempFilePermanentizer
       # rename to <file>.<ext>.previous and not <file>.previous.<ext>
       # since grepping for all *.<ext> files
       # would then hit these outdated ones.
-      V2C_Util_File.mv(@output_file_fqpn, @output_file_fqpn + '.previous')
+      V2C_Util_File.mv(
+        @output_file_fqpn,
+        @output_file_fqpn + '.previous')
     end
     # activate our version
     # We'll choose to chmod() the input rather than the output file,
@@ -6739,7 +6771,11 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def print_marker_line(line)
     # write_comment_line(line) # UNCOMMENT THIS CALL IF NEEDED
   end
-  def write_comment_line(line); @textOut.write_line('# ' + line) end
+  def write_comment_line(
+    line)
+    @textOut.write_line(
+      '# ' + line)
+  end
   def write_comment_at_level(level, block)
     return if @textOut.generated_comments_level() < level
     # Since we'd like the start of a comment paragraph to start with
@@ -6753,7 +6789,8 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   # (and bonus points for configurable line length...)
   def write_command_list(cmake_command, cmake_command_arg, arr_args_cmd)
     if cmake_command_arg.nil?; cmake_command_arg = '' end
-    @textOut.write_line(cmake_command + '(' + cmake_command_arg)
+    @textOut.write_line(
+      cmake_command + '(' + cmake_command_arg)
     if not arr_args_cmd.nil?
       @textOut.indent_more()
         arr_args_cmd.each do |curr_arg|
@@ -6777,7 +6814,8 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     write_command_list(cmake_command, cmake_command_arg_main_quoted, arr_args_cmd_quoted)
   end
   def write_command_list_single_line(cmake_command, arr_args_cmd)
-    @textOut.write_line(cmake_command + '(' + array_to_string(arr_args_cmd) + ')')
+    @textOut.write_line(
+      cmake_command + '(' + array_to_string(arr_args_cmd) + ')')
   end
   def write_command_single_line(cmake_command, str_cmake_command_args)
     # Be sure to have this string-based function invoke the array-based one
@@ -6828,7 +6866,9 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def write_invoke_function_quoted(str_function, arr_args_func)
     write_command_list_quoted(str_function, nil, arr_args_func)
   end
-  def get_dereferenced_variable_name(str_var); "${#{str_var}}" end
+  def get_dereferenced_variable_name(str_var)
+    "${#{str_var}}"
+  end
   def add_subdirectory(
     str_subdir)
     # quote strings containing spaces!!
@@ -7119,11 +7159,15 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def get_keyword_bool(setting); false != setting ? 'ON' : 'OFF' end
   # Generates CMake commands matching the common COMMAND / endCOMMAND pair.
   def gen_scoped_cmake_command(cmake_command, arr_params)
-    write_command_list_single_line(cmake_command, arr_params)
+    write_command_list_single_line(
+      cmake_command,
+      arr_params)
       @textOut.indent_more()
         yield
       @textOut.indent_less()
-    write_command_list_single_line('end' + cmake_command, arr_params)
+    write_command_list_single_line(
+      'end' + cmake_command,
+      arr_params)
   end
   def gen_if(arr_params)
     empty_conditional = false
@@ -7323,7 +7367,8 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     if config_name.nil?
       res = property_name
     else
-      config_name_upper = get_config_name_upcase(config_name)
+      config_name_upper = get_config_name_upcase(
+        config_name)
       res = property_name + '_' + config_name_upper
     end
     return res
@@ -7389,7 +7434,10 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
   # VS_GLOBAL_PREFIX_NAME is located in generator base since it's used
   # for at least both TARGET and DIRECTORY property scopes.
   VS_GLOBAL_PREFIX_NAME = 'VS_GLOBAL_'
-  def format_global_prefix(sub); VS_GLOBAL_PREFIX_NAME + sub end
+  def format_global_prefix(
+    sub)
+    VS_GLOBAL_PREFIX_NAME + sub
+  end
   def write_vcproj2cmake_func_comment()
     write_comment_at_level(COMMENT_LEVEL_STANDARD, "See function implementation/docs in #{VCPROJ2CMAKE_FUNC_CMAKE_LOCATION}")
   end
