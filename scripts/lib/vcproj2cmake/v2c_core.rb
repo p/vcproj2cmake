@@ -550,6 +550,20 @@ V2C_Core_Add_Plugin_Parser(plugin_parser_vs7_vfproj)
 # thus per-config switching *is* doable.
 $config_multi_authoritative = ''
 
+def v2c_can_use_processes
+  res = $v2c_enable_processes
+  if false == V2C_Ruby_Compat::have_support_Process_fork
+    res = false
+  end
+  res
+end
+
+def v2c_can_use_threads
+  res = $v2c_enable_threads
+  res
+end
+
+
 if 0 < $v2c_validate_vcproj_abort_on_error
   # Definitely log a warning explicitly mentioning "exceptions",
   # since this setting will swallow exceptions

@@ -26,6 +26,14 @@ v2cc_load_path_extend_for_own_libs()
 
 require 'vcproj2cmake/v2c_core' # (currently) large amount of random "core" functionality
 
+def v2c_recursive_enable_processes
+  v2c_can_use_processes
+end
+
+def v2c_recursive_enable_threads
+  v2c_can_use_threads
+end
+
 ################
 #     MAIN     #
 ################
@@ -630,7 +638,7 @@ def execute_work_units(
 end
 
 def execute_work_package(unitGlobal, workPackage, want_multi_processing)
-  if (want_multi_processing and $v2c_enable_processes)
+  if (want_multi_processing and v2c_recursive_enable_processes)
     # See also http://stackoverflow.com/a/1076445
     log_info 'Recursively converting projects, multi-process.'
     workPackage.each { |arr_work_units_per_worker|
@@ -659,7 +667,7 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
         exit worker_exitstatus
       end
     }
-  elsif (want_multi_processing and $v2c_enable_threads)
+  elsif (want_multi_processing and v2c_recursive_enable_threads)
     log_info 'Recursively converting projects, multi-threaded.'
 
     # "Ruby-Threads erzeugen"
@@ -717,8 +725,6 @@ def submit_work(unitGlobal, arr_work_units)
   # (e.g. launch a fixed number of workers, *then* submit work via IPC)
   # of a thread/process pool, but for now... I don't care. ;)
 
-
-  $v2c_enable_processes = V2C_Ruby_Compat::have_support_Process_fork
 
   num_work_units = arr_work_units.length
 
