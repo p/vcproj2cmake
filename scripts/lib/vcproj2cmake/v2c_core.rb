@@ -939,7 +939,7 @@ module V2C_ParserGenericLogging
   end
   def error_unknown_case_value(description, val)
     msg = ''
-    msg << "unknown/unsupported/corrupt #{description} case value! (#{val})"
+    msg << "unknown/unsupported/corrupt #{quoted_string_from_string(description)} case value! (#{val})"
     parser_error(
       msg,
       true)
