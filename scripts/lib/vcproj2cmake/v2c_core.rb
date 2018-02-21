@@ -283,6 +283,36 @@ module V2C_File_Stuff
   module_function :file_ensure_close
 end
 
+# To be used to
+# collect reports of activity which needs to happen already prior to
+# logging framework having reached working state.
+class V2C_DelayedReporting
+  def initialize(
+    )
+    @arr_msg = []
+  end
+  def add(
+    component_id, # additional parm: to enforce proper referencing
+    msg)
+    arr_msg.push(
+      component_id + ': ' + msg)
+  end
+  attr_reader :arr_msg
+end
+
+$delayedReporting = V2C_DelayedReporting.new
+
+# Be sure to have these
+# initial startup reports (log level config, etc.)
+# announced at a very early time -
+# thus, usually right after
+# logging framework having reached working state.
+def delayedReporting_msgs_get
+  output = $delayedReporting.arr_msg.join(STR_CTRL_LF)
+  $delayedReporting = nil # not needed any more
+  output
+end
+
 V2C_LOG_LEVEL_OFF = 0
 V2C_LOG_LEVEL_FATAL = 1
 V2C_LOG_LEVEL_ERROR = 2
@@ -337,23 +367,32 @@ def load_configuration
     str_msg << " (#{str_msg_extra})"
   end
   str_msg << '.'
-  puts str_msg
+  $delayedReporting.add(
+    'Configuration',
+    str_msg)
 end
 
 def load_configuration_get_load_paths
   $: # == $LOAD_PATH
 end
 
+$delayedReporting.add(
+  'Configuration',
+  "Config file load search paths:\n#{load_configuration_get_load_paths().join(STR_CTRL_LF)}")
+
 load_configuration()
 
 # Additionally enable Ruby's $DEBUG in case:
 # - we want a log level of at least debug
-# Will cause e.g. the following log output activity:
-# - will still log Exception records/traces
-#   for handled/silenced (rescue:d) exceptions even!
 # Also, ensure that this feature gets enabled ASAP.
 if $v2c_log_level >= V2C_LOG_LEVEL_DEBUG
   $DEBUG=true
+  arr_eff = Array.new
+  arr_eff.push("- will still log Exception records/traces for handled/silenced (rescue:d) exceptions even!")
+  msg = "Attention: log level >= Debug - setting $DEBUG=true\n(important effects:\n#{arr_eff.join(STR_CTRL_LF)}\n)"
+  $delayedReporting.add(
+    'Logging',
+    msg)
 end
 
 def log_debug(str)
@@ -403,7 +442,7 @@ def log_implementation_bug(str); log_fatal(str) end
 
 
 # Place rather modest log level demands (such usability-affecting info should be visible at < Debug already!)
-log_info "Config file load search paths:\n#{load_configuration_get_load_paths().join(STR_CTRL_LF)}"
+log_info delayedReporting_msgs_get()
 
 
 # TODO: make this a user-visible config setting soon.
