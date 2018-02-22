@@ -5637,22 +5637,53 @@ def v2c_get_path_config(master_project_source_dir)
   V2C_Path_Config.new(master_project_source_dir)
 end
 
-# @brief CMake syntax generator base class.
-#        Strictly about converting requests into specific CMake syntax,
-#        no build-specific generator knowledge at this level!
-class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
+# Offer some CMake-specific modules
+# with some helper vars
+# to cut down on string misspelling
+# (provide one central location
+# where breakage will be quickly discovered).
+# Module naming: strictly following official separation
+# ("man cmakecommands" etc.)
+
+module CMake_Syntax_base_language
   CMAKE_IS_LIST_VAR_CONTENT_REGEX_OBJ = %r{^".*;.*"$}
   CMAKE_VAR_MATCH_REGEX_STR = '\\$\\{[[:alnum:]_]+\\}'
   CMAKE_ENV_VAR_MATCH_REGEX_STR = '\\$ENV\\{[[:alnum:]_]+\\}'
   CMAKE_SOURCE_GROUP_HIERARCHY_SEPARATOR = '\\\\'
-  # Some helper vars to cut down on string misspelling (provide one central
-  # location where breakage will be quickly discovered)
+  WHITESPACE_REGEX_OBJ = %r{\s}
+end
+
+module CMake_Syntax_cmakecommands
+  NAME_SET_PROPERTY = 'set_property'
+end
+
+module CMake_Syntax_cmakecompat
+end
+
+module CMake_Syntax_cmakeprops
+end
+
+module CMake_Syntax_cmakevars
   NAME_CMAKE_CURRENT_SOURCE_DIR = 'CMAKE_CURRENT_SOURCE_DIR'
   NAME_CMAKE_CURRENT_BINARY_DIR = 'CMAKE_CURRENT_BINARY_DIR'
   NAME_CMAKE_MODULE_PATH = 'CMAKE_MODULE_PATH'
   NAME_CMAKE_SOURCE_DIR = 'CMAKE_SOURCE_DIR'
-  NAME_SET_PROPERTY = 'set_property'
-  WHITESPACE_REGEX_OBJ = %r{\s}
+end
+
+# Convenience "standard language" collection module.
+module CMake_Syntax_Standard
+  include CMake_Syntax_base_language
+  include CMake_Syntax_cmakecommands
+  include CMake_Syntax_cmakecompat
+  include CMake_Syntax_cmakeprops
+  include CMake_Syntax_cmakevars
+end
+
+# @brief CMake syntax generator base class.
+#        Strictly about converting requests into specific CMake syntax,
+#        no build-specific generator knowledge at this level!
+class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
+  include CMake_Syntax_Standard
 
   # Separate logical paragraphs from each other.
   # This should only be called by implementation scopes which call
