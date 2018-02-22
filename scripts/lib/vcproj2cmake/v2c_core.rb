@@ -775,21 +775,6 @@ class Logger
         str))
   end
 
-  # "Ruby Exceptions", http://rubylearning.com/satishtalim/ruby_exceptions.html
-  # NOTE: user side should probably re-raise() the exception in most cases...
-  # Thus I am now force-wrappingly (thus achieving: "unless explicitly not desired"!) causing a re-raise here...
-  # VERY useful discussion:
-  # "Does Ruby support exception wrapping (exception chaining)?"
-  #   http://www.ruby-forum.com/topic/148193#977439
-  def unhandled_exception(
-    e,
-    action,
-    reraise = true)
-    log_error "unhandled exception occurred during #{action}! " + get_exception_presentation_description(e)
-    if reraise
-      raise
-    end
-  end
   def unhandled_functionality(
     str_description)
     msg = ''
