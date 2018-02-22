@@ -85,6 +85,21 @@ require 'tempfile'
 require 'vcproj2cmake/util_file' # V2C_Util_File.cmp()
 
 
+# Centrally provides widely used string constants.
+# Serves to avoid wasteful local allocations of strings
+# (this can be analyzed via memory_profiler).
+module V2CS
+  BACKSLASH = '\\'
+  BRACKET_ROUND_OPEN = '('
+  BRACKET_ROUND_CLOSE = ')'
+  DOT = '.'
+  EMPTY = ''
+  EQUAL = '='
+  HASH = '#'
+  SLASH = '/'
+  SPACE = ' '
+end
+
 # Helpers to expressly clarify (--> avoid bugs!) that
 # certain control chars *must* be used specially, consistently:
 # - String.join() and .split() *must* be
@@ -936,13 +951,13 @@ end
 # Change '\' to '/', and remove leading "./",
 # and retain a trailing path separator.
 def normalize_path(p)
-  p_slash = p.tr('\\', '/')
-  felems = p_slash.split('/')
+  p_slash = p.tr(V2CS::BACKSLASH, V2CS::SLASH)
+  felems = p_slash.split(V2CS::SLASH)
   # "Getting last character from a string" http://www.ruby-forum.com/topic/54374
   trailing_slash_status = p_slash[-1,1]
-  trailing_slash_status = '' if trailing_slash_status != '/'
+  trailing_slash_status = V2CS::EMPTY if trailing_slash_status != V2CS::SLASH
   # DON'T eradicate single '.' !!
-  felems.shift if felems[0] == '.' and felems.length >= 2
+  felems.shift if felems[0] == V2CS::DOT and felems.length >= 2
   # And use special invocation to NOT swallow a special trailing slash
   # if existing (http://stackoverflow.com/a/12393692 was interesting,
   # but ultimately did not help since it unconditionally adds it):
@@ -1065,13 +1080,14 @@ else
   end
 end
 
+CHAR_COMMENT_START = V2CS::HASH
 def read_commented_text_file_lines(filename)
   if File.file?(filename)
     #Hash[*File.read(filename).scan(/^(.*)=(.*)$/).flatten]
     line_cooked = arr_comments_separator = line_payload = LoopVarPreconstruct()
     File.open(filename, 'r').each do |line_raw|
       line_cooked = line_raw.chomp
-      arr_comments_separator = line_cooked.split('#')
+      arr_comments_separator = line_cooked.split(CHAR_COMMENT_START)
       line_payload = arr_comments_separator[0]
       next if line_payload.nil?
       # remove whitespace right before comment start,
@@ -1084,12 +1100,13 @@ def read_commented_text_file_lines(filename)
   end
 end
 
+CHAR_COLON = ':'
 def read_mappings(filename_mappings, mappings)
   pattern_orig = expr_replacement = LoopVarPreconstruct()
   # line format is:
   # "tag:PLATFORM1:PLATFORM2=tag_replacement2:PLATFORM3=tag_replacement3"
   read_commented_text_file_lines(filename_mappings) do |line_payload|
-    pattern_orig, expr_replacement = line_payload.split(':')
+    pattern_orig, expr_replacement = line_payload.split(CHAR_COLON)
     if not pattern_orig.nil?
       mappings[pattern_orig] = expr_replacement
     end
@@ -1482,17 +1499,19 @@ class V2C_Tool_Compiler_Specific_Info_MSVC_Base < V2C_Tool_Compiler_Specific_Inf
   attr_accessor :warning_level
 end
 
+ID_COMPILER_MSVC7 = 'MSVC7'
 class V2C_Tool_Compiler_Specific_Info_MSVC7 < V2C_Tool_Compiler_Specific_Info_MSVC_Base
   def initialize
     super(
-      'MSVC7')
+      ID_COMPILER_MSVC7)
   end
 end
 
+ID_COMPILER_MSVC10 = 'MSVC10'
 class V2C_Tool_Compiler_Specific_Info_MSVC10 < V2C_Tool_Compiler_Specific_Info_MSVC_Base
   def initialize
     super(
-      'MSVC10')
+      ID_COMPILER_MSVC10)
   end
 end
 
@@ -2129,7 +2148,7 @@ class V2C_Info_File < V2C_Info_Item
     # (probably moved to a base instead?)
     @target_config_info = nil
     @config_info = nil
-    @path_relative = ''
+    @path_relative = V2CS::EMPTY
     @filter = nil # String (mentioning the filter which the file may belong to)
     @attr = 0
   end
@@ -2779,7 +2798,7 @@ def cmake_path_join(a, b)
     # File.join()
     # since that quite certainly
     # would use different system-specific path separators).
-    res << '/'
+    res << V2CS::SLASH
   end
   res << b_str
 end
@@ -3735,7 +3754,7 @@ class V2C_VSToolDefineParserBase < V2C_VSToolParserBase
   def parse_preprocessor_definitions(hash_defines, attr_defines)
     str_define_key = str_define_value = LoopVarPreconstruct()
     split_values_list_discard_empty(attr_defines).each { |elem_define|
-      str_define_key, str_define_value = elem_define.strip.split('=')
+      str_define_key, str_define_value = elem_define.strip.split(V2CS::EQUAL)
       next if skip_vs10_item_metadata_macro_var(str_define_key)
       # Since a Hash will indicate nil for any non-existing key,
       # we do need to fill in _empty_ value for our _existing_ key.
@@ -5038,7 +5057,7 @@ class V2C_VSProjectFilesBundleParserBase < V2C_LoggerBase
   # in this somewhat too specific class...
   def check_unhandled_file_type(str_ext)
     str_file = ''
-    str_file << @proj_filename << '.' << str_ext
+    str_file << @proj_filename << V2CS::DOT << str_ext
     if File.file?(str_file)
       logger.unhandled_functionality("parser does not handle type of file #{str_file} yet!")
     end
@@ -5047,7 +5066,7 @@ class V2C_VSProjectFilesBundleParserBase < V2C_LoggerBase
   private
 
   def get_default_project_name;
-    return (@p_parser_proj_file.basename.to_s).split('.')[0]
+    return (@p_parser_proj_file.basename.to_s).split(V2CS::DOT)[0]
   end
   def mark_projects_postprocessing
     mark_projects_orig_environment_shortname(@str_orig_environment_shortname)
@@ -6959,7 +6978,7 @@ class V2C_TextStreamSyntaxGeneratorBase
   end
   def write_line(
     payload)
-    indent = ' ' * get_indent()
+    indent = V2CS::SPACE * get_indent()
     out_data = ''
     out_data << indent << payload
     write_data(
@@ -7191,7 +7210,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   # (and bonus points for configurable line length...)
   def write_command_list(cmake_command, cmake_command_arg, arr_args_cmd)
     cmake_command_leadin = ''
-    cmake_command_leadin << cmake_command << '('
+    cmake_command_leadin << cmake_command << V2CS::BRACKET_ROUND_OPEN
     if not cmake_command_arg.nil?
       cmake_command_leadin << cmake_command_arg
     end
@@ -7204,7 +7223,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
         end
       @textOut.indent_less()
     end
-    @textOut.write_line(')')
+    @textOut.write_line(V2CS::BRACKET_ROUND_CLOSE)
   end
   def write_command_list_quoted(cmake_command, cmake_command_arg_main, arr_args_cmd)
     cmake_command_arg_main_quoted = element_handle_quoting(cmake_command_arg_main) if not cmake_command_arg_main.nil?
@@ -7213,15 +7232,17 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
       arr_args_cmd_quoted = Array.new
       arr_args_cmd.each do |curr_arg|
         # HACK for nil input of SCC info.
-        if curr_arg.nil?; curr_arg = '' end
+        if curr_arg.nil?; curr_arg = V2CS::EMPTY end
         arr_args_cmd_quoted.push(element_handle_quoting(curr_arg))
       end
     end
     write_command_list(cmake_command, cmake_command_arg_main_quoted, arr_args_cmd_quoted)
   end
+  CHAR_BRK_BEGIN = '('
+  CHAR_BRK_END = ')'
   def write_command_list_single_line(cmake_command, arr_args_cmd)
     line = ''
-    line << cmake_command << '(' << array_to_string(arr_args_cmd) << ')'
+    line << cmake_command << CHAR_BRK_BEGIN << array_to_string(arr_args_cmd) << CHAR_BRK_END
     @textOut.write_line(
       line)
   end
@@ -7717,6 +7738,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   CMAKE_STRING_NEEDS_QUOTING_REGEX_OBJ = %r{[^\}\s]\s|\s[^\s\$]|^$}
   CMAKE_STRING_HAS_QUOTES_REGEX_OBJ = %r{".*"}
   CMAKE_STRING_QUOTED_CONTENT_MATCH_REGEX_OBJ = %r{"(.*)"}
+  REGEX_MATCH_RES_1 = '\1'
   def element_handle_quoting(elem)
     # Determine whether quoting needed
     # (in case of whitespace or variable content):
@@ -7763,7 +7785,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
         needs_unquoting = (not is_list)
         if needs_unquoting
           #puts 'QUOTING: do UNquoting!'
-          return elem.sub(CMAKE_STRING_QUOTED_CONTENT_MATCH_REGEX_OBJ, '\1')
+          return elem.sub(CMAKE_STRING_QUOTED_CONTENT_MATCH_REGEX_OBJ, REGEX_MATCH_RES_1)
         end
       end
     end
@@ -7865,8 +7887,9 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
     res = ''
     res << VS_GLOBAL_PREFIX_NAME << sub
   end
+  HINT_VCPROJ2CMAKE_FUNC_REF = "See function implementation/docs in #{VCPROJ2CMAKE_FUNC_CMAKE_LOCATION}"
   def write_vcproj2cmake_func_comment()
-    write_comment_at_level(COMMENT_LEVEL_STANDARD, "See function implementation/docs in #{VCPROJ2CMAKE_FUNC_CMAKE_LOCATION}")
+    write_comment_at_level(COMMENT_LEVEL_STANDARD, HINT_VCPROJ2CMAKE_FUNC_REF)
   end
   def put_converter_script_location(
     p_script_location_relative_to_master)
@@ -7984,7 +8007,7 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
         # original _constant_ input has already been pre-treated (chomped).
         map_line.split('|').each do |platform_element|
           #log_debug "platform_element #{platform_element}"
-          platform, replacement_defn = platform_element.split('=')
+          platform, replacement_defn = platform_element.split(V2CS::EQUAL)
           if platform.empty?
             # specified a replacement without a specific platform?
             # ("tag:=REPLACEMENT")
@@ -8095,8 +8118,8 @@ class V2C_CMakeV2CSyntaxGeneratorV2CFunc < V2C_CMakeV2CSyntaxGeneratorBase
   # (build platform / configuration / ...)
   # from that handle.
   def write_invoke_object_conditional_v2c_function(str_function, object_name, condition, arr_args_func_other)
-    build_platform = ''
-    build_type = ''
+    build_platform = V2CS::EMPTY
+    build_type = V2CS::EMPTY
     if not condition.nil?
       build_platform = condition.get_build_platform()
       build_type = condition.get_build_type()
@@ -8343,10 +8366,10 @@ def cmake_pathname_relative_path_from(
   if (has_leading_dotdir)
     p_path_rel = p_path_rel.cleanpath()
   end
-  is_single_dot = ('.' == path_rel)
+  is_single_dot = (V2CS::DOT == path_rel)
   if (is_single_dot)
     p_path_rel = Pathname.new(
-      '')
+      V2CS::EMPTY)
   end
   #puts "p_path_rel #{p_path_rel.inspect}"
   p_path_rel
@@ -8823,7 +8846,7 @@ class V2C_CMakeCompilerInfoGenerator < V2C_CMakeTargetGenerator
     arr_defs_assignments = Array.new
     str_define = LoopVarPreconstruct()
     hash_ensure_sorted_each(hash_defines_augmented).each { |key, value|
-      str_define = value.empty? ? key.dup : key + '=' + value
+      str_define = value.empty? ? key.dup : key + V2CS::EQUAL + value
       arr_defs_assignments.push(str_define)
     }
     write_property_compile_definitions(condition, arr_defs_assignments, map_defines)
