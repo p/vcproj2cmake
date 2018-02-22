@@ -2342,6 +2342,14 @@ class V2C_XmlParserBase < V2C_ParserBase
   end
   def unknown_attribute(key, value); unknown_something_key_value('attribute', key, value) end
   def unknown_element_key(name); unknown_something('element', name) end
+  def unknown_element_attribute_value(
+    elem,
+    attribute,
+    value)
+    unknown_something(
+      "Element #{elem}\'s attribute #{attribute} value",
+      value)
+  end
   def unknown_element(key, value); unknown_something_key_value('element', key, value) end
   def unknown_element_text(name); unknown_something('element text', name) end
   def unknown_value(name); unknown_something('value', name) end
@@ -3391,10 +3399,12 @@ class V2C_VS7ToolForwarderParser < V2C_VS7ParserBase
       found = FOUND_FALSE
     end
     if not elem_parser.nil?
-      elem_parser.parse
+      found = elem_parser.parse
       arr_info = get_tools_info().get(
         tool_type)
       arr_info.push(info)
+    else
+      found = super
     end
     return found
   end
@@ -3510,8 +3520,6 @@ class V2C_VS7ConfigurationBaseParser < V2C_VS7ParserBase
     case subelem_xml.name
     when 'Tool'
       elem_parser = V2C_VS7ToolForwarderParser.new(subelem_xml, get_tools_info())
-    else
-      elem_parser = nil
     end
     if not elem_parser.nil?
       elem_parser.parse
@@ -4022,8 +4030,6 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
       elem_parser = V2C_VS7PlatformsParser.new(subelem_xml, get_project().build_platform_configs)
     when 'ToolFiles'
       elem_parser = V2C_VS7ToolFilesParser.new(subelem_xml, nil)
-    else
-      elem_parser = nil
     end
     if not elem_parser.nil?
       elem_parser.parse
@@ -4615,6 +4621,8 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10BaseElemParser
       end
       if not elem_parser.nil?
         found = elem_parser.parse
+      else
+        found = super
       end
     end
     return found
@@ -4639,11 +4647,10 @@ class V2C_VS10ItemGroupForwarderParser < V2C_VS10ParserBase
       item_group_parser = V2C_VS10ItemGroupProjectConfigurationsParser.new(@elem_xml, get_project().build_platform_configs)
     when nil
       item_group_parser = V2C_VS10ItemGroupAnonymousParser.new(@elem_xml, get_project())
-    else
-      item_group_parser = nil
     end
     if not item_group_parser.nil?
-      item_group_parser.parse
+      found = item_group_parser.parse
+    # Do NOT call super!
     end
     log_found(found, itemgroup_label)
     return found
@@ -4878,7 +4885,8 @@ class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
       item_def_group_parser = V2C_VS10ToolMIDLParser.new(subelem_xml, info)
     end
     if not item_def_group_parser.nil?
-      if FOUND_FALSE != item_def_group_parser.parse
+      found = item_def_group_parser.parse
+      if FOUND_FALSE != found
         logger.debug(
           "tool_type #{tool_type} info #{info.inspect}")
         arr_info = get_tools_info().get(
@@ -5069,11 +5077,11 @@ class V2C_VS10ProjectExtensionsVisualStudioParser < V2C_VS10BaseElemParser
     case setting_key
     when 'UserProperties'
       parser = V2C_VS10UserPropertiesParser.new(subelem_xml, get_project().user_properties)
-    else
-      found = super
     end
     if not parser.nil?
-      parser.parse
+      found = parser.parse
+    else
+      found = super
     end
     return found
   end
@@ -5091,11 +5099,11 @@ class V2C_VS10ProjectExtensionsParser < V2C_VS10BaseElemParser
     case setting_key
     when 'VisualStudio'
       parser = V2C_VS10ProjectExtensionsVisualStudioParser.new(subelem_xml, get_project())
-    else
-      found = super
     end
     if not parser.nil?
-      parser.parse
+      found = parser.parse
+    else
+      found = super
     end
     return found
   end
@@ -5117,14 +5125,21 @@ class V2C_VS10PropertyGroupForwarderParser < V2C_VS10BaseElemParser
     when 'Configuration'
       target_config_info = V2C_Target_Config_Build_Info.new
       propgroup_parser = V2C_VS10PropertyGroupConfigurationParser.new(@elem_xml, target_config_info)
-      propgroup_parser.parse
+      found = propgroup_parser.parse
       get_project().arr_target_config_info.push(target_config_info)
     when 'Globals'
       propgroup_parser = V2C_VS10PropertyGroupGlobalsParser.new(@elem_xml, get_project())
-      propgroup_parser.parse
+      found = propgroup_parser.parse
     else
       found = FOUND_FALSE
     end
+    if FOUND_FALSE == found
+      unknown_element_attribute_value(
+        @elem_xml.name,
+        TEXT_LABEL,
+        propgroup_label)
+    end
+    # Do NOT call super!
     # we're a simple forwarder class, thus EVERYTHING is supposed to be "successful" for us
     log_found(found, propgroup_label)
     return found
@@ -5159,7 +5174,8 @@ class V2C_VS10ProjectParser < V2C_VSProjectParserBase
     when 'ItemDefinitionGroup'
       config_info_curr = V2C_Project_Config_Info.new
       elem_parser = V2C_VS10ItemDefinitionGroupParser.new(subelem_xml, config_info_curr)
-      if FOUND_FALSE != elem_parser.parse
+      found = elem_parser.parse
+      if FOUND_FALSE != found
         logger.debug(
           "ACI #{config_info_curr.inspect}")
         get_project().arr_config_info.push(config_info_curr)
@@ -5169,16 +5185,17 @@ class V2C_VS10ProjectParser < V2C_VSProjectParserBase
       end
     when 'ItemGroup'
       elem_parser = V2C_VS10ItemGroupForwarderParser.new(subelem_xml, get_project())
-      elem_parser.parse
+      found = elem_parser.parse
     when 'ProjectExtensions'
       elem_parser = V2C_VS10ProjectExtensionsParser.new(subelem_xml, get_project())
-      elem_parser.parse
+      found = elem_parser.parse
     when 'PropertyGroup'
       elem_parser = V2C_VS10PropertyGroupForwarderParser.new(subelem_xml, get_project())
-      elem_parser.parse
+      found = elem_parser.parse
     else
-      found = super
+      found = FOUND_FALSE
     end
+    if FOUND_FALSE == found; found = super end
     log_found(found, subelem_xml.name)
     return found
   end
@@ -9397,8 +9414,6 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
       parser = V2C_VS7ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
     when '.vcxproj'
       parser = V2C_VS10ProjectFilesBundleParser.new(p_parser_proj_file, arr_projects)
-    else
-      parser = nil
     end
 
     if not parser.nil?
