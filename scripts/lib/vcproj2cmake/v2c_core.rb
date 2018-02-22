@@ -85,6 +85,20 @@ require 'tempfile'
 require 'vcproj2cmake/util_file' # V2C_Util_File.cmp()
 
 
+# Helpers to expressly clarify (--> avoid bugs!) that
+# certain control chars *must* be used specially, consistently:
+# - String.join() and .split() *must* be
+#   using quote-based control char (such as \n) strings rather than
+#   using tick-based strings, else
+#   join()ing will not work properly
+# - this likely applies to all string-based use of control chars, methinks
+STR_CTRL_CR = "\r"
+STR_CTRL_LF = "\n"
+STR_CTRL_TAB = "\t"
+
+STR_QUOTE = '"'
+
+
 ### RUBY VERSION COMPAT STUFF BEGIN ###
 
 if (RUBY_VERSION < '1.9') # FIXME exact version where it got introduced?
@@ -145,7 +159,7 @@ def LoopVarPreconstruct; nil end
 def quoted_string_from_string(
   str)
    res = ''
-   res << '"' << str << '"'
+   res << STR_QUOTE << str << STR_QUOTE
 end
 
 def quoted_string_from_obj(
@@ -334,7 +348,7 @@ def log_implementation_bug(str); log_fatal(str) end
 
 
 # Place rather modest log level demands (such usability-affecting info should be visible at < Debug already!)
-log_info "Config file load search paths:\n#{load_configuration_get_load_paths().join("\n")}"
+log_info "Config file load search paths:\n#{load_configuration_get_load_paths().join(STR_CTRL_LF)}"
 
 
 # TODO: make this a user-visible config setting soon.
@@ -452,9 +466,10 @@ if 0 < $v2c_validate_vcproj_abort_on_error
   log_warn "$v2c_validate_vcproj_abort_on_error set to #{$v2c_validate_vcproj_abort_on_error} --> some exceptions will get swallowed."
 end
 
+STR_CTRL_LFTAB = STR_CTRL_LF + STR_CTRL_TAB
 def get_exception_dump(
   e)
-  "#{e.message}\nBacktrace: #{e.backtrace.join("\n\t")}"
+  "#{e.message}\nBacktrace: #{e.backtrace.join(STR_CTRL_LFTAB)}"
 end
 
 
@@ -573,10 +588,11 @@ class Logger
   end
 
   private
+  SCOPE_DELIM = ': '
   def formatter(
     str)
     fmt = ''
-    fmt << scope_id << ': ' << str
+    fmt << scope_id << SCOPE_DELIM << str
   end
 
   def scope_id
@@ -2986,8 +3002,8 @@ class V2C_XmlParserBase < V2C_ParserBase
     # should try to possibly find
     # an existing toolkit API
     # for this purpose.
-    cooked.gsub!('&#x0A;', "\n")
-    cooked.gsub!('&#x0D;', "\r")
+    cooked.gsub!('&#x0A;', STR_CTRL_LF)
+    cooked.gsub!('&#x0D;', STR_CTRL_CR)
     # Commands in Custom Build Tools are said to have any % signs
     # (e.g. for %WINDIR%) escaped.
     # So add this here - but I'm unsure of two things:
@@ -3932,7 +3948,7 @@ class V2C_VSToolPrePostBuildLinkEventParser < V2C_VSToolParserBase
     str_in)
     return nil if str_in.nil?
 
-    arr_commandline_raw = str_in.split("\n")
+    arr_commandline_raw = str_in.split(STR_CTRL_LF)
     array_collect_compact(arr_commandline_raw) do |commandline_raw|
       str_unescaped = string_unescape_from_xml__extended(
         string_value_preprocess(
@@ -6590,7 +6606,7 @@ class V2C_TextStreamSyntaxGeneratorBase
     @out.puts data
   end
   def write_block(block)
-    block.split("\n").each { |line|
+    block.split(STR_CTRL_LF).each { |line|
       write_line(line)
     }
   end
@@ -6825,7 +6841,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     return if @textOut.generated_comments_level() < level
     # Since we'd like the start of a comment paragraph to start with
     # an upper-case char, perhaps we should check against that and warn.
-    block.split("\n").each { |line|
+    block.split(STR_CTRL_LF).each { |line|
       write_comment_line(line)
     }
   end
