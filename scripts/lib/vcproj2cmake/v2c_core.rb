@@ -1493,9 +1493,17 @@ class File_List_Descr
 
     # description: longer human-readable description
     @type_description = type_description
+
+    # user marker: fixed characteristic marker (token)
+    # for user-side reliable recognition of a specific filelist type.
+    # Currently used for generation of CMake functions.
+    # We'll add a prefix here for more precise scoping,
+    # and do this on-init-only to avoid string concatenation in hotpath.
+    @type_user_marker = 'FL_' + @type_name.upcase
   end
   attr_reader :type_name
   attr_reader :type_description
+  attr_reader :type_user_marker
 end
 
 # I'm not sure whether it's still a good idea to have fixed indices
@@ -1623,6 +1631,9 @@ class V2C_File_List_Info
   # referencing the descriptions that MSVS10 uses.
   def get_list_type_description()
     get_list_type_descr().type_description
+  end
+  def get_list_type_user_marker()
+    get_list_type_descr().type_user_marker
   end
   def get_generated_files
     array_collect_compact(@arr_files) do |info_file|
@@ -7019,9 +7030,13 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       #puts "file_list.name #{file_list.name}, arr_generated #{arr_generated}"
       arr_file_elems = [ get_dereferenced_variable_name(source_files_variable) ]
       qualify_file_list(arr_file_elems, file_list.type)
+      add_to_target = true
+      file_list_generate_callback_invoker(project_name, file_list.get_list_type_user_marker(), arr_file_elems, add_to_target)
     }
   end
   # Flags certain file list types with certain CMake properties.
+  # However, please note that LANGUAGE property assignment currently
+  # happens dynamically on user side via vcproj2cmake_func.cmake helpers.
   def qualify_file_list(arr_file_elems, file_list_type)
     # We'll decide to mark files unconditionally, no matter whether the
     # extension of some of these files already indicates
@@ -7046,6 +7061,13 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       generator_error_unknown_case(
         'File list type ' + file_list_type.to_s)
     end
+  end
+  def file_list_generate_callback_invoker(project_name, file_list_type_magic, arr_file_elems, add_to_target)
+    var_name_add_to_target = 'fl_want_add_to_target'
+    write_set_var_bool(var_name_add_to_target, add_to_target)
+    arr_args = [ file_list_type_magic, var_name_add_to_target ]
+    arr_args.concat(arr_file_elems)
+    write_command_list_quoted('_v2c_target_filelist_route', project_name, arr_args)
   end
   def put_obj_files_as_sources(project_info, arr_sub_source_list_var_names)
     project_info.arr_config_info.each do |config_info_curr|

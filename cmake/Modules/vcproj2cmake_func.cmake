@@ -121,6 +121,22 @@ macro(_v2c_var_set_default_if_not_set _var_name _v2c_default_setting)
   endif(NOT DEFINED ${_var_name})
 endmacro(_v2c_var_set_default_if_not_set _var_name _v2c_default_setting)
 
+# Special helper to let users indicate
+# in case they want to specifically set something to ON/OFF
+# (or just not do anything!!),
+# by providing specific FLAG_ON / FLAG_OFF strings.
+function(_v2c_var_flag_bool_evaluate _flag _out_bool)
+  # change state only if variable name *does* match:
+  if(_flag MATCHES FLAG_)
+    if(_flag STREQUAL FLAG_ON)
+      set(bool_ ON)
+    else(_flag STREQUAL FLAG_OFF)
+      set(bool_ OFF)
+    endif()
+    set(${_out_bool} ${bool_} PARENT_SCOPE)
+  endif(_flag MATCHES FLAG_)
+endfunction(_v2c_var_flag_bool_evaluate _flag _out_bool)
+
 # Helper for nicely verified fetching of a variable (usually CACHE) :)
 # Naming *_my_* to reflect the fact that it internally assigns V2C_ prefix.
 function(_v2c_var_my_get _var_name _out_value)
@@ -1186,6 +1202,65 @@ macro(v2c_build_sub_projects_include)
   _v2c_include_optional_invoke("${v2c_fs_item_}")
 endmacro(v2c_build_sub_projects_include)
 
+# CMake has a LANGUAGE source property which indicates a custom configuration
+# of the language of a file. Standard values are C CXX RC Fortran ASM.
+# HOWEVER, CMake also allows creation of a custom language defintion
+# (compile configuration), see e.g. the cmakevars man page and use of that
+# CMake infrastructure in CMake's CMakeDetermineRCCompiler.cmake.
+# This helper exists to allow for a *very nice* deviation of certain input
+# file list type magics into globally configured (or even per-target!)
+# deviating LANGUAGE settings.
+# IOW, by properly defining the corresponding deviation variables in advance,
+# one could e.g. switch certain resource-compile file types to being handled
+# by a "RC_OTHER" language i.e. by CMAKE_RC_OTHER_COMPILER.
+function(_v2c_target_filelist_type_language_deviation_get _target _fl_type_magic _out_language)
+  set(language_ "")
+  set(lang_var_name_ V2C_LANGUAGE_${_fl_type_magic}) # "FL_FOO"
+  # Query both possible global (V2C_LANGUAGE_FL_FOO)
+  # and per-target (V2C_LANGUAGE_FL_FOO_<TARGET>)
+  # deviations.
+  foreach(lvn_ ${lang_var_name_} ${lang_var_name_}_${_target})
+    if(${lvn_})
+      set(language_ ${${lvn_}})
+      break()
+    endif(${lvn_})
+  endforeach(lvn_ ${lang_var_name_} ${lang_var_name_}_${_target})
+  set(${_out_language} "${language_}" PARENT_SCOPE)
+endfunction(_v2c_target_filelist_type_language_deviation_get _target _fl_type_magic _out_language)
+
+# For various file lists defined by an original project,
+# passes them through this function to be able to do some special
+# central handling where needed, and to pass them on to a user-side callback
+# if available (e.g. to specially handle the list of RC resource files -
+# but one should probably install a CMake LANGUAGE compiler setup for that
+# instead, see above), and to optionally do a deviation to another
+# LANGUAGE property for that file type.
+# _fl_type_magic is a type-specific "FL_xxxxx" string magic.
+# The list of file list arguments will be passed via additional
+# arguments to this function (ARGN).
+# The _out_add_to_target bool is additionally required,
+# to indicate whether the file list elements ought to be made a part of the
+# standard target (add_library()) config (e.g. in the case of .c/.cpp/.h).
+function(_v2c_target_filelist_route _target _fl_type_magic _out_add_to_target)
+  set(add_to_target_ ${${_out_add_to_target}}) # adopt caller's default
+  # [keep checking for this function *here* rather than doing fixed on-init test
+  # (this function might get established at a later time only)]
+  if(COMMAND v2c_user_callback_filelist_v1)
+    set(add_to_target_wish_ "")
+    v2c_user_callback_filelist_v1(${_target} ${_fl_type_magic} add_to_target_wish_ ${ARGN})
+    _v2c_var_flag_bool_evaluate("${add_to_target_wish_}" add_to_target_)
+  else(COMMAND v2c_user_callback_filelist_v1)
+    _v2c_msg_important_once(UCB_FL "No user-side callback function found for a target's type-specific file lists. Please add one if needed (but compiler LANGUAGE setup is preferable).")
+  endif(COMMAND v2c_user_callback_filelist_v1)
+  _v2c_target_filelist_type_language_deviation_get(${_target} ${_fl_type_magic} language_)
+  if(language_)
+    _v2c_msg_info("target ${_target}: deviation to CMake LANGUAGE property \"${language_}\" for filelist ${_fl_type_magic}.")
+    set_property(SOURCE ${ARGN} PROPERTY LANGUAGE "${language_}")
+    # when language-specific config chosen, do skip addition to target:
+    set(add_to_target_ OFF)
+  endif(language_)
+  set(${_out_add_to_target} ${add_to_target_} PARENT_SCOPE)
+endfunction(_v2c_target_filelist_route _target _fl_type_magic _out_add_to_target)
 
 # Indicates whether source groups for a project target ought to be
 # provided.
