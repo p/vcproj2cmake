@@ -347,7 +347,7 @@ arr_filtered_dirs.each do |dir|
   # No project file at all? Skip directory.
   next if arr_dir_proj_files.nil?
 
-  str_cmakelists_file_name = CMAKELISTS_FILE_NAME
+  str_cmakelists_file_name = CMake_Syntax_Filesystem::CMAKELISTS_FILE_NAME
   str_cmakelists_file_path = File.join(
     dir,
     str_cmakelists_file_name)

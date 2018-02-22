@@ -121,7 +121,7 @@ if output_file_location
   output_filename = p_output_file_location.basename
 else
   output_dir = File.dirname(vcproj_filename)
-  output_filename = CMAKELISTS_FILE_NAME
+  output_filename = CMake_Syntax_Filesystem::CMAKELISTS_FILE_NAME
 end
 
 # Master (root) project dir defaults to current dir--useful for simple, single-.vcproj conversions.
