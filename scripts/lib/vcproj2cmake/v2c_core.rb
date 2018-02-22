@@ -592,7 +592,12 @@ def get_exception_dump(
   e.backtrace.join(STR_CTRL_LFTAB).sub(STR_CTRL_LFTAB, ": #{e}#{e.class ? " (#{e.class})" : ''}" + STR_CTRL_LFTAB)
 end
 
-def raise_unless_disallowed
+def report_and_reraise_unless_disallowed(
+  domain_specific_msg,
+  e)
+  error_msg = ''
+  error_msg << 'failed: ' << domain_specific_msg << ': ' << get_exception_dump(e)
+  log_error error_msg
   # Hohumm, this variable is not really what we should be having here...
   if ($v2c_validate_vcproj_abort_on_error > 0)
     raise # escalate the problem
@@ -10484,8 +10489,9 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
         project_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
       #rescue V2C_GeneratorError => e
       rescue Exception => e # *all* exception types are a sign of fatal sub component failure...
-        logger.error("generation of project (named #{project_info.name}) failed: #{get_exception_dump(e)}")
-        raise_unless_disallowed
+        report_and_reraise_unless_disallowed(
+          "generation of project (named #{project_info.name})",
+          e)
       end
     }
   end
@@ -11309,9 +11315,9 @@ def v2c_convert_local_projects_inner(
     #rescue V2C_ValidationError => e
     rescue Exception => e # *all* exception types are a sign of fatal sub component failure...
       project_valid = false
-      error_msg = "project validation failed: #{get_exception_dump(e)}"
-      log_error error_msg
-      raise_unless_disallowed
+      report_and_reraise_unless_disallowed(
+        'project validation',
+        e)
     end
     (false == project_valid)
   }
