@@ -575,7 +575,7 @@ class Logger
     e,
     action,
     reraise = true)
-    log_error "unhandled exception occurred during #{action}! #{e.message}, #{e.backtrace.inspect}"
+    log_error "unhandled exception occurred during #{action}! " + get_exception_dump(e)
     if reraise
       raise
     end
