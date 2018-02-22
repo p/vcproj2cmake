@@ -6950,25 +6950,98 @@ class V2C_TextStream_Attributes
   attr_accessor :comments_level
 end
 
+def make_indent_string(
+  indent)
+  V2CS::SPACE * indent
+end
+
+class IndentProviderRecalc
+  def get_indent_string(
+    indent)
+    make_indent_string(
+      indent)
+  end
+end
+
+# Special variant for performance optimization
+# (cut down on number of string allocations).
+class IndentProviderFixedStorage
+  MAX_INDENT = 20
+  def initialize(
+    )
+    @arr_indents = construct_indent_array
+  end
+
+  def get_indent_string(
+    indent)
+    # For standard indents,
+    # return pre-constructed central storage,
+    # else resort to doing custom construction.
+    str_indent = nil
+    if indent <= MAX_INDENT
+      str_indent = @arr_indents[indent]
+    else
+      str_indent = make_indent_string(
+        indent)
+    end
+    str_indent
+  end
+
+  def construct_indent_array
+    arr_indents = Array.new
+    (0..20).each do |i|
+      arr_indents.push(
+        make_indent_string(
+          i))
+    end
+    arr_indents
+  end
+end
+
+class Indenter
+  def initialize(
+    indent_start,
+    indent_step,
+    indent_provider)
+    @indent_now = indent_start
+    @indent_step = indent_step
+    @indent_provider = indent_provider
+    @str_indent = nil # State helper for optimization purposes (re-generate only when indent actually changed)
+    indent_update
+  end
+  def indent_more; @indent_now += @indent_step; indent_update end
+  def indent_less; @indent_now -= @indent_step; indent_update end
+  def indent; @str_indent; end
+
+  def get_indent; @indent_now end
+
+  private
+
+  def indent_update
+    @str_indent = @indent_provider.get_indent_string(
+      @indent_now)
+  end
+end
+
 # Contains functionality common to _any_ file-based generator
 class V2C_TextStreamSyntaxGeneratorBase
   def initialize(
     out,
     textstream_attributes)
     @out = out
-    @indent_now = textstream_attributes.indent_start
-    @indent_step = textstream_attributes.indent_step
     @comments_level = textstream_attributes.comments_level
-    @str_indent = '' # State helper for optimization purposes (re-generate only when indent actually changed)
-    indent_update
+    @idt = Indenter.new(
+      textstream_attributes.indent_start,
+      textstream_attributes.indent_step,
+      IndentProviderFixedStorage.new)
   end
 
   def generated_comments_level; @comments_level end
 
-  def get_indent; @indent_now end
+  def get_indent; @idt.get_indent end
 
-  def indent_more; @indent_now += @indent_step; indent_update end
-  def indent_less; @indent_now -= @indent_step; indent_update end
+  def indent_more; @idt.indent_more end
+  def indent_less; @idt.indent_less end
 
   def write_data(data)
     @out.puts data
@@ -6981,7 +7054,7 @@ class V2C_TextStreamSyntaxGeneratorBase
   def write_line(
     payload)
     out_data = ''
-    out_data << indent << payload
+    out_data << @idt.indent << payload
     write_data(
       out_data)
   end
@@ -6991,14 +7064,6 @@ class V2C_TextStreamSyntaxGeneratorBase
     @out.puts get_temporary_content_marker(
       )
   end
-
-  private
-
-  def indent_update
-    @str_indent = V2CS::SPACE * get_indent()
-  end
-
-  def indent; @str_indent; end
 end
 
 def string_storage_contains(string_storage, regex)
