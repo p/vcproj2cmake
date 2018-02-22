@@ -2924,7 +2924,7 @@ class V2C_XmlParserBase < V2C_ParserBase
         e.message,
         'invalid value for Integer')
         parser_error(
-          "encountered ArgumentError #{e.message} - probably integer parsing of #{setting_key} --> #{setting_value} failed",
+          "encountered ArgumentError - probably integer parsing of #{setting_key} --> #{setting_value} failed: #{get_exception_dump(e)}",
           true)
       else
         raise
@@ -10258,7 +10258,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
       begin
         project_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
       rescue V2C_GeneratorError => e
-        logger.error("generation of project (named #{project_info.name}) failed: #{e.message}")
+        logger.error("generation of project (named #{project_info.name}) failed: #{get_exception_dump(e)}")
         # Hohumm, this variable is not really what we should be having here...
         if ($v2c_validate_vcproj_abort_on_error > 0)
           raise # escalate the problem
@@ -11090,7 +11090,7 @@ def v2c_convert_local_projects_inner(
       validator.validate
     rescue V2C_ValidationError => e
       project_valid = false
-      error_msg = "project validation failed: #{e.message}"
+      error_msg = "project validation failed: #{get_exception_dump(e)}"
       log_error error_msg
       # Hohumm, this variable is not really what we should be having here...
       if ($v2c_validate_vcproj_abort_on_error > 0)
