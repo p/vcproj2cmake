@@ -9323,20 +9323,20 @@ class V2C_ProjectPostProcess < V2C_LoggerBase
     project_info)
     # Mark some items as generated
     # (e.g. output items as produced by MIDL etc.).
-    arr_generated_items = Array.new
+    arr_output_items = Array.new
     arr_config_info = project_info.arr_config_info
     arr_config_info.each { |config_info|
       arr_midl_info = config_info.tools.get(
         V2C_Tool_Types::TYPE_MIDL)
       arr_midl_info.each { |midl_info|
-        arr_generated_items.push(
+        arr_output_items.push(
           midl_info.header_file_name,
           midl_info.iface_id_file_name,
           midl_info.proxy_file_name,
           midl_info.type_library_name)
       }
     }
-    arr_generated_items.compact.each { |candidate|
+    arr_output_items.compact.each { |candidate|
       info_item = project_info.item_lists.lookup_from_item_name(
         candidate)
       if not info_item.nil?
