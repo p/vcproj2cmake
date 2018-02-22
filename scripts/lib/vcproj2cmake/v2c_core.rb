@@ -6954,7 +6954,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     args_generator.add('VALIDATE_ALL_PARAMETERS', midl_info.validate_all_parameters.to_s)
     write_invoke_object_conditional_v2c_function('v2c_target_midl_compile', target_name, condition, args_generator.array)
   end
-  def hook_up_midl_files(file_lists, config_info)
+  def hook_up_midl_files(
+    file_lists,
+    config_info)
     # VERY Q&D way to mark MIDL-related files as GENERATED,
     # to keep CMake from erroring out when adding these source files to a target.
     # Well,
@@ -7814,7 +7816,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
       # buildcfg condition block handling...
       # Note that some may be dependent on the target already having
       # been established!
-      hook_up_midl_files(project_info.file_lists, config_info_curr)
+      hook_up_midl_files(
+        project_info.file_lists,
+        config_info_curr)
     } # [END per-config handling]
     target_is_valid
   end
