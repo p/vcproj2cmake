@@ -1,6 +1,6 @@
 Authors (loosely following Linux MAINTAINERS format):
 
-M: Andreas Mohr <andi [at] lisas [period] de>
+M: Andreas Mohr <andim2 [at] users [period] sf [period] net>
 S: Maintained
 
 M: Jesper Eskilson <jesper [at] eskilson [dot] se>

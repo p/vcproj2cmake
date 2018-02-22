@@ -15,7 +15,7 @@ $v2c_config_dir_local = "./cmake/vcproj2cmake"
 
 # directory where CMake modules reside (from CMAKE_SOURCE_DIR root).
 # Filename case is not really standardized,
-# thus you might want to tweak this setting.
+# thus you might decide to tweak this setting.
 $v2c_module_path_root = "cmake/Modules"
 
 # directory where project-local modules reside.

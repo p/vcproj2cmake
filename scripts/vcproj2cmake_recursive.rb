@@ -142,7 +142,9 @@ end
 
 # Filters suitable project files in a directory's entry list.
 # arr_proj_file_regex should contain regexes for project file matches
-# in most (very specific check) to least preferred (generic, catch-all check) order.
+# in order of
+# most preferred (very specific check) to
+# least preferred (generic, catch-all check).
 def search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex, case_insensitive_regex_match_option_flag)
   # Check pre-conditions.
   arr_proj_file_regex.each { |proj_file_regex|

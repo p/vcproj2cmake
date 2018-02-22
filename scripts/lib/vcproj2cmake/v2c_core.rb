@@ -102,7 +102,8 @@ end
 # whether this is about number of CPUs/cores/SMT siblings.
 # What we're interested in
 # probably is number of cores,
-# even in an SMT (HT) case.
+# even in the case of
+# an SMT (HT) CPU type.
 # Returns the number of processors for Linux, OS X or Windows.
 def number_of_processors
   if RUBY_PLATFORM =~ /linux/
@@ -193,6 +194,9 @@ load_configuration()
 
 # Additionally enable Ruby's $DEBUG in case:
 # - we want a log level of at least debug
+# Will cause e.g. the following log output activity:
+# - will still log Exception records/traces
+#   for handled/silenced (rescue:d) exceptions even!
 if $v2c_log_level >= V2C_LOG_LEVEL_DEBUG
   $DEBUG=true
 end
@@ -336,13 +340,19 @@ V2C_Core_Add_Plugin_Parser(plugin_parser_vs7_vfproj)
 # But at least let's optionally allow the user to precisely specify which configuration
 # (empty [first config], "Debug", "Release", ...) he wants to have
 # these settings taken from.
+# NOTE: this is NOT true for include directories: newer CMake versions
+# do have genex support for various INCLUDE_DIRECTORIES properties,
+# thus per-config switching *is* doable.
 $config_multi_authoritative = ''
 
 if 0 < $v2c_validate_vcproj_abort_on_error
   # Definitely log a warning explicitly mentioning "exceptions",
   # since this setting will swallow exceptions
-  # and may be (was)
+  # and may be (since it already was!)
   # confusing to track down.
+  # Thus, also do NOT obfuscate (hide) the "exc*ption" keyword here
+  # since searching for "xcept"
+  # SHOULD be successful to point people at this fact.
   log_warn "$v2c_validate_vcproj_abort_on_error set to #{$v2c_validate_vcproj_abort_on_error} --> some exceptions will get swallowed."
 end
 
@@ -491,7 +501,7 @@ module Logging_Redirector
   end
 
   def logger_member
-    self # HACK - we're currently the base class of certain classes, but ultimately the logger target should be a ctor param (i.e., member) of all classes). This trick allows us to do a gradual migration :)
+    self # HACK - we're currently the base class of certain classes, but ultimately the logger target should be a ctor param (i.e., member) of all classes. This trick allows us to do a gradual migration :)
   end
 
   def todo(
@@ -601,7 +611,7 @@ end
 # since they _are required_ to end up with
 # reproducible, identical content -
 # if content happened to change
-# from conversion run to the next one, then
+# from one conversion run to the next one, then
 # a huge penalty of
 # a _full rebuild_ of an entire build tree would ensue!
 
@@ -1378,7 +1388,7 @@ class V2C_File_Config_Info < V2C_Config_Base_Info
   attr_accessor :excluded_from_build
 end
 
-# Carries Source Control Management (SCM) setup.
+# Carries setup of Source Control Management (SCM) project bindings.
 class V2C_SCC_Info
   def initialize
     @project_name = nil
@@ -1766,7 +1776,7 @@ class V2C_File_Filters_Group_Info
     # V2C_SOURCE_GROUP_HIERARCHY_SEPARATOR:
     @name = name
     @arr_filters = arr_filters # Array of filename extensions to allow
-    @arr_files = arr_files # Array of files (V2C_Info_File) which are members of that group; we decide to provide a full V2C_Info_File since we might need the enhanced attributes, too.
+    @arr_files = arr_files # Array of files (V2C_Info_File) which are members of that group; we decide to provide a fully/specifically file-typed object since we might need the enhanced (file-related) attributes, too.
   end
   attr_accessor :name
   attr_accessor :arr_filters
@@ -1800,10 +1810,10 @@ class V2C_Project_Info < V2C_Info_Elem_Base # We need this base to always consis
     # "C vs C++ or any C varient"
     #   http://hardforum.com/archive/index.php/t-1574698.html
 
-    # VS10: in case the main project file
+    # VS10: in case the .vcxproj file
     # is lacking a ProjectName element,
     # the project will adopt the _exact name part_
-    # of the filename,
+    # of the .vcxproj filename,
     # thus enforce this ctor taking a project name to use as a default if no ProjectName element is available:
     @name = nil
 
@@ -1953,7 +1963,8 @@ Files_str = Struct.new(
 
 def is_known_environment_variable_convention(config_var, config_var_type_descr)
   # Side note: need to use String.replace()
-  # to properly export the output param's new value.
+  # to have the output param's new value properly exported
+  # to the caller's scope.
   is_wellknown = false
   case config_var
   when 'BOOSTROOT'
@@ -1989,7 +2000,13 @@ def cmake_path_join(a, b)
   b_valid = !(string_nil_or_empty(b_str))
   need_sep = (a_valid && b_valid)
   # CMake path string expressions
-  # always use '/' as separator, right?
+  # always use character value '/' as separator, right?
+  # (which quite certainly is the main reason for
+  # an extra helper
+  # which does NOT make use of
+  # File.join()
+  # since that quite certainly
+  # would use different system-specific path separators).
   return need_sep ? a_str + '/' + b_str : a_str + b_str
 end
 
@@ -2048,7 +2065,7 @@ def vs7_create_config_variable_translation(
     # Hmm, $(Configuration) / $(ConfigurationName) seem to be
     # very similar but not fully, and it's not obvious what the difference is.
     # See http://msdn.microsoft.com/en-us/library/community/history/c02as0cs.aspx?id=3
-    # (or better locate
+    # (or better try to locate
     # the original "$(Configuration) vs $(ConfigurationName)"
     # discussion page content
     # since - ONCE AGAIN! Like with CodePlex, TFS Web etc. -
@@ -2141,7 +2158,7 @@ EOF
       # from the environment ($ENV{VAR}),
       # since AFAIR these MSVS Config Variables
       # will get defined via environment variable,
-      # via a certain ordering
+      # via a certain priority ordering
       # (project setting overrides env var, or some such).
       # TODO: In fact we should probably provide support for
       # a property_var_mappings.txt file -
@@ -2326,7 +2343,7 @@ class V2C_XmlParserBase < V2C_ParserBase
       # to certain Ruby functions (integer parsing)
       # AND
       # for function argument count errors
-      # in Ruby methods.
+      # in Ruby functions.
       # I.e. for issues in BOTH
       # implementation-time
       # AND
@@ -2335,7 +2352,7 @@ class V2C_XmlParserBase < V2C_ParserBase
       # This looks like a collossal design issue. "Ruby, bad doggie, no bone!"
       # Oh well, seems it's possible
       # to check .message
-      # for the specific error string.
+      # for the specific (i.e., sufficiently unique) error string.
       if V2C_Ruby_Compat::string_start_with(
         e.message,
         'invalid value for Integer')
@@ -2524,7 +2541,7 @@ class V2C_VSXmlParserBase < V2C_XmlParserBase
   end
 
   def parse_integer(setting_value)
-    # Integer(x) (rather than .to_i) may throw an ArgumentError,
+    # Integer(x) (rather than .to_i) may raise an ArgumentError,
     # which we'll cleanly handle externally
     # (parsing failed --> no value assigned --> default value kept).
     return Integer(setting_value)
@@ -2645,6 +2662,15 @@ class V2C_VSProjectParserBase < V2C_VSXmlParserBase
 
   def get_project; @info_elem end
 
+  # This helper is supposed to supply
+  # "default/fallback" values
+  # as seen in MSVS project GUI dialogs
+  # where no specific values have been set.
+  # Such "defaults" handling
+  # is to be completely specific
+  # to this MSVS environment (parsing)
+  # and thus NOT to instead be added
+  # in *common* (all-environments) data model areas.
   # TODO: perhaps this "default values" initializer
   # should be spread throughout all parser sub classes.
   # But since they're instantiated on-demand
@@ -3373,8 +3399,8 @@ class V2C_VS7ConfigurationBaseParser < V2C_VS7ParserBase
       # VS7 does not seem to use string values (only 0/1/2 integers),
       # while VS10 additionally does.
       # NOTE SPELLING DIFFERENCE:
-      # MSVS7 has UseOfMFC,
-      # MSVS10 has UseOfMfc
+      # - MSVS7  has UseOfMFC
+      # - MSVS10 has UseOfMfc
       # (see CMake MSVS generators)
       # HOWEVER, qmake-generated .vcproj seem to use UseOfMfc!!
       # After some re-evaluation,
@@ -3991,6 +4017,8 @@ class V2C_VSProjectFilesBundleParserBase < V2C_LoggerBase
     @arr_projects_new.each { |project_new|
       # FIXME: lists main project file only - should probably also
       # add some peripheral original project files (.filters, .user, ...).
+      # And perhaps should list files related to external properties as well?
+      # (.rules, .vsprops etc.)
       project_new.arr_p_original_project_files = [ @p_parser_proj_file ]
     }
   end
@@ -4078,6 +4106,11 @@ class V2C_VS7ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
   end
   def check_unhandled_file_types
     # FIXME: we don't handle now externally specified (.rules, .vsprops) custom build parts yet!
+    # Note that such checks should only be done for file types
+    # which are included implicitly "as a sibling" of a project file,
+    # as opposed to (likely very differently named) files which are included
+    # via explicit in-project references.
+    # Not sure whether this .rules check properly follows such... rules (ahem).
     check_unhandled_file_type('rules')
     check_unhandled_file_type('vsprops')
     # Well, .user files are called .vcproj.[USERNAME].user,
@@ -4961,7 +4994,7 @@ class V2C_VS10PropertyGroupForwarderParser < V2C_VS10BaseElemParser
     case propgroup_label
     # Future comment for anonymous PropertyGroup:
     # the TargetName element could be helpful to determine the required
-    # value of the
+    # value of CMake's
     # <CONFIG>_POSTFIX target property.
     when 'Configuration'
       target_config_info = V2C_Target_Config_Build_Info.new
@@ -5279,7 +5312,7 @@ class Util_TempFilePermanentizer
     # We'll choose to chmod() the input rather than the output file,
     # since operations on the output file should better be atomic
     # (a single move,
-    # and NOT a subsequent permissions adjustment),
+    # and NOT an improperly separate subsequent permissions adjustment step),
     # to obey potential build tool requirements.
     # [for chmod() comments, see our $v2c_generator_file_create_permissions settings variable]
     V2C_Util_File.chmod(@target_file_permissions, @input_file_location)
@@ -5348,9 +5381,13 @@ class V2C_CMakeFilePermanentizer < Util_TempFilePermanentizer
 end
 
 # Write into temporary file,
+# in a hopefully sufficiently robustly
+# atomically operating transactional manner,
 # to avoid corrupting previous CMakeLists.txt
-# due to
-# syntax error abort, disk space or failure issues.
+# due to issues such as:
+# - syntax error abort
+# - out of disk space
+# - misc. failure
 # Implement as scoped block operation.
 class V2C_GenerateIntoTempFile
   include Logging
@@ -5582,7 +5619,8 @@ end
 class V2C_Path_Config
   # Provide a special directory
   # for temporary/generated content that's not supposed to be added to SCM
-  # (entire content can be ignored easily,
+  # (this way
+  # entire content can be ignored easily,
   # by mentioning this directory in SCM config files
   # such as .gitignore)
   TEMP_STORE_DIR_NAME = 'temporary_scm_ignored_content'
@@ -5962,7 +6000,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     # CMAKE_INCLUDE_SYSTEM_FLAG_C and CMAKE_INCLUDE_SYSTEM_FLAG_CXX
     # do not contain a flag (usually "-isystem "),
     # thus you might want to set it if unset and supported.
-    gen_put_include_directories(target_name, arr_args)
+    gen_put_target_include_directories(target_name, arr_args)
   end
   # analogous to CMake separate_arguments() command
   def separate_arguments(array_in); array_in.join(';') end
@@ -6450,10 +6488,10 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
         #end
         # ok, there's no CMAKE_ATL_FLAG yet, AFAIK, but still prepare
         # for it (also to let people probe on this in hook includes)
-        # FIXME: since this flag does not exist yet
+        # FIXME: since this flag does not exist yet in CMake
         # yet MFC sort-of includes ATL configuration,
-        # perhaps as a workaround
-        # one should set the MFC flag
+        # perhaps as a workaround one should
+        # set the MFC flag
         # if use_of_atl is true?
         #if use_of_atl > 0
           # TODO: should also set the per-configuration-type variable variant
@@ -6468,10 +6506,19 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
   # FIXME: intermingling and stupifying condition handling like this
   # likely isn't such a smart idea (there might easily turn up conditions
   # more complicated than what we expect).
-  # Should instead generate an outer frame
+  # Should instead generate an outer CMake code frame
   # via condition generator
-  # and _then_ invoke the function
+  # and _then_ if condition fulfilled invoke the function
   # (perhaps keeping the build_platform/build_type args).
+  # Nope, it should probably be done differently:
+  # rather than passing a build platform / configuration combo
+  # to a V2C CMake function,
+  # we should create a suitable opaque-info *handle*
+  # to be passed to CMake side,
+  # and then the CMake side also has helpers
+  # which know how to gather info
+  # (build platform / configuration / ...)
+  # from that handle.
   def write_invoke_object_conditional_v2c_function(str_function, object_name, condition, arr_args_func_other)
     arr_args_func = [
       prepare_string_literal(condition.get_build_platform()),
@@ -6490,7 +6537,7 @@ class V2C_CMakeV2CSyntaxGeneratorV2CFunc < V2C_CMakeV2CSyntaxGeneratorBase
   def gen_put_customization_hook_from_cmake_var(include_file_var)
     put_v2c_hook_invoke(get_dereferenced_variable_name(include_file_var))
   end
-  def gen_put_include_directories(target_name, arr_args)
+  def gen_put_target_include_directories(target_name, arr_args)
     write_command_list_quoted('v2c_target_include_directories', target_name, arr_args)
   end
   def gen_put_converter_script_location(script_location)
@@ -6510,7 +6557,7 @@ end
 # class variant which is supposed to create a self-contained file
 # (i.e. one which does not rely on our V2C functions module).
 # Currently this most certainly does not work fully.
-# And I'm afraid we'll eventually get rid of
+# And I'm afraid we'll eventually retract support of
 # "self-contained generation" mode
 # since we now have way too many
 # of our own V2C-specific helper functions.
@@ -6522,7 +6569,7 @@ class V2C_CMakeV2CSyntaxGeneratorSelfContained < V2C_CMakeV2CSyntaxGeneratorBase
   def gen_put_customization_hook_from_cmake_var(include_file_var)
     write_include_from_cmake_var(include_file_var, true)
   end
-  def gen_put_include_directories(target_name, arr_args)
+  def gen_put_target_include_directories(target_name, arr_args)
     write_command_list_quoted('include_directories', nil, arr_args)
   end
   def gen_put_converter_script_location(script_location)
@@ -6573,10 +6620,12 @@ class V2C_CMakeV2CConditionGeneratorBase < V2C_CMakeV2CSyntaxGenerator
     # is a long discussion of this severe issue.
     # Probably the best we can do is
     # to add a function to add to vcproj2cmake_func.cmake which
-    # calls either raw include_directories()
+    # either calls raw include_directories()
     # or sets the future target property,
     # depending on a pre-determined support flag
     # for proper include dirs setting.
+    # NOT true: newer CMake now has
+    # INCLUDE_DIRECTORIES properties with genex support...
 
     if 1 == $v2c_generate_self_contained_file
 
@@ -7173,9 +7222,10 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def hook_up_midl_files(
     item_lists,
     config_info)
+    # This helper used to provide a
     # VERY Q&D way to mark MIDL-related files as GENERATED,
     # to keep CMake from erroring out when adding these source files to a target.
-    # Well,
+    # But well,
     # even marking these files as GENERATED does not help,
     # since they simply won't be available for the target --> error.
     # Instead, we do need to have an add_custom_command()
@@ -7183,7 +7233,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     arr_midl_info = config_info.tools.arr_midl_info
 
     # Hmm, perhaps it's actually incorrect to skip IDL files
-    # when no MIDL config info provided (--> assume defaults??).
+    # when no MIDL info provided (--> assume defaults??).
     return if arr_midl_info.empty?
 
     item_list_midl = item_lists.lookup_from_list_type(
@@ -7252,7 +7302,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     put_source_vars_combined_list(arr_sub_source_list_var_names)
     project_target_name = @target.name
 
-    # write link_directories() (BEFORE establishing a target!)
+    # BEFORE establishing a target, generate:
+    # - link_directories()
     config_info_curr.tools.arr_linker_info.each { |linker_info_curr|
       @localGenerator.write_link_directories(linker_info_curr.arr_lib_dirs, map_lib_dirs)
     }
@@ -7325,7 +7376,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
     # We will NOT add the WIN32 param here -
     # subsequently setting the WIN32_EXECUTABLE property
     # (iff appropriate for the target type!) is *much* more flexible
-    # (think per-config conditionals etc.)
+    # (think per-config handling
+    # via genex or conditionals etc.)
     # than inflexibly specifying it
     # right at target instantiation.
     write_command_list_single_line('add_executable', [ target_name, string_sources_list ])
@@ -7731,7 +7783,7 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
           # the buildcfg condition above), but only since they define properties
           # which are clearly named as being configuration-_specific_ already!
           #
-          # I don't know WhyTH we're iterating over a compiler_info here,
+          # I don't know WhyTH we're *iterating* over a compiler_info here,
           # but let's just do it like that for now since
           # it's required by our current data model:
           tools.arr_compiler_info.each { |compiler_info_curr|
@@ -7802,9 +7854,9 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
               # (with a nice base class virtuals hierarchy)
               # for translation of linker_info_curr high-level data to an array
               # of open-coded linker flags.
-              # This generator of course will generate linker args
+              # This generator of course will generate linker-specific args
               # and *not* CMake code instead, since that way
-              # it will be reusable by other build env generators, too.
+              # it will be reusable by generators of other build envs, too.
               linker_flags_generator = linker_flags_generator_factory(linker_specific.tool_id)
               if not linker_flags_generator.nil?
                 arr_flags = linker_flags_generator.generate(linker_info_curr)
@@ -8115,6 +8167,9 @@ end
 # within an entire "solution" hierarchy.
 # Currently, these end up (repeated) in each local CMakeLists.txt file.
 # Should be generating into a common include() file instead.
+# We also might have some use for the related CMAKE_BUILD_TYPE_INIT
+# and DEBUG_CONFIGURATIONS variables somewhere...
+# VS_GLOBAL_SECTION_PRE_* probably is important, too.
 class V2C_CMakeGlobalGenerator < V2C_CMakeV2CSyntaxGenerator
   def put_configuration_types(configuration_types)
     configuration_types_list = separate_arguments(configuration_types)
@@ -8175,21 +8230,17 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     end
   end
 
-  # cmake_minimum_required() is required to be mentioned open-coded
-  # per-CMakeLists.txt (exact requirement seems to be:
-  # to be executed whenever it has not been done before within a scope),
-  # thus we always do need to generate this line
-  # rather than having it carried out by our module file.
-  # Having it mentioned by an included macro executed locally
-  # is not accepted either.
+  # Generates required version line to make CMake happy.
   def put_per_scope_cmake_minimum_version
-    # Required version line to make cmake happy.
     write_comment_at_level(COMMENT_LEVEL_VERBOSE,
       "For features provided (or not) by various CMake versions,\n" \
       "please see http://www.cmake.org/Wiki/CMake_Released_Versions\n" \
       "(and page CMake_Version_Compatibility_Matrix).")
     # Keep a whole list of various requirements and their version,
     # to know which of our dependencies carries which penalty.
+    # But keeping them in a hash would be overkill
+    # (resulting runtime overhead entirely uncalled-for) -
+    # simply have only the currently used entry uncommented.
     str_cmake_minimum_version = '2.6'
     str_cmake_minimum_version_reason = 'set_property(... COMPILE_DEFINITIONS_* ...)'
     # CMakeParseArguments is a very modern dependency,
@@ -8326,6 +8377,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
     # a way of specifying _per-configuration_ syntax of include_directories().
     # See "[CMake] vcproj2cmake.rb script: announcing new version / hosting questions"
     #   http://www.cmake.org/pipermail/cmake/2010-June/037538.html
+    # Likely not true (Generator Expressions!!).
     #
     # Side note #2: relative arguments to include_directories() (e.g. "..")
     # are relative to CMAKE_PROJECT_SOURCE_DIR and _not_ BINARY,
@@ -8533,7 +8585,7 @@ end
 
 # Hrmm, I'm not quite sure yet where to aggregate this function...
 # (missing some proper generator base class or so...)
-def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name, throw_error)
+def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name, raise_error)
   file_accessible = false
   if $v2c_validate_vcproj_ensure_files_ok
     if string_nil_or_empty(file_relative)
@@ -8548,10 +8600,11 @@ def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_de
         # to be printed as a summary
         # after a project's conversion step ended.
         log_error "File #{file_relative} (#{file_item_description}) as listed by project #{project_name} does not exist!? (perhaps filename with wrong case, or wrong path, ..., in either file lists or perhaps source group filter lists)"
-        if throw_error
+        if raise_error
           # FIXME: should be
-          # throwing an exception, to
-          # not exit out on
+          # raising an exception rather than exiting, to
+          # not be unconditionally *forced* to
+          # completely directly exit out on
           # entire possibly recursive (global) operation
           # when a single project is in error...
           log_fatal "Improper original file - will abort and NOT generate a broken converted project file. Please fix content of the original project file!"
@@ -8958,7 +9011,7 @@ class V2C_ProjectPostProcess < V2C_LoggerBase
   def mark_items_as_generated(
     project_info)
     # Mark some items as generated
-    # (MIDL etc.).
+    # (e.g. output items as produced by MIDL etc.).
     arr_generated_items = Array.new
     project_info.arr_config_info.each { |config_info|
       arr_midl_info = config_info.tools.arr_midl_info
@@ -9074,7 +9127,7 @@ def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_file
     (false == project_processed)
   }
 
-  # Now validate the project...
+  # Now validate the projects...
   # This validation should be a step that's _separate_
   # from parser, processor _and_ generator implementations,
   # since otherwise each individual parser/generator
