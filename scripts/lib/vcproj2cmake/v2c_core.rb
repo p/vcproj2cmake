@@ -571,8 +571,55 @@ V2C_Core_Add_Plugin_Parser(plugin_parser_vs7_vfproj)
 # thus per-config switching *is* doable.
 $config_multi_authoritative = ''
 
+module V2C_Cfg_Common
+  def enable_processes; $v2c_enable_processes; end
+  def enable_threads; $v2c_enable_threads; end
+end
+
+module V2C_Cfg_Parser
+  def parser_proj_files_case_insensitive_match; $v2c_parser_proj_files_case_insensitive_match; end
+  def parser_recursive_follow_symlinks; $v2c_parser_recursive_follow_symlinks; end
+  def issue_modify; $v2c_issue_modify; end
+  def issue_modify_inplace; $v2c_issue_modify_inplace; end
+  def issue_modify_final_bailout_when_modified; $v2c_issue_modify_final_bailout_when_modified; end
+end
+
+module V2C_Cfg_Validator
+  def validate_vcproj_abort_on_error; $v2c_validate_vcproj_abort_on_error; end
+  def validate_vcproj_ensure_files_ok; $v2c_validate_vcproj_ensure_files_ok; end
+end
+
+module V2C_Cfg_Generator
+  def generator_one_time_conversion_only; $v2c_generator_one_time_conversion_only; end
+  def generator_generate_self_contained_file; $v2c_generate_self_contained_file; end
+  def generator_indent_initial_num_spaces; $v2c_generator_indent_initial_num_spaces; end
+  def generator_indent_step; $v2c_generator_indent_step; end
+  def generator_comments_level; $v2c_generator_comments_level; end
+  def generator_file_create_permissions; $v2c_generator_file_create_permissions; end
+  def generator_timestamp_format; $v2c_generator_timestamp_format; end
+  def generator_source_groups_enable; $v2c_generator_source_groups_enable; end
+  def target_precompiled_header_enable; $v2c_target_precompiled_header_enable; end
+end
+
+module V2C_Cfg_Generator_CMake
+  include V2C_Cfg_Generator
+
+  def config_dir_local; $v2c_config_dir_local; end
+  def module_path_local; $v2c_module_path_local; end
+  def module_path_root; $v2c_module_path_root; end
+end
+
+# This is to abstract config mechanism specifics
+# (currently dirtily provided via globals).
+module V2C_Cfg
+  extend V2C_Cfg_Common
+  extend V2C_Cfg_Parser
+  extend V2C_Cfg_Validator
+  extend V2C_Cfg_Generator_CMake
+end
+
 def v2c_can_use_processes
-  res = $v2c_enable_processes
+  res = V2C_Cfg::enable_processes
   if false == V2C_Ruby_Compat::have_support_Process_fork
     res = false
   end
@@ -580,12 +627,12 @@ def v2c_can_use_processes
 end
 
 def v2c_can_use_threads
-  res = $v2c_enable_threads
+  res = V2C_Cfg::enable_threads
   res
 end
 
 
-if 0 < $v2c_validate_vcproj_abort_on_error
+if 0 < V2C_Cfg::validate_vcproj_abort_on_error
   # Definitely log a warning explicitly mentioning "exceptions",
   # since this setting will swallow exceptions
   # and may be (since it already was!)
@@ -600,7 +647,7 @@ if 0 < $v2c_validate_vcproj_abort_on_error
   #   react properly,
   #   gets ignored, thus
   #   there is further state progress, but on unknown terrain!! (--> CORRUPTION??)
-  log_warn "$v2c_validate_vcproj_abort_on_error set to #{$v2c_validate_vcproj_abort_on_error} --> some exceptions will get swallowed."
+  log_warn "V2C_Cfg::validate_vcproj_abort_on_error set to #{V2C_Cfg::validate_vcproj_abort_on_error} --> some exceptions will get swallowed."
 end
 
 STR_CTRL_LFTAB = STR_CTRL_LF + STR_CTRL_TAB
@@ -620,7 +667,7 @@ def report_and_reraise_unless_disallowed(
   error_msg << 'failed: ' << domain_specific_msg << ': ' << get_exception_dump(e)
   log_error error_msg
   # Hohumm, this variable is not really what we should be having here...
-  if ($v2c_validate_vcproj_abort_on_error > 0)
+  if (V2C_Cfg::validate_vcproj_abort_on_error > 0)
     raise # escalate the problem
   end
 end
@@ -1050,7 +1097,7 @@ module V2C_ParserGenericLogging
   def parser_error(str_description, critical)
     do_raise = false
     if true == critical
-      if ($v2c_validate_vcproj_abort_on_error > 0)
+      if (V2C_Cfg::validate_vcproj_abort_on_error > 0)
         do_raise = true
       end
     end
@@ -6694,11 +6741,11 @@ class V2C_GenerateIntoTempFile
     @tempfile_prefix = tempfile_prefix
     @destination_file = destination_file
     textstream_attributes = V2C_TextStream_Attributes.new(
-      $v2c_generator_indent_initial_num_spaces,
-      $v2c_generator_indent_step,
-      $v2c_generator_comments_level)
+      V2C_Cfg::generator_indent_initial_num_spaces,
+      V2C_Cfg::generator_indent_step,
+      V2C_Cfg::generator_comments_level)
     @textstream_attributes = textstream_attributes
-    @file_create_permissions = $v2c_generator_file_create_permissions
+    @file_create_permissions = V2C_Cfg::generator_file_create_permissions
   end
   def generate
     tmpfile_path = nil
@@ -6742,10 +6789,10 @@ class V2C_GenerateIntoTempFile
   end
 end
 
-FILENAME_MAP_DEF = File.join($v2c_config_dir_local, 'define_mappings.txt')
-FILENAME_MAP_DEP = File.join($v2c_config_dir_local, 'dependency_mappings.txt')
-FILENAME_MAP_LIB_DIRS = File.join($v2c_config_dir_local, 'lib_dirs_mappings.txt')
-FILENAME_MAP_LIB_DIRS_DEP = File.join($v2c_config_dir_local, 'lib_dirs_dep_mappings.txt')
+FILENAME_MAP_DEF = File.join(V2C_Cfg::config_dir_local, 'define_mappings.txt')
+FILENAME_MAP_DEP = File.join(V2C_Cfg::config_dir_local, 'dependency_mappings.txt')
+FILENAME_MAP_LIB_DIRS = File.join(V2C_Cfg::config_dir_local, 'lib_dirs_mappings.txt')
+FILENAME_MAP_LIB_DIRS_DEP = File.join(V2C_Cfg::config_dir_local, 'lib_dirs_dep_mappings.txt')
 
 
 # Nice helper class, e.g. to be used as the counterpart
@@ -6765,7 +6812,7 @@ end
 class V2C_BaseGlobalGenerator
   def initialize(
     master_project_dir)
-    @filename_map_inc = File.join($v2c_config_dir_local, 'include_mappings.txt')
+    @filename_map_inc = File.join(V2C_Cfg::config_dir_local, 'include_mappings.txt')
     @master_project_dir = master_project_dir
     @map_includes = Hash.new
     read_mappings_includes()
@@ -6936,7 +6983,7 @@ class V2C_SyntaxGeneratorBase < V2C_GeneratorBase
 
   private
 
-  def is_one_time_conversion_only; $v2c_generator_one_time_conversion_only; end
+  def is_one_time_conversion_only; V2C_Cfg::generator_one_time_conversion_only; end
 
   def need_add_customization_hooks; false == is_one_time_conversion_only; end
 
@@ -6957,7 +7004,7 @@ class V2C_Path_Config
   def initialize(
     master_project_source_dir)
     @source_root = master_project_source_dir
-    @rel_config_dir_source_root = $v2c_config_dir_local
+    @rel_config_dir_source_root = V2C_Cfg::config_dir_local
     @config_dir_source_root = File.join(@source_root, @rel_config_dir_source_root)
     @rel_config_dir_temp_store = File.join(@rel_config_dir_source_root, TEMP_STORE_DIR_NAME)
     @config_dir_source_root_temp_store = get_abs_temp_store_dir(@source_root)
@@ -7731,7 +7778,7 @@ end
 # (i.e., some build-specific configuration content).
 class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
   VCPROJ2CMAKE_FUNC_CMAKE = 'vcproj2cmake_func.cmake'
-  VCPROJ2CMAKE_FUNC_CMAKE_LOCATION = File.join($v2c_module_path_root, VCPROJ2CMAKE_FUNC_CMAKE)
+  VCPROJ2CMAKE_FUNC_CMAKE_LOCATION = File.join(V2C_Cfg::module_path_root, VCPROJ2CMAKE_FUNC_CMAKE)
   V2C_ATTRIBUTE_NOT_PROVIDED_MARKER = 'V2C_NOT_PROVIDED' # WARNING KEEP IN SYNC: that exact string literal is being checked by vcproj2cmake_func.cmake!
   V2C_ALL_PLATFORMS_MARKER = 'ALL'
   NAME_V2C_CONFIG_DIR_LOCAL = 'V2C_CONFIG_DIR_LOCAL'
@@ -8051,7 +8098,7 @@ class V2C_CMakeV2CSyntaxGeneratorSelfContained < V2C_CMakeV2CSyntaxGeneratorBase
   end
 end
 
-if 1 == $v2c_generate_self_contained_file
+if 1 == V2C_Cfg::generator_generate_self_contained_file
   class V2C_CMakeV2CSyntaxGenerator < V2C_CMakeV2CSyntaxGeneratorSelfContained
   end
 else
@@ -8100,7 +8147,7 @@ class V2C_CMakeV2CConditionGeneratorBase < V2C_CMakeV2CSyntaxGenerator
     # NOT true: newer CMake now has
     # INCLUDE_DIRECTORIES properties with genex support...
 
-    if 1 == $v2c_generate_self_contained_file
+    if 1 == V2C_Cfg::generator_generate_self_contained_file
 
       # HACK global var (multi-thread unsafety!)
       # Thus make sure to have a local copy, for internal modifications.
@@ -8283,7 +8330,7 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
             f,
             'file item in project',
             @project_name,
-            ($v2c_validate_vcproj_abort_on_error > 0))
+            (V2C_Cfg::validate_vcproj_abort_on_error > 0))
         end
 
         ## Ignore all generated files, for now.
@@ -8860,7 +8907,7 @@ class V2C_CMakeCompilerInfoGenerator < V2C_CMakeTargetGenerator
     write_invoke_object_conditional_v2c_function('v2c_target_pdb_configure', target_name, condition, args_generator.array)
   end
   def write_precompiled_header(condition, precompiled_header_info)
-    return if not $v2c_target_precompiled_header_enable
+    return if not V2C_Cfg::target_precompiled_header_enable
     return if precompiled_header_info.nil?
     return if precompiled_header_info.header_source_name.nil?
 
@@ -9965,7 +10012,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     # (a filesystem-based creation/modification timestamp might be unreliable
     # due to copying/modification).
     str_time = ''
-    timestamp_format = $v2c_generator_timestamp_format
+    timestamp_format = V2C_Cfg::generator_timestamp_format
     if not string_nil_or_empty(timestamp_format)
       timestamp_format_docs = timestamp_format.tr('%', '')
       time = Time.new
@@ -10016,7 +10063,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
       # may contain _multiple_ project files - i.e. project()s -!).
       # I.e., they need to be reset
       # per-project()!
-      hook_project_location = File.join($v2c_config_dir_local, 'hook_project.txt')
+      hook_project_location = File.join(V2C_Cfg::config_dir_local, 'hook_project.txt')
       @textOut.write_block( \
         "# MasterProjectDefaults_vcproj2cmake is supposed to define generic settings\n" \
         "# (such as V2C_HOOK_PROJECT, defined as e.g.\n" \
@@ -10350,7 +10397,7 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     write_set_var_quoted(NAME_V2C_MASTER_PROJECT_SOURCE_DIR, str_master_proj_source_dir)
     str_master_proj_binary_dir = get_dereferenced_variable_name(NAME_CMAKE_CURRENT_BINARY_DIR) + str_conversion_root_rel_cooked
     write_set_var_quoted(NAME_V2C_MASTER_PROJECT_BINARY_DIR, str_master_proj_binary_dir)
-    arr_module_paths_relative = [ $v2c_module_path_local ]
+    arr_module_paths_relative = [ V2C_Cfg::module_path_local ]
     put_cmake_module_path_bootstrap(
       arr_module_paths_relative)
   end
@@ -10360,9 +10407,9 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
       "Include the main file for pre-defined vcproj2cmake helper functions")
     write_include('vcproj2cmake_func')
   end
-  # "export" our internal $v2c_config_dir_local variable
+  # "export" our internal config_dir_local setting
   # (to be able to reference it in CMake scripts as well)
-  def put_var_config_dir_local; write_set_var_quoted('V2C_CONFIG_DIR_LOCAL', $v2c_config_dir_local) end
+  def put_var_config_dir_local; write_set_var_quoted('V2C_CONFIG_DIR_LOCAL', V2C_Cfg::config_dir_local) end
 end
 
 # This class generates the output of multiple input projects to a text output
@@ -10679,7 +10726,7 @@ end
 def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name, abort_on_error)
   file_accessible = false
   log_debug "project_dir #{project_dir} file_relative #{file_relative} project_name #{project_name}"
-  if $v2c_validate_vcproj_ensure_files_ok
+  if V2C_Cfg::validate_vcproj_ensure_files_ok
     msg_error = nil
     instance_ref = "File #{quoted_string_from_string(file_relative)} (#{file_item_description}) as listed by project named #{project_name}"
     if string_nil_or_empty(file_relative)
@@ -11106,7 +11153,7 @@ def v2c_projects_list_handle_sub_dirs(
     projects_list_file_name)
   v2c_source_root_write_projects_list_file(
     projects_list_file,
-    $v2c_generator_file_create_permissions,
+    V2C_Cfg::generator_file_create_permissions,
     arr_project_subdir_infos)
 end
 
@@ -11368,7 +11415,7 @@ def v2c_convert_local_projects_inner(
         p_proj_base_dir,
         p_generator_proj_file,
         is_solution_dir,
-        $v2c_generator_source_groups_enable,
+        V2C_Cfg::generator_source_groups_enable,
         arr_projects)
     end
 
@@ -11412,6 +11459,6 @@ end
 # Writes the final message.
 def v2c_convert_finished()
   log_info %{\
-Finished. You should make sure to have all important V2C settings includes such as vcproj2cmake_defs.cmake somewhere in your CMAKE_MODULE_PATH (probably copy them to <SOURCE_ROOT>/#{$v2c_module_path_root})}
+Finished. You should make sure to have all important V2C settings includes such as vcproj2cmake_defs.cmake somewhere in your CMAKE_MODULE_PATH (probably copy them to <SOURCE_ROOT>/#{V2C_Cfg::module_path_root})}
   log_debug "When doing development, please remember to maintain existing unit tests (details see tests/README.txt)."
 end

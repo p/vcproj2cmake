@@ -272,7 +272,7 @@ end
 def command_file_dependencies_changed(command_output_file, arr_file_deps)
   time_proj = V2C_File_Stuff::file_stat_mtime_stamp_value_get(str_proj_file)
   time_cmake_folder = 0
-  config_dir_local = File.join(f, $v2c_config_dir_local)
+  config_dir_local = File.join(f, V2C_Cfg::config_dir_local)
   if File.exist?(config_dir_local)
     time_cmake_folder = V2C_File_Stuff::file_stat_mtime_stamp_value_get(config_dir_local)
   end
@@ -292,7 +292,7 @@ end
 
 case_insensitive_regex_match_option_flag = nil
 str_case_match_type = ''
-if true == $v2c_parser_proj_files_case_insensitive_match
+if true == V2C_Cfg::parser_proj_files_case_insensitive_match
   str_case_match_type = 'IN'
   case_insensitive_regex_match_option_flag = Regexp::IGNORECASE
 end
@@ -398,7 +398,7 @@ end
 arr_filtered_dirs = Array.new
 
 dir_crawler = V2C_CrawlerDirs.new(
-  $v2c_parser_recursive_follow_symlinks)
+  V2C_Cfg::parser_recursive_follow_symlinks)
 
 dir_crawler.crawl(source_root) do |dir, dir_deref|
 
