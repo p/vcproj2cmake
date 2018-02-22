@@ -795,9 +795,9 @@ module V2C_ParserGenericLogging
   def parser_error(str_description, critical)
     do_raise = false
     if true == critical
-      # TODO: should check a user-side config setting
-      # on whether to actually abort.
-      do_raise = true
+      if ($v2c_validate_vcproj_abort_on_error > 0)
+        do_raise = true
+      end
     end
     if true == do_raise
       raise V2C_ParserError, str_description
