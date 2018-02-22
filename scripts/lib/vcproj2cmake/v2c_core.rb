@@ -168,6 +168,38 @@ def quoted_string_from_obj(
     "#{obj}")
 end
 
+# Comment-only helper:
+# create a deep copy of an object, for e.g. the following purposes:
+# - to avoid "`scan': string modified (RuntimeError)"
+# - generally: to avoid modifications for local purposes getting executed on the input object
+#   (i.e., undesired modification of original object's storage)
+def obj_deep_copy(
+  o)
+  o.clone
+end
+
+# Side note: be sure to
+# narrow-flatten (specifically: string-flatten)
+# separate container elements (such as cmdline opts)
+# at the latest possible moment only!
+# Reasons:
+# - preserve grouping information (improve "presentation layer" formatting accuracy)
+# - preserve spaces-in-filenames issue handling capabilities!
+# Unfortunately this helper seems to be required for e.g.:
+# - generation of command opt elements into a text stream
+def flatten_string_elements(
+  arr_str)
+
+  arr_str.join(' ')
+end
+
+def flatten_cmdline_opts(
+  arr_opt)
+
+  flatten_string_elements(
+    arr_opt)
+end
+
 # Helper to reliably emulate/mark abstract virtuals (C++)
 # [emulating C++ mechanisms may be a good thing or NOT...]
 # Related:
@@ -226,6 +258,19 @@ module V2C_File_Stuff
   end
 
   module_function :fs_location_get_filename_part_wo_ext
+
+  # Central (comment-only) helper.
+  # Definitely ensure *manually* closing file *prior* to
+  # subsequent processing, since:
+  # - Fileutils.mv on an open file will barf on Windows (XP)
+  # - unclosed (in other words: unflushed) file very easily ends up empty
+  #   (zero size)
+  def file_ensure_close(
+    file)
+    file.close
+  end
+
+  module_function :file_ensure_close
 end
 
 V2C_LOG_LEVEL_OFF = 0
@@ -482,6 +527,13 @@ def get_exception_dump(
   # Note: "unhandled exception" not handled properly
   # (reported as RuntimeError).
   e.backtrace.join(STR_CTRL_LFTAB).sub(STR_CTRL_LFTAB, ": #{e}#{e.class ? " (#{e.class})" : ''}" + STR_CTRL_LFTAB)
+end
+
+def raise_unless_disallowed
+  # Hohumm, this variable is not really what we should be having here...
+  if ($v2c_validate_vcproj_abort_on_error > 0)
+    raise # escalate the problem
+  end
 end
 
 
@@ -2579,9 +2631,9 @@ def vs7_create_config_variable_translation(
   str_in,
   arr_config_var_handling,
   vs7_only_flag)
-  str = str_in.clone
+  str = obj_deep_copy(str_in)
   # http://langref.org/all-languages/pattern-matching/searching/loop-through-a-string-matching-a-regex-and-performing-an-action-for-each-match
-  str_scan_copy = str_in.clone # create a deep copy of string, to avoid "`scan': string modified (RuntimeError)"
+  str_scan_copy = obj_deep_copy(str_in)
   str_scan_copy.scan(VS7_PROP_VAR_SCAN_REGEX_OBJ) {
     config_var = $1
     config_var_type_descr = 'MSVS configuration variable'
@@ -3060,7 +3112,7 @@ class V2C_XmlParserBase < V2C_ParserBase
     # http://stackoverflow.com/questions/14761474/performance-implications-of-stringgsub-chains
     # --> perhaps switch to a loop over StringScanner/StringIO,
     # but only if it's relevant (and it might be less portable even!).
-    cooked = raw.clone
+    cooked = obj_deep_copy(raw)
     cooked.gsub!('&quot;', '"')
     cooked.gsub!('&apos;', '\'')
     cooked.gsub!('&lt;', '<')
@@ -3812,7 +3864,7 @@ class V2C_VSToolLinkerParser < V2C_VSToolParserBase
       # while some build environments allow listing both libs and objs
       # as dependencies, e.g. CMake allows linking to libs only,
       # and objs are expected to be passed as source input instead!
-      mdata_obj = elem_lib_dep_fs.clone.downcase.match(MSVC_OBJ_REGEX)
+      mdata_obj = obj_deep_copy(elem_lib_dep_fs).downcase.match(MSVC_OBJ_REGEX)
       if not mdata_obj.nil?
         last_obj = elem_lib_dep_fs
         flags |= V2C_Dependency_Info::DEP_TYPE_OBJECT
@@ -4524,7 +4576,7 @@ class V2C_VS7FilterParser < V2C_VS7ParserBase
       filter_info.val_scmfiles = get_boolean_value(setting_value)
     when TEXT_UNIQUEIDENTIFIER
       filter_info.guid = setting_value
-      setting_value_upper = setting_value.clone.upcase
+      setting_value_upper = obj_deep_copy(setting_value).upcase
       case setting_value_upper
       when GUID_VS_SOURCEFILES
       when GUID_QMAKE_SOURCEFILES
@@ -6333,7 +6385,7 @@ class V2C_ToolProcessorBase < V2C_LoggerBase
     # Rather than sheepishly relying on all do_transform methods
     # properly implementing returning a (our!) result,
     # *we* will return it (i.e., minimize custom-side responsibilities).
-    tool_info_result = @tool_info_template.clone
+    tool_info_result = obj_deep_copy(@tool_info_template)
     do_transform(
       tool_info_result,
       arr_items)
@@ -6557,12 +6609,8 @@ class V2C_GenerateIntoTempFile
       yield textOut
       tmpfile_path = tmpfile.path
 
-      # Definitely ensure *manually* closing file *prior* to
-      # subsequent processing, since:
-      # - Fileutils.mv on an open file will barf on Windows (XP)
-      # - unclosed (in other words: unflushed) file very easily ends up empty
-      #   (zero size)
-      tmpfile.close
+      V2C_File_Stuff::file_ensure_close(
+        tmpfile)
 
       # Since we're forced to fumble our source tree
       # (a definite no-no in all other cases!)
@@ -7415,7 +7463,8 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     return element_manual_quoting(arr_elems.join(';'))
   end
   def array_to_string(arr_params)
-    arr_params.nil? ? '' : arr_params.join(' ')
+    arr_params.nil? ? '' : flatten_cmdline_opts(
+      arr_params)
   end
   REGEX_OBJ_SEMICOLON = %r{;}
   REGEX_OBJ_DOUBLEQUOTE = %r{"}
@@ -7430,7 +7479,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     # Since we're a simple short interim helper,
     # simply pass on nil input... (hopefully this is a good policy)
     return nil if in_string.nil?
-    str = in_string.clone
+    str = obj_deep_copy(in_string)
     # Hmm, any other special chars to be escaped here?
     escape_backslash!(str)
     # Note that CMake currently does not properly handle an escaped
@@ -7517,7 +7566,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     return CMAKE_IS_LIST_VAR_CONTENT_REGEX_OBJ.match(str_elem)
   end
   def util_flatten_string(in_string)
-    out_string = in_string.clone
+    out_string = obj_deep_copy(in_string)
     out_string.gsub!(WHITESPACE_REGEX_OBJ, '_')
     out_string.tr!('\\', '_')
     out_string
@@ -7525,7 +7574,7 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def get_config_name_upcase(config_name)
     # need to also convert config names with spaces into underscore variants,
     # right?
-    config_name.clone.upcase.tr(' ','_')
+    obj_deep_copy(config_name).upcase.tr(' ','_')
   end
   def get_name_of_per_config_type_property(property_name, config_name)
     res = ''
@@ -7957,7 +8006,7 @@ class V2C_CMakeV2CConditionGeneratorBase < V2C_CMakeV2CSyntaxGenerator
 
       # HACK global var (multi-thread unsafety!)
       # Thus make sure to have a local copy, for internal modifications.
-      config_multi_authoritative = $config_multi_authoritative.clone
+      config_multi_authoritative = obj_deep_copy($config_multi_authoritative)
       if config_multi_authoritative.empty?
 
         if nil != arr_config_info[0].condition
@@ -8276,7 +8325,7 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeFileListGeneratorBase
       @textOut.indent_less()
     end
 
-    source_group_var_suffix = this_source_group.clone.gsub(VS7_UNWANTED_GROUP_TAG_CHARS_MATCH_REGEX_OBJ,'_')
+    source_group_var_suffix = obj_deep_copy(this_source_group).gsub(VS7_UNWANTED_GROUP_TAG_CHARS_MATCH_REGEX_OBJ,'_')
 
     # process our hierarchy's own files
     if not arr_local_sources.nil?
@@ -8540,7 +8589,7 @@ class V2C_CMakeCompilerInfoGenerator < V2C_CMakeTargetGenerator
 
   private
   def generate_compiler_info(condition, target_name, compiler_info_curr, target_config_info_curr, map_defines)
-    hash_defines_augmented = compiler_info_curr.hash_defines.clone
+    hash_defines_augmented = obj_deep_copy(compiler_info_curr.hash_defines)
 
     add_target_config_specific_definitions(target_config_info_curr, hash_defines_augmented)
     # Convert hash into array as required by the definitions helper function
@@ -9497,7 +9546,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
       "E.g. to be used for tweaking target properties etc.")
   end
   def write_link_libraries(arr_dependencies, map_dependencies)
-    arr_dependencies_augmented = arr_dependencies.clone
+    arr_dependencies_augmented = obj_deep_copy(arr_dependencies)
     arr_dependencies_augmented.push(get_dereferenced_variable_name('V2C_LIBS'))
     @localGenerator.write_build_attributes(
       'target_link_libraries',
@@ -9570,12 +9619,10 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     # then we can bail out right away...
     return if scc_info_in.project_name.nil?
 
-    scc_info_cmake = scc_info_in.clone
+    scc_info_cmake = obj_deep_copy(scc_info_in)
 
     # Hmm, perhaps need to use CGI.escape
     # since chars other than just '"' might need to be escaped?
-    # NOTE: needed to clone() this string above
-    # since otherwise modifying (same) source object!!
     # We used to escape_char!('"') below, but this was problematic
     # on CMake's VS7 .vcproj generator since
     # that one is BUGGY (GIT trunk 201007xx):
@@ -10365,10 +10412,7 @@ class V2C_CMakeLocalFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
         project_generator.generate_it(generator_base, map_lib_dirs, map_lib_dirs_dep, map_dependencies, map_defines)
       rescue V2C_GeneratorError => e
         logger.error("generation of project (named #{project_info.name}) failed: #{get_exception_dump(e)}")
-        # Hohumm, this variable is not really what we should be having here...
-        if ($v2c_validate_vcproj_abort_on_error > 0)
-          raise # escalate the problem
-        end
+        raise_unless_disallowed
       end
     }
   end
@@ -11193,10 +11237,7 @@ def v2c_convert_local_projects_inner(
       project_valid = false
       error_msg = "project validation failed: #{get_exception_dump(e)}"
       log_error error_msg
-      # Hohumm, this variable is not really what we should be having here...
-      if ($v2c_validate_vcproj_abort_on_error > 0)
-        raise # escalate the problem
-      end
+      raise_unless_disallowed
     end
     (false == project_valid)
   }

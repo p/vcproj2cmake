@@ -57,7 +57,7 @@ else
    vcproj_filename_full = vcproj_filename_full.expand_path
 
    $arr_plugin_parser.each { |plugin_parser_curr|
-     vcproj_filename_test = vcproj_filename_full.clone
+     vcproj_filename_test = obj_deep_copy(vcproj_filename_full)
      parser_extension = ".#{plugin_parser_curr.extension_name}"
      if File.extname(vcproj_filename_test) == parser_extension
        vcproj_filename = vcproj_filename_test

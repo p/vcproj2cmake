@@ -171,10 +171,10 @@ def search_project_files_in_dir_entries(dir_entries, arr_proj_file_regex, case_i
   # Shortcut: return immediately if pre-list ended up empty already:
   return dir_entries_match_subset if dir_entries_match_subset.empty?
 
-  dir_entries_match_subset_remaining = dir_entries_match_subset.clone
+  dir_entries_match_subset_remaining = obj_deep_copy(dir_entries_match_subset)
 
   # Regexes going from most specific to least specific.
-  arr_proj_file_regex_remaining = arr_proj_file_regex.clone
+  arr_proj_file_regex_remaining = obj_deep_copy(arr_proj_file_regex)
   arr_proj_file_regex.each { |proj_file_regex|
     # We're analyzing this more specific regex right now -
     # this means in future we won't need this very regex any more :)
