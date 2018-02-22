@@ -6959,14 +6959,16 @@ class V2C_TextStreamSyntaxGeneratorBase
     @indent_now = textstream_attributes.indent_start
     @indent_step = textstream_attributes.indent_step
     @comments_level = textstream_attributes.comments_level
+    @str_indent = '' # State helper for optimization purposes (re-generate only when indent actually changed)
+    indent_update
   end
 
   def generated_comments_level; @comments_level end
 
   def get_indent; @indent_now end
 
-  def indent_more; @indent_now += @indent_step end
-  def indent_less; @indent_now -= @indent_step end
+  def indent_more; @indent_now += @indent_step; indent_update end
+  def indent_less; @indent_now -= @indent_step; indent_update end
 
   def write_data(data)
     @out.puts data
@@ -6978,7 +6980,6 @@ class V2C_TextStreamSyntaxGeneratorBase
   end
   def write_line(
     payload)
-    indent = V2CS::SPACE * get_indent()
     out_data = ''
     out_data << indent << payload
     write_data(
@@ -6990,6 +6991,14 @@ class V2C_TextStreamSyntaxGeneratorBase
     @out.puts get_temporary_content_marker(
       )
   end
+
+  private
+
+  def indent_update
+    @str_indent = V2CS::SPACE * get_indent()
+  end
+
+  def indent; @str_indent; end
 end
 
 def string_storage_contains(string_storage, regex)
