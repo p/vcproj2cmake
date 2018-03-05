@@ -8382,7 +8382,7 @@ def v2c_want_cmakelists_rewritten(str_cmakelists_file)
   when CMAKELISTS_FILE_TYPE_V2C_LOCAL
     # ok, it _is_ a CMakeLists.txt, but a temporary vcproj2cmake one
     # which we can overwrite.
-    log_info "existing #{str_cmakelists_file} is our own auto-generated file --> replacing!"
+    log_info "existing #{str_cmakelists_file} is our own auto-generated file --> processing!"
   else
     error_unknown_case_value("#{CMAKELISTS_FILE_NAME} type", cmakelists_type)
     want_cmakelists_rewritten = false # keep it safe - encode a skip instruction anyway
