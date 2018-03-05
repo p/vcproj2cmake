@@ -7437,6 +7437,220 @@ class V2C_CMakeLinkerInfoGenerator < V2C_CMakeTargetGenerator
   end
 end
 
+class V2C_CMakeCompilerInfoGenerator < V2C_CMakeTargetGenerator
+  # FIXME: I'm really not sure whether passing the map_defines param here
+  # like this is actually sufficiently clean.
+  # Since this is a *mapping*, one could argue
+  # that mapping should have been done beforehand already,
+  # *prior* to proceeding with *generating* (pushing out)
+  # supposedly-final data...
+  def generate(condition, compiler_info_curr, target_config_info_curr, map_defines)
+    generate_compiler_info(condition, get_target_name(), compiler_info_curr, target_config_info_curr, map_defines)
+  end
+
+  private
+  def generate_compiler_info(condition, target_name, compiler_info_curr, target_config_info_curr, map_defines)
+    hash_defines_augmented = compiler_info_curr.hash_defines.clone
+
+    add_target_config_specific_definitions(target_config_info_curr, hash_defines_augmented)
+    # Convert hash into array as required by the definitions helper function
+    # (it's probably a good idea to provide "cooked" "key=value" entries
+    # for more complete matching possibilities
+    # within the regex matching parts done by it).
+    # TODO: this might be relocatable to a common generator base helper method.
+    arr_defs_assignments = Array.new
+    hash_ensure_sorted_each(hash_defines_augmented).each { |key, value|
+      str_define = value.empty? ? key.dup : "#{key}=#{value}"
+      arr_defs_assignments.push(str_define)
+    }
+    write_property_compile_definitions(condition, arr_defs_assignments, map_defines)
+    if not compiler_info_curr.pdb_info.nil?
+      configure_pdb(condition, compiler_info_curr.pdb_info)
+    end
+    # Original compiler flags are MSVC-only, of course.
+    # TODO: provide an automatic conversion towards gcc?
+    compiler_info_curr.arr_tool_variant_specific_info.each { |compiler_specific|
+      arr_conditional_compiler_platform = map_tool_name_to_cmake_platform_conditional(compiler_specific.tool_id)
+      # I don't think we need this (we have per-target properties), thus we'll NOT write it!
+      #if not attr_opts.nil?
+      #  local_generator.write_directory_property_compile_flags(attr_options)
+      #end
+      write_property_compile_flags(condition, compiler_specific.arr_flags, arr_conditional_compiler_platform)
+    } # compiler.tool_specific.each
+
+    # Since the precompiled header CMake module currently
+    # _resets_ a target's COMPILE_FLAGS property,
+    # make sure to generate it _before_ specifying any COMPILE_FLAGS:
+    # UPDATE: nope, it's now fixed, thus move it *after* the target
+    # is fully configured (it needs to be able to correctly gather
+    # all settings of the target it is supposed to be used for).
+    write_precompiled_header(condition, compiler_info_curr.precompiled_header_info)
+  end
+
+  def add_target_config_specific_definitions(target_config_info, hash_defines)
+    condition = target_config_info.condition
+
+    # Hrmm, are we even supposed to be doing this?
+    # On Windows I guess UseOfMfc in generated VS project files
+    # would automatically cater for it, and all other platforms
+    # would have to handle it some way or another anyway.
+    # But then I guess there are other build environments on Windows
+    # which would need us handling it here manually,
+    # so let's just keep it for now.
+    # Plus, defining _AFXEXT already includes the _AFXDLL setting
+    # (MFC toolkit will define it implicitly),
+    # thus it's quite likely that our current handling is somewhat incorrect.
+    # Very detailed info:
+    # "Using and Writing DLLs with MFC"
+    #   http://cygnus.redirectme.net/ProMFC_5/ch12_6.htm
+    if target_config_info.use_of_mfc == V2C_TargetConfig_Defines::MFC_DYNAMIC
+      # FIXME: need to add a compiler flag lookup entry
+      # to compiler-specific info as well!
+      # (in case of MSVC it would yield: /MD [dynamic] or /MT [static])
+      # _AFXEXT should most likely *not* be added here -
+      # while _AFXDLL gets defined implicitly by the environment when
+      # UseOfMfc == Dynamic (thus we do have to add it implicitly here, too),
+      # _AFXEXT is an *explicit* manual project-side define.
+      #hash_defines['_AFXEXT'] = ''
+      hash_defines['_AFXDLL'] = ''
+    end
+    charset_type = 'SBCS'
+    case target_config_info.charset
+    when V2C_TargetConfig_Defines::CHARSET_SBCS
+      charset_type = 'SBCS'
+    when V2C_TargetConfig_Defines::CHARSET_UNICODE
+      charset_type = 'UNICODE'
+    when V2C_TargetConfig_Defines::CHARSET_MBCS
+      charset_type = 'MBCS'
+    else
+      log_implementation_bug('unknown charset type!?')
+    end
+    arr_args_func_other = [ charset_type ]
+    write_invoke_object_conditional_v2c_function(
+      'v2c_target_config_charset_set',
+      get_target_name(),
+      condition,
+      arr_args_func_other)
+  end
+
+  def write_property_compile_definitions(condition, arr_defs_assignments, map_defs)
+    return if arr_defs_assignments.empty?
+    # the container for
+    # the list of _actual_ dependencies as stated by the project
+    all_platform_defs = Hash.new
+    parse_platform_conversions(all_platform_defs, arr_defs_assignments, map_defs, false)
+    gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
+    # While below there's COMPILE_DEFINITIONS_DEBUG/_RELEASE etc.,
+    # we do need to generate the condition since it also contains *platform*
+    # conditions, and some VS conditions might contain further specifics
+    # (Exists(...)).
+    gen_condition.generate(condition) do
+      hash_ensure_sorted_each(all_platform_defs).each { |key, arr_platdefs|
+        #logger.info "key #{key}, arr_platdefs: #{arr_platdefs}"
+        next_paragraph()
+        arr_conditional_platform = key.eql?(V2C_ALL_PLATFORMS_MARKER) ? nil : split_string_to_array(key)
+        generate_property_compile_definitions_per_platform(
+          condition,
+          arr_platdefs,
+          arr_conditional_platform)
+      }
+    end
+  end
+  def generate_property_compile_definitions_per_platform(
+    condition,
+    arr_platdefs,
+    arr_conditional_platform)
+    write_conditional_block(arr_conditional_platform) do
+      put_property_compile_definitions(
+        condition,
+        arr_platdefs)
+    end
+  end
+  def put_property_compile_definitions(
+    condition,
+    arr_compile_defn)
+    arr_compile_defn_cooked = cmake_escape_compile_definitions(
+      arr_compile_defn)
+    set_property_per_config(
+      condition,
+      get_target_name(),
+      # make sure to specify APPEND for greater flexibility (hooks etc.)
+      PROP_APPEND,
+      'COMPILE_DEFINITIONS',
+      arr_compile_defn_cooked)
+  end
+  def write_property_compile_flags(condition, arr_flags, arr_conditional)
+    return if arr_flags.empty?
+    next_paragraph()
+    gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
+    gen_condition.generate(condition) do
+      write_conditional_block(arr_conditional) do
+        # FIXME!!!
+        # It appears that while CMake source has COMPILE_DEFINITIONS_<CONFIG>,
+        # it does NOT provide a per-config COMPILE_FLAGS property!
+        # Need to verify ASAP
+        # whether compile flags do get passed properly in debug / release.
+        # Strangely enough it _does_ have LINK_FLAGS_<CONFIG>, though!
+        set_property_per_config(
+          condition,
+          get_target_name(),
+          PROP_APPEND,
+          'COMPILE_FLAGS',
+          arr_flags)
+      end
+    end
+  end
+  def configure_pdb(
+    condition,
+    pdb_info)
+    put_v2c_target_pdb_configure(
+      get_target_name(),
+      condition,
+      pdb_info)
+  end
+  def put_v2c_target_pdb_configure(
+    target_name,
+    condition,
+    pdb_info)
+    args_generator = ParameterArrayGenerator.new
+    args_generator.add('PDB_OUTPUT_DIRECTORY', pdb_info.output_dir)
+    args_generator.add('PDB_NAME', pdb_info.filename)
+    write_invoke_object_conditional_v2c_function('v2c_target_pdb_configure', target_name, condition, args_generator.array)
+  end
+  def write_precompiled_header(condition, precompiled_header_info)
+    return if not $v2c_target_precompiled_header_enable
+    return if precompiled_header_info.nil?
+    return if precompiled_header_info.header_source_name.nil?
+
+    target_name = get_target_name()
+    ## FIXME: this filesystem validation should be carried out by a non-parser/non-generator validator class...
+    #header_file_is_existing = v2c_generator_check_file_accessible(@project_dir, precompiled_header_info.header_source_name, 'header file to be precompiled', target_name, false)
+    logger.info "#{target_name}: generating PCH functionality (use mode #{precompiled_header_info.use_mode}, header file #{precompiled_header_info.header_source_name}, PCH output binary #{precompiled_header_info.header_binary_name})"
+    put_precompiled_header(
+      target_name,
+      condition,
+      precompiled_header_info.use_mode,
+      precompiled_header_info.header_source_name,
+      precompiled_header_info.header_binary_name)
+  end
+  def put_precompiled_header(
+    target_name,
+    condition,
+    pch_use_mode,
+    pch_source_name,
+    pch_binary_name)
+    # FIXME: empty filename may happen in case of precompiled file
+    # indicated via VS7 FileConfiguration UsePrecompiledHeader
+    # (however this is an entry of the .cpp file: not sure whether we can
+    # and should derive the header from that - but we could grep the
+    # .cpp file for the similarly named include......).
+    return if string_nil_or_empty(pch_source_name)
+    arr_args_precomp_header = [ pch_use_mode.to_s, pch_source_name, pch_binary_name ]
+    write_invoke_object_conditional_v2c_function('v2c_target_add_precompiled_header',
+      target_name, condition, arr_args_precomp_header)
+  end
+end
+
 class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
   def initialize(
     textOut,
@@ -7979,165 +8193,6 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
       COMMENT_LEVEL_MINIMUM,
       "E.g. to be used for tweaking target properties etc.")
   end
-
-  def add_target_config_specific_definitions(target_config_info, hash_defines)
-    condition = target_config_info.condition
-
-    # Hrmm, are we even supposed to be doing this?
-    # On Windows I guess UseOfMfc in generated VS project files
-    # would automatically cater for it, and all other platforms
-    # would have to handle it some way or another anyway.
-    # But then I guess there are other build environments on Windows
-    # which would need us handling it here manually, so let's just keep it for now.
-    # Plus, defining _AFXEXT already includes the _AFXDLL setting
-    # (MFC toolkit will define it implicitly),
-    # thus it's quite likely that our current handling is somewhat incorrect.
-    # Very detailed info:
-    # "Using and Writing DLLs with MFC"
-    #   http://cygnus.redirectme.net/ProMFC_5/ch12_6.htm
-    if target_config_info.use_of_mfc == V2C_TargetConfig_Defines::MFC_DYNAMIC
-      # FIXME: need to add a compiler flag lookup entry
-      # to compiler-specific info as well!
-      # (in case of MSVC it would yield: /MD [dynamic] or /MT [static])
-      # _AFXEXT should most likely *not* be added here -
-      # while _AFXDLL gets defined implicitly by the environment when
-      # UseOfMfc == Dynamic (thus we do have to add it implicitly here, too),
-      # _AFXEXT is an *explicit* manual project-side define.
-      #hash_defines['_AFXEXT'] = ''
-      hash_defines['_AFXDLL'] = ''
-    end
-    charset_type = 'SBCS'
-    case target_config_info.charset
-    when V2C_TargetConfig_Defines::CHARSET_SBCS
-      charset_type = 'SBCS'
-    when V2C_TargetConfig_Defines::CHARSET_UNICODE
-      charset_type = 'UNICODE'
-    when V2C_TargetConfig_Defines::CHARSET_MBCS
-      charset_type = 'MBCS'
-    else
-      log_implementation_bug('unknown charset type!?')
-    end
-    arr_args_func_other = [ charset_type ]
-    write_invoke_object_conditional_v2c_function(
-      'v2c_target_config_charset_set',
-      get_target_name(),
-      condition,
-      arr_args_func_other)
-  end
-
-  def write_property_compile_definitions(condition, arr_defs_assignments, map_defs)
-    return if arr_defs_assignments.empty?
-    # the container for the list of _actual_ dependencies as stated by the project
-    all_platform_defs = Hash.new
-    parse_platform_conversions(all_platform_defs, arr_defs_assignments, map_defs, false)
-    gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
-    # While below there's COMPILE_DEFINITIONS_DEBUG/_RELEASE etc.,
-    # we do need to generate the condition since it also contains *platform*
-    # conditions, and some VS conditions might contain further specifics
-    # (Exists(...)).
-    gen_condition.generate(condition) do
-      hash_ensure_sorted_each(all_platform_defs).each { |key, arr_platdefs|
-        #logger.info "key #{key}, arr_platdefs: #{arr_platdefs}"
-        next_paragraph()
-        arr_conditional_platform = key.eql?(V2C_ALL_PLATFORMS_MARKER) ? nil : split_string_to_array(key)
-        generate_property_compile_definitions_per_platform(
-          condition,
-          arr_platdefs,
-          arr_conditional_platform)
-      }
-    end
-  end
-  def generate_property_compile_definitions_per_platform(
-    condition,
-    arr_platdefs,
-    arr_conditional_platform)
-    write_conditional_block(arr_conditional_platform) do
-      put_property_compile_definitions(
-        condition,
-        arr_platdefs)
-    end
-  end
-  def put_property_compile_definitions(
-    condition,
-    arr_compile_defn)
-    arr_compile_defn_cooked = cmake_escape_compile_definitions(
-      arr_compile_defn)
-    set_property_per_config(
-      condition,
-      get_target_name(),
-      # make sure to specify APPEND for greater flexibility (hooks etc.)
-      PROP_APPEND,
-      'COMPILE_DEFINITIONS',
-      arr_compile_defn_cooked)
-  end
-  def write_property_compile_flags(condition, arr_flags, arr_conditional)
-    return if arr_flags.empty?
-    next_paragraph()
-    gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
-    gen_condition.generate(condition) do
-      write_conditional_block(arr_conditional) do
-        # FIXME!!! It appears that while CMake source has COMPILE_DEFINITIONS_<CONFIG>,
-        # it does NOT provide a per-config COMPILE_FLAGS property! Need to verify ASAP
-        # whether compile flags do get passed properly in debug / release.
-        # Strangely enough it _does_ have LINK_FLAGS_<CONFIG>, though!
-        set_property_per_config(
-          condition,
-          get_target_name(),
-          PROP_APPEND,
-          'COMPILE_FLAGS',
-          arr_flags)
-      end
-    end
-  end
-  def configure_pdb(
-    condition,
-    pdb_info)
-    put_v2c_target_pdb_configure(
-      get_target_name(),
-      condition,
-      pdb_info)
-  end
-  def put_v2c_target_pdb_configure(
-    target_name,
-    condition,
-    pdb_info)
-    args_generator = ParameterArrayGenerator.new
-    args_generator.add('PDB_OUTPUT_DIRECTORY', pdb_info.output_dir)
-    args_generator.add('PDB_NAME', pdb_info.filename)
-    write_invoke_object_conditional_v2c_function('v2c_target_pdb_configure', target_name, condition, args_generator.array)
-  end
-  def write_precompiled_header(condition, precompiled_header_info)
-    return if not $v2c_target_precompiled_header_enable
-    return if precompiled_header_info.nil?
-    return if precompiled_header_info.header_source_name.nil?
-
-    target_name = get_target_name()
-    ## FIXME: this filesystem validation should be carried out by a non-parser/non-generator validator class...
-    #header_file_is_existing = v2c_generator_check_file_accessible(@project_dir, precompiled_header_info.header_source_name, 'header file to be precompiled', target_name, false)
-    logger.info "#{target_name}: generating PCH functionality (use mode #{precompiled_header_info.use_mode}, header file #{precompiled_header_info.header_source_name}, PCH output binary #{precompiled_header_info.header_binary_name})"
-    put_precompiled_header(
-      target_name,
-      condition,
-      precompiled_header_info.use_mode,
-      precompiled_header_info.header_source_name,
-      precompiled_header_info.header_binary_name)
-  end
-  def put_precompiled_header(
-    target_name,
-    condition,
-    pch_use_mode,
-    pch_source_name,
-    pch_binary_name)
-    # FIXME: empty filename may happen in case of precompiled file
-    # indicated via VS7 FileConfiguration UsePrecompiledHeader
-    # (however this is an entry of the .cpp file: not sure whether we can
-    # and should derive the header from that - but we could grep the
-    # .cpp file for the similarly named include......).
-    return if string_nil_or_empty(pch_source_name)
-    arr_args_precomp_header = [ pch_use_mode.to_s, pch_source_name, pch_binary_name ]
-    write_invoke_object_conditional_v2c_function('v2c_target_add_precompiled_header',
-      target_name, condition, arr_args_precomp_header)
-  end
   def write_link_libraries(arr_dependencies, map_dependencies)
     arr_dependencies_augmented = arr_dependencies.clone
     arr_dependencies_augmented.push(get_dereferenced_variable_name('V2C_LIBS'))
@@ -8301,7 +8356,8 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
           # NOTE: the commands below can stay in the general section (outside of
           # the buildcfg condition above), but only since they define properties
           # which are clearly named as being configuration-_specific_ already!
-          #
+
+          compiler_info_generator = V2C_CMakeCompilerInfoGenerator.new(@textOut, @project_info)
           # I don't know WhyTH we're *iterating* over a compiler_info here,
           # but let's just do it like that for now since
           # it's required by our current data model:
@@ -8312,42 +8368,8 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
             project_info.get_arr_target_config_info_matching(condition).each { |target_config_info_curr|
               condition_target = target_config_info_curr.condition
 
-              hash_defines_augmented = compiler_info_curr.hash_defines.clone
-
-              add_target_config_specific_definitions(target_config_info_curr, hash_defines_augmented)
-              # Convert hash into array as required by the definitions helper function
-              # (it's probably a good idea to provide "cooked" "key=value" entries
-              # for more complete matching possibilities
-              # within the regex matching parts done by it).
-              # TODO: this might be relocatable to a common generator base helper method.
-              arr_defs_assignments = Array.new
-              hash_ensure_sorted_each(hash_defines_augmented).each { |key, value|
-                str_define = value.empty? ? key.dup : "#{key}=#{value}"
-                arr_defs_assignments.push(str_define)
-              }
-              write_property_compile_definitions(condition_target, arr_defs_assignments, map_defines)
-              if not compiler_info_curr.pdb_info.nil?
-                configure_pdb(condition, compiler_info_curr.pdb_info)
-              end
-              # Original compiler flags are MSVC-only, of course.
-              # TODO: provide an automatic conversion towards gcc?
-              compiler_info_curr.arr_tool_variant_specific_info.each { |compiler_specific|
-                arr_conditional_compiler_platform = map_tool_name_to_cmake_platform_conditional(compiler_specific.tool_id)
-                # I don't think we need this (we have per-target properties), thus we'll NOT write it!
-                #if not attr_opts.nil?
-                #  local_generator.write_directory_property_compile_flags(attr_options)
-                #end
-                write_property_compile_flags(condition_target, compiler_specific.arr_flags, arr_conditional_compiler_platform)
-              } # compiler.tool_specific.each
+              compiler_info_generator.generate(condition_target, compiler_info_curr, target_config_info_curr, map_defines)
             } # arr_target_config_info.each
-
-            # Since the precompiled header CMake module currently
-            # _resets_ a target's COMPILE_FLAGS property,
-            # make sure to generate it _before_ specifying any COMPILE_FLAGS:
-            # UPDATE: nope, it's now fixed, thus move it *after* the target
-            # is fully configured (it needs to be able to correctly gather
-            # all settings of the target it is supposed to be used for).
-            write_precompiled_header(condition, compiler_info_curr.precompiled_header_info)
           } # arr_compiler_info.each
 
           linker_info_generator = V2C_CMakeLinkerInfoGenerator.new(@textOut, @project_info)
