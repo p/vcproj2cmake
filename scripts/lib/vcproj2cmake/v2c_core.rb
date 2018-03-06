@@ -526,6 +526,8 @@ def process # NOT called "load" (Ruby system "load" function)
     end
     # register project file extension name in plugin manager array, ...
   }
+rescue Errno::ENOENT
+  log_warn "Failed to crawl v2c_plugin_dir #{v2c_plugin_dir} (Errno::ENOENT)"
 end
 end
 
