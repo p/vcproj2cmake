@@ -512,18 +512,25 @@ def V2C_Core_Add_Plugin_Parser(plugin_parser)
   end
 end
 
-# Use specially named "v2c_plugins" dir to avoid any resemblance/clash with
-# standard Ruby on Rails plugins mechanism.
-v2c_plugin_dir = File.join($script_dir, 'v2c_plugins')
-
+class V2C_PluginLoader
 PLUGIN_FILE_REGEX_OBJ = %r{v2c_(parser|generator)_.*\.rb$}
-Find.find(v2c_plugin_dir) { |f_plugin|
-  if PLUGIN_FILE_REGEX_OBJ.match(f_plugin)
-    log_info "loading plugin #{f_plugin}!"
-    load f_plugin
-  end
-  # register project file extension name in plugin manager array, ...
-}
+def process # NOT called "load" (Ruby system "load" function)
+  # Use specially named "v2c_plugins" dir to avoid any resemblance/clash with
+  # standard Ruby on Rails plugins mechanism.
+  v2c_plugin_dir = File.join($script_dir, 'v2c_plugins')
+
+  Find.find(v2c_plugin_dir) { |f_plugin|
+    if PLUGIN_FILE_REGEX_OBJ.match(f_plugin)
+      log_info "loading plugin #{f_plugin}!"
+      load f_plugin
+    end
+    # register project file extension name in plugin manager array, ...
+  }
+end
+end
+
+pluginLoader = V2C_PluginLoader.new
+pluginLoader.process
 
 # TODO: to be automatically filled in from parser plugins
 # TODO: parser plugin stuff is very incomplete ATM
