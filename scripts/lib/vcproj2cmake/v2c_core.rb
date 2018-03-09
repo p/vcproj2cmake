@@ -10121,19 +10121,16 @@ end
 class V2C_CMakeRootFileContentGenerator < V2C_CMakeLocalFileContentGenerator
   def initialize(
     textOut,
-    projects_list_file,
-    p_script_location_relative_to_master)
-    p_local_dir = Pathname.new('.')
-    p_solution_dir = Pathname.new('.')
-    arr_local_projects = [
-    ]
+    p_solution_dir,
+    p_script_location_relative_to_master,
+    p_local_dir,
+    arr_local_projects)
     super(
       textOut,
       p_solution_dir,
       p_script_location_relative_to_master,
       p_local_dir,
       arr_local_projects)
-    @projects_list_file = projects_list_file
   end
   def generate_footer
     put_projects_list_file_include()
@@ -10371,6 +10368,7 @@ class V2C_CMakeLocalFileGenerator < V2C_CMakeFileGenerator
     p_v2c_script,
     p_master_project,
     p_generator_proj_file,
+    is_solution_dir,
     flag_source_groups_enabled,
     arr_projects)
     super(
@@ -10380,6 +10378,7 @@ class V2C_CMakeLocalFileGenerator < V2C_CMakeFileGenerator
     @p_script_location_relative_to_master = p_v2c_script.relative_path_from(
       p_master_project)
     @p_generator_proj_file = p_generator_proj_file
+    @is_solution_dir = is_solution_dir
     @flag_source_groups_enabled = flag_source_groups_enabled
     @p_local_dir = @p_generator_proj_file.dirname
     @arr_projects = arr_projects
@@ -10394,8 +10393,14 @@ class V2C_CMakeLocalFileGenerator < V2C_CMakeFileGenerator
   def generate_local_projects(output_file_location)
     temp_generator_local = V2C_GenerateIntoTempFile.new('vcproj2cmake', output_file_location)
     temp_generator_local.generate { |textOutLocal|
-      do_generate_local = true
-      if false != do_generate_local
+      if @is_solution_dir
+        content_generator = V2C_CMakeRootFileContentGenerator.new(
+          textOutLocal,
+          @p_master_project,
+          @p_script_location_relative_to_master,
+          @p_local_dir,
+          @arr_projects)
+      else
         content_generator = V2C_CMakeLocalFileContentGenerator.new(
           textOutLocal,
           @p_master_project,
@@ -10523,53 +10528,35 @@ rescue Exception
   raise V2C_FileGeneratorError, "Failed to generate projects list file to #{output_file_fqpn}."
 end
 
+def v2c_projects_list_handle_sub_dirs(
+  p_source_root,
+  arr_project_subdirs)
+  # FIXME: since the conversion above may end up multi-processed
+  # yet arr_project_subdirs cannot be updated on worker side
+  # (and in some cases .vcproj conversion *will* be skipped,
+  # e.g. in case of CMake-converted .vcproj:s),
+  # we should include only those entries where each directory
+  # now actually does contain a CMakeLists.txt file.
 
-def v2c_source_root_write_cmakelists_skeleton_file(p_master_project, p_script, path_cmakelists_txt, projects_list_file)
-  generate_skeleton = V2C_GenerateIntoTempFile.new('vcproj2cmake_root_skeleton', path_cmakelists_txt)
-  generate_skeleton.generate { |textOut|
-    p_script_location_relative_to_master = p_script.relative_path_from(
-      p_master_project)
-    content_generator = V2C_CMakeRootFileContentGenerator.new(
-      textOut,
-      p_script_location_relative_to_master,
-      projects_list_file)
-    content_generator.generate
-  }
-rescue Exception
-  raise V2C_FileGeneratorError, "Failed to generate root skeleton #{CMAKELISTS_FILE_NAME} to #{path_cmakelists_txt}."
+  # The filename is an inner implementation detail of inner implementation
+  # (which happens to also include that very file on the CMake side).
+  projects_list_file_name = 'all_sub_projects.txt'
+  v2c_path_config = v2c_get_path_config(
+    p_source_root.to_s)
+  generated_items_dir = File.join(
+    v2c_path_config.get_abs_config_dir_source_root_temp_store(),
+    'generated_items')
+  V2C_Util_File.mkdir_p(
+    generated_items_dir)
+  projects_list_file = File.join(
+    generated_items_dir,
+    projects_list_file_name)
+  v2c_source_root_write_projects_list_file(
+    projects_list_file,
+    $v2c_generator_file_create_permissions,
+    arr_project_subdirs)
 end
 
-# For collections of project configs,
-# create a skeleton fallback root file whenever there's no user-provided main file
-# pre-existing:
-def v2c_source_root_ensure_usable_cmakelists_skeleton_file(project_converter_script_filename, source_root, projects_list_file)
-  root_cmakelists_txt_file = File.join(source_root, CMAKELISTS_FILE_NAME)
-  root_cmakelists_txt_type = check_cmakelists_txt_type(root_cmakelists_txt_file)
-  skip_skeleton_root_file_reason = nil
-  case root_cmakelists_txt_type
-  when CMAKELISTS_FILE_TYPE_NONE, CMAKELISTS_FILE_TYPE_ZERO_SIZE
-  when CMAKELISTS_FILE_TYPE_CUSTOM
-    skip_skeleton_root_file_reason = 'custom/modified file content - since this source root file is custom, YOU should extend your custom file to contain all standard references required for V2C root setup (e.g. adopt relevant content of another setup with an actually auto-generated root file)'
-  when CMAKELISTS_FILE_TYPE_V2C_LOCAL
-  else
-    raise V2C_GeneratorError, "unknown/unsupported/corrupt #{CMAKELISTS_FILE_NAME} type value!"
-  end
-
-  file_descr = 'initially usable skeleton file'
-  if skip_skeleton_root_file_reason.nil?
-    begin
-      log_info "Creating/updating an #{file_descr} at #{root_cmakelists_txt_file}"
-      script_location = File.expand_path(project_converter_script_filename)
-      p_script = Pathname.new(script_location)
-      v2c_source_root_write_cmakelists_skeleton_file(Pathname.new(source_root), p_script, root_cmakelists_txt_file, projects_list_file)
-    rescue
-      log_error "FAILED to create #{root_cmakelists_txt_file}, aborting!"
-      raise
-    end
-  else
-    log_info "Skipping create of an #{file_descr} (#{skip_skeleton_root_file_reason})."
-  end
-end
 
 # This class is tasked with doing important analysis work
 # on *generic* V2C-side project data
@@ -10754,7 +10741,8 @@ def v2c_convert_local_projects_inner(
   p_script,
   p_master_project,
   arr_p_parser_proj_files,
-  p_generator_proj_file)
+  p_generator_proj_file,
+  is_solution_dir)
 
   arr_projects = Array.new
 
@@ -10829,6 +10817,7 @@ def v2c_convert_local_projects_inner(
         p_script,
         p_master_project,
         p_generator_proj_file,
+        is_solution_dir,
         $v2c_generator_source_groups_enable,
         arr_projects)
     end
@@ -10846,7 +10835,8 @@ def v2c_convert_local_projects_outer(
   master_project_dir,
   arr_parser_proj_files,
   generator_proj_dir,
-  generator_proj_filename)
+  generator_proj_filename,
+  is_solution_dir)
   arr_p_parser_proj_files = arr_parser_proj_files.collect { |parser_proj_file|
     Pathname.new(parser_proj_file)
   }
@@ -10865,7 +10855,8 @@ def v2c_convert_local_projects_outer(
     p_script,
     p_master_project,
     arr_p_parser_proj_files,
-    p_generator_proj_file_location)
+    p_generator_proj_file_location,
+    is_solution_dir)
 end
 
 # Writes the final message.

@@ -138,5 +138,6 @@ v2c_convert_local_projects_outer(
   master_project_dir,
   arr_parser_proj_files,
   output_dir,
-  output_filename)
+  output_filename,
+  true)
 v2c_convert_finished()
