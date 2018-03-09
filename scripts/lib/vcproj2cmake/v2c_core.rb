@@ -452,6 +452,10 @@ if 0 < $v2c_validate_vcproj_abort_on_error
   log_warn "$v2c_validate_vcproj_abort_on_error set to #{$v2c_validate_vcproj_abort_on_error} --> some exceptions will get swallowed."
 end
 
+def get_exception_dump(
+  e)
+  "#{e.message}\nBacktrace: #{e.backtrace.join("\n\t")}"
+end
 
 
 # "Re: Does Ruby support exception wrapping (exception chaining)?"
@@ -468,16 +472,19 @@ class V2C_ChainedError < StandardError
     original=$!)
     msg_extended = msg
     if not original.nil?
+      e_trace_original = get_exception_dump(
+        original)
       # Do use a newline (the inner record will be *large*)
       # Describe it as "inner-scope record"
       # (avoid mentioning the special "error" word instead).
-      msg_extended << " (inner-scope record:\n#{original.message}\nBacktrace: #{original.backtrace.join("\n\t")})"
+      msg_extended << " (inner-scope record:\n#{e_trace_original})"
     end
     super(
       msg_extended)
     @original = original
   end
 end
+
 
 # Some hints about logging:
 # - always place logging at the *end* of a larger section
