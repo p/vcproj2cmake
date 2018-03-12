@@ -1100,6 +1100,29 @@ else
   end
 end
 
+# Central helper for
+# generating a normalized (lower-cased) representation of a filesystem item,
+# to achieve case-(non-)insensitive comparison of filesystem items.
+# Provided to be able to centrally feature-flag-switch
+# this (non-)transformation as needed.
+# Result of this helper should be used
+# *temporarily for comparison purposes only* -
+# it should not be handed to any subsequent processing!
+# (== DATA CORRUPTION!! - pretending to have an item case which we do NOT have...)
+def filesystem_item_case_comparison_normalize_temp(
+  i_raw)
+  do_lower = true
+  i_cooked = do_lower ? i_raw.downcase : i_raw
+  i_cooked
+end
+
+# Central helper to help ensure correctly restricted use of its inner functionality API.
+def filesystem_item_case_compare(
+  i1,
+  i2)
+  filesystem_item_case_comparison_normalize_temp(i1) == filesystem_item_case_comparison_normalize_temp(i2)
+end
+
 CHAR_COMMENT_START = V2CS::HASH
 def read_commented_text_file_lines(filename)
   if File.file?(filename)
@@ -6702,7 +6725,7 @@ module V2C_ProjectInfoProvider
     parser_project_extension = p_parser_proj_file.extname
     # Q&D parser switch...
     parser = nil # IMPORTANT: reset it!
-    case parser_project_extension
+    case filesystem_item_case_comparison_normalize_temp(parser_project_extension)
     when '.vcxproj', '.csproj'
       is_fully_supported = true
       if '.csproj' == parser_project_extension
