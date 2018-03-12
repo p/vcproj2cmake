@@ -1,5 +1,8 @@
 #!/usr/bin/ruby -w
 
+# This file is part of the vcproj2cmake build converter (vcproj2cmake.sf.net)
+#
+
 # Given a Visual Studio project (.vcproj, .vcxproj),
 # create a CMakeLists.txt file which optionally allows
 # for ongoing side-by-side operation (e.g. on Linux, Mac)

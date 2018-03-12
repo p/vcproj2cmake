@@ -1,5 +1,8 @@
 #!/usr/bin/ruby -w
 
+# This file is part of the vcproj2cmake build converter (vcproj2cmake.sf.net)
+#
+
 require 'find'
 require 'pathname'
 
