@@ -284,6 +284,7 @@ def number_of_processors
   raise "can't determine 'number_of_processors' for '#{RUBY_PLATFORM}'"
 end
 
+require 'uri' # URI
 
 module V2C_File_Stuff
   def file_stat_mtime_stamp_value_get(
@@ -317,6 +318,38 @@ module V2C_File_Stuff
   end
 
   module_function :file_ensure_close
+
+  # https://stackoverflow.com/questions/10571562/converting-file-path-to-uri
+  # http://blog.honeybadger.io/why-is-uri-join-so-counterintuitive/
+  # Main objective: we simply want to
+  # introduce (achieve) a eneric *abstraction* here -
+  # thus by means of an URI standard.
+  # We do *not* care about any gory URI details - we merely want to
+  # achieve properly symmetric behaviour of
+  # the (reverse) transformation roundtrip.
+  # Minor notes:
+  # - "interestingly",
+  #   URI::Generic.new(..., "./etc/passwd", ...).relative? returns false.
+  def to_uri(
+    file)
+    uri = URI::Generic.new('file', nil, nil, nil, nil, file, nil, nil, nil)
+    #puts "file #{file} uri #{uri.to_s}"
+    uri
+  end
+
+  module_function :to_uri
+
+  def from_uri(
+    uri)
+    if not "file" == uri.scheme
+      raise(RuntimeError, 'invalid URI scheme (not file)')
+    end
+    file = uri.path
+    #puts "file #{file}"
+    file
+  end
+
+  module_function :from_uri
 end
 
 # To be used to
@@ -1123,6 +1156,182 @@ def filesystem_item_case_compare(
   filesystem_item_case_comparison_normalize_temp(i1) == filesystem_item_case_comparison_normalize_temp(i2)
 end
 
+# These classes are to contain attributes which
+# serve to precisely point at
+# a particular location within a resource.
+class V2C_Content_Location
+  def initialize(
+    )
+  end
+
+  def human_readable
+    raise_error_abstract_base_method
+  end
+end
+
+class V2C_Content_Location_Hint < V2C_Content_Location
+  def initialize(
+    )
+    super(
+      )
+    @str_hint = nil # some custom hint (type/specifics/behaviour of this location)
+    @str_obj = nil # mentions particular "object" at that location
+  end
+
+  COMMA_DELIM = ', '
+  def human_readable
+    res = ''
+    arr_parts = [
+    ]
+    if not str_hint.nil?
+      arr_parts.push(
+        'hint: ' << str_hint)
+    end
+    if not str_obj.nil?
+      arr_parts.push(
+        'obj: ' << str_obj)
+    end
+    if not arr_parts.empty?
+      res << arr_parts.join(COMMA_DELIM)
+    end
+    res
+  end
+
+  attr_accessor :str_hint
+  attr_accessor :str_obj
+end
+
+class V2C_Content_Location_Text < V2C_Content_Location_Hint
+  def initialize(
+    )
+    super(
+      )
+    @row = 1
+    @col = 1
+  end
+
+  def human_readable
+    res = ''
+    res << 'row ' + row.to_s + ', column ' + col.to_s
+    hr_base = super
+    if not hr_base.nil?
+      res << ' ' << '(' << hr_base << ')'
+    end
+    res
+  end
+
+  attr_accessor :row
+  attr_accessor :col
+end
+
+# Base class for container classes which are to provide
+# suitable origin information reference of
+# their particular type (files/items etc.),
+# e.g. for the following special cases:
+# - where such objects are located in
+#   their *original* (conversion-parsed) [now not any longer directly processed] environment
+# "Location reference" information may possibly consist of:
+# - URI (pointer to content)
+# - row (line) number (specifics within content)
+# - column number (specifics within content)
+# This whole mechanism might smell of
+# ugly re-invention of
+# "hierarchical exception unroll", however
+# please note that
+# this information is *required* in cases where
+# - we do *not* have a situation which could be seen as
+#   an "exceptional error condition"
+# - we *are* unable/unwilling to exception-destroy an entire sub context
+#   (OTOH if we had
+#   parser/generator implementation processing which was
+#   *directly* fused together, then
+#   we could be exception-unrolling right back to the parser, where
+#   we could optionally be
+#   edit-correcting things and then retrying parsing/generation;
+#   however since there is
+#   a larger interim/middleware disconnect
+#   between parser and generator processing
+#   [parsing is completely finished, and *then* we start doing generation],
+#   this currently is not possible
+#   anyway)
+#
+# Design notes about classes of this type:
+# certain important attributes are to be directly ctor-passed ("enforced"), whereas
+# certain other attributes are to be passed via accessors, where available.
+class V2C_Ref_Origin
+  def initialize(
+    ref_resource, # Provides "pointer"/"reference" (e.g.: URI) to a resource
+    ref_content, # Info about current location *within* that resource [V2C_Content_Location-typed]
+    curr_descr, # string element (is to provide a *hint* of which "object"/"area" is currently being processed in general)
+    curr_obj)
+    @ref_resource = ref_resource
+    @ref_content = ref_content
+    @curr_descr = curr_descr
+    @curr_obj = curr_obj
+  end
+
+  def human_readable
+    raise_error_abstract_base_method
+  end
+
+  attr_accessor :ref_content
+  attr_accessor :curr_descr
+  attr_accessor :curr_obj
+end
+
+def v2c_ref_origin_human_readable(
+  ref_origin)
+  if not ref_origin.nil?
+    ref_origin.human_readable
+  else
+    'nil'
+  end
+end
+
+# Helper to simplify/document passing ("handover") of
+# origin information
+# between hierarchically related objects.
+# And where needed, remember to also use this opportunity to
+# enforce (params *not* default-nil-optional!) delivering a new
+# "current" location/processing information.
+# ["always keep things maximally precisely
+# instance-reference-aggregated-maintained" :))]
+def v2c_ref_origin_handover(
+  outer,
+  inner,
+  curr_descr,
+  curr_obj, # may resort to passing nil here
+  str_obj = nil)
+  #log_debug "HANDOVER: #{outer.class} to #{inner.class}: #{v2c_ref_origin_human_readable(outer.ref_origin)}, old inner: #{v2c_ref_origin_human_readable(inner.ref_origin)}" # IMPORTANT (to determine missing handover processing)
+  inner.ref_origin = outer.ref_origin.clone
+  outer_ref_content = outer.ref_origin.ref_content
+  inner.ref_origin.ref_content = outer_ref_content.clone # IMPORTANT - disconnect storage of outer object! (FIXME: we probably have a structural violation here - such measures probably should not be required given proper design)
+  inner.ref_origin.curr_descr = curr_descr if not curr_descr.nil?
+  inner.ref_origin.curr_obj = curr_obj if not curr_obj.nil?
+  inner.ref_origin.ref_content.str_obj = str_obj if not str_obj.nil?
+end
+
+class V2C_Ref_Origin_URI_Item < V2C_Ref_Origin
+  def initialize(
+    uri,
+    curr_descr,
+    curr_obj)
+    super(
+      uri,
+      V2C_Content_Location_Text.new,
+      curr_descr,
+      curr_obj)
+  end
+
+  def human_readable
+    uri().to_s + " (content location: #{@ref_content.human_readable}) (context: #{curr_descr}; #{curr_obj})"
+  end
+
+  def uri
+    @ref_resource
+  end
+end
+
 CHAR_COMMENT_START = V2CS::HASH
 def read_commented_text_file_lines(filename)
   if File.file?(filename)
@@ -1287,12 +1496,32 @@ class V2C_ParserBase < V2C_LoggerBase
     super(
       )
     @info_elem = info_elem_out
+    @ref_origin = nil # to contain sufficiently precisely (thus: to be updated frequently!) information about current parser-side origin (=~ "parser read position"); V2C_Ref_Origin-typed
   end
   attr_accessor :info_elem
+  attr_accessor :ref_origin
 
   # @brief Descriptively named helper,
   # to save a ton of useless comments :) ("be optimistic :)")
   def be_optimistic; FOUND_TRUE end
+
+  # Parameterization-simplifying forwarder
+  def ref_origin_handover(
+    inner,
+    curr_descr,
+    curr_obj,
+    str_obj = nil)
+    v2c_ref_origin_handover(
+      self,
+      inner,
+      curr_descr,
+      curr_obj,
+      str_obj)
+  end
+
+  def get_origin_info
+    @ref_origin.human_readable()
+  end
 end
 
 # Manages a build condition expression.
@@ -1411,8 +1640,10 @@ class V2C_Info_Elem_Base < V2C_LoggerBase
     super(
       )
     @condition = nil # V2C_Info_Condition
+    @ref_origin = nil # to be configured once/where possible [V2C_Ref_Origin-typed]
   end
   attr_accessor :condition
+  attr_accessor :ref_origin
 end
 
 def get_arr_elems_where_condition_satisfied(
@@ -3181,7 +3412,12 @@ end
 # Should probably rework the core of our classes to use the StreamListener,
 # and hopefully keep servicing our existing overrides.
 
+# To report context of/at global XML parsing.
 class V2C_XmlParserError < V2C_ChainedError
+end
+
+# To report context of/at sub element XML parsing.
+class V2C_XmlParserNodeError < V2C_ChainedError
 end
 
 class V2C_XmlParserBase < V2C_ParserBase
@@ -3215,6 +3451,8 @@ class V2C_XmlParserBase < V2C_ParserBase
     logger.debug(
       "found #{found}")
     found
+  rescue Exception
+    raise V2C_XmlParserError, "context: #{get_origin_info()}"
   end
 
   def parse_attributes
@@ -3227,7 +3465,7 @@ class V2C_XmlParserBase < V2C_ParserBase
           end
         end
       rescue Exception
-        raise V2C_XmlParserError, "name #{attr_xml.name}\" / value \"#{attr_xml.value}\""
+        raise V2C_XmlParserNodeError, "name #{attr_xml.name}\" / value \"#{attr_xml.value}\""
       end
     }
   end
@@ -3242,7 +3480,7 @@ class V2C_XmlParserBase < V2C_ParserBase
           end
         end
       rescue Exception
-        raise V2C_XmlParserError, "name \"#{subelem_xml.name}\" / value \"#{subelem_xml.text}\""
+        raise V2C_XmlParserNodeError, "name \"#{subelem_xml.name}\" / value \"#{subelem_xml.text}\""
       end
     }
   end
@@ -4680,6 +4918,11 @@ class V2C_VS7FileParser < V2C_VS7ParserBase
     case setting_key
     when 'RelativePath'
       @info_file.path_relative = get_filesystem_location(setting_value)
+      ref_origin_handover(
+        @info_file,
+        nil,
+        nil,
+        setting_value)
     else
       found = super
     end
@@ -4770,11 +5013,19 @@ class V2C_VS7FilterParser < V2C_VS7ParserBase
       when 'File'
         logger.debug('FOUND File')
         elem_parser = V2C_VS7FileParser.new(subelem_xml, arr_info_file)
+        ref_origin_handover(
+          elem_parser,
+          nil,
+          nil)
         elem_parser.parse
       when 'Filter'
         logger.debug('FOUND Filter')
         subfiles_str = Files_str.new
         elem_parser = V2C_VS7FilterParser.new(subelem_xml, get_project(), subfiles_str)
+        ref_origin_handover(
+          elem_parser,
+          nil,
+          nil)
         if elem_parser.parse
           files_str[:arr_sub_filters] ||= Array.new
           files_str[:arr_sub_filters].push(subfiles_str)
@@ -5030,6 +5281,10 @@ class V2C_VS7ProjectParser < V2C_VS7ProjectParserBase
       elem_parser = V2C_VS7ToolFilesParser.new(subelem_xml, nil)
     end
     if not elem_parser.nil?
+      ref_origin_handover(
+        elem_parser,
+        nil,
+        nil)
       elem_parser.parse
     else
       found = super
@@ -5138,6 +5393,10 @@ class V2C_VS7ProjectFileXmlParser < V2C_VSProjectFileXmlParserBase
     when 'VisualStudioProject'
       project = V2C_Project_Info.new
       project_parser = V2C_VS7ProjectParser.new(subelem_xml, project)
+      ref_origin_handover(
+        project_parser,
+        nil,
+        nil)
       project_parser.parse
 
       get_arr_projects_out().push(project)
@@ -5161,6 +5420,14 @@ class V2C_VSProjectFileParserBase < V2C_ParserBase
     arr_projects_out)
     super(
       nil) # hrmpf - layering violation - we are an outer handler which is specifically file-based which produces an *array* of results, thus we do NOT service an info_elem!
+    # XXX I am afraid that
+    # due to REXML limitations we likely are not able to provide
+    # exact row/col information of this item within the container file (XML)
+    @ref_origin = V2C_Ref_Origin_URI_Item.new(
+      V2C_File_Stuff::to_uri(p_parser_proj_file.to_s),
+      'FIXME',
+      self)
+
     @p_parser_proj_file = p_parser_proj_file
     @proj_filename = p_parser_proj_file.to_s # FIXME: do we want to keep the string-based filename? We should probably change several sub classes to be Pathname-based...
     @arr_projects_out = arr_projects_out
@@ -5178,6 +5445,10 @@ class V2C_VS7ProjectFileParser < V2C_VSProjectFileParserBase
       doc_proj = REXML::Document.new io
 
       @proj_xml_parser = V2C_VS7ProjectFileXmlParser.new(doc_proj, @arr_projects_out)
+      ref_origin_handover(
+        @proj_xml_parser,
+        nil,
+        nil)
       #super.parse
       @proj_xml_parser.parse
     }
@@ -5487,6 +5758,11 @@ class V2C_VS10ItemGroupFileElemParser < V2C_VS10BaseElemParser
       # and multiple elements ("file1.c; file2.c") are valid - for MSBuild
       # (not sure whether that applies to .vcxproj, too)
       get_file_elem().path_relative = get_filesystem_location(setting_value)
+      ref_origin_handover(
+        get_file_elem(),
+        nil,
+        nil,
+        setting_value)
     else
       found = super
     end
@@ -5529,6 +5805,10 @@ class V2C_VS10ItemGroupFilesParser < V2C_VS10BaseElemParser
     end
     info_file = V2C_Info_File.new
     file_parser = V2C_VS10ItemGroupFileElemParser.new(subelem_xml, info_file)
+    ref_origin_handover(
+      file_parser,
+      nil,
+      nil)
     found = file_parser.parse
     if FOUND_TRUE == found
       list_curr = select_list(
@@ -5641,6 +5921,10 @@ class V2C_VS10ItemGroupAnonymousParser < V2C_VS10BaseElemParser
           get_project().item_lists)
       end
       if not elem_parser.nil?
+        ref_origin_handover(
+          elem_parser,
+          nil,
+          nil)
         found = elem_parser.parse
       else
         found = super
@@ -5671,6 +5955,10 @@ class V2C_VS10ItemGroupForwarderParser < V2C_VS10ParserBase
       item_group_parser = V2C_VS10ItemGroupAnonymousParser.new(@elem_xml, get_project())
     end
     if not item_group_parser.nil?
+      ref_origin_handover(
+        item_group_parser,
+        nil,
+        nil)
       found = item_group_parser.parse
     # Do NOT call super!
     end
@@ -6241,6 +6529,10 @@ class V2C_VS10ProjectParser < V2C_VSProjectParserBase
     when 'ItemDefinitionGroup'
       config_info_curr = V2C_Project_Config_Info.new
       elem_parser = V2C_VS10ItemDefinitionGroupParser.new(subelem_xml, config_info_curr)
+      ref_origin_handover(
+        elem_parser,
+        nil,
+        nil)
       found = elem_parser.parse
       if FOUND_FALSE != found
         logger.debug(
@@ -6252,12 +6544,20 @@ class V2C_VS10ProjectParser < V2C_VSProjectParserBase
       end
     when 'ItemGroup'
       elem_parser = V2C_VS10ItemGroupForwarderParser.new(subelem_xml, get_project())
+      ref_origin_handover(
+        elem_parser,
+        nil,
+        nil)
       found = elem_parser.parse
     when 'ProjectExtensions'
       elem_parser = V2C_VS10ProjectExtensionsParser.new(subelem_xml, get_project())
       found = elem_parser.parse
     when 'PropertyGroup'
       elem_parser = V2C_VS10PropertyGroupForwarderParser.new(subelem_xml, get_project())
+      ref_origin_handover(
+        elem_parser,
+        nil,
+        nil)
       found = elem_parser.parse
     else
       found = FOUND_FALSE
@@ -6328,6 +6628,10 @@ class V2C_VS10ProjectFileXmlParser < V2C_VSProjectFileXmlParserBase
       # FIXME handle fetch() exception - somewhere!
       project_info = populate_existing_projects() ? arr_projects_out.fetch(@project_idx) : V2C_Project_Info.new
       elem_parser = V2C_VS10ProjectParser.new(subelem_xml, project_info)
+      ref_origin_handover(
+        elem_parser,
+        nil,
+        nil)
       elem_parser.parse
       if populate_existing_projects()
         @project_idx += 1
@@ -6364,6 +6668,10 @@ class V2C_VS10ProjectFileParser < V2C_VSProjectFileParserBase
 
         arr_projects_work = populate_existing_projects() ? @arr_projects_out : Array.new
         @proj_xml_parser = V2C_VS10ProjectFileXmlParser.new(doc_proj, arr_projects_work, @flag_populate_existing)
+        ref_origin_handover(
+          @proj_xml_parser,
+          nil,
+          nil)
         #super.parse
         if FOUND_FALSE != @proj_xml_parser.parse
           # Everything ok? Append to output...
