@@ -45,10 +45,10 @@
 #   write custom hook script content (which cannot be kept synchronized
 #   with changes _automatically_!!) each time due to changing components and libraries.
 
+$VERBOSE=true
+
 require 'tempfile'
 require 'vcproj2cmake/util_file' # V2C_Util_File.cmp()
-
-$VERBOSE=true
 
 
 ### RUBY VERSION COMPAT STUFF BEGIN ###
@@ -94,6 +94,35 @@ def quoted_string_from_obj(
   obj)
   quoted_string_from_string(
     "#{obj}")
+end
+
+
+# http://blog.robseaman.com/2009/7/11/detecting-the-number-of-processors-with-ruby
+# FIXME: it's rather undocumented
+# whether this is about number of CPUs/cores/SMT siblings.
+# What we're interested in
+# probably is number of cores,
+# even in an SMT (HT) case.
+# Returns the number of processors for Linux, OS X or Windows.
+def number_of_processors
+  if RUBY_PLATFORM =~ /linux/
+    return `grep processor /proc/cpuinfo| wc -l`.to_i
+  elsif RUBY_PLATFORM =~ /darwin/
+    return `sysctl -n hw.logicalcpu`.to_i
+  elsif RUBY_PLATFORM =~ /(win32|i386-mingw32)/
+    # this works for windows 2000 or greater
+    require 'win32ole'
+    wmi = WIN32OLE.connect("winmgmts://")
+    wmi.ExecQuery("select * from Win32_ComputerSystem").each do |system|
+      begin
+        processors = system.NumberOfLogicalProcessors
+      rescue
+        processors = 0
+      end
+      return [system.NumberOfProcessors, processors].max
+    end
+  end
+  raise "can't determine 'number_of_processors' for '#{RUBY_PLATFORM}'"
 end
 
 
@@ -162,43 +191,55 @@ end
 
 load_configuration()
 
-class V2C_Path_Config
-  # Provide a special directory
-  # for temporary/generated content that's not supposed to be added to SCM
-  # (entire content can be ignored easily,
-  # by mentioning this directory in SCM config files
-  # such as .gitignore)
-  TEMP_STORE_DIR_NAME = 'temporary_scm_ignored_content'
-  def initialize(
-    master_project_source_dir)
-    @source_root = master_project_source_dir
-    @rel_config_dir_source_root = $v2c_config_dir_local
-    @config_dir_source_root = File.join(@source_root, @rel_config_dir_source_root)
-    @rel_config_dir_temp_store = File.join(@rel_config_dir_source_root, TEMP_STORE_DIR_NAME)
-    @config_dir_source_root_temp_store = get_abs_temp_store_dir(@source_root)
-  end
-  def get_rel_temp_store_dir; @rel_config_dir_temp_store end
-  def get_abs_temp_store_dir(proj_dir)
-    proj_temp_store_dir = File.join(proj_dir, get_rel_temp_store_dir())
-    if not File.exist?(proj_temp_store_dir)
-      V2C_Util_File.mkdir_p(proj_temp_store_dir)
-    end
-    proj_temp_store_dir
-  end
-  def get_abs_source_root; @source_root end
-  # Returns the location of the V2C config dir located below V2C's source root
-  # (V2C_MASTER_PROJECT_SOURCE_DIR).
-  def get_rel_config_dir_source_root(); @rel_config_dir_source_root end
-  def get_abs_config_dir_source_root(); @config_dir_source_root end
-  # Returns a suitable location for *temporary* storage purposes
-  # (this content should not be committed to SCM).
-  def get_rel_config_dir_temp_store(); @rel_config_dir_temp_store end
-  def get_abs_config_dir_source_root_temp_store(); @config_dir_source_root_temp_store end
+# Additionally enable Ruby's $DEBUG in case:
+# - we want a log level of at least debug
+if $v2c_log_level >= V2C_LOG_LEVEL_DEBUG
+  $DEBUG=true
 end
 
-def v2c_get_path_config(master_project_source_dir)
-  V2C_Path_Config.new(master_project_source_dir)
+def log_debug(str)
+  return if $v2c_log_level < V2C_LOG_LEVEL_DEBUG
+  puts str
 end
+
+def log_info(str)
+  return if $v2c_log_level < V2C_LOG_LEVEL_INFO
+  # We choose to not log an INFO: prefix (reduce log spew).
+  puts str
+end
+
+def log_warn(str)
+  return if $v2c_log_level < V2C_LOG_LEVEL_WARN
+  puts "WARNING: #{str}"
+end
+
+def log_todo(str)
+  return if $v2c_log_level < V2C_LOG_LEVEL_ERROR
+  puts "TODO: #{str}"
+end
+
+def log_error(str)
+  return if $v2c_log_level < V2C_LOG_LEVEL_ERROR
+  $stderr.puts "ERROR: #{str}"
+end
+
+# FIXME: should probably replace most log_fatal()
+# with exceptions since in many cases
+# one would want to have _partial_ aborts of processing only.
+# Soft error handling via exceptions would apply to errors due to problematic input -
+# but errors due to bugs in our code should cause immediate abort.
+def log_fatal(str)
+  # Note: code flow here deviates from similar functions! (exit() *needs* to be executed, unconditionally *and* finally!)
+  log_error str + '. Aborting!' if $v2c_log_level >= V2C_LOG_LEVEL_FATAL;
+  exit 1
+end
+
+def log_implementation_bug(str); log_fatal(str) end
+
+
+# Place rather modest log level demands (such usability-affecting info should be visible at < Debug already!)
+log_info "Config file load search paths:\n#{load_configuration_get_load_paths().join("\n")}"
+
 
 # TODO: make this a user-visible config setting soon.
 # Perhaps we might want to change this config setting into a
@@ -286,35 +327,6 @@ plugin_parser_vs7_vfproj.extension_name = 'vfproj'
 V2C_Core_Add_Plugin_Parser(plugin_parser_vs7_vfproj)
 
 
-# http://blog.robseaman.com/2009/7/11/detecting-the-number-of-processors-with-ruby
-# FIXME: it's rather undocumented
-# whether this is about number of CPUs/cores/SMT siblings.
-# What we're interested in
-# probably is number of cores,
-# even in an SMT (HT) case.
-# Returns the number of processors for Linux, OS X or Windows.
-def number_of_processors
-  if RUBY_PLATFORM =~ /linux/
-    return `grep processor /proc/cpuinfo| wc -l`.to_i
-  elsif RUBY_PLATFORM =~ /darwin/
-    return `sysctl -n hw.logicalcpu`.to_i
-  elsif RUBY_PLATFORM =~ /(win32|i386-mingw32)/
-    # this works for windows 2000 or greater
-    require 'win32ole'
-    wmi = WIN32OLE.connect("winmgmts://")
-    wmi.ExecQuery("select * from Win32_ComputerSystem").each do |system|
-      begin
-        processors = system.NumberOfLogicalProcessors
-      rescue
-        processors = 0
-      end
-      return [system.NumberOfProcessors, processors].max
-    end
-  end
-  raise "can't determine 'number_of_processors' for '#{RUBY_PLATFORM}'"
-end
-
-
 #*******************************************************************************************************
 
 # since the .vcproj multi-configuration environment has some settings
@@ -326,61 +338,6 @@ end
 # these settings taken from.
 $config_multi_authoritative = ''
 
-FILENAME_MAP_DEF = File.join($v2c_config_dir_local, 'define_mappings.txt')
-FILENAME_MAP_DEP = File.join($v2c_config_dir_local, 'dependency_mappings.txt')
-FILENAME_MAP_LIB_DIRS = File.join($v2c_config_dir_local, 'lib_dirs_mappings.txt')
-FILENAME_MAP_LIB_DIRS_DEP = File.join($v2c_config_dir_local, 'lib_dirs_dep_mappings.txt')
-
-
-# Additionally enable Ruby's $DEBUG in case:
-# - we want a log level of at least debug
-if $v2c_log_level >= V2C_LOG_LEVEL_DEBUG
-  $DEBUG=true
-end
-
-def log_debug(str)
-  return if $v2c_log_level < V2C_LOG_LEVEL_DEBUG
-  puts str
-end
-
-def log_info(str)
-  return if $v2c_log_level < V2C_LOG_LEVEL_INFO
-  # We choose to not log an INFO: prefix (reduce log spew).
-  puts str
-end
-
-def log_warn(str)
-  return if $v2c_log_level < V2C_LOG_LEVEL_WARN
-  puts "WARNING: #{str}"
-end
-
-def log_todo(str)
-  return if $v2c_log_level < V2C_LOG_LEVEL_ERROR
-  puts "TODO: #{str}"
-end
-
-def log_error(str)
-  return if $v2c_log_level < V2C_LOG_LEVEL_ERROR
-  $stderr.puts "ERROR: #{str}"
-end
-
-# FIXME: should probably replace most log_fatal()
-# with exceptions since in many cases
-# one would want to have _partial_ aborts of processing only.
-# Soft error handling via exceptions would apply to errors due to problematic input -
-# but errors due to bugs in our code should cause immediate abort.
-def log_fatal(str)
-  # Note: code flow here deviates from similar functions! (exit() *needs* to be executed, unconditionally *and* finally!)
-  log_error str + '. Aborting!' if $v2c_log_level >= V2C_LOG_LEVEL_FATAL;
-  exit 1
-end
-
-def log_implementation_bug(str); log_fatal(str) end
-
-
-# Place rather modest log level demands (such usability-affecting info should be visible at < Debug already!)
-log_info "Config file load search paths:\n#{load_configuration_get_load_paths().join("\n")}"
-
 if 0 < $v2c_validate_vcproj_abort_on_error
   # Definitely log a warning explicitly mentioning "exceptions",
   # since this setting will swallow exceptions
@@ -390,6 +347,24 @@ if 0 < $v2c_validate_vcproj_abort_on_error
 end
 
 
+
+# "Re: Does Ruby support exception wrapping (exception chaining)?"
+#   http://www.ruby-forum.com/topic/148193#982947
+class V2C_ChainedError < StandardError
+  attr_reader :original
+  def initialize(
+    msg,
+    original=$!)
+    msg_extended = msg
+    if not original.nil?
+      # Do use a newline (the inner error will be *large*)
+      msg_extended += " (inner error:\n#{original.message}\nBacktrace: #{original.backtrace.join("\n\t")})"
+    end
+    super(
+      msg_extended)
+    @original = original
+  end
+end
 
 class Logger
   def initialize(
@@ -711,24 +686,6 @@ end
 # local generator: has a Makefile member (which contains a list of targets),
 #   then generates project files by iterating over the targets via a newly generated target generator each.
 # target generator: generates targets. This is the one creating/producing the output file stream. Not provided by all generators (VS10 yes, VS7 no).
-
-# "Re: Does Ruby support exception wrapping (exception chaining)?"
-#   http://www.ruby-forum.com/topic/148193#982947
-class V2C_ChainedError < StandardError
-  attr_reader :original
-  def initialize(
-    msg,
-    original=$!)
-    msg_extended = msg
-    if not original.nil?
-      # Do use a newline (the inner error will be *large*)
-      msg_extended += " (inner error:\n#{original.message}\nBacktrace: #{original.backtrace.join("\n\t")})"
-    end
-    super(
-      msg_extended)
-    @original = original
-  end
-end
 
 class V2C_ParserError < V2C_ChainedError
 end
@@ -5356,6 +5313,12 @@ class V2C_GenerateIntoTempFile
   end
 end
 
+FILENAME_MAP_DEF = File.join($v2c_config_dir_local, 'define_mappings.txt')
+FILENAME_MAP_DEP = File.join($v2c_config_dir_local, 'dependency_mappings.txt')
+FILENAME_MAP_LIB_DIRS = File.join($v2c_config_dir_local, 'lib_dirs_mappings.txt')
+FILENAME_MAP_LIB_DIRS_DEP = File.join($v2c_config_dir_local, 'lib_dirs_dep_mappings.txt')
+
+
 # Nice helper class, e.g. to be used as the counterpart
 # for CMakeParseArguments functionality.
 class ParameterArrayGenerator
@@ -5524,6 +5487,44 @@ class V2C_SyntaxGeneratorBase < V2C_GeneratorBase
       )
     @textOut = textOut
   end
+end
+
+class V2C_Path_Config
+  # Provide a special directory
+  # for temporary/generated content that's not supposed to be added to SCM
+  # (entire content can be ignored easily,
+  # by mentioning this directory in SCM config files
+  # such as .gitignore)
+  TEMP_STORE_DIR_NAME = 'temporary_scm_ignored_content'
+  def initialize(
+    master_project_source_dir)
+    @source_root = master_project_source_dir
+    @rel_config_dir_source_root = $v2c_config_dir_local
+    @config_dir_source_root = File.join(@source_root, @rel_config_dir_source_root)
+    @rel_config_dir_temp_store = File.join(@rel_config_dir_source_root, TEMP_STORE_DIR_NAME)
+    @config_dir_source_root_temp_store = get_abs_temp_store_dir(@source_root)
+  end
+  def get_rel_temp_store_dir; @rel_config_dir_temp_store end
+  def get_abs_temp_store_dir(proj_dir)
+    proj_temp_store_dir = File.join(proj_dir, get_rel_temp_store_dir())
+    if not File.exist?(proj_temp_store_dir)
+      V2C_Util_File.mkdir_p(proj_temp_store_dir)
+    end
+    proj_temp_store_dir
+  end
+  def get_abs_source_root; @source_root end
+  # Returns the location of the V2C config dir located below V2C's source root
+  # (V2C_MASTER_PROJECT_SOURCE_DIR).
+  def get_rel_config_dir_source_root(); @rel_config_dir_source_root end
+  def get_abs_config_dir_source_root(); @config_dir_source_root end
+  # Returns a suitable location for *temporary* storage purposes
+  # (this content should not be committed to SCM).
+  def get_rel_config_dir_temp_store(); @rel_config_dir_temp_store end
+  def get_abs_config_dir_source_root_temp_store(); @config_dir_source_root_temp_store end
+end
+
+def v2c_get_path_config(master_project_source_dir)
+  V2C_Path_Config.new(master_project_source_dir)
 end
 
 # FIXME: rework implementation to be able to move this
