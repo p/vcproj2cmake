@@ -462,8 +462,10 @@ class V2C_ChainedError < StandardError
     original=$!)
     msg_extended = msg
     if not original.nil?
-      # Do use a newline (the inner error will be *large*)
-      msg_extended += " (inner error:\n#{original.message}\nBacktrace: #{original.backtrace.join("\n\t")})"
+      # Do use a newline (the inner record will be *large*)
+      # Describe it as "inner-scope record"
+      # (avoid mentioning the special "error" word instead).
+      msg_extended += " (inner-scope record:\n#{original.message}\nBacktrace: #{original.backtrace.join("\n\t")})"
     end
     super(
       msg_extended)
