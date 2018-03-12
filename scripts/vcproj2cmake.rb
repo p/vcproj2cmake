@@ -57,10 +57,10 @@ else
    vcproj_filename_full = vcproj_filename_full.expand_path
 
    $arr_plugin_parser.each { |plugin_parser_curr|
-     vcproj_filename_test = obj_deep_copy(vcproj_filename_full)
+     vcproj_filename_candidate = obj_deep_copy(vcproj_filename_full)
      parser_extension = ".#{plugin_parser_curr.extension_name}"
-     if File.extname(vcproj_filename_test) == parser_extension
-       vcproj_filename = vcproj_filename_test
+     if File.extname(vcproj_filename_candidate) == parser_extension
+       vcproj_filename = vcproj_filename_candidate
        break
      else
         # The first argument on the command-line did not have
@@ -68,11 +68,11 @@ else
         # the current parser supports.
         # If the local directory contains file "ARGV[0].<project_extension>" then use it, else error.
         # (Note:  Only '+' works here for concatenation, not '<<'.)
-        vcproj_filename_test += parser_extension
+        vcproj_filename_candidate += parser_extension
 
         #puts "Looking for #{vcproj_filename}"
-        if FileTest.exist?(vcproj_filename_test)
-          vcproj_filename = vcproj_filename_test
+        if FileTest.exist?(vcproj_filename_candidate)
+          vcproj_filename = vcproj_filename_candidate
           break
         end
      end
