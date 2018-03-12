@@ -1,0 +1,7 @@
+Authors (loosely following Linux MAINTAINERS format):
+
+M: Andreas Mohr <andi [at] lisas [period] de>
+S: Maintained
+
+M: Jesper Eskilson <jesper [at] eskilson [dot] se>
+S: historic/original author

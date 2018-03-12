@@ -1,6 +1,50 @@
 # This file is part of the vcproj2cmake build converter (vcproj2cmake.sf.net)
 #
 
+# Given a Visual Studio project (.vcproj, .vcxproj),
+# create a CMakeLists.txt file which optionally allows
+# for ongoing side-by-side operation (e.g. on Linux, Mac)
+# together with the existing static .vc[x]proj project on the Windows side.
+# Provides good support for simple DLL/Static/Executable projects,
+# but custom build steps and build events are currently ignored.
+
+# Large list of extensions:
+# list _all_ configuration types, add indenting, add per-platform configuration
+# of definitions, dependencies and includes, add optional includes
+# to provide static content, thus allowing for a nice on-the-fly
+# generation mode of operation _side-by-side_ existing and _updated_ .vcproj files,
+# fully support recursive handling of all .vcproj file groups (filters).
+
+# If you add code, please try to keep this file generic and modular,
+# to enable other people to hook into a particular part easily
+# and thus keep any additions specific to the requirements of your local project _separate_.
+
+# TODO/NOTE:
+# Always make sure that a simple vcproj2cmake.rb run will result in a
+# fully working almost completely _self-contained_ CMakeLists.txt,
+# no matter how small the current vcproj2cmake config environment is
+# (i.e., it needs to work even without a single specification file
+# other than vcproj2cmake_func.cmake)
+#
+# Useful check: use different versions of this project, then diff resulting
+# changes in generated CMakeLists.txt content - this should provide a nice
+# opportunity to spot bugs which crept in from version to version.
+#
+# Tracing (ltrace -s255 -S -tt -f ruby) reveals that overall execution time
+# of this script horribly dwarfs ruby startup time (0.3s vs. 1.9s, on 1.8.7).
+# There's nothing much we can do about it, other than making sure to
+# only have one Ruby process (avoid a huge number of wasteful Ruby startups).
+
+# TODO:
+# - perhaps there's a way to provide more precise/comfortable hook script handling?
+# - possibly add parser or generator functionality
+#   for build systems other than .vcproj/.vcxproj/CMake? :)
+# - try to come up with an ingenious way to near-_automatically_ handle
+#   those pesky repeated dependency requirements of several sub projects
+#   (e.g. the component-based Boost Find scripts, etc.) instead of having to manually
+#   write custom hook script content (which cannot be kept synchronized
+#   with changes _automatically_!!) each time due to changing components and libraries.
+
 require 'tempfile'
 require 'vcproj2cmake/util_file' # V2C_Util_File.cmp()
 
