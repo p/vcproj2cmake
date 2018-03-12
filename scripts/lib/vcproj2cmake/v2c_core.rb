@@ -227,7 +227,8 @@ def load_configuration_file(
   str_descr,
   arr_descr_loaded)
   load str_file
-  descr_loaded = str_descr + ' ' + str_file
+  descr_loaded = ''
+  descr_loaded << str_descr << ' ' << str_file
   arr_descr_loaded.push(
     descr_loaded)
   true
@@ -264,9 +265,9 @@ def load_configuration
   # to make it non-ambiguous that the operation *did* happen.
   str_msg = "Evaluated #{arr_descr_loaded.join(' and ')}"
   if not str_msg_extra.nil?
-    str_msg += " (#{str_msg_extra})"
+    str_msg << " (#{str_msg_extra})"
   end
-  str_msg += '.'
+  str_msg << '.'
   puts str_msg
 end
 
@@ -470,7 +471,7 @@ class V2C_ChainedError < StandardError
       # Do use a newline (the inner record will be *large*)
       # Describe it as "inner-scope record"
       # (avoid mentioning the special "error" word instead).
-      msg_extended += " (inner-scope record:\n#{original.message}\nBacktrace: #{original.backtrace.join("\n\t")})"
+      msg_extended << " (inner-scope record:\n#{original.message}\nBacktrace: #{original.backtrace.join("\n\t")})"
     end
     super(
       msg_extended)
@@ -517,7 +518,8 @@ class Logger
   end
   def fixme(
     str)
-    msg = 'FIXME: ' + str
+    msg = ''
+    msg << 'FIXME: ' << str
     log_warn(
       formatter(
         msg))
@@ -558,16 +560,16 @@ class Logger
   end
   def unhandled_functionality(
     str_description)
-    msg = 'unhandled functionality: ' + str_description
+    msg = ''
+    msg << 'unhandled functionality: ' << str_description
     fixme msg
   end
 
   private
   def formatter(
     str)
-    fmt = scope_id +
-    ': ' +
-    str
+    fmt = ''
+    fmt << scope_id << ': ' << str
   end
 
   def scope_id
@@ -671,7 +673,8 @@ end
 
 def escape_char!(in_string, foreign_payload_char)
   #log_debug "in_string #{in_string}"
-  tgt = '\\' + foreign_payload_char
+  tgt = ''
+  tgt << '\\' << foreign_payload_char
   # WARNING!! It's NOT possible
   # to simply pass "foreign_payload_char," param here
   # (gsub replacement will FAIL) - we need actual pattern syntax here.
@@ -873,33 +876,38 @@ module V2C_ParserGenericLogging
   # (info/warn/error | logic/syntax | please_report/critical)
   def parser_warn_syntax(
     str_description)
-    msg = 'syntax: ' + str_description
+    msg = ''
+    msg << 'syntax: ' << str_description
     logger.warn(
       msg)
   end
   def parser_error_logic(
     str_description)
-    msg = 'logic: ' + str_description
+    msg = ''
+    msg << 'logic: ' << str_description
     parser_error(
       msg,
       false)
   end
   def parser_error_syntax(
     str_description)
-    msg = 'syntax: ' + str_description
+    msg = ''
+    msg << 'syntax: ' << str_description
     parser_error(
       msg,
       false)
   end
   def parser_warn_syntax_semi_compatible(
     str_description)
-    msg = str_description + ' Possibly other tools might choke when encountering this issue, thus you should correct the file content.'
+    msg = ''
+    msg << str_description << ' Possibly other tools might choke when encountering this issue, thus you should correct the file content.'
     parser_warn_syntax(
       msg)
   end
   def parser_error_todo(
     str_description)
-    msg = 'todo: ' + str_description
+    msg = ''
+    msg << 'todo: ' << str_description
     # Could add a config flag to indicate whether to aggressively report
     # such issues as an (often abort-inducing) error or using warn instead.
     parser_error(
@@ -907,7 +915,8 @@ module V2C_ParserGenericLogging
       false)
   end
   def error_unknown_case_value(description, val)
-    msg = "unknown/unsupported/corrupt #{description} case value! (#{val})"
+    msg = ''
+    msg << "unknown/unsupported/corrupt #{description} case value! (#{val})"
     parser_error(
       msg,
       true)
@@ -1940,7 +1949,8 @@ class File_List_Descr
     # Currently used for generation of CMake functions.
     # We'll add a prefix here for more precise scoping,
     # and do this on-init-only to avoid string concatenation in hotpath.
-    @type_user_marker = 'FL_' + @type_name.upcase
+    @type_user_marker = ''
+    @type_user_marker << 'FL_' << @type_name.upcase
   end
   attr_reader :type_name
   attr_reader :type_description
@@ -2459,7 +2469,8 @@ def cmake_path_join(a, b)
   a_valid = !(string_nil_or_empty(a_str))
   b_valid = !(string_nil_or_empty(b_str))
   need_sep = (a_valid && b_valid)
-  res = a_str
+  res = ''
+  res << a_str
   if false != need_sep
     # CMake path string expressions
     # always use character value '/' as separator, right?
@@ -2469,9 +2480,9 @@ def cmake_path_join(a, b)
     # File.join()
     # since that quite certainly
     # would use different system-specific path separators).
-    res += '/'
+    res << '/'
   end
-  res += b_str
+  res << b_str
 end
 
 # (Almost-)comment-only helper function:
@@ -2480,7 +2491,8 @@ end
 # SolutionDir, TargetDir, DevEnvDir, InputDir, ProjectDir.
 # (and IntDir too, it seems?)
 def vs7_config_var_trailing_slash(cfg_var_translation)
-  res = cfg_var_translation + '/'
+  res = ''
+  res << cfg_var_translation << '/'
 end
 
 # See also
@@ -4225,7 +4237,8 @@ class V2C_VS7ConfigurationsParser < V2C_VS7ParserBase
     config_entry = V2C_BuildConfigurationEntry.new
     build_type = condition.get_build_type()
     build_platform = condition.get_build_platform()
-    descr = build_platform + '|' + build_type
+    descr = ''
+    descr << build_platform << '|' << build_type
     config_entry.description = descr
     config_entry.build_type = build_type
     config_entry.platform = build_platform
@@ -4716,7 +4729,8 @@ class V2C_VSProjectFilesBundleParserBase < V2C_LoggerBase
   # Hrmm, that function does not really belong
   # in this somewhat too specific class...
   def check_unhandled_file_type(str_ext)
-    str_file = @proj_filename + '.' + str_ext
+    str_file = ''
+    str_file << @proj_filename << '.' << str_ext
     if File.file?(str_file)
       logger.unhandled_functionality("parser does not handle type of file #{str_file} yet!")
     end
@@ -6034,7 +6048,8 @@ class V2C_VS10ProjectFilesBundleParser < V2C_VSProjectFilesBundleParserBase
   def parse_project_files
     proj_file_parser = V2C_VS10ProjectFileParser.new(@p_parser_proj_file, @arr_projects_new, false)
     if false != proj_file_parser.parse_file
-      tmp_parser_proj_file_filters = @p_parser_proj_file.to_s + '.filters'
+      tmp_parser_proj_file_filters = ''
+      tmp_parser_proj_file_filters << @p_parser_proj_file.to_s << '.filters'
       p_parser_proj_file_filters = Pathname.new(
         tmp_parser_proj_file_filters)
       begin
@@ -6341,7 +6356,8 @@ class Util_TempFilePermanentizer
       # rename to <file>.<ext>.previous and not <file>.previous.<ext>
       # since grepping for all *.<ext> files
       # would then hit these outdated ones.
-      output_file_fqpn_prev = @output_file_fqpn + '.previous'
+      output_file_fqpn_prev = ''
+      output_file_fqpn_prev << @output_file_fqpn << '.previous'
       V2C_Util_File.mv(
         @output_file_fqpn,
         output_file_fqpn_prev)
@@ -6574,7 +6590,8 @@ class V2C_TextStreamSyntaxGeneratorBase
   def write_line(
     payload)
     indent = ' ' * get_indent()
-    out_data = indent + payload
+    out_data = ''
+    out_data << indent << payload
     write_data(
       out_data)
   end
@@ -6792,7 +6809,8 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   end
   def write_comment_line(
     line)
-    line_c = '# ' + line
+    line_c = ''
+    line_c << '# ' << line
     @textOut.write_line(
       line_c)
   end
@@ -6808,9 +6826,10 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   # _automatically_
   # (and bonus points for configurable line length...)
   def write_command_list(cmake_command, cmake_command_arg, arr_args_cmd)
-    cmake_command_leadin = cmake_command + '('
+    cmake_command_leadin = ''
+    cmake_command_leadin << cmake_command << '('
     if not cmake_command_arg.nil?
-      cmake_command_leadin += cmake_command_arg
+      cmake_command_leadin << cmake_command_arg
     end
     @textOut.write_line(
       cmake_command_leadin)
@@ -6837,7 +6856,8 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     write_command_list(cmake_command, cmake_command_arg_main_quoted, arr_args_cmd_quoted)
   end
   def write_command_list_single_line(cmake_command, arr_args_cmd)
-    line = cmake_command + '(' + array_to_string(arr_args_cmd) + ')'
+    line = ''
+    line << cmake_command << '(' << array_to_string(arr_args_cmd) << ')'
     @textOut.write_line(
       line)
   end
@@ -6891,7 +6911,8 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     write_command_list_quoted(str_function, nil, arr_args_func)
   end
   def get_dereferenced_variable_name(str_var)
-    deref = "${#{str_var}}"
+    deref = ''
+    deref << '${' << str_var << '}'
   end
   def add_subdirectory(
     str_subdir)
@@ -6947,7 +6968,8 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     # We'll internally make use of a _v2cg ("generated") prefix.
     # This is a good idea since such functions are always generated
     # and invoked by us, thus the prefix should indicate our ownership scope.
-    str_function_name_prefixed = '_v2cg_' + str_function_name_raw
+    str_function_name_prefixed = ''
+    str_function_name_prefixed << '_v2cg_' << str_function_name_raw
     write_comment_at_level(COMMENT_LEVEL_STANDARD, 'Dummy function to keep extended variable activity in a throw-away scope')
     put_function(str_function_name_prefixed, nil) do
       yield
@@ -7183,8 +7205,10 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
   def get_keyword_bool(setting); false != setting ? 'ON' : 'OFF' end
   # Generates CMake commands matching the common COMMAND / endCOMMAND pair.
   def gen_scoped_cmake_command(cmake_command, arr_params)
-    cmake_command_b = cmake_command
-    cmake_command_e = 'end' + cmake_command
+    cmake_command_b = ''
+    cmake_command_e = ''
+    cmake_command_b << cmake_command
+    cmake_command_e << 'end' << cmake_command
     write_command_list_single_line(
       cmake_command_b,
       arr_params)
@@ -7390,11 +7414,12 @@ class V2C_CMakeSyntaxGenerator < V2C_SyntaxGeneratorBase
     config_name.clone.upcase.tr(' ','_')
   end
   def get_name_of_per_config_type_property(property_name, config_name)
-    res = property_name
+    res = ''
+    res << property_name
     if not config_name.nil?
       config_name_upper = get_config_name_upcase(
         config_name)
-      res += '_' + config_name_upper
+      res << '_' << config_name_upper
     end
     return res
   end
@@ -7461,7 +7486,8 @@ class V2C_CMakeV2CSyntaxGeneratorBase < V2C_CMakeSyntaxGenerator
   VS_GLOBAL_PREFIX_NAME = 'VS_GLOBAL_'
   def format_global_prefix(
     sub)
-    res = VS_GLOBAL_PREFIX_NAME + sub
+    res = ''
+    res << VS_GLOBAL_PREFIX_NAME << sub
   end
   def write_vcproj2cmake_func_comment()
     write_comment_at_level(COMMENT_LEVEL_STANDARD, "See function implementation/docs in #{VCPROJ2CMAKE_FUNC_CMAKE_LOCATION}")
@@ -7885,7 +7911,8 @@ class V2C_CMakeV2CConditionGeneratorBase < V2C_CMakeV2CSyntaxGenerator
       # Name may contain spaces - need to handle them!
       build_type_flattened = util_flatten_string(build_type)
       platform_name_flattened = util_flatten_string(platform_name)
-      var_name = 'v2c_want_buildcfg_platform_' + platform_name_flattened + '_build_type_' + build_type_flattened
+      var_name = ''
+      var_name << 'v2c_want_buildcfg_platform_' << platform_name_flattened << '_build_type_' << build_type_flattened
     end
     return var_name
   end
@@ -8028,12 +8055,14 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
     arr_sources,
     var_prefix = NAME_V2C_SOURCE_LIST_PREFIX)
     if not source_list_description.nil?
-      cmt_file_list = 'File list: ' + source_list_description
+      cmt_file_list = ''
+      cmt_file_list << 'File list: ' << source_list_description
       write_comment_at_level(
         COMMENT_LEVEL_STANDARD,
         cmt_file_list)
     end
-    source_files_list_var_name = var_prefix + source_list_name
+    source_files_list_var_name = ''
+    source_files_list_var_name << var_prefix << source_list_name
     item_aggregation_path_rel = @p_item_aggregation_path_rel.to_s
     arr_sources_aggregated = arr_sources.collect { |source|
       path_join(
@@ -8107,9 +8136,9 @@ class V2C_CMakeFileListGenerator_VS7 < V2C_CMakeFileListGeneratorBase
     this_source_group = ''
     if not parent_source_group.nil?
       if parent_source_group != ''
-        this_source_group = parent_source_group + CMAKE_SOURCE_GROUP_HIERARCHY_SEPARATOR + group_name
+        this_source_group << parent_source_group << CMAKE_SOURCE_GROUP_HIERARCHY_SEPARATOR << group_name
       else
-        this_source_group = group_name
+        this_source_group << group_name
       end
     end
 
@@ -8224,7 +8253,8 @@ class V2C_ToolFlagsGenerator_Linker_MSVC < V2C_ToolFlagsGenerator_Base
       # Nope, we don't need to strip off .lib.
       #nodefaultlib_arg = File.basename(nodefaultlib, '.lib')
       nodefaultlib_arg = nodefaultlib
-      linker_arg_nodefaultlib = '/NODEFAULTLIB:' + nodefaultlib_arg
+      linker_arg_nodefaultlib = ''
+      linker_arg_nodefaultlib << '/NODEFAULTLIB:' << nodefaultlib_arg
       arr_nodefaultlib.push(linker_arg_nodefaultlib)
     end
     arr_nodefaultlib
@@ -8794,7 +8824,8 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
             # should be moved into a vcproj2cmake_func helper, too...
             gen_condition = V2C_CMakeV2CConditionGenerator.new(@textOut, false)
             gen_condition.generate(condition) do
-              var_name_obj_sources = NAME_V2C_SOURCE_LIST_PREFIX + 'obj_deps'
+              var_name_obj_sources = ''
+              var_name_obj_sources << NAME_V2C_SOURCE_LIST_PREFIX << 'obj_deps'
               write_list_quoted(var_name_obj_sources, arr_obj)
               arr_file_elems = [ get_dereferenced_variable_name(var_name_obj_sources) ]
               file_list_mark_as_external_objects(arr_file_elems, true)
@@ -10656,7 +10687,8 @@ class V2C_CMakeLocalFileGenerator < V2C_CMakeFileGenerator
   end
   def source_groups_enabled; true == @flag_source_groups_enabled end
   def generate_per_project_source_groups(dest_dir, target_name, arr_filtered_file_lists)
-    sg_file_name = target_name + '.cmake'
+    sg_file_name = ''
+    sg_file_name << target_name << '.cmake'
     output_file_location = File.join(dest_dir, sg_file_name)
     temp_generator_sg = V2C_GenerateIntoTempFile.new('vcproj2cmake', output_file_location)
     temp_generator_sg.generate { |textOutSG|
