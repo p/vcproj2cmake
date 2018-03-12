@@ -15,10 +15,44 @@
 # generation mode of operation _side-by-side_ existing and _updated_ .vcproj files,
 # fully support recursive handling of all .vcproj file groups (filters).
 
-# If you add code, please try to keep this file generic and modular,
-# to enable other people to hook into a particular part easily
-# and thus keep any additions specific to the requirements of your local project _separate_.
+# Some policy notes:
+# - currently this file is one monster G0d implementation file,
+#   due to the (possibly misguided?) intent of
+#   achieving a single large "directly redistributable file";
+#   it is thus at least expected
+#   that implementation tries hard
+#   to follow a precise sorting of implementation layers
+#   (base layers implemented first,
+#   with more complex / aggregating / collecting implementations
+#   following later)
+# - implementation here is intended to be strongly (maximally) module:ar,
+#   i.e. to have important core algorithm functionality
+#   implemented in an "external"/"isolated" manner
+#   by a large number of smaller module:s,
+#   which then simply is to be include:d/"collected" and "called"
+#   by some aggregating, hosting classes -
+#   this allows for:
+#   - a rather tiny scope of local implementation,
+#     which yields both high testability (minimal dependencies)
+#     and very good reviewability
+#   - a very flexible, elegant, minimalist-change rework
+#     (re-grouping, basically)
+#     of existing implementation code
+#     whenever such rework turns out to be necessary
+#   https://stackoverflow.com/questions/15478747/instance-variables-in-modules
+#     "Pickaxe suggests not giving your mixin any state; instead,
+#     mandate that anything which includes it must provide a stack method.
+#     In many ways, a mixin with state isn't a mixin. It's a class."
+#   https://www.sitepoint.com/understanding-scope-in-ruby/
+#   https://codequizzes.wordpress.com/2014/04/30/rubys-scope-gates/
+#   https://codequizzes.wordpress.com/2014/04/07/rubys-self-keyword-and-implicit-self/
+#   http://www.railstips.org/blog/archives/2006/11/18/class-and-instance-variables-in-ruby/
+# - if you add code, please try to keep this file generic and modular,
+#   to enable other people to hook into a particular part easily
+#   and thus keep any additions specific to the requirements of your local project _separate_.
 
+# http://www.virtuouscode.com/2011/06/23/how-ruby-helps-you-fix-your-broken-code/
+# https://mislav.net/2011/06/ruby-verbose-mode/
 # TODO/NOTE:
 # Always make sure that a simple vcproj2cmake.rb run will result in a
 # fully working almost completely _self-contained_ CMakeLists.txt,
@@ -84,6 +118,14 @@ end
 
 
 
+# WARNING: the direct concatenation used here
+# ('"' << file << '"')
+# may lead to
+# Exception `TypeError' at v2c_core.rb:324 -
+# no implicit conversion of Pathname into String
+# whenever non-string objects (here: Pathname) are used.
+# In such cases,
+# use the nearby non-string ("object") variant instead.
 def quoted_string_from_string(
   str)
    res = ''
@@ -163,6 +205,8 @@ def load_configuration
   # --> the user will _know_ immediately in case
   # a now non-existent class member gets modified
   # (i.e. a config file update happened!).
+  # But possibly we should instead use a YAML configuration file:
+  # https://stackoverflow.com/questions/16202290/optionparser-to-parse-arguments-form-file-instead-of-command-line
 
   # load common settings
   settings_file_prefix = 'vcproj2cmake_settings'
@@ -360,6 +404,11 @@ end
 
 # "Re: Does Ruby support exception wrapping (exception chaining)?"
 #   http://www.ruby-forum.com/topic/148193#982947
+# IMPORTANT NOTE: due to
+# this inherently *properly fully referencing* mechanism (chaining)
+# it is *not* needed to
+# *manually* hand over (parts of) inner exception context
+# (such as e.message) where an outer exception type is thrown.
 class V2C_ChainedError < StandardError
   attr_reader :original
   def initialize(
@@ -376,6 +425,14 @@ class V2C_ChainedError < StandardError
   end
 end
 
+# Some hints about logging:
+# - always place logging at the *end* of a larger section
+#   of potentially interesting variables,
+#   to easily be able to add logging of newly added variables
+# - when doing initialize() logging,
+#   should prefer logging of instance variables rather than input variables
+#   (will catch missing instance assignments,
+#   IOW achieves end-to-end validation)
 class Logger
   def initialize(
     class_name,
@@ -762,6 +819,13 @@ class V2C_ParserBase < V2C_LoggerBase
   def be_optimistic; FOUND_TRUE end
 end
 
+# Manages a build condition expression.
+# https://www.britannica.com/topic/condition-logic
+# Currently VS2010 syntax only, but further abstraction is *very* worthwhile.
+# Examples of more interesting MSVS2010 (well, msbuild) conditions:
+# '%(_OutputFileFromLib.FullPath)' != '$([System.IO.Path]::GetFullPath($(TargetPath)))'
+# '%(PreLinkEvent.Message)' != ''
+# '@(BuildMacro)' != ''
 class V2C_Info_Condition
   def initialize(
     str_condition = nil)
@@ -1184,7 +1248,7 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
     @arr_delay_load_dlls = Array.new
     @generate_debug_information_enable = false
     @generate_map_file_enable = false
-    @arr_ignore_specific_default_libraries = Array.new
+    @arr_ignore_specific_default_libraries = Array.new # probably related to CMAKE_<LANG>_STANDARD_LIBRARIES..... variables
     @link_incremental = 0 # 1 means NO, thus 2 probably means YES?
     @map_file_name = nil
     @module_definition_file = nil
@@ -1193,6 +1257,8 @@ class V2C_Tool_Linker_Info < V2C_Tool_Base_Info
     @per_user_redirection_enable = false
     @randomized_base_address_enable = false
     @register_output_enable = false
+    # CMAKE_<lang>_STACK_SIZE probably is the equivalent
+    # for linker stack size settings.
     @strip_private_symbols_file = nil
     @subsystem = SUBSYSTEM_CONSOLE
     @target_machine = MACHINE_NOT_SET
@@ -2198,7 +2264,7 @@ EOF
 end
 
 # XML support as required by VS7+/VS10 parsers:
-require 'rexml/document'
+require 'rexml/document' # FIXME PERFORMANCE: THIS LINE IS SLOOOW
 
 # TODO: oerks, it seems making use of rexml/streamlistener
 # may be a much better way of parsing content in a linear way.
@@ -2862,7 +2928,7 @@ class V2C_VSToolCompilerParser < V2C_VSToolDefineParserBase
       get_compiler_info().debug_information_format = parse_debug_information_format(setting_value)
     when TEXT_DISABLESPECIFICWARNINGS
       parse_disable_specific_warnings(get_compiler_info().arr_tool_variant_specific_info[0].arr_disable_warnings, setting_value)
-    when TEXT_ENABLEFUNCTIONLEVELLINKING
+    when TEXT_ENABLEFUNCTIONLEVELLINKING # XXX vcxproj uses *differently-named* "FunctionLevelLinking"
       get_compiler_info().function_level_linking_enable = get_boolean_value(setting_value)
     when TEXT_ENABLEINTRINSICFUNCTIONS
       get_compiler_info().intrinsic_functions_enable = get_boolean_value(setting_value)
@@ -4372,6 +4438,8 @@ class V2C_VS10ItemGroupFileElemParser < V2C_VS10ParserBase
     found = be_optimistic()
     setting_key = subelem_xml.name
     setting_value = subelem_xml.text
+    # We're parsing the ItemGroup's Item element's sub elements here.
+    # MSVS speak: they are called ItemMetadata.
     case setting_key
     when 'Filter'
       get_file_elem().filter = vs_normalized_filter_name(setting_value)
@@ -4738,7 +4806,7 @@ class V2C_VS10ToolLinkerParser < V2C_VSToolLinkerParser
 end
 
 class V2C_VS10ToolMIDLParser < V2C_VSToolMIDLParser
-  include V2C_VS10Syntax
+  include V2C_VS10Syntax # parse_boolean_property_value
 end
 
 class V2C_VS10ItemDefinitionGroupParser < V2C_VS10BaseElemParser
@@ -5414,6 +5482,16 @@ class V2C_GenerateIntoTempFile
       # we only write back the live CMakeLists.txt in case anything did change.
       # This is especially important in case of multiple concurrent builds
       # on a shared source on NFS mount.
+      #
+      # Note that since we "steal" the file from
+      # the Tempfile object
+      # by renaming it away,
+      # Tempfile when deciding to do a final deletion
+      # will then complain with message
+      #     removing [FILENAME]...Exception `Errno::ENOENT' at /usr/lib/ruby/1.9.1/tempfile.rb:282 - No such file or directory - [FILENAME]
+      # (there is no way to
+      # atomically/transactionally swap()/un-possess the file out of
+      # the Tempfile object)
       mover = V2C_CMakeFilePermanentizer.new(tmpfile_path, @destination_file, @file_create_permissions)
       mover.process
     }
@@ -6666,6 +6744,14 @@ class V2C_CMakeV2CConditionGeneratorBase < V2C_CMakeV2CSyntaxGenerator
         build_type = condition.get_build_type()
         build_type_cooked = prepare_string_literal(build_type)
         arr_cmake_build_type_condition = nil
+        # XXX: this open-coded assembly of CMake condition syntax
+        # ought to be handled by the syntax generator internally
+        # (by returning an object which
+        # represents a properly hierarchically layered
+        # set of partial conditions),
+        # to then here be fed into a
+        # correspondingly modernized
+        # write_set_var_bool_conditional() helper.
         if config_multi_authoritative == build_type
           arr_cmake_build_type_condition = [ 'CMAKE_CONFIGURATION_TYPES', 'OR', 'CMAKE_BUILD_TYPE', 'STREQUAL', build_type_cooked ]
         else
@@ -6737,6 +6823,8 @@ end
 class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
   VS7_UNWANTED_FILE_TYPES_REGEX_OBJ = %r{\.(lex|y|ico|bmp|txt)$}
   VS7_LIB_FILE_TYPES_REGEX_OBJ = %r{\.lib$}
+  # TODO: perhaps we should add a filelist *type* parameter,
+  # to have additional information for inner logging activity.
   def initialize(
     textOut,
     project_name,
@@ -7207,6 +7295,8 @@ class V2C_CMakeProjectTargetGenerator < V2C_CMakeV2CSyntaxGenerator
   def put_source_vars_combined_list(arr_sub_source_list_var_names)
     next_paragraph()
     put_list_of_lists('SOURCES', arr_sub_source_list_var_names)
+    # Side note: CMAKE_<LANG>_IGNORE_EXTENSIONS is a related variable
+    # which we might eventually want to use somewhere.
   end
   def put_hook_post_sources; @localGenerator.put_customization_hook_from_cmake_var('V2C_HOOK_POST_SOURCES') end
   def put_hook_post_definitions
@@ -8293,6 +8383,13 @@ class V2C_CMakeGlobalBootstrapCodeGenerator < V2C_CMakeV2CSyntaxGenerator
     #str_cmake_minimum_version_reason = 'CMakeParseArguments module'
     write_comment_at_level(COMMENT_LEVEL_MINIMUM,
       ">= #{str_cmake_minimum_version} due to crucial #{str_cmake_minimum_version_reason}")
+    # cmake_minimum_required() is required to be mentioned open-coded
+    # per-CMakeLists.txt (exact requirement seems to be:
+    # to be executed whenever it has not been done before within a scope),
+    # thus we always do need to generate this line
+    # rather than having it carried out by our module file.
+    # Having it mentioned by an included macro executed locally
+    # is not accepted either.
     write_cmake_minimum_version(str_cmake_minimum_version)
     next_paragraph()
   end
@@ -8619,6 +8716,10 @@ class V2C_CMakeSourceGroupFileContentGenerator < V2C_CMakeV2CSyntaxGenerator
             element_manual_quoting(sg_files + sg_name_flat_deref)
           ]
         end
+        # XXX: the rather ugly manual quoting handling above
+        # quite possibly ought to be
+        # a central responsibility of the command generator instead,
+        # right?
         write_command_list(
           '_v2c_target_source_group_define', target_name, arr_func_parms)
       end
@@ -9146,6 +9247,26 @@ class V2C_ProjectPostProcess < V2C_LoggerBase
   end
 end
 
+# Suitably central location for comment:
+# we should generally avoid
+# trying to dirtily figure out
+# whether we can "skip" conversion
+# of certain configuration files
+# (e.g. by means of file timestamp comparison
+# of input vs. output files):
+# while a *main* project file may still be older than its already
+# generated translated file,
+# that project file might include certain *other* project-related files
+# which indeed *have* been updated after the last conversion run
+# (and thus *should* trigger a conversion re-run!).
+# Thus the entire project *should* have a conversion re-run,
+# which we would fail to do
+# in case we omitted checking timestamps of inner included files, *too*.
+# Thus better simply forget
+# about attempting to do any
+# "does this really need a conversion update?"
+# checks
+# (well, at least at parsing time!).
 def v2c_convert_project_inner(p_script, p_master_project, arr_p_parser_proj_files, p_generator_proj_file)
 
   arr_projects = Array.new

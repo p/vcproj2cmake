@@ -1,0 +1,23 @@
+=== Publishing new versions ===
+
+The following should be done directly prior to
+publishing new versions:
+- verify [unit ~] tests
+- verify proper conversion
+- verify that
+  Ruby script execution does not trigger warnings ("FILE:LL: warning: ...")
+- verify that
+  content of generated files
+  (CMakeLists.txt, and possibly further files...)
+  did not deteriorate
+  from old version to current version
+  ("diff -uN CMakeLists.txt.previous CMakeLists.txt")
+- verify that
+  a build within the generated build environment works fine
+- verify that
+  a conversion re-run doesn't bogusly touch (write) any generated files
+  in case their generated content/payload happened to stay the same
+  ("find . -mmin +0 -mmin -1")
+- verify that
+  activity triggered by tools/download_projects_random seems fine
+  (i.e., no FAILs - in case of input candidates being valid, that is)

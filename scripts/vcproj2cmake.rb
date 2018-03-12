@@ -3,6 +3,8 @@
 # This file is part of the vcproj2cmake build converter (vcproj2cmake.sf.net)
 #
 
+# For certain central documentation, see relevant central location (implementation files).
+
 require 'pathname'
 require 'find' # Find.find()
 

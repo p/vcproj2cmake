@@ -3,6 +3,8 @@
 # This file is part of the vcproj2cmake build converter (vcproj2cmake.sf.net)
 #
 
+# For certain central documentation, see relevant central location (implementation files).
+
 require 'find'
 require 'pathname'
 
@@ -522,6 +524,12 @@ def execute_work_package(unitGlobal, workPackage, want_multi_processing)
     thread_wait_seconds = 120
     threads.each { |aThread|
       # Could add a count here, to bail out only after a certain limit is reached
+      # Could robustify (get rid of this imprecisely implemented hard bailout)
+      # this implementation, by
+      # always be trying a join() on threads remaining within a "pending workers" array,
+      # with small timeout each, and printing "still waiting" diagnostics,
+      # and removing each successfully join()ed thread from the array,
+      # and NOT doing a hard bailout (or only after extreme amounts of time).
       while aThread.join(thread_wait_seconds).nil?
         # Still running!? It's best to cleanly(?) error out completely,
         # since continuing (i.e. merely breaking out of the loop)

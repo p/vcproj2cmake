@@ -2113,6 +2113,9 @@ function(v2c_target_pdb_configure _target _build_platform _build_type)
     # Expansion Rule (see CMake source).
     _v2c_buildcfg_buildtype_determine_upper("${_build_type}")
     if(v2c_target_pdb_configure_PDB_NAME)
+      # TODO: if possible, should also support setting of
+      # CMAKE_DEBUG_SYMBOL_SUFFIX (currently Ninja-specific)
+      # .
       set_property(TARGET ${_target} PROPERTY PDB_NAME_${_v2c_buildcfg_build_type_upper} "${v2c_target_pdb_configure_PDB_NAME}")
     endif(v2c_target_pdb_configure_PDB_NAME)
     if(v2c_target_pdb_configure_PDB_OUTPUT_DIRECTORY)
@@ -2421,4 +2424,10 @@ function(v2c_directory_post_setup)
     _v2c_directory_post_setup_do_rebuilder("${directory_projects_list_}" "${dir_orig_proj_files_list_}")
   endif(directory_projects_list_)
   v2c_hook_invoke("${V2C_HOOK_DIRECTORY_POST}")
+  # Yes indeed, there's no corresponding symmetric V2C_HOOK_DIRECTORY_PRE.
+  # a) V2C_HOOK_DIRECTORY_PRE variable availability is uncertain:
+  #    V2C parts need bootstrapping, which at the desired invocation time
+  #    is not a given
+  # b) hook_pre.txt and/or V2C_HOOK_PROJECT ought to be able to fulfill
+  #    all (most?) of V2C_HOOK_DIRECTORY_PRE's duties
 endfunction(v2c_directory_post_setup)
