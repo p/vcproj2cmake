@@ -1264,7 +1264,8 @@ class V2C_Info_Condition
       }
       if string_nil_or_empty(build_type)
         # TODO!!
-        log_fatal "could not parse build type from condition #{str_condition_cooked}"
+        raise V2C_ParserError,
+          "could not parse build type from condition #{str_condition_cooked}"
       end
       @build_type = build_type
       @platform = platform
@@ -8340,12 +8341,21 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
         # consult our tool processors in order to
         # have their output marked as "generated" each.
         if false == info_file.is_generated
-          v2c_generator_check_file_accessible(
-            @project_dir,
-            f,
-            'file item in project',
-            @project_name,
-            (V2C_Cfg::validate_vcproj_abort_on_error > 0))
+          begin
+            v2c_generator_check_file_accessible(
+              @project_dir,
+              f,
+              'file item in project',
+              @project_name)
+          rescue V2C_FileNotAccessibleError => e
+            str_report = "Improper content of the original project file (please fix it!) [#{get_exception_dump(e)}]"
+            abort_on_error = (V2C_Cfg::validate_vcproj_abort_on_error > 0)
+            if abort_on_error
+              log_fatal "#{str_report} - will abort and thus NOT conversion-generate a potentially executable yet actually broken configuration."
+            else
+              log_error str_report
+            end
+          end
         end
 
         ## Ignore all generated files, for now.
@@ -10758,9 +10768,12 @@ class V2C_CMakeRootFileContentGenerator < V2C_CMakeLocalFileContentGenerator
   end
 end
 
+class V2C_FileNotAccessibleError < V2C_ChainedError
+end
+
 # Hrmm, I'm not quite sure yet where to aggregate this function...
 # (missing some proper generator base class or so...)
-def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name, abort_on_error)
+def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name)
   file_accessible = false
   log_debug "project_dir #{project_dir} file_relative #{file_relative} project_name #{project_name}"
   if V2C_Cfg::validate_vcproj_ensure_files_ok
@@ -10786,18 +10799,13 @@ def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_de
       end
     end
     if not true == file_accessible
-      str_report = "Improper content of the original project file (please fix it!) [#{msg_error}]"
-      if abort_on_error
-        # FIXME: should be
-        # raising an exception rather than exiting, to
-        # not be unconditionally *forced* to
-        # completely directly exit out on
-        # entire possibly recursive (global) operation
-        # when a single project is in error...
-        log_fatal "#{str_report} - will abort and thus NOT conversion-generate a potentially executable yet actually broken configuration."
-      else
-        log_error str_report
-      end
+      # Better be
+      # raising an exception rather than exiting, to
+      # not be unconditionally *forced* to
+      # completely directly exit out on
+      # entire possibly recursive (global) operation
+      # when a single project is in error...
+      raise V2C_FileNotAccessibleError, msg_error
     end
   else
     file_accessible = true
