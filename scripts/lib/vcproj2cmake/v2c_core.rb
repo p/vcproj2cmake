@@ -660,11 +660,21 @@ def get_exception_dump(
   e.backtrace.join(STR_CTRL_LFTAB).sub(STR_CTRL_LFTAB, ": #{e}#{e.class ? " (#{e.class})" : ''}" + STR_CTRL_LFTAB)
 end
 
+# Provides maximally descriptive output:
+# - "exceptional error" search keyword marker (usability!)
+# - full context details
+def get_exception_presentation_description(
+  e)
+  s = ''
+  s << 'exceptional error: ' << get_exception_dump(e)
+  s
+end
+
 def report_and_reraise_unless_disallowed(
   domain_specific_msg,
   e)
   error_msg = ''
-  error_msg << 'failed: ' << domain_specific_msg << ': ' << get_exception_dump(e)
+  error_msg << 'failed: ' << domain_specific_msg << ': ' << get_exception_presentation_description(e)
   log_error error_msg
   # Hohumm, this variable is not really what we should be having here...
   if (V2C_Cfg::validate_vcproj_abort_on_error > 0)
@@ -775,7 +785,7 @@ class Logger
     e,
     action,
     reraise = true)
-    log_error "unhandled exception occurred during #{action}! " + get_exception_dump(e)
+    log_error "unhandled exception occurred during #{action}! " + get_exception_presentation_description(e)
     if reraise
       raise
     end
@@ -3214,7 +3224,7 @@ class V2C_XmlParserBase < V2C_ParserBase
         e.message,
         'invalid value for Integer')
         parser_error(
-          "encountered ArgumentError - probably integer parsing of #{setting_key} --> #{setting_value} failed: #{get_exception_dump(e)}",
+          "encountered ArgumentError - probably integer parsing of #{setting_key} --> #{setting_value} failed: #{get_exception_presentation_description(e)}",
           true)
       else
         raise
@@ -8348,7 +8358,7 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
               'file item in project',
               @project_name)
           rescue V2C_FileNotAccessibleError => e
-            str_report = "Improper content of the original project file (please fix it!) [#{get_exception_dump(e)}]"
+            str_report = "Improper content of the original project file (please fix it!) [#{get_exception_presentation_description(e)}]"
             abort_on_error = (V2C_Cfg::validate_vcproj_abort_on_error > 0)
             if abort_on_error
               log_fatal "#{str_report} - will abort and thus NOT conversion-generate a potentially executable yet actually broken configuration."
