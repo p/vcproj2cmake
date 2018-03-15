@@ -10466,9 +10466,10 @@ end
 def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_description, project_name, abort_on_error)
   file_accessible = false
   if $v2c_validate_vcproj_ensure_files_ok
+    msg_error = nil
     instance_ref = "File #{quoted_string_from_string(file_relative)} (#{file_item_description}) as listed by project named #{project_name}"
     if string_nil_or_empty(file_relative)
-      log_warn "#{instance_ref} is an empty string!?"
+      msg_error = "#{instance_ref} is an empty string!?"
     else
       # TODO: perhaps we need to add a permissions check, too?
       file_location = File.join(project_dir, file_relative)
@@ -10479,18 +10480,20 @@ def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_de
         # to be printed as a summary
         # after a project's conversion step ended.
         msg_error = "#{instance_ref} does not exist!? (perhaps filename with wrong case, or wrong path, ..., in either file lists or perhaps source group filter lists)"
-        str_report = "Improper content of the original project file (please fix it!) [#{msg_error}]"
-        if abort_on_error
-          # FIXME: should be
-          # raising an exception rather than exiting, to
-          # not be unconditionally *forced* to
-          # completely directly exit out on
-          # entire possibly recursive (global) operation
-          # when a single project is in error...
-          log_fatal "#{str_report} - will abort and thus NOT conversion-generate a potentially executable yet actually broken configuration."
-        else
-          log_error str_report
-        end
+      end
+    end
+    if not true == file_accessible
+      str_report = "Improper content of the original project file (please fix it!) [#{msg_error}]"
+      if abort_on_error
+        # FIXME: should be
+        # raising an exception rather than exiting, to
+        # not be unconditionally *forced* to
+        # completely directly exit out on
+        # entire possibly recursive (global) operation
+        # when a single project is in error...
+        log_fatal "#{str_report} - will abort and thus NOT conversion-generate a potentially executable yet actually broken configuration."
+      else
+        log_error str_report
       end
     end
   else
