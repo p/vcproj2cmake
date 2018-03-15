@@ -121,6 +121,7 @@ Exit_code_str = Struct.new(
   :reason)
 
 V2C_EXIT_CODE_ERROR_MISC = :misc
+V2C_EXIT_CODE_INPUT_CONTENT_MODIFICATIONS_OCCURRED = :modif
 
 def get_exit_codes(
 )
@@ -130,6 +131,10 @@ def get_exit_codes(
   h[V2C_EXIT_CODE_ERROR_MISC] = Exit_code_str.new(
     1,
     'uncategorized error')
+
+  h[V2C_EXIT_CODE_INPUT_CONTENT_MODIFICATIONS_OCCURRED] = Exit_code_str.new(
+    99,
+    'modifications of input-side content occurred (may want to launch another re-run)')
 
   h
 end
@@ -233,6 +238,11 @@ end
 # - preserve spaces-in-filenames issue handling capabilities!
 # Unfortunately this helper seems to be required for e.g.:
 # - generation of command opt elements into a text stream
+# - Kernel::system(), since that API uuuunfortunately does not support an array-based argument
+#   (Massive weaknesses, oh my...:
+#   https://medium.com/zendesk-engineering/running-a-child-process-in-ruby-properly-febd0a2b6ec8
+#   https://stackoverflow.com/questions/13338147/ruby-system-method-arguments
+#   )
 def flatten_string_elements(
   arr_str)
 
@@ -282,6 +292,16 @@ def number_of_processors
     end
   end
   raise "can't determine 'number_of_processors' for '#{RUBY_PLATFORM}'"
+end
+
+# This is supposed to figure out whether
+# an execution environment is interactive (user session)
+# or not.
+# - https://stackoverflow.com/questions/3384982/how-can-i-determine-if-my-process-is-being-run-interactively
+# - https://stackoverflow.com/questions/1312922/detect-if-stdin-is-a-terminal-or-pipe
+# [ - https://www.gnu.org/software/bash/manual/html_node/Is-this-Shell-Interactive_003f.html ]
+def is_interactive_environment
+  $stdout.isatty
 end
 
 require 'uri' # URI
@@ -1331,6 +1351,466 @@ class V2C_Ref_Origin_URI_Item < V2C_Ref_Origin
     @ref_resource
   end
 end
+
+class ContentModifier < V2C_LoggerBase
+
+  def initialize(
+    )
+    super(
+      )
+  end
+
+  def edit(
+    # assume arr_ref_location to be NON-empty
+    # (else no reason for editing in the first place!)
+    arr_ref_location)
+
+    raise_error_abstract_base_method
+  end
+end
+
+class ContentModifier_editor_executable < ContentModifier
+  def initialize(
+    editor)
+    super(
+      )
+    @editor = editor
+  end
+
+  private
+
+  def execute(
+    executable,
+    arr_opt)
+
+    if is_interactive_environment
+      opts = flatten_cmdline_opts(
+        arr_opt)
+      logger.debug "About to launch editor (cmdline: #{executable} #{opts})"
+      return system(
+        executable,
+        *arr_opt) # splat operator
+    else
+      logger.warn 'Non-interactive execution detected - NOT launching interactivity-requiring executable!'
+    end
+  end
+end
+
+# http://vim.wikia.com/wiki/Errorformats
+# https://stackoverflow.com/questions/29088436/whats-the-meaning-of-some-advanced-patterns-in-vim-errorformat-s/29102995
+# Formatting seems to be pretty picky.
+# Do not ever, ever dare to fumble any of this!!
+# It took me several hours to get everything working properly!!
+class VimErrorformat
+  def generate_record(
+    f,
+    l,
+    c,
+    m)
+
+    raise_error_abstract_base_method
+  end
+
+  # Symmetry: to be kept directly nearby format output generation!
+  def get_errorformat
+    raise_error_abstract_base_method
+  end
+
+  private
+
+  WILDCARD = '\\.\\*'
+  # SPECIAL TRICK:
+  # since %s will be translated into
+  # a fixed pattern of
+  # ^\VEXPR\$
+  # (which is to match a precise full-line content!!)
+  # we need to get wildcard regex parts into the result,
+  # to be able to
+  # less precisely match *parts* of a line already!
+  def wildcard_trick(
+    search_expr)
+    r = ''
+    r << WILDCARD << search_expr << WILDCARD
+  end
+  # Small helper to achieve a consistent syntax.
+  def pf( # prefix
+    prefix,
+    content)
+    r = ''
+    r << '{' << prefix << '}' << content
+  end
+end
+
+class VimErrorformat_v2c_braced_keys < VimErrorformat
+  def initialize(
+    )
+    super(
+      )
+  end
+  def generate_record(
+    f,
+    l,
+    c,
+    m,
+    s = nil)
+
+    r = ''
+    #r << quoted_string_from_string(f) << ', '
+    #r << 'line ' << l.to_s << ', '
+    #r << 'col ' << c.to_s << ': '
+    #r << m
+    #if not s.nil?
+    #  r << ' (' << s << ')'
+    #end
+
+    #r << f << ': '
+    #r << 'line ' << l.to_s << ', '
+    #r << 'col ' << c.to_s << ':'
+    #r << wildcard_trick(s) << ':'
+    #r << m
+    r << pf('F', quoted_string_from_string(f))
+    r << pf('L', l.to_s)
+    r << pf('C', c.to_s)
+    r << pf('S', wildcard_trick(s))
+    r << pf('M', m)
+    r
+  end
+
+  def get_errorformat(
+    )
+    #'%*[\"]%f%*[\"]\\,\ line\ %l,\ col\ %c:\ %m\ \\(%s\\)'
+    #'%f:\ line\ %l\\,\ col\ %c:%s:%m'
+    '\\{F\\}\"%f\"\\{L\\}%l\\{C\\}%c\\{S\\}%s\\{M\\}%m'
+  end
+end
+
+class ContentModifier_vim < ContentModifier_editor_executable
+  def initialize(
+    editor)
+    super(
+      editor)
+    @fmt = VimErrorformat_v2c_braced_keys.new
+  end
+
+  def edit(
+    arr_ref_location)
+
+    # Idea: rather than doing a *temporary* setup here,
+    # one could be creating a *longer-lived* fully encompassing setup
+    # where things get launched via an auto-generated ruby script
+    # which would then be able to
+    # remain available for some time,
+    # for the user to *re-launch* (re-create that very workflow context) whenever needed.
+    Tempfile.open('vcproj2cmake_vim_errorfile') { |vim_errorfile|
+      logger.debug 'about to write quickfix list into vim errorfile ' + vim_errorfile.path
+      convert_to_errorfile_content(
+        vim_errorfile,
+        arr_ref_location)
+      vim_errorfile_path = vim_errorfile.path
+
+      V2C_File_Stuff::file_ensure_close(
+        vim_errorfile)
+
+      arr_opt = [
+        ]
+
+      arr_opt.push(
+        '-c')
+      arr_opt.push(
+        ":set errorformat=#{@fmt.get_errorformat()}")
+      # ATTENTION! This does NOT work!
+      # -c will be executed *at the wrong time*, thus
+      # it won't work (no errors available to be parsed -
+      # took me AGES to figure it out!).
+      # Thus setup things manually without -q,
+      # by doing [set errorformat and] cfile.
+      #arr_opt.push(
+      #  '-q')
+
+      add_opt_command(
+        arr_opt,
+        ':cfile ' + vim_errorfile_path)
+      add_opt_command(
+        arr_opt,
+        ':copen')
+
+      return execute(
+        @editor,
+        arr_opt)
+    }
+  end
+
+  private
+
+  def add_opt_command(
+    arr_opt,
+    cmd)
+    arr_opt.push(
+      '-c')
+    arr_opt.push(
+      cmd)
+  end
+
+  def escape_search_string(
+    s_in)
+    s = obj_deep_copy(s_in)
+    escape_backslash!(s)
+    s
+  end
+
+  def convert_to_errorfile_content(
+    errorfile,
+    arr_ref_location)
+
+    content_location = f = l = c = m = s = LoopVarPreconstruct()
+    arr_ref_location.each do |ref_location| # V2C_Ref_Origin_URI_Item
+      content_location = ref_location.ref_content # V2C_Content_Location_Text
+      f = V2C_File_Stuff::from_uri(ref_location.uri())
+      l = content_location.row
+      c = content_location.col
+      m = content_location.str_hint
+      s = escape_search_string(content_location.str_obj)
+      m = 'UNKNOWN_ERROR' if m.nil?
+      # Pass everything that we have, maximally precisely/specifically!
+      r = @fmt.generate_record(
+        f,
+        l,
+        c,
+        m,
+        s)
+      logger.debug "errorfile record: #{r}"
+      errorfile.puts r
+    end
+  end
+
+  def format_hint(
+    content_location)
+    res = ''
+    h = content_location.str_hint
+    o = content_location.str_obj
+    arr_parts = [
+    ]
+    if not h.nil?
+      arr_parts.push(
+        h)
+    end
+    if not o.nil?
+      arr_parts.push(
+        o)
+    end
+    if not arr_parts.empty?
+      res << arr_parts.join(': ')
+    end
+    res
+  end
+end
+
+# Maps a path-based input to
+# a matching content modifier (slang: "editor"), hopefully.
+module DetermineContentModifier
+  def determine(
+    path_editor)
+    log_debug "path_editor: #{path_editor}"
+    if not path_editor.to_s.empty?
+      p_path_editor = Pathname.new(path_editor)
+      basename = p_path_editor.basename.to_s
+      ContentModifier_arr.each do |modifier_elem|
+        regex = modifier_elem.basename_regex
+        log_debug "regex #{regex}, basename #{basename}"
+        if regex.match(basename)
+          log_debug "match found! #{basename} --> #{modifier_elem.class_contentmodifier.class}"
+          return modifier_elem.class_contentmodifier.new(
+            path_editor)
+        end
+      end
+      # TODO: should support
+      # trying to do a last-ditch attempt at an edit here, via
+      # providing a ContentModifier_editor_executable derivation which
+      # tries to process content via
+      # generic abstraction helpers such as:
+      # - xdg-open
+      # - open
+      nil
+    end
+  end
+
+  module_function :determine
+
+  private
+
+  ContentModifier_str = Struct.new(
+    :basename_regex,
+    :class_contentmodifier)
+
+  ContentModifier_arr = [
+    ContentModifier_str.new(%r{\bvi}, ContentModifier_vim)
+  ]
+end
+
+def get_locations_human_readable(
+  arr_ref_location)
+  arr_locations = arr_ref_location.collect { |ref_location|
+    ref_location.human_readable
+  }
+  arr_locations
+end
+
+class DetermineDefaultEditor
+  def determine
+    # https://robots.thoughtbot.com/visual-ize-the-future
+    arr_envs = [
+      'VISUAL',
+      'EDITOR']
+    path = nil
+    arr_envs.each do |env|
+      path = ENV[env]
+      if not path.nil?
+        break
+      end
+    end
+    path
+  end
+end
+
+class ContentModificationsHandler
+  def initialize(
+      modify_inplace)
+    @modify_inplace = modify_inplace
+    @arr_ref_location_pending = []
+    @arr_ref_location_modified = []
+    @contentmodifier = nil
+  end
+
+  def request_modification(
+    arr_ref_location)
+    res = false
+    if @modify_inplace
+      return try_modification(
+        arr_ref_location)
+    else
+      log_debug "append to pending locations: #{arr_ref_location.inspect}"
+      @arr_ref_location_pending.concat(
+        arr_ref_location)
+    end
+    res
+  end
+
+  def final_try_modification(
+    )
+    try_modification(
+      @arr_ref_location_pending)
+  end
+
+  def indicate_locations_modified(
+    arr_ref_location)
+
+    @arr_ref_location_modified.concat(
+      arr_ref_location)
+    arr_ref_location.clear
+  end
+
+  def get_locations_modified(
+    )
+    @arr_ref_location_modified
+  end
+
+  private
+
+  def try_modification(
+    arr_ref_location)
+    res = false
+    str_what = 'ad-hoc/interactive content modification'
+    log_info 'Attempting to achieve ' + str_what + ' - items:' + STR_CTRL_LF + get_locations_human_readable(arr_ref_location).join(STR_CTRL_LF)
+    if V2C_Cfg::issue_modify # FIXME REWORK
+      contentmodifier = get_content_modifier
+      if contentmodifier.nil?
+        log_info 'content modifier not configured/available --> skipping.'
+      else
+        res = contentmodifier.edit(
+          arr_ref_location)
+        if true == res
+          indicate_locations_modified(
+            arr_ref_location)
+        end
+      end
+    else
+      log_info str_what + ' not configured --> skipping.'
+    end
+    res
+  end
+
+  def get_content_modifier
+    if @contentmodifier.nil?
+      determineeditor = DetermineDefaultEditor.new
+      @contentmodifier = DetermineContentModifier::determine(
+        determineeditor.determine)
+    end
+    @contentmodifier
+  end
+end
+
+# I am resorting to
+# aggregating this object fully globally, since
+# it is used by
+# both individual handlers and final global handling.
+# This access would otherwise be much more complex to implement
+# (pass between sub hierarchies each...).
+$modifications_handler = nil
+
+def get_modifications_handler_direct
+  $modifications_handler
+end
+
+def get_modifications_handler
+  if V2C_Cfg::issue_modify
+    $modifications_handler ||= ContentModificationsHandler.new(
+      V2C_Cfg::issue_modify_inplace)
+  end
+  get_modifications_handler_direct
+end
+
+def bailout_when_modified
+  if true == V2C_Cfg::issue_modify_final_bailout_when_modified
+    modhandler = get_modifications_handler_direct
+    if not modhandler.nil?
+      modifications = modhandler.get_locations_modified()
+      if not modifications.empty?
+        exitcodes = get_exit_codes()
+        code = exitcodes[V2C_EXIT_CODE_INPUT_CONTENT_MODIFICATIONS_OCCURRED]
+        log_warn 'Exiting: ' + code.reason
+        exit code.value
+      end
+    end
+  end
+end
+
+def report_handle_issue(
+  descr,
+  str_item,
+  ref_origin) # NOTE: this one is *expected* to properly be a valid object.
+  log_debug "#{__method__.to_s} ref_origin #{ref_origin.inspect}"
+  ref_origin.ref_content.str_hint = descr
+  log_warn "Issue occurred: #{descr} (#{str_item}) [#{ref_origin.human_readable}]"
+  modhandler = get_modifications_handler
+  if not modhandler.nil?
+    return modhandler.request_modification(
+      [ref_origin])
+  else
+    log_debug 'No modifications handler.'
+  end
+  return false
+end
+
+def modifications_hook_final(
+  )
+  modhandler = $modifications_handler
+  if not modhandler.nil?
+    modhandler.final_try_modification(
+      )
+  end
+  bailout_when_modified
+end
+
 
 CHAR_COMMENT_START = V2CS::HASH
 def read_commented_text_file_lines(filename)
@@ -8841,6 +9321,10 @@ class V2C_CMakeFileListGeneratorBase < V2C_CMakeV2CSyntaxGenerator
               'file item in project',
               @project_name)
           rescue V2C_FileNotAccessibleError => e
+            skip_issue = false
+            if not false != skip_issue
+              report_handle_issue(e.message, f, info_file.ref_origin)
+            end
             str_report = "Improper content of the original project file (please fix it!) [#{get_exception_presentation_description(e)}]"
             abort_on_error = (V2C_Cfg::validate_vcproj_abort_on_error > 0)
             if abort_on_error
@@ -11280,14 +11764,6 @@ def v2c_generator_check_file_accessible(project_dir, file_relative, file_item_de
       if File.exist?(file_location)
         file_accessible = true
       else
-        # TODO: should perhaps queue such errors in a cleverly sorted way,
-        # for the following purposes,
-        # right when a project's conversion step scope ends:
-        # - to be printed as a total summary
-        # - to be able to provide a
-        #   very, very useful ("awesome!")
-        #   fully precisely location-referenced interactive-correction user mode,
-        #   when flag-requested by the user
         msg_error = "#{instance_ref} does not exist!? (perhaps filename with wrong case, or wrong path, ..., in either file lists or perhaps source group filter lists)"
       end
     end
@@ -11998,6 +12474,8 @@ end
 
 # Writes the final message.
 def v2c_convert_finished()
+  modifications_hook_final
+
   log_info %{\
 Finished. You should make sure to have all important V2C settings includes such as vcproj2cmake_defs.cmake somewhere in your CMAKE_MODULE_PATH (probably copy them to <SOURCE_ROOT>/#{V2C_Cfg::module_path_root})}
   log_debug "When doing development, please remember to maintain existing unit tests (details see tests/README.txt)."

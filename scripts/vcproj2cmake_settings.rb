@@ -25,6 +25,23 @@ $v2c_module_path_local = "./#{$v2c_module_path_root}"
 # (e.g. they might not exist, perhaps due to filename having wrong case).
 $v2c_validate_vcproj_ensure_files_ok = 1
 
+# Whether to try causing a modification
+# (ad-hoc interactive user-side edit!!)
+# of parsed content in case
+# that content has been determined to be problematic.
+$v2c_issue_modify = false
+
+# Whether to launch such a modification in-place
+# (alternatively and likely more convenient:
+# in whole form at the global end of processing)
+$v2c_issue_modify_inplace = false
+
+# Whether to bail out with a hard error in case
+# origin content has been modified.
+# Convenience setting to attempt to communicate/force
+# an automatic re-run of conversion by the outer environment.
+$v2c_issue_modify_final_bailout_when_modified = true
+
 # Whether to actively fail the conversion in case any errors have been
 # encountered. Strongly recommended to active this, since:
 # - generating an incorrect CMakeLists.txt
