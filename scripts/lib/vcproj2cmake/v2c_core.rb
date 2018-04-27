@@ -9564,9 +9564,8 @@ class V2C_ToolFlagsGenerator_Linker_MSVC < V2C_ToolFlagsGenerator_Base
   end
   private
   def generate_nodefaultlib(arr_ignore_specific_default_libraries)
-    arr_nodefaultlib = []
     arr_ignore = arr_ignore_specific_default_libraries
-    arr_ignore.each do |nodefaultlib|
+    arr_nodefaultlib = arr_ignore.collect do |nodefaultlib|
       # We'll use File.basename() since that has a nice way
       # to split off .lib extension.
       # Nope, we don't need to strip off .lib.
@@ -9574,7 +9573,7 @@ class V2C_ToolFlagsGenerator_Linker_MSVC < V2C_ToolFlagsGenerator_Base
       nodefaultlib_arg = nodefaultlib
       linker_arg_nodefaultlib = ''
       linker_arg_nodefaultlib << '/NODEFAULTLIB:' << nodefaultlib_arg
-      arr_nodefaultlib.push(linker_arg_nodefaultlib)
+      linker_arg_nodefaultlib
     end
     arr_nodefaultlib
   end
