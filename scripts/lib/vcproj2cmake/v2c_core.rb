@@ -1643,7 +1643,7 @@ module DetermineContentModifier
     :class_contentmodifier)
 
   ContentModifier_arr = [
-    ContentModifier_str.new(%r{\bvi}, ContentModifier_vim)
+    ContentModifier_str.new(%r{\bvi}, ContentModifier_vim),
   ]
 end
 
@@ -1660,7 +1660,8 @@ class DetermineDefaultEditor
     # https://robots.thoughtbot.com/visual-ize-the-future
     arr_envs = [
       'VISUAL',
-      'EDITOR']
+      'EDITOR',
+    ]
     path = nil
     arr_envs.each do |env|
       path = ENV[env]
@@ -10818,7 +10819,8 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
       scc_info_cmake.project_name,
       scc_info_cmake.local_path,
       scc_info_cmake.provider,
-      scc_info_cmake.aux_path ]
+      scc_info_cmake.aux_path,
+    ]
     write_invoke_config_object_v2c_function_quoted(
       'v2c_target_set_properties_vs_scc',
       target_name,
