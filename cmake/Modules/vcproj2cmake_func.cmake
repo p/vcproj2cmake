@@ -970,7 +970,7 @@ endfunction(_v2c_project_platform_get_build_types _target _build_platform _build
 function(_v2c_buildcfg_get_magic_conditional_name _target _build_platform _build_type _var_name_out)
   if(_build_platform AND _build_type)
   else(_build_platform AND _build_type)
-    _v2c_msg_warning("v2c_buildcfg_check_if_platform_buildtype_active: empty platform [${_build_platform}] or build type [${_build_type}]!?")
+    _v2c_msg_warning("_v2c_buildcfg_get_magic_conditional_name: empty platform [${_build_platform}] or build type [${_build_type}]!?")
   endif(_build_platform AND _build_type)
   # Nice performance trick: since we need to flatten both _build_platform
   # and _build_type, flatten an entire *combined* string:
