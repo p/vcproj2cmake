@@ -10227,7 +10227,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
       "Hook include after all definitions have been made\n" \
       "(but _before_ target is created using the source list!)")
   end
-  def put_v2c_target_midl_compile(
+  def put_v2c_target_tool_midl_compile(
     target_name,
     condition,
     midl_info,
@@ -10251,7 +10251,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
     args_generator.add('TYPE_LIBRARY_NAME', midl_info.type_library_name)
     args_generator.add('DLL_DATA_FILE_NAME', midl_info.dll_data_file_name)
     args_generator.add('VALIDATE_ALL_PARAMETERS', midl_info.validate_all_parameters.to_s)
-    write_invoke_object_conditional_v2c_function('v2c_target_midl_compile', target_name, condition, args_generator.array)
+    write_invoke_object_conditional_v2c_function('v2c_target_tool_midl_compile', target_name, condition, args_generator.array)
   end
   TOOL_CONTEXT_STR = Struct.new(
     :tool_processor,
@@ -10315,7 +10315,7 @@ class V2C_CMakeProjectGenerator < V2C_CMakeTargetGenerator
         arr_processor_input)
       case tool_type
       when V2C_Tool_Types::TYPE_MIDL
-        put_v2c_target_midl_compile(
+        put_v2c_target_tool_midl_compile(
           target_name,
           condition,
           tool_info_result,
