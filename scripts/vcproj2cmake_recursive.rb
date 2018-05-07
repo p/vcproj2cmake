@@ -123,7 +123,7 @@ def generate_multi_regex(regex_prefix, arr_excl_expr)
 end
 
 # The regex to exclude a single specific directory within the hierarchy:
-dir_part = './'
+dir_part = source_root + '/'
 excl_regex_single = generate_multi_regex('^' + Regexp.escape(dir_part), arr_excl_proj_expr)
 
 # The regex to exclude a match (and all children!) within the hierarchy:
